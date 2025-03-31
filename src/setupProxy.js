@@ -15,34 +15,34 @@ module.exports = function (app) {
             },
 
             onProxyReq: (proxyReq, req, res) => {
-                console.log('🔄 Proxy : Envoi de la requête SSE au backend...');
+                console.log('🔄 Proxy: Sending SSE request to backend...');
 
-                // Récupérer le token d'authentification depuis l'en-tête de la requête
+                // Get authentication token from request headers
                 const authToken = req.headers['authorization'];
 
                 if (authToken) {
                     proxyReq.setHeader('Authorization', authToken);
                 } else {
-                    console.error('❌ Aucun token d\'authentification trouvé dans les en-têtes!');
+                    console.error('❌ No authentication token found in headers!');
                 }
 
                 proxyReq.setHeader('Content-Type', 'text/event-stream');
             },
 
             onError: (err, req, res) => {
-                console.error('❌ Erreur Proxy:', err);
+                console.error('❌ Proxy Error:', err);
             },
 
             onProxyRes: (proxyRes, req, res) => {
                 let body = [];
 
-                // Écouter les chunks de données de la réponse
+                // Listen for data chunks from the response
                 proxyRes.on('data', chunk => {
                     body.push(chunk);
                     console.log('Received chunk:', chunk.toString());
                 });
 
-                // Écouter la fin de la réponse
+                // Listen for response end
                 proxyRes.on('end', () => {
                     body = Buffer.concat(body).toString();
                     console.log('Complete response body:', body);

@@ -19,19 +19,16 @@ import useSSE from "../hooks/useSSE";
 
 let enabled;
 
-console.log("Oidc:", Oidc);
-console.log("OidcProvider:", OidcProvider);
-
 const isTokenValid = (token) => {
     if (!token) return false;
 
     try {
-        const payload = JSON.parse(atob(token.split(".")[1])); // Décoder le token JWT
-        const now = Date.now() / 1000; // Timestamp actuel en secondes
-        return payload.exp > now; // Vérifie si le token n'est pas expiré
+        const payload = JSON.parse(atob(token.split(".")[1])); // Decode the JWT token
+        const now = Date.now() / 1000; // Current timestamp in seconds
+        return payload.exp > now; // Check if the token is not expired
     } catch (error) {
-        console.error("Erreur lors de la vérification du token:", error);
-        return false; // Considère le token comme invalide s'il est corrompu
+        console.error("Error while verifying token:", error);
+        return false; // Consider the token invalid if corrupted
     }
 };
 
@@ -45,8 +42,8 @@ const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem("authToken");
 
     if (!isTokenValid(token)) {
-        console.warn("🔴 Token invalide ou expiré, redirection vers /login");
-        localStorage.removeItem("authToken"); // Supprime le token périmé
+        console.warn("🔴 Invalid or expired token, redirecting to /login");
+        localStorage.removeItem("authToken"); // Remove the expired token
         return <Navigate to="/login" replace />;
     }
 
@@ -76,7 +73,6 @@ const AppStateProvider = ({ children }) => {
                 return action.data === state.eventSourceAlive ? state : { ...state, eventSourceAlive: action.data };
 
             case "setBasicLogin":
-                console.log("Mise à jour de basicLogin avec les données :", action.data);
                 return { ...state, basicLogin: action.data };
 
             case "setAuthChoice":
@@ -114,54 +110,47 @@ const AppStateProvider = ({ children }) => {
 
 const AuthProvider = ({ children }) => {
     const authInfo = useAuthInfo();
-    console.log("AuthInfo:", authInfo);
 
-    // Utilisation de la configuration avec oidcConfiguration
+    // Using configuration with oidcConfiguration
     const config = oidcConfiguration(authInfo);
-    console.log("oidcConfiguration(authInfo):", config);
 
     const location = useLocation();
     const [{ authChoice, user, basicLogin }, dispatch] = useStateValue();
-    console.log("basicLogin:", basicLogin);
-
-
 
     React.useEffect(() => {
         if (authInfo) {
-            console.log("Mise à jour du state avec authInfo:", authInfo);
             dispatch({ type: "setAuthInfo", data: authInfo });
         }
     }, [authInfo, dispatch]);
 
-    console.log("AuthProvider:", authChoice, user, basicLogin);
 
     const oidcUser = authInfo?.user;
 
-    // 🔹 Gestion du rafraîchissement du token
+    // 🔹 Token refresh management
     React.useEffect(() => {
         if (!oidcUser) return;
 
         const handleTokenExpiring = () => {
-            console.log("🔄 Token expiring... Tentative de renouvellement...");
+            console.log("🔄 Token expiring... Attempting renewal...");
             if (authInfo && authInfo.renewTokens) {
                 authInfo.renewTokens()
                     .then(() => {
-                        console.log("🎉 Token renouvelé !");
+                        console.log("🎉 Token renewed!");
                     })
                     .catch((error) => {
-                        console.error("Erreur lors du renouvellement du token:", error);
+                        console.error("Error while renewing token:", error);
                     });
             } else {
-                console.warn("⚠️ Impossible de renouveler le token, 'renewTokens' est indisponible.");
+                console.warn("⚠️ Unable to renew token, 'renewTokens' is unavailable.");
             }
         };
 
         const handleTokenExpired = () => {
-            console.log("⚠️ Token expiré... Tentative de déconnexion...");
+            console.log("⚠️ Token expired... Attempting logout...");
             if (authInfo?.logout) {
                 authInfo.logout();
             } else {
-                console.warn("⚠️ Impossible de se déconnecter : méthode logout non disponible");
+                console.warn("⚠️ Unable to logout: logout method not available");
             }
         };
 
@@ -174,16 +163,15 @@ const AuthProvider = ({ children }) => {
         };
     }, [oidcUser, authInfo]);
 
-
     if (!authInfo) return null;
 
-    // 🔹 Mode BASIC : Vérifie que les identifiants sont fournis
+    // 🔹 BASIC mode: Verify credentials are provided
     if (authChoice === "basic" && (!basicLogin.username || !basicLogin.password)) return <Login />;
 
-    // 🔹 Si aucune méthode d'authentification choisie et pas d'utilisateur OIDC
+    // 🔹 If no authentication method chosen and no OIDC user
     if (!authChoice && !oidcUser && location.pathname !== "/authentication/callback") return <AuthChoice />;
 
-    // 🔹 Redirige vers "NotAuthorized" si l'utilisateur est non authentifié et tente d'accéder à une page protégée
+    // 🔹 Redirect to "NotAuthorized" if user is unauthenticated and tries to access a protected page
     if (!oidcUser && location.pathname !== "/authentication/callback" && user?.status === 401) return <NotAuthorized />;
 
     try {
@@ -192,7 +180,7 @@ const AuthProvider = ({ children }) => {
         enabled = false;
     }
 
-    // 🔹 Si OIDC n'est pas activé, on affiche les enfants directement
+    // 🔹 If OIDC is not enabled, render children directly
     if (!enabled) return <>{children}</>;
 
     return (
@@ -209,20 +197,19 @@ const AuthProvider = ({ children }) => {
     );
 };
 
-
-// 🌍 Application principale
+// 🌍 Main Application
 const App = () => {
     const [token, setToken] = useState(localStorage.getItem("authToken") || null);
 
-    // Fonction pour établir la connexion SSE
+    // Function to establish SSE connection
     const initSSEConnection = async () => {
         if (!token) {
-            console.log("Aucun token trouvé. Connexion SSE non établie.");
+            console.log("No token found. SSE connection not established.");
             return;
         }
 
         try {
-            console.log("Token trouvé, initialisation de la connexion SSE...");
+            console.log("Token found, initializing SSE connection...");
             const response = await fetch("/sse", {
                 method: "GET",
                 headers: {
@@ -231,21 +218,21 @@ const App = () => {
             });
 
             if (response.ok) {
-                console.log("Connexion SSE réussie!");
+                console.log("SSE connection successful!");
             } else {
-                console.error("Erreur lors de la connexion SSE.");
+                console.error("Error during SSE connection.");
             }
         } catch (error) {
-            console.error("Erreur de connexion SSE:", error);
+            console.error("SSE connection error:", error);
         }
     };
 
-    // 🔹 Établir la connexion SSE au chargement ET lorsqu'un nouveau token est détecté
+    // 🔹 Establish SSE connection on load AND when a new token is detected
     useEffect(() => {
         initSSEConnection();
     }, [token]);
 
-    // 🔹 Surveiller les changements dans `localStorage`
+    // 🔹 Monitor changes in `localStorage`
     useEffect(() => {
         const checkTokenChange = () => {
             const newToken = localStorage.getItem("authToken");
@@ -275,7 +262,6 @@ const App = () => {
                     <Route path="/unauthorized" element={<NotAuthorized />} />
                     <Route path="*" element={<Navigate to="/" />} />
                     <Route path="/authentication/callback" element={<LoginCallback />} />
-
                 </Routes>
             </Router>
         </AppStateProvider>

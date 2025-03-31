@@ -10,13 +10,6 @@ function AuthChoice() {
     const [state, dispatch] = useStateValue();
     const { authInfo } = state;
 
-    console.log("authInfo:", authInfo);
-    console.log("AuthInfo OpenID well_known_uri:", authInfo?.openid?.well_known_uri);
-    console.log("AuthInfo Methods:", authInfo?.methods);
-    console.log("Afficher OpenID:", !!(authInfo?.openid?.well_known_uri));
-    console.log("Afficher Basic:", authInfo?.methods?.includes("basic"));
-
-
     const handleAuthChoice = (choice) => {
         dispatch({ type: "setAuthChoice", data: choice });
     };

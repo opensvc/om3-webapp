@@ -7,28 +7,28 @@ const useSSE = (token) => {
     useEffect(() => {
         if (!token) return;
 
-        console.log("🔄 Tentative de connexion au SSE avec token :", token);
+        console.log("🔄 Attempting SSE connection with token:", token);
         const eventSource = new EventSource("/sse", {
             headers: { "Authorization": `Bearer ${token}` },
         });
 
         eventSource.onopen = () => {
-            console.log("✅ SSE connecté !");
+            console.log("✅ SSE connected!");
             dispatch({ type: "setEventSourceAlive", data: true });
         };
 
         eventSource.onerror = (error) => {
-            console.error("❌ Erreur SSE :", error);
+            console.error("❌ SSE error:", error);
             dispatch({ type: "setEventSourceAlive", data: false });
             eventSource.close();
         };
 
         eventSource.onmessage = (event) => {
-            console.log("📩 SSE message reçu :", event.data);
+            console.log("📩 SSE message received:", event.data);
         };
 
         return () => {
-            console.log("❌ Fermeture de la connexion SSE.");
+            console.log("❌ Closing SSE connection.");
             eventSource.close();
         };
     }, [token, dispatch]);

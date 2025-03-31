@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 
 import { useState, useRef } from "react";
-import { createEventSource, closeEventSource } from "../../eventSourceManager";
+import { createEventSource, closeEventSource } from "../eventSourceManager";
 import { fetchData } from "../services/api";
 
 const useFetchNodes = () => {

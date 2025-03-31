@@ -8,7 +8,7 @@ function LoginCallback() {
     if (authChoice != "openid") {
         dispatch({type: "setAuthChoice", data: "openid"})
     }
-    close()
+    window.close()
     return null
 }
 

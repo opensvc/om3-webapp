@@ -25,7 +25,7 @@ function Authenticating(props) {
                 </DialogContentText>
             </DialogContent>
             <DialogActions>
-                <Button onClick={() => location.reload()}>
+                <Button onClick={() => window.location.reload()}>
                     {t("Reload")}
                 </Button>
             </DialogActions>

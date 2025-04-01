@@ -1,26 +1,42 @@
-/* eslint-disable no-unused-vars */
-
 import { useEffect, useState } from "react";
 import useFetchNodes from "../hooks/useFetchNodes";
+import { createEventSource } from "../eventSourceManager";
+import { FaSnowflake } from "react-icons/fa";
 
 const NodesTable = () => {
-    const { nodes, fetchNodes, startEventReception } = useFetchNodes();
+    const { nodes, fetchNodes } = useFetchNodes();
     const [token, setToken] = useState("");
+    const [eventNodes, setEventNodes] = useState([]);
 
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
-            startEventReception(storedToken);
+            createEventSource("/sse", storedToken, setEventNodes);
         }
     }, []);
 
+    // Merge static data with data received via SSE
+    const mergedNodes = nodes.map((node) => {
+        const updatedNode = eventNodes.find((n) => n.node === node.nodename);
+        if (updatedNode) {
+            return {
+                ...node,
+                status: {
+                    ...node.status,
+                    frozen_at: updatedNode.node_status?.frozen_at,
+                },
+            };
+        }
+        return node;
+    });
+
     return (
         <div className="p-6">
-            <h2 className="text-2xl font-bold mb-4">État des Nœuds</h2>
-            {nodes.length === 0 ? (
-                <div>Chargement...</div>
+            <h2 className="text-2xl font-bold mb-4">Node Status</h2>
+            {mergedNodes.length === 0 ? (
+                <div>Loading...</div>
             ) : (
                 <table className="w-full border-collapse border border-gray-300">
                     <thead>
@@ -35,10 +51,18 @@ const NodesTable = () => {
                     </tr>
                     </thead>
                     <tbody>
-                    {nodes.map((node, index) => (
+                    {mergedNodes.map((node, index) => (
                         <tr key={index} className="text-center border">
                             <td className="border p-2">{node.nodename || "-"}</td>
-                            <td className="border p-2">{node.status?.state || "N/A"}</td>
+                            <td className="border p-2">
+                                {node.status.frozen_at}
+                                {console.log("🔍 Node:", node)}
+                                {console.log("🔍 frozen_at:", node.status?.frozen_at)}
+                                {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" ? (
+                                    <FaSnowflake className="inline ml-2 text-blue-500" />
+                                ) : "OK"}
+
+                            </td>
                             <td className="border p-2">{node.stats?.score || "N/A"}</td>
                             <td className="border p-2">{node.stats?.load_15m || "N/A"}</td>
                             <td className="border p-2">{node.stats?.mem_avail || "N/A"}%</td>

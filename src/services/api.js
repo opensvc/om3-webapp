@@ -8,10 +8,15 @@ export const fetchData = async (token) => {
         }
     });
 
+    console.log("Réponse brute :", response);
+
     if (!response.ok) {
         throw new Error('Failed to fetch data');
     }
 
     const data = await response.json();
+
+    console.log("Données reçues :", data);
+
     return data;
 };

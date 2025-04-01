@@ -1,4 +1,4 @@
-export const createEventSource = (url, token) => {
+export const createEventSource = (url, token, updateNodes) => {
     if (!token) {
         console.error("❌ Missing token for EventSource!");
         return null;
@@ -15,15 +15,35 @@ export const createEventSource = (url, token) => {
         console.log("📩 New SSE event received:", event.data);
     };
 
-    // Listen for custom events like "WatchDog"
-    eventSource.addEventListener("WatchDog", (event) => {
-        console.log("🔄 WatchDog event received:", event.data);
-    });
 
     // Listen for another event "NodeStatusUpdated"
     eventSource.addEventListener("NodeStatusUpdated", (event) => {
         console.log("🔄 NodeStatusUpdated event received:", event.data);
+
+        try {
+            const nodeData = JSON.parse(event.data);
+            const { node, node_status } = nodeData;
+
+            if (node && node_status) {
+                updateNodes((prevNodes) => {
+                    return prevNodes.map((n) =>
+                        n.nodename === node
+                            ? {
+                                ...n,
+                                status: {
+                                    ...n.status,
+                                    frozen_at: node_status.frozen_at,
+                                },
+                            }
+                            : n
+                    );
+                });
+            }
+        } catch (error) {
+            console.error("🚨 Error parsing NodeStatusUpdated event:", error);
+        }
     });
+
 
     // Handle SSE connection errors
     eventSource.onerror = (error) => {

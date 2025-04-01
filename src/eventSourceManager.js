@@ -1,26 +1,39 @@
-// Function to create the EventSource
 export const createEventSource = (url, token) => {
     if (!token) {
         console.error("❌ Missing token for EventSource!");
         return null;
     }
 
-    console.log("🔗 Connecting to EventSource with token", token);
-
-    const eventSource = new EventSource(url);
+    // Create the EventSource without directly passing headers (the proxy handles it)
+    const eventSource = new EventSource(`/sse?token=${token}`);
 
     eventSource.onopen = () => {
         console.log("✅ SSE connection established!");
     };
 
+    eventSource.onmessage = (event) => {
+        console.log("📩 New SSE event received:", event.data);
+    };
+
+    // Listen for custom events like "WatchDog"
+    eventSource.addEventListener("WatchDog", (event) => {
+        console.log("🔄 WatchDog event received:", event.data);
+    });
+
+    // Listen for another event "NodeStatusUpdated"
+    eventSource.addEventListener("NodeStatusUpdated", (event) => {
+        console.log("🔄 NodeStatusUpdated event received:", event.data);
+    });
+
+    // Handle SSE connection errors
     eventSource.onerror = (error) => {
         console.error("🚨 EventSource error:", error);
         eventSource.close();
 
-        // Reconnect after 5 seconds
+        // Reconnect after 5 seconds in case of an error
         setTimeout(() => {
-            console.log("🔄 Attempting EventSource reconnection...");
-            createEventSource(url, token);
+            console.log("🔄 Attempting to reconnect to EventSource...");
+            createEventSource(url, token); // Retry with the same token
         }, 5000);
     };
 

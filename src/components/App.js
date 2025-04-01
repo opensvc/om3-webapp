@@ -15,7 +15,6 @@ import Authenticating from "./Authenticating.js";
 import LoginCallback from "./LoginCallback.js";
 import "../styles/App.css";
 import NodesTable from "./NodesTable";
-import useSSE from "../hooks/useSSE";
 
 let enabled;
 
@@ -200,37 +199,6 @@ const AuthProvider = ({ children }) => {
 // 🌍 Main Application
 const App = () => {
     const [token, setToken] = useState(localStorage.getItem("authToken") || null);
-
-    // Function to establish SSE connection
-    const initSSEConnection = async () => {
-        if (!token) {
-            console.log("No token found. SSE connection not established.");
-            return;
-        }
-
-        try {
-            console.log("Token found, initializing SSE connection...");
-            const response = await fetch("/sse", {
-                method: "GET",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                },
-            });
-
-            if (response.ok) {
-                console.log("SSE connection successful!");
-            } else {
-                console.error("Error during SSE connection.");
-            }
-        } catch (error) {
-            console.error("SSE connection error:", error);
-        }
-    };
-
-    // 🔹 Establish SSE connection on load AND when a new token is detected
-    useEffect(() => {
-        initSSEConnection();
-    }, [token]);
 
     // 🔹 Monitor changes in `localStorage`
     useEffect(() => {

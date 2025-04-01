@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useFetchNodes from "../hooks/useFetchNodes";
 
 const NodesTable = () => {
-    const { nodes, fetchNodes } = useFetchNodes();
+    const { nodes, fetchNodes, startEventReception } = useFetchNodes();
     const [token, setToken] = useState("");
 
     useEffect(() => {
@@ -12,6 +12,7 @@ const NodesTable = () => {
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
+            startEventReception(storedToken);
         }
     }, []);
 

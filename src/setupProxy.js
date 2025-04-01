@@ -15,34 +15,37 @@ module.exports = function (app) {
             },
 
             onProxyReq: (proxyReq, req, res) => {
-                console.log('🔄 Proxy : Envoi de la requête SSE au backend...');
+                console.log('🔄 Proxy: Sending SSE request to backend...');
 
-                // Récupérer le token d'authentification depuis l'en-tête de la requête
-                const authToken = req.headers['authorization'];
+                const urlParams = new URLSearchParams(req.url.split('?')[1]);
 
+                // Get the authentication token from the request headers
+                const authToken = urlParams.get('token');
+                //const authToken = req.headers['authorization'];
+                console.log("authToken: ", authToken);
                 if (authToken) {
-                    proxyReq.setHeader('Authorization', authToken);
+                    proxyReq.setHeader('Authorization',  `Bearer ${authToken}`);
                 } else {
-                    console.error('❌ Aucun token d\'authentification trouvé dans les en-têtes!');
+                    console.error('❌ No authentication token found in the headers!');
                 }
 
                 proxyReq.setHeader('Content-Type', 'text/event-stream');
             },
 
             onError: (err, req, res) => {
-                console.error('❌ Erreur Proxy:', err);
+                console.error('❌ Proxy Error:', err);
             },
 
             onProxyRes: (proxyRes, req, res) => {
                 let body = [];
 
-                // Écouter les chunks de données de la réponse
+                // Listen to data chunks of the response
                 proxyRes.on('data', chunk => {
                     body.push(chunk);
                     console.log('Received chunk:', chunk.toString());
                 });
 
-                // Écouter la fin de la réponse
+                // Listen for the end of the response
                 proxyRes.on('end', () => {
                     body = Buffer.concat(body).toString();
                     console.log('Complete response body:', body);

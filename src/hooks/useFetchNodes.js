@@ -11,7 +11,7 @@ const useFetchNodes = () => {
     const eventSourceRef = useRef(null);
     const cacheRef = useRef([]);
 
-    // Fonction pour récupérer les daemon statuses avec le token
+    // Function to fetch daemon statuses with token
     const fetchNodes = async (token) => {
         setLoading(true);
         setError("");
@@ -24,28 +24,28 @@ const useFetchNodes = () => {
             setNodes(nodesArray);
             cacheRef.current = nodesArray;
         } catch (err) {
-            console.error("Erreur lors de la récupération des daemon statuses :", err);
-            setError("Impossible de récupérer les daemon status.");
+            console.error("Error while fetching daemon statuses:", err);
+            setError("Failed to retrieve daemon statuses.");
         } finally {
             setLoading(false);
         }
     };
 
-    // Fonction pour démarrer SSE avec un token
+    // Function to start SSE with a token
     const startEventReception = (token) => {
         if (!token) {
-            console.error("❌ Aucun token fourni pour SSE !");
+            console.error("❌ No token provided for SSE!");
             return;
         }
 
-        console.log("🔗 Connexion SSE avec le token...", token);
+        console.log("🔗 Connecting SSE with token...", token);
 
-        // Fermer la connexion précédente avant d'en ouvrir une nouvelle
+        // Close previous connection before opening a new one
         if (eventSourceRef.current) {
             closeEventSource(eventSourceRef.current);
         }
 
-        // Créer une nouvelle connexion SSE
+        // Create new SSE connection
         eventSourceRef.current = createEventSource("/sse", token);
     };
 

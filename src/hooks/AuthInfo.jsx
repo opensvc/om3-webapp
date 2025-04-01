@@ -8,7 +8,6 @@ function useAuthInfo() {
             res
                 .json()
                 .then((data) => {
-                    console.log(data)
                     setAuthInfo(data)
                 })
                 .catch((e) => {

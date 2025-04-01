@@ -17,5 +17,5 @@ if (rootElement) {
         </OidcProvider>
     );
 } else {
-    console.error("L'élément DOM avec l'id 'root' est introuvable !");
+    console.error("DOM element with id 'root' not found!");
 }

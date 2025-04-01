@@ -1,57 +1,69 @@
-
-// Fonction pour créer l'EventSource
-export const createEventSource = (url, token) => {
-
+export const createEventSource = (url, token, updateNodes) => {
     if (!token) {
-        console.error("❌ Token manquant pour l'EventSource !");
+        console.error("❌ Missing token for EventSource!");
         return null;
     }
 
-    console.log("🔗 Connexion à EventSource avec token", token);
-
-    const eventSource = new EventSource(url);
+    // Create the EventSource without directly passing headers (the proxy handles it)
+    const eventSource = new EventSource(`/sse?token=${token}`);
 
     eventSource.onopen = () => {
-        console.log("✅ Connexion SSE établie !");
+        console.log("✅ SSE connection established!");
     };
 
+    eventSource.onmessage = (event) => {
+        console.log("📩 New SSE event received:", event.data);
+    };
+
+
+    // Listen for another event "NodeStatusUpdated"
+    eventSource.addEventListener("NodeStatusUpdated", (event) => {
+        console.log("🔄 NodeStatusUpdated event received:", event.data);
+
+        try {
+            const nodeData = JSON.parse(event.data);
+            const { node, node_status } = nodeData;
+
+            if (node && node_status) {
+                updateNodes((prevNodes) => {
+                    return prevNodes.map((n) =>
+                        n.nodename === node
+                            ? {
+                                ...n,
+                                status: {
+                                    ...n.status,
+                                    frozen_at: node_status.frozen_at,
+                                },
+                            }
+                            : n
+                    );
+                });
+            }
+        } catch (error) {
+            console.error("🚨 Error parsing NodeStatusUpdated event:", error);
+        }
+    });
+
+
+    // Handle SSE connection errors
     eventSource.onerror = (error) => {
-        console.error("🚨 Erreur EventSource :", error);
+        console.error("🚨 EventSource error:", error);
         eventSource.close();
 
-        // Reconnexion après 5 secondes
+        // Reconnect after 5 seconds in case of an error
         setTimeout(() => {
-            console.log("🔄 Tentative de reconnexion à EventSource...");
-            createEventSource(url, token);
+            console.log("🔄 Attempting to reconnect to EventSource...");
+            createEventSource(url, token); // Retry with the same token
         }, 5000);
     };
 
     return eventSource;
 };
 
-// Fonction pour fermer l'EventSource
+// Function to close the EventSource
 export const closeEventSource = (eventSource) => {
     if (eventSource) {
-        console.log("🛑 Fermeture de l'EventSource");
+        console.log("🛑 Closing EventSource");
         eventSource.close();
     }
 };
-
-// Hook personnalisé avec useEffect pour gérer l'EventSource
-//export const useEventSource = (url, token) => {
-//  useEffect(() => {
-//    if (!token) {
-//      console.error("❌ Aucun token fourni pour l'EventSource !");
-//      return;
-//    }
-//
-//    // Création de l'EventSource avec le token
-//    const eventSource = createEventSource(url, token);
-//
-//    // Nettoyage lors du démontage du composant ou changement de token
-//    return () => {
-//      closeEventSource(eventSource);
-//    };
-//  }, [url, token]); // Redémarre l'EventSource si l'URL ou le token change
-//};
-//

@@ -1,5 +1,4 @@
 export const fetchData = async (token) => {
-    console.log("Token utilisé :", token);
     const url = '/daemon/status';
 
     const response = await fetch(url, {
@@ -16,6 +15,8 @@ export const fetchData = async (token) => {
     }
 
     const data = await response.json();
+
     console.log("Données reçues :", data);
+
     return data;
 };

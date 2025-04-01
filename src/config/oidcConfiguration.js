@@ -5,8 +5,6 @@ const baseUrl = window.location.origin;
 console.log("redirect_uri:", baseUrl + "/nodes");
 console.log("silent_redirect_uri:", baseUrl + "/authentication/silent_callback");
 
-
-
 const initData = {
     client_id: "ringfs",
     redirect_uri: baseUrl + "/authentication/callback",
@@ -25,29 +23,25 @@ const initData = {
 };
 
 function oidcConfiguration(authInfo) {
-    console.log("AuthInfo:", authInfo);
 
-    // Vérifie si authInfo et authInfo.openid sont définis
+    // Check if authInfo and authInfo.openid are defined
     if (!authInfo || !authInfo.openid || !authInfo.openid.well_known_uri) {
-        console.warn("OIDC Configuration fallback: 'authInfo.openid.well_known_uri' est manquant. Retour à la configuration par défaut.");
-        return initData; // Retourne la configuration par défaut si la configuration OIDC est manquante
+        console.warn("OIDC Configuration fallback: 'authInfo.openid.well_known_uri' is missing. Falling back to default configuration.");
+        return initData; // Returns default configuration if OIDC configuration is missing
     }
 
-    console.log("AuthInfo.openid:", authInfo.openid);
-    console.log("AuthInfo.openid.well_known_uri:", authInfo.openid.well_known_uri);
-
-    // Vérifie que l'URI bien formée
+    // Verify the URI is well-formed
     try {
         const url = new URL(authInfo.openid.well_known_uri);
         if (!url.protocol || !url.host) {
-            throw new Error('URI mal formée');
+            throw new Error('Malformed URI');
         }
     } catch (error) {
-        console.error('URL bien formée nécessaire pour openid.well_known_uri', error);
-        return initData; // Retourne la configuration par défaut si l'URI est invalide
+        console.error('Well-formed URL required for openid.well_known_uri', error);
+        return initData; // Returns default configuration if URI is invalid
     }
 
-    // Retourne la configuration OIDC avec les valeurs personnalisées
+    // Returns OIDC configuration with custom values
     return {
         ...initData,
         authority: authInfo.openid.well_known_uri,

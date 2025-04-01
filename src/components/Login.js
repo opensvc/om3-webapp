@@ -13,14 +13,13 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 
-
 const decodeToken = (token) => {
     if (!token) return null;
     try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         return payload;
     } catch (error) {
-        console.error("Erreur lors du décodage du token:", error);
+        console.error("Error while decoding token:", error);
         return null;
     }
 };
@@ -33,14 +32,14 @@ function Login() {
     const [{ basicLogin }, dispatch] = useStateValue();
     const { t, i18n } = useTranslation();
 
-    // Fonction pour renouveler le token
+    // Function to refresh the token
     const refreshToken = async () => {
-        console.log("Renouvellement du token...");
+        console.log("Refreshing token...");
         const token = localStorage.getItem("authToken");
 
         if (token) {
             try {
-                // Refaire la requête POST pour obtenir un nouveau token en utilisant le token actuel
+                // Make a POST request to get a new token using the current token
                 const response = await fetch("/auth/token", {
                     method: "POST",
                     headers: {
@@ -49,32 +48,28 @@ function Login() {
                 });
 
                 if (!response.ok) {
-                    throw new Error("Échec du renouvellement du token");
+                    throw new Error("Token refresh failed");
                 }
 
                 const data = await response.json();
-                console.log("Nouveau token reçu :", data);
 
-                // Mettez à jour le token dans localStorage et dans le state global
+                // Update the token in localStorage and global state
                 localStorage.setItem("authToken", data.token);
                 dispatch({ type: "setBasicLogin", data: { ...basicLogin, token: data } });
 
-                // Renouveler le token avant son expiration
-                setTimeout(refreshToken, 30 * 1000 - 5000); // Renouveler le token 5 secondes avant l'expiration
+                // Refresh the token before it expires
+                setTimeout(refreshToken, 30 * 1000 - 5000); // Refresh token 5 seconds before expiration
             } catch (error) {
-                console.error("Erreur lors du renouvellement du token :", error);
+                console.error("Error while refreshing token:", error);
             }
         }
     };
 
     const handleLogin = async (username, password) => {
-        console.log("handleLogin a été appelée avec :", username, password);
         try {
-            console.log("Tentative d'authentification avec :", username, password);
+            //const duration = "30s"; // Token duration in seconds
 
-            //const duration = "30s"; // Durée du token en secondes
-
-            // Construire l'URL avec la durée dans la query string
+            // Build URL with duration in query string
             //const url = `/auth/token?duration=${duration}`;
             const url = `/auth/token`;
 
@@ -85,28 +80,26 @@ function Login() {
                 },
             });
 
-            console.log("Réponse brute de l'API :", response);
-
             if (!response.ok) {
-                throw new Error("Nom d'utilisateur ou mot de passe incorrect");
+                throw new Error("Incorrect username or password");
             }
 
             const data = await response.json();
-            console.log("Token reçu :", data);
+            console.log("Token received");
 
-            // Réinitialiser l'erreur si la connexion réussit
+            // Reset error if login succeeds
             setErrorMessage("");
 
-            // Sauvegarde les identifiants et le token dans le state
+            // Save credentials and token in state
             dispatch({ type: "setBasicLogin", data: { username, password, token: data } });
             localStorage.setItem("authToken", data.token);
 
-            // Décoder le token pour récupérer l'expiration et calculer le rafraîchissement
+            // Decode token to get expiration and calculate refresh time
             const payload = decodeToken(data.token);
             if (payload && payload.exp) {
                 const expirationTime = payload.exp * 1000;
                 const now = Date.now();
-                const refreshTime = expirationTime - now - 5000; // Rafraîchir 5 secondes avant l'expiration
+                const refreshTime = expirationTime - now - 5000; // Refresh 5 seconds before expiration
 
                 if (refreshTime > 0) {
                     setTimeout(refreshToken, refreshTime);
@@ -115,16 +108,15 @@ function Login() {
 
             navigate("/nodes");
         } catch (error) {
-            console.error("Erreur d'authentification :", error);
+            console.error("Authentication error:", error);
             setErrorMessage(error.message);
         }
     };
 
-
-    // Gère l'envoi du formulaire
+    // Handles form submission
     const handleSubmit = (e) => {
-        e.preventDefault();  // Empêche le rechargement de la page lors de l'envoi du formulaire
-        handleLogin(username, password);  // Appelle la fonction d'authentification
+        e.preventDefault();  // Prevents page reload on form submission
+        handleLogin(username, password);  // Calls authentication function
     };
 
     function handleEnterKeyDown(e) {
@@ -159,7 +151,7 @@ function Login() {
                     />
                 </FormControl>
 
-                {/* Afficher le message d'erreur si le login échoue */}
+                {/* Display error message if login fails */}
                 {errorMessage && (
                     <Typography color="error" variant="body2" sx={{ mt: 2 }}>
                         {errorMessage}

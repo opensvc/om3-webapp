@@ -20,17 +20,17 @@ const NodesTable = () => {
     // Merge static data with data received via SSE
     const mergedNodes = nodes.map((node) => {
         const updatedNode = eventNodes.find((n) => n.node === node.nodename);
-        if (updatedNode) {
-            return {
+        return updatedNode
+            ? {
                 ...node,
                 status: {
                     ...node.status,
                     frozen_at: updatedNode.node_status?.frozen_at,
                 },
-            };
-        }
-        return node;
+            }
+            : node;
     });
+
 
     return (
         <div className="p-6">
@@ -55,14 +55,15 @@ const NodesTable = () => {
                         <tr key={index} className="text-center border">
                             <td className="border p-2">{node.nodename || "-"}</td>
                             <td className="border p-2">
-                                {node.status.frozen_at}
-                                {console.log("🔍 Node:", node)}
-                                {console.log("🔍 frozen_at:", node.status?.frozen_at)}
                                 {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" ? (
-                                    <FaSnowflake className="inline ml-2 text-blue-500" />
-                                ) : "OK"}
-
+                                    <>
+                                        <FaSnowflake className="inline ml-2" style={{ color: "#66ccff" }} size={20} />
+                                    </>
+                                ) : (
+                                    ""
+                                )}
                             </td>
+
                             <td className="border p-2">{node.stats?.score || "N/A"}</td>
                             <td className="border p-2">{node.stats?.load_15m || "N/A"}</td>
                             <td className="border p-2">{node.stats?.mem_avail || "N/A"}%</td>

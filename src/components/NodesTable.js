@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import useFetchNodes from "../hooks/useFetchNodes";
 import { createEventSource } from "../eventSourceManager";
-import { FaSnowflake, FaWifi } from "react-icons/fa"; // Import des icônes
+import { FaSnowflake, FaWifi } from "react-icons/fa";
 
 const NodesTable = () => {
     const { nodes, fetchNodes } = useFetchNodes();
     const [token, setToken] = useState("");
     const [eventNodes, setEventNodes] = useState([]);
-    const [daemonNode, setDaemonNode] = useState(null); // Stocke daemon.nodename
+    const [daemonNode, setDaemonNode] = useState(null);
 
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
@@ -20,7 +20,7 @@ const NodesTable = () => {
 
     useEffect(() => {
         if (nodes.length > 0) {
-            // Trouver daemon.nodename dans la réponse API
+            // Find daemon.nodename in API response
             const daemonData = nodes.find((node) => node.daemon?.nodename);
             if (daemonData) {
                 setDaemonNode(daemonData.daemon.nodename);
@@ -28,7 +28,7 @@ const NodesTable = () => {
         }
     }, [nodes]);
 
-    // Fusionner les données statiques avec les données reçues via SSE
+    // Merge static data with data received via SSE
     const mergedNodes = nodes.map((node) => {
         const updatedNode = eventNodes.find((n) => n.node === node.nodename);
         return updatedNode

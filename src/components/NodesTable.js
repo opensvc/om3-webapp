@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import useFetchNodes from "../hooks/useFetchNodes";
 import { createEventSource } from "../eventSourceManager";
-import { FaSnowflake } from "react-icons/fa";
+import { FaSnowflake, FaWifi } from "react-icons/fa"; // Import des icônes
 
 const NodesTable = () => {
     const { nodes, fetchNodes } = useFetchNodes();
     const [token, setToken] = useState("");
     const [eventNodes, setEventNodes] = useState([]);
+    const [daemonNode, setDaemonNode] = useState(null); // Stocke daemon.nodename
 
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
@@ -17,7 +18,17 @@ const NodesTable = () => {
         }
     }, []);
 
-    // Merge static data with data received via SSE
+    useEffect(() => {
+        if (nodes.length > 0) {
+            // Trouver daemon.nodename dans la réponse API
+            const daemonData = nodes.find((node) => node.daemon?.nodename);
+            if (daemonData) {
+                setDaemonNode(daemonData.daemon.nodename);
+            }
+        }
+    }, [nodes]);
+
+    // Fusionner les données statiques avec les données reçues via SSE
     const mergedNodes = nodes.map((node) => {
         const updatedNode = eventNodes.find((n) => n.node === node.nodename);
         return updatedNode
@@ -30,7 +41,6 @@ const NodesTable = () => {
             }
             : node;
     });
-
 
     return (
         <div className="p-6">
@@ -55,12 +65,12 @@ const NodesTable = () => {
                         <tr key={index} className="text-center border">
                             <td className="border p-2">{node.nodename || "-"}</td>
                             <td className="border p-2">
-                                {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" ? (
-                                    <>
-                                        <FaSnowflake className="inline ml-2" style={{ color: "#66ccff" }} size={20} />
-                                    </>
-                                ) : (
-                                    ""
+                                {daemonNode === node.nodename && (
+                                    <FaWifi className="inline ml-2 text-green-500" size={20} />
+                                )}
+
+                                {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" && (
+                                    <FaSnowflake className="inline ml-2" style={{ color: "#66ccff" }} size={20} />
                                 )}
                             </td>
 

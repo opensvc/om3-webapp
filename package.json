@@ -31,7 +31,6 @@
     "react-router-dom": "^7.4.0",
     "web-vitals": "^2.1.4"
   },
-  "proxy": "https://54.37.191.105:1215/",
   "browserslist": {
     "production": [
       ">0.2%",

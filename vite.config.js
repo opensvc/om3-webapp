@@ -2,32 +2,29 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const baseUrl = process.env.BASE_URL || 'https://localhost:1215';
+
 export default defineConfig({
     plugins: [react(), tailwindcss()],
     server: {
         proxy: {
             '/auth': {
-                target: 'https://54.37.191.105:1215',
+                target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            //'/auth/info': {
-            //    target: 'https://54.37.191.105:1215',
-            //    changeOrigin: true,
-            //    secure: false,
-            //},
             '/nodes': {
-                target: 'https://54.37.191.105:1215',
+                target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
             '/daemon/status': { // Ajoutez cette règle
-                target: 'https://54.37.191.105:1215',
+                target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
             '/sse': {
-                target: 'https://54.37.191.105:1215',
+                target: baseUrl,
                 changeOrigin: true,
                 secure: false,
                 rewrite: (path) => path.replace(/^\/sse/, '/node/name/localhost/daemon/event'), // Réécriture comme dans setupProxy

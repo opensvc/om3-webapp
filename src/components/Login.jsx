@@ -63,6 +63,7 @@ function Login() {
             }
 
             const data = await response.json();
+            console.log('Token received:', data.token);
 
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
@@ -99,16 +100,32 @@ function Login() {
     };
 
     return (
-        <Dialog open={true} aria-labelledby="dialog-title" className="p-4">
-            <DialogTitle id="dialog-title">{t('Login')}</DialogTitle>
-            <DialogContent>
+        <Dialog
+            open={true}
+            aria-labelledby="dialog-title"
+            className="p-4"
+            PaperProps={{
+                className: 'bg-gray-100 rounded-lg shadow-lg w-full max-w-md mx-auto',
+            }}
+        >
+            <DialogTitle
+                id="dialog-title"
+                className="text-2xl font-semibold text-gray-800 text-center py-4"
+            >
+                {t('Login')}
+            </DialogTitle>
+            <DialogContent className="px-6">
                 <TextField
                     placeholder={t('Username')}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     fullWidth
-                    sx={{ mb: 2 }}
                     autoFocus
+                    sx={{ mb: 3 }} // Utilisation de sx pour un espacement de 24px (3 * 8px)
+                    InputProps={{
+                        className:
+                            'bg-white border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200',
+                    }}
                 />
                 <TextField
                     type="password"
@@ -117,19 +134,32 @@ function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
                     fullWidth
-                    sx={{ mb: 2 }}
+                    sx={{ mb: 2 }} // 16px (2 * 8px) pour l'espace avec le message d'erreur
+                    InputProps={{
+                        className:
+                            'bg-white border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200',
+                    }}
                 />
                 {errorMessage && (
-                    <Typography color="error" sx={{ mb: 2 }}>
+                    <Typography
+                        className="text-red-500 text-sm mb-4 animate-pulse text-center"
+                    >
                         {errorMessage}
                     </Typography>
                 )}
             </DialogContent>
-            <DialogActions>
-                <Button onClick={handleSubmit} disabled={!username || !password} color="primary">
+            <DialogActions className="px-6 pb-6 flex justify-center gap-4">
+                <Button
+                    onClick={handleSubmit}
+                    disabled={!username || !password}
+                    className="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
                     {t('Submit')}
                 </Button>
-                <Button onClick={handleChangeMethod} color="secondary">
+                <Button
+                    onClick={handleChangeMethod}
+                    className="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600 transition duration-200"
+                >
                     {t('Change Method')}
                 </Button>
             </DialogActions>

@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { OidcProvider } from '@axa-fr/react-oidc';
 import OidcConfiguration from './config/oidcConfiguration';
 import App from './components/App';
-import "./styles/App.css";
+import './styles/main.css'
 
 console.log(document.getElementById('root'));
 const rootElement = document.getElementById('root');

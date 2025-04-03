@@ -1,5 +1,5 @@
 //import useClusterStatus from '../hooks/ClusterStatus.jsx'
-import { useStateValue } from "../state.js"
+import { useStateValue } from "../state.jsx"
 
 function LoginCallback() {
     //const { close } = useClusterStatus()

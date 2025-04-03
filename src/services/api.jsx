@@ -1,4 +1,4 @@
-export const fetchData = async (token) => {
+export const fetchDaemonStatus = async (token) => {
     const url = '/daemon/status';
 
     const response = await fetch(url, {

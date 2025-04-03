@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import useFetchNodes from "../hooks/useFetchNodes";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import { createEventSource } from "../eventSourceManager";
 import { FaSnowflake, FaWifi, FaSignOutAlt } from "react-icons/fa";
 import {
@@ -22,10 +22,9 @@ import {
 import { blue, green, red } from "@mui/material/colors";
 
 const NodesTable = () => {
-    const { nodes, fetchNodes } = useFetchNodes();
+    const { daemon, nodes, fetchNodes } = useFetchDaemonStatus();
     const [token, setToken] = useState("");
     const [eventNodes, setEventNodes] = useState([]);
-    const [daemonNode, setDaemonNode] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -36,15 +35,6 @@ const NodesTable = () => {
             createEventSource("/sse", storedToken, setEventNodes);
         }
     }, []);
-
-    useEffect(() => {
-        if (nodes.length > 0) {
-            const daemonData = nodes.find((node) => node.daemon?.nodename);
-            if (daemonData) {
-                setDaemonNode(daemonData.daemon.nodename);
-            }
-        }
-    }, [nodes]);
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");
@@ -131,7 +121,7 @@ const NodesTable = () => {
                                         </TableCell>
                                         <TableCell>
                                             <Box sx={{ display: "flex", gap: 1 }}>
-                                                {daemonNode === node.nodename && (
+                                                {daemon.nodename === node.nodename && (
                                                     <Tooltip title="Daemon Node">
                                                         <FaWifi style={{ color: green[500] }} />
                                                     </Tooltip>

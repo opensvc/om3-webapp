@@ -2,25 +2,27 @@
 
 import { useState, useRef } from "react";
 import { createEventSource, closeEventSource } from "../eventSourceManager";
-import { fetchData } from "../services/api";
+import { fetchDaemonStatus } from "../services/api";
 
-const useFetchNodes = () => {
+const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
+    const [daemon, setDaemon] = useState({});
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const eventSourceRef = useRef(null);
     const cacheRef = useRef([]);
 
     // Function to fetch daemon statuses with token
-    const fetchNodes = async (token) => {
+    const refreshDaemonStatus = async (token) => {
         setLoading(true);
         setError("");
         try {
-            const result = await fetchData(token);
+            const result = await fetchDaemonStatus(token);
             const nodesArray = Object.keys(result.cluster.node).map((key) => ({
                 nodename: key,
                 ...result.cluster.node[key],
             }));
+            setDaemon(result.daemon)
             setNodes(nodesArray);
             cacheRef.current = nodesArray;
         } catch (err) {
@@ -49,7 +51,7 @@ const useFetchNodes = () => {
         eventSourceRef.current = createEventSource("/sse", token);
     };
 
-    return { nodes, error, loading, fetchNodes, startEventReception };
+    return { daemon, nodes, error, loading, fetchNodes: refreshDaemonStatus, startEventReception };
 };
 
-export default useFetchNodes;
+export default useFetchDaemonStatus;

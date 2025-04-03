@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+
 //const baseUrl = window.location.protocol + "//" + window.location.host;
 
 const baseUrl = window.location.origin;

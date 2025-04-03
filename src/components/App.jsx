@@ -4,16 +4,18 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { OidcProvider, OidcSecure } from "@axa-fr/react-oidc-context";
 import * as Oidc from "@axa-fr/react-oidc-context";
-import oidcConfiguration from "../config/oidcConfiguration.js";
+import oidcConfiguration from "../config/oidcConfiguration.jsx";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import { useStateValue, StateProvider } from "../state";
-import AuthChoice from "./Authchoice.js";
-import Login from "./Login.js";
-import NotAuthorized from "./NotAuthorized.js";
-import NotAuthenticated from "./NotAuthenticated.js";
-import Authenticating from "./Authenticating.js";
-import LoginCallback from "./LoginCallback.js";
-import "../styles/App.css";
+import AuthChoice from "./Authchoice.jsx";
+import Login from "./Login.jsx";
+import NotAuthorized from "./NotAuthorized.jsx";
+import NotAuthenticated from "./NotAuthenticated.jsx";
+import Authenticating from "./Authenticating.jsx";
+import LoginCallback from "./LoginCallback.jsx";
+//import "../styles/App.css";
+import '../styles/main.css'
+//import 'tailwindcss/tailwind.css'
 import NodesTable from "./NodesTable";
 
 let enabled;

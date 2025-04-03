@@ -2,13 +2,14 @@
   "name": "web-app",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "A web application that connects to an API with user authentication.",
-  "main": "src/index.js",
+  "main": "src/index.jsx",
   "scripts": {
-    "start": "set NODE_OPTIONS=--openssl-legacy-provider && react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "lint": "eslint src --ext .js,.jsx"
   },
   "dependencies": {
     "@axa-fr/react-oidc": "^7.25.3",
@@ -20,14 +21,14 @@
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
     "event-source-polyfill": "^1.0.31",
+    "i18next": "^23.11.5",
+    "next": "13.5.5",
     "oidc-client": "^1.11.5",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-i18next": "^15.4.1",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.4.0",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
   "proxy": "https://54.37.191.105:1215/",
@@ -50,7 +51,30 @@
     ]
   },
   "devDependencies": {
-    "eslint": "^9.23.0",
-    "eslint-plugin-react": "^7.37.4"
+    "@tailwindcss/postcss": "^4.1.1",
+    "@tailwindcss/vite": "^4.1.1",
+    "@types/node": "^20",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.1.0",
+    "eslint-config-react-app": "^7.0.1",
+    "eslint-plugin-react": "^7.37.4",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^4.1.1",
+    "typescript": "^5.3.3",
+    "vite": "^6.2.5",
+    "vite-plugin-svgr": "^4.3.0"
+  },
+  "resolutions": {
+    "eslint": "8.57.1",
+    "typescript": "5.3.3"
+  },
+  "overrides": {
+    "eslint-config-react-app": {
+      "eslint": "8.57.1"
+    }
   }
 }

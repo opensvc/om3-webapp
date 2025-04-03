@@ -1,10 +1,12 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
+const baseUrl = process.env.BASE_URL || 'https://localhost:1215';
+
 module.exports = function (app) {
     app.use(
         '/sse',
         createProxyMiddleware({
-            target: 'https://54.37.191.105:1215',
+            target: baseUrl,
             changeOrigin: true,
             secure: false,
             ws: false,

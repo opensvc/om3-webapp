@@ -45,6 +45,50 @@ export const createEventSource = (url, token, updateNodes) => {
         }
     });
 
+    eventSource.addEventListener("NodeMonitorUpdated", (event) => {
+        console.log("🧭 NodeMonitorUpdated event received:", event.data);
+
+        try {
+            const data = JSON.parse(event.data);
+            const { node, node_monitor } = data;
+
+            if (node && node_monitor) {
+                updateNodes((prevNodes) => {
+                    const existingNode = prevNodes.find((n) => n.node === node);
+
+                    let updatedNodes;
+                    if (existingNode) {
+                        updatedNodes = prevNodes.map((n) =>
+                            n.node === node
+                                ? {
+                                    ...n,
+                                    monitor: {
+                                        ...n.monitor,
+                                        ...node_monitor,
+                                    },
+                                }
+                                : n
+                        );
+                    } else {
+                        //
+                        updatedNodes = [
+                            ...prevNodes,
+                            {
+                                node,
+                                monitor: node_monitor,
+                                node_status: {},
+                            },
+                        ];
+                    }
+                    return updatedNodes;
+                });
+            }
+        } catch (error) {
+            console.error("🚨 Error parsing NodeMonitorUpdated event:", error);
+        }
+    });
+
+
     eventSource.onerror = (error) => {
         console.error("🚨 EventSource error:", error);
         eventSource.close();

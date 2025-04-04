@@ -1,10 +1,16 @@
 import React from "react";
 import { useStateValue } from "../state";
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Button from '@mui/material/Button';
+import {
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Button,
+    Box,
+    Typography,
+    Stack
+} from "@mui/material";
+import { FaKey, FaIdCard, FaUserShield } from "react-icons/fa";
 
 function AuthChoice() {
     const [state, dispatch] = useStateValue();
@@ -15,21 +21,52 @@ function AuthChoice() {
     };
 
     return (
-        <Dialog open={true} aria-labelledby="dialog-title">
-            <DialogTitle id="dialog-title">
-                Authentication Methods
+        <Dialog open={true} maxWidth="xs" fullWidth>
+            <DialogTitle>
+                <Typography variant="h6" fontWeight="bold" textAlign="center">
+                    Authentication Methods
+                </Typography>
             </DialogTitle>
             <DialogContent>
-                Please select one of the following authentication methods the cluster advertizes.
+                <Typography variant="body2" textAlign="center" color="textSecondary" gutterBottom>
+                    Please select one of the authentication methods the cluster advertises.
+                </Typography>
+                <Stack spacing={2} mt={2}>
+                    {authInfo?.openid?.well_known_uri && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<FaKey />}
+                            fullWidth
+                            onClick={() => handleAuthChoice("openid")}
+                        >
+                            OpenID
+                        </Button>
+                    )}
+                    <Button
+                        variant="contained"
+                        color="success"
+                        startIcon={<FaIdCard />}
+                        fullWidth
+                        onClick={() => handleAuthChoice("x509")}
+                    >
+                        x509 Certificate
+                    </Button>
+                    {authInfo?.methods?.includes("basic") && (
+                        <Button
+                            variant="contained"
+                            color="secondary"
+                            startIcon={<FaUserShield />}
+                            fullWidth
+                            onClick={() => handleAuthChoice("basic")}
+                        >
+                            Basic Auth
+                        </Button>
+                    )}
+                </Stack>
             </DialogContent>
             <DialogActions>
-                {authInfo && authInfo.openid && authInfo.openid.well_known_uri && (
-                    <Button onClick={() => handleAuthChoice("openid")}>OpenId</Button>
-                )}
-                <Button onClick={() => handleAuthChoice("x509")}>x509</Button>
-                {authInfo?.methods?.includes("basic") && (
-                    <Button onClick={() => handleAuthChoice("basic")}>Basic</Button>
-                )}
+                <Box flexGrow={1} />
             </DialogActions>
         </Dialog>
     );

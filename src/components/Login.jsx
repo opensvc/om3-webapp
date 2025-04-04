@@ -63,7 +63,6 @@ function Login() {
             }
 
             const data = await response.json();
-            console.log('Token received:', data.token);
 
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
@@ -121,7 +120,7 @@ function Login() {
                     onChange={(e) => setUsername(e.target.value)}
                     fullWidth
                     autoFocus
-                    sx={{ mb: 3 }} // Utilisation de sx pour un espacement de 24px (3 * 8px)
+                    sx={{ mb: 3 }}
                     InputProps={{
                         className:
                             'bg-white border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200',
@@ -134,7 +133,7 @@ function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
                     fullWidth
-                    sx={{ mb: 2 }} // 16px (2 * 8px) pour l'espace avec le message d'erreur
+                    sx={{ mb: 2 }}
                     InputProps={{
                         className:
                             'bg-white border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200',

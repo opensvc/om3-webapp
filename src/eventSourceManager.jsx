@@ -18,11 +18,10 @@ export const createEventSource = (url, token, updateNodes) => {
             const { node, node_status } = nodeData;
 
             if (node && node_status) {
+                console.log("🔄 Updating Node Status:", node, node_status);
                 updateNodes((prevNodes) => {
-                    // Check if the node already exists
                     const existingNode = prevNodes.find(n => n.node === node);
                     if (existingNode) {
-                        // Update existing node
                         return prevNodes.map((n) =>
                             n.node === node
                                 ? {
@@ -35,7 +34,6 @@ export const createEventSource = (url, token, updateNodes) => {
                                 : n
                         );
                     } else {
-                        // Add a new node if not present
                         return [...prevNodes, { node, node_status }];
                     }
                 });
@@ -53,9 +51,9 @@ export const createEventSource = (url, token, updateNodes) => {
             const { node, node_monitor } = data;
 
             if (node && node_monitor) {
+                console.log("🧭 Updating Node Monitor:", node, node_monitor);
                 updateNodes((prevNodes) => {
                     const existingNode = prevNodes.find((n) => n.node === node);
-
                     let updatedNodes;
                     if (existingNode) {
                         updatedNodes = prevNodes.map((n) =>
@@ -70,7 +68,6 @@ export const createEventSource = (url, token, updateNodes) => {
                                 : n
                         );
                     } else {
-                        //
                         updatedNodes = [
                             ...prevNodes,
                             {
@@ -85,6 +82,49 @@ export const createEventSource = (url, token, updateNodes) => {
             }
         } catch (error) {
             console.error("🚨 Error parsing NodeMonitorUpdated event:", error);
+        }
+    });
+
+    eventSource.addEventListener("InstanceMonitorUpdated", (event) => {
+        console.log("📦 InstanceMonitorUpdated event received:", event.data);
+
+        try {
+            const data = JSON.parse(event.data);
+            const { instance_monitor, labels, node } = data;
+
+            if (instance_monitor && labels && node) {
+                console.log("📦 Updating Instance Monitor:", instance_monitor, labels, node);
+                updateNodes((prevNodes) => {
+                    const existingNode = prevNodes.find((n) => n.node === node);
+                    let updatedNodes;
+                    if (existingNode) {
+                        updatedNodes = prevNodes.map((n) =>
+                            n.node === node
+                                ? {
+                                    ...n,
+                                    instance_monitor: {
+                                        ...n.instance_monitor,
+                                        ...instance_monitor,
+                                    },
+                                    labels: { ...n.labels, ...labels },
+                                }
+                                : n
+                        );
+                    } else {
+                        updatedNodes = [
+                            ...prevNodes,
+                            {
+                                node,
+                                instance_monitor,
+                                labels,
+                            },
+                        ];
+                    }
+                    return updatedNodes;
+                });
+            }
+        } catch (error) {
+            console.error("🚨 Error parsing InstanceMonitorUpdated event:", error);
         }
     });
 

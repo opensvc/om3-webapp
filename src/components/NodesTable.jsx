@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import useFetchNodes from "../hooks/useFetchDaemonStatus";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import { createEventSource } from "../eventSourceManager";
 import { FaSnowflake, FaWifi, FaSignOutAlt } from "react-icons/fa";
 import {
@@ -15,16 +15,16 @@ import {
     Button,
     CircularProgress,
     Box,
+    IconButton,
     Tooltip,
     LinearProgress,
 } from "@mui/material";
-import { blue, green } from "@mui/material/colors";
+import { blue, green, red } from "@mui/material/colors";
 
 const NodesTable = () => {
-    const { nodes, fetchNodes } = useFetchNodes();
+    const { daemon, nodes, fetchNodes } = useFetchDaemonStatus();
     const [token, setToken] = useState("");
     const [eventNodes, setEventNodes] = useState([]);
-    const [daemonNode, setDaemonNode] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -35,15 +35,6 @@ const NodesTable = () => {
             createEventSource("/sse", storedToken, setEventNodes);
         }
     }, []);
-
-    useEffect(() => {
-        if (nodes.length > 0) {
-            const daemonData = nodes.find((node) => node.daemon?.nodename);
-            if (daemonData) {
-                setDaemonNode(daemonData.daemon.nodename);
-            }
-        }
-    }, [nodes]);
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");
@@ -93,13 +84,7 @@ const NodesTable = () => {
                     bgcolor: "background.paper",
                 }}
             >
-                <Typography
-                    variant="h4"
-                    component="h1"
-                    gutterBottom
-                    align="center"
-                    sx={{ mb: 4 }}
-                >
+                <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ mb: 4 }}>
                     Node Status
                 </Typography>
 
@@ -136,21 +121,16 @@ const NodesTable = () => {
                                         </TableCell>
                                         <TableCell>
                                             <Box sx={{ display: "flex", gap: 1 }}>
-                                                {daemonNode === node.nodename && (
+                                                {daemon.nodename === node.nodename && (
                                                     <Tooltip title="Daemon Node">
-                                                        <span>
-                                                            <FaWifi style={{ color: green[500] }} size={20} />
-                                                        </span>
+                                                        <FaWifi style={{ color: green[500] }} />
                                                     </Tooltip>
                                                 )}
-                                                {node.status?.frozen_at &&
-                                                    node.status.frozen_at !== "0001-01-01T00:00:00Z" && (
-                                                        <Tooltip title="Frozen">
-                                                            <span>
-                                                                <FaSnowflake style={{ color: blue[200] }} size={20} />
-                                                            </span>
-                                                        </Tooltip>
-                                                    )}
+                                                {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" && (
+                                                    <Tooltip title="Frozen">
+                                                        <FaSnowflake style={{ color: blue[200] }} />
+                                                    </Tooltip>
+                                                )}
                                             </Box>
                                         </TableCell>
                                         <TableCell>{node.stats?.score || "N/A"}</TableCell>
@@ -163,11 +143,7 @@ const NodesTable = () => {
                                                         value={Math.min(node.stats.load_15m * 20, 100)}
                                                         sx={{ mt: 1, height: 4 }}
                                                         color={
-                                                            node.stats.load_15m > 4
-                                                                ? "error"
-                                                                : node.stats.load_15m > 2
-                                                                    ? "warning"
-                                                                    : "success"
+                                                            node.stats.load_15m > 4 ? "error" : node.stats.load_15m > 2 ? "warning" : "success"
                                                         }
                                                     />
                                                 </>
@@ -183,11 +159,7 @@ const NodesTable = () => {
                                                     value={node.stats.mem_avail}
                                                     sx={{ mt: 1, height: 4 }}
                                                     color={
-                                                        node.stats.mem_avail < 20
-                                                            ? "error"
-                                                            : node.stats.mem_avail < 50
-                                                                ? "warning"
-                                                                : "success"
+                                                        node.stats.mem_avail < 20 ? "error" : node.stats.mem_avail < 50 ? "warning" : "success"
                                                     }
                                                 />
                                             )}

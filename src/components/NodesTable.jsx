@@ -83,9 +83,9 @@ const NodesTable = () => {
                     Node Status
                 </Typography>
 
-                {nodes.length === 0 ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
-                        <CircularProgress />
+                {nodeStatus.length === 0 ? (
+                    <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
+                        <CircularProgress/>
                     </Box>
                 ) : (
                     <TableContainer component={Paper} elevation={0}>
@@ -102,7 +102,10 @@ const NodesTable = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {nodes.map((node, index) => (
+                                {Object.keys(nodeStatus).map((nodename, index) => {
+                                    const stats = nodeStats[nodename]
+                                    const status = nodeStatus[nodename]
+                                    return (
                                     <TableRow
                                         key={index}
                                         hover
@@ -112,36 +115,36 @@ const NodesTable = () => {
                                         }}
                                     >
                                         <TableCell component="th" scope="row">
-                                            {node.nodename || "-"}
+                                            {nodename || "-"}
                                         </TableCell>
                                         <TableCell>
                                             <Box sx={{ display: "flex", gap: 1 }}>
-                                                {daemon.nodename === node.nodename && (
-                                                    <Tooltip title="Daemon Node">
-                                                        <span><FaWifi style={{ color: green[500] }} /></span>
-                                                    </Tooltip>
+                                                {nodeMonitor[nodename]?.state && nodeMonitor[nodename]?.state !== "idle" && (
+                                                    nodeMonitor[nodename].state
                                                 )}
-                                                {nodeMonitor[node.nodename]?.state && nodeMonitor[node.nodename]?.state !== "idle" && (
-                                                    nodeMonitor[node.nodename].state
-                                                )}
-                                                {nodeStatus[node.nodename]?.frozen_at && nodeStatus[node.nodename]?.frozen_at !== "0001-01-01T00:00:00Z" && (
+                                                {status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z" && (
                                                     <Tooltip title="Frozen">
                                                         <span><FaSnowflake style={{ color: blue[200] }} /></span>
                                                     </Tooltip>
                                                 )}
+                                                {daemon.nodename === nodename && (
+                                                    <Tooltip title="Daemon Node">
+                                                        <span><FaWifi style={{ color: green[500] }} /></span>
+                                                    </Tooltip>
+                                                )}
                                             </Box>
                                         </TableCell>
-                                        <TableCell>{node.stats?.score || "N/A"}</TableCell>
+                                        <TableCell>{stats?.score || "N/A"}</TableCell>
                                         <TableCell>
-                                            {node.stats?.load_15m ? (
+                                            {stats?.load_15m ? (
                                                 <>
-                                                    {node.stats.load_15m}
+                                                    {stats?.load_15m}
                                                     <LinearProgress
                                                         variant="determinate"
-                                                        value={Math.min(node.stats.load_15m * 20, 100)}
+                                                        value={Math.min(stats?.load_15m * 20, 100)}
                                                         sx={{ mt: 1, height: 4 }}
                                                         color={
-                                                            node.stats.load_15m > 4 ? "error" : node.stats.load_15m > 2 ? "warning" : "success"
+                                                            stats?.load_15m > 4 ? "error" : stats?.load_15m > 2 ? "warning" : "success"
                                                         }
                                                     />
                                                 </>
@@ -150,22 +153,22 @@ const NodesTable = () => {
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            {node.stats?.mem_avail || "N/A"}%
-                                            {node.stats?.mem_avail && (
+                                            {stats?.mem_avail || "N/A"}%
+                                            {stats?.mem_avail && (
                                                 <LinearProgress
                                                     variant="determinate"
-                                                    value={node.stats.mem_avail}
+                                                    value={stats?.mem_avail}
                                                     sx={{ mt: 1, height: 4 }}
                                                     color={
-                                                        node.stats.mem_avail < 20 ? "error" : node.stats.mem_avail < 50 ? "warning" : "success"
+                                                        stats?.mem_avail < 20 ? "error" : stats?.mem_avail < 50 ? "warning" : "success"
                                                     }
                                                 />
                                             )}
                                         </TableCell>
-                                        <TableCell>{node.stats?.swap_avail || "N/A"}%</TableCell>
-                                        <TableCell>{node.status?.agent || "N/A"}</TableCell>
+                                        <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
+                                        <TableCell>{status?.agent || "N/A"}</TableCell>
                                     </TableRow>
-                                ))}
+                                )})}
                             </TableBody>
                         </Table>
                     </TableContainer>

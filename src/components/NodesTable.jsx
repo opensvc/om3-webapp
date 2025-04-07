@@ -123,12 +123,12 @@ const NodesTable = () => {
                                             <Box sx={{ display: "flex", gap: 1 }}>
                                                 {daemon.nodename === node.nodename && (
                                                     <Tooltip title="Daemon Node">
-                                                        <FaWifi style={{ color: green[500] }} />
+                                                        <span><FaWifi style={{ color: green[500] }} /></span>
                                                     </Tooltip>
                                                 )}
                                                 {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" && (
                                                     <Tooltip title="Frozen">
-                                                        <FaSnowflake style={{ color: blue[200] }} />
+                                                        <span><FaSnowflake style={{ color: blue[200] }} /></span>
                                                     </Tooltip>
                                                 )}
                                             </Box>

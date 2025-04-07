@@ -147,7 +147,12 @@ export const createEventSource2 = (url, token, onEventToState) => {
         return null;
     }
 
-    const eventSource = new EventSource(`/sse?token=${token}`);
+    let cachedUrl = "/sse?cache=true"
+    for (const eventName in onEventToState) {
+        cachedUrl += `&filter=${eventName}`
+    }
+    console.log("eventSource url", cachedUrl)
+    const eventSource = new EventSource(cachedUrl+`&token=${token}`);
 
     eventSource.onopen = () => {
         console.log("✅ SSE connection established!");
@@ -209,7 +214,7 @@ export const createEventSource2 = (url, token, onEventToState) => {
         eventSource.close();
         setTimeout(() => {
             console.log("🔄 Attempting to reconnect to EventSource...");
-            createEventSource(url, token, updateNodes);
+            createEventSource2(url, token, onEventToState);
         }, 5000);
     };
 

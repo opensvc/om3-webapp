@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import { createEventSource } from "../eventSourceManager";
+import { createEventSource2 } from "../eventSourceManager";
 import { FaSnowflake, FaWifi, FaSignOutAlt } from "react-icons/fa";
 import {
     Table,
@@ -25,14 +25,22 @@ const NodesTable = () => {
     const { daemon, nodes, fetchNodes } = useFetchDaemonStatus();
     const [token, setToken] = useState("");
     const [eventNodes, setEventNodes] = useState([]);
+    const [nodeStatus, setNodeStatus] = useState({});
+    const [nodeStats, setNodeStats] = useState({});
+    const [nodeMonitor, setNodeMonitor] = useState({});
     const navigate = useNavigate();
 
+    const onEventToState = {
+        "NodeStatusUpdated": setNodeStatus,
+        "NodeMonitorUpdated": setNodeMonitor,
+        "NodeStatsUpdated": setNodeStats,
+    }
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
-            createEventSource("/sse", storedToken, setEventNodes);
+            createEventSource2("/sse", storedToken, onEventToState);
         }
     }, []);
 
@@ -40,19 +48,6 @@ const NodesTable = () => {
         localStorage.removeItem("authToken");
         navigate("/login");
     };
-
-    const mergedNodes = nodes.map((node) => {
-        const updatedNode = eventNodes.find((n) => n.node === node.nodename);
-        return updatedNode
-            ? {
-                ...node,
-                status: {
-                    ...node.status,
-                    frozen_at: updatedNode.node_status?.frozen_at,
-                },
-            }
-            : node;
-    });
 
     return (
         <Box
@@ -88,7 +83,7 @@ const NodesTable = () => {
                     Node Status
                 </Typography>
 
-                {mergedNodes.length === 0 ? (
+                {nodes.length === 0 ? (
                     <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
                         <CircularProgress />
                     </Box>
@@ -107,7 +102,7 @@ const NodesTable = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {mergedNodes.map((node, index) => (
+                                {nodes.map((node, index) => (
                                     <TableRow
                                         key={index}
                                         hover
@@ -126,7 +121,10 @@ const NodesTable = () => {
                                                         <span><FaWifi style={{ color: green[500] }} /></span>
                                                     </Tooltip>
                                                 )}
-                                                {node.status?.frozen_at && node.status.frozen_at !== "0001-01-01T00:00:00Z" && (
+                                                {nodeMonitor[node.nodename]?.state && nodeMonitor[node.nodename]?.state !== "idle" && (
+                                                    nodeMonitor[node.nodename].state
+                                                )}
+                                                {nodeStatus[node.nodename]?.frozen_at && nodeStatus[node.nodename]?.frozen_at !== "0001-01-01T00:00:00Z" && (
                                                     <Tooltip title="Frozen">
                                                         <span><FaSnowflake style={{ color: blue[200] }} /></span>
                                                     </Tooltip>

@@ -1,7 +1,7 @@
 import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {createEventSource2} from "../eventSourceManager";
+import {createEventSource} from "../eventSourceManager";
 import {FaSnowflake, FaWifi, FaSignOutAlt} from "react-icons/fa";
 import {
     Table,
@@ -37,6 +37,7 @@ const NodesTable = () => {
         NodeStatusUpdated: setNodeStatus,
         NodeMonitorUpdated: setNodeMonitor,
         NodeStatsUpdated: setNodeStats,
+        //InstanceStatusUpdated: setInstanceStatus
     };
 
     useEffect(() => {
@@ -44,7 +45,7 @@ const NodesTable = () => {
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
-            createEventSource2("/sse", storedToken, onEventToState);
+            createEventSource("/sse", storedToken, onEventToState);
         }
     }, []);
 
@@ -197,12 +198,6 @@ const NodesTable = () => {
                                                     )}
                                                     <MenuItem
                                                         onClick={() => handleAction(nodename, "daemon/action/restart")}>Restart
-                                                        Daemon</MenuItem>
-                                                    <MenuItem
-                                                        onClick={() => handleAction(nodename, "daemon/action/shutdown")}>Shutdown
-                                                        Daemon</MenuItem>
-                                                    <MenuItem
-                                                        onClick={() => handleAction(nodename, "daemon/action/stop")}>Stop
                                                         Daemon</MenuItem>
                                                 </Menu>
                                             </TableCell>

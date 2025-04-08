@@ -60,7 +60,7 @@ function AuthChoice() {
                             fullWidth
                             onClick={() => handleAuthChoice("basic")}
                         >
-                            Basic Auth
+                            Login
                         </Button>
                     )}
                 </Stack>

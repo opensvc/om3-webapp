@@ -105,6 +105,7 @@ const NodesTable = () => {
                                 {Object.keys(nodeStatus).map((nodename, index) => {
                                     const stats = nodeStats[nodename]
                                     const status = nodeStatus[nodename]
+                                    const monitor = nodeMonitor[nodename]
                                     return (
                                         <TableRow
                                             key={index}
@@ -119,8 +120,8 @@ const NodesTable = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <Box sx={{display: "flex", gap: 1}}>
-                                                    {nodeMonitor[nodename]?.state && nodeMonitor[nodename]?.state !== "idle" && (
-                                                        nodeMonitor[nodename].state
+                                                    {monitor?.state && monitor?.state !== "idle" && (
+                                                        monitor.state
                                                     )}
                                                     {status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z" && (
                                                         <Tooltip title="Frozen">

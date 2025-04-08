@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-const baseUrl = process.env.BASE_URL || 'https://localhost:1215';
+const baseUrl = process.env.BASE_URL || 'https://localhost:1215/';
 
 export default defineConfig({
     plugins: [react(), tailwindcss()],
@@ -13,12 +13,13 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
-            '/nodes': {
+
+            '/daemon/status': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/daemon/status': { // Ajoutez cette règle
+            '/node/name': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,

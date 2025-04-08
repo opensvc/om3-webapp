@@ -24,7 +24,6 @@ import {blue, green, red} from "@mui/material/colors";
 const NodesTable = () => {
     const {daemon, nodes, fetchNodes} = useFetchDaemonStatus();
     const [token, setToken] = useState("");
-    const [eventNodes, setEventNodes] = useState([]);
     const [nodeStatus, setNodeStatus] = useState({});
     const [nodeStats, setNodeStats] = useState({});
     const [nodeMonitor, setNodeMonitor] = useState({});
@@ -35,6 +34,7 @@ const NodesTable = () => {
         "NodeMonitorUpdated": setNodeMonitor,
         "NodeStatsUpdated": setNodeStats,
     }
+
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
         if (storedToken) {
@@ -47,6 +47,26 @@ const NodesTable = () => {
     const handleLogout = () => {
         localStorage.removeItem("authToken");
         navigate("/login");
+    };
+
+    const toggleFreeze = async (nodename, shouldFreeze) => {
+        const action = shouldFreeze ? "freeze" : "unfreeze";
+        try {
+            const response = await fetch(`/node/name/${nodename}/action/${action}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to ${action} node`);
+            }
+
+            console.log(`✅ Node ${nodename} ${action}d successfully`);
+        } catch (error) {
+            console.error("🚨 Error toggling freeze:", error);
+        }
     };
 
     return (
@@ -99,13 +119,16 @@ const NodesTable = () => {
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>Mem Avail</TableCell>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>Swap Avail</TableCell>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>Version</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Action</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {Object.keys(nodeStatus).map((nodename, index) => {
-                                    const stats = nodeStats[nodename]
-                                    const status = nodeStatus[nodename]
-                                    const monitor = nodeMonitor[nodename]
+                                    const stats = nodeStats[nodename];
+                                    const status = nodeStatus[nodename];
+                                    const monitor = nodeMonitor[nodename];
+                                    const isFrozen = status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z";
+
                                     return (
                                         <TableRow
                                             key={index}
@@ -123,9 +146,9 @@ const NodesTable = () => {
                                                     {monitor?.state && monitor?.state !== "idle" && (
                                                         monitor.state
                                                     )}
-                                                    {status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z" && (
+                                                    {isFrozen && (
                                                         <Tooltip title="Frozen">
-                                                            <span><FaSnowflake style={{color: blue[200]}}/></span>
+                                                            <span><FaSnowflake style={{color: blue[200]}} /></span>
                                                         </Tooltip>
                                                     )}
                                                     {daemon.nodename === nodename && (
@@ -168,8 +191,18 @@ const NodesTable = () => {
                                             </TableCell>
                                             <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
                                             <TableCell>{status?.agent || "N/A"}</TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    variant="outlined"
+                                                    size="small"
+                                                    color={isFrozen ? "success" : "error"}
+                                                    onClick={() => toggleFreeze(nodename, !isFrozen)}
+                                                >
+                                                    {isFrozen ? "Unfreeze" : "Freeze"}
+                                                </Button>
+                                            </TableCell>
                                         </TableRow>
-                                    )
+                                    );
                                 })}
                             </TableBody>
                         </Table>

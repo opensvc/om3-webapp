@@ -19,6 +19,11 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
+            '/node/name': {
+                target: baseUrl,
+                changeOrigin: true,
+                secure: false,
+            },
             '/sse': {
                 target: baseUrl,
                 changeOrigin: true,

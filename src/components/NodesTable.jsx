@@ -18,8 +18,11 @@ import {
     IconButton,
     Tooltip,
     LinearProgress,
+    Menu,
+    MenuItem,
 } from "@mui/material";
-import {blue, green, red} from "@mui/material/colors";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import {blue, green} from "@mui/material/colors";
 
 const NodesTable = () => {
     const {daemon, nodes, fetchNodes} = useFetchDaemonStatus();
@@ -27,13 +30,14 @@ const NodesTable = () => {
     const [nodeStatus, setNodeStatus] = useState({});
     const [nodeStats, setNodeStats] = useState({});
     const [nodeMonitor, setNodeMonitor] = useState({});
+    const [anchorEls, setAnchorEls] = useState({});
     const navigate = useNavigate();
 
     const onEventToState = {
-        "NodeStatusUpdated": setNodeStatus,
-        "NodeMonitorUpdated": setNodeMonitor,
-        "NodeStatsUpdated": setNodeStats,
-    }
+        NodeStatusUpdated: setNodeStatus,
+        NodeMonitorUpdated: setNodeMonitor,
+        NodeStatsUpdated: setNodeStats,
+    };
 
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
@@ -49,13 +53,20 @@ const NodesTable = () => {
         navigate("/login");
     };
 
-    const toggleFreeze = async (nodename, shouldFreeze) => {
-        const action = shouldFreeze ? "freeze" : "unfreeze";
+    const handleMenuOpen = (event, nodename) => {
+        setAnchorEls((prev) => ({...prev, [nodename]: event.currentTarget}));
+    };
+
+    const handleMenuClose = (nodename) => {
+        setAnchorEls((prev) => ({...prev, [nodename]: null}));
+    };
+
+    const handleAction = async (nodename, action) => {
         try {
-            const response = await fetch(`/node/name/${nodename}/action/${action}`, {
-                method: 'POST',
+            const response = await fetch(`/node/name/${nodename}/${action}`, {
+                method: "POST",
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`,
                 },
             });
 
@@ -65,19 +76,14 @@ const NodesTable = () => {
 
             console.log(`✅ Node ${nodename} ${action}d successfully`);
         } catch (error) {
-            console.error("🚨 Error toggling freeze:", error);
+            console.error("🚨 Error performing action:", error);
+        } finally {
+            handleMenuClose(nodename);
         }
     };
 
     return (
-        <Box
-            sx={{
-                minHeight: "100vh",
-                bgcolor: "background.default",
-                p: 3,
-            }}
-        >
-            {/* Header with Logout */}
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3}}>
             <Box sx={{display: "flex", justifyContent: "flex-end", mb: 3}}>
                 <Button
                     variant="contained"
@@ -90,27 +96,19 @@ const NodesTable = () => {
                 </Button>
             </Box>
 
-            {/* Main Content */}
-            <Paper
-                elevation={3}
-                sx={{
-                    p: 3,
-                    borderRadius: 2,
-                    bgcolor: "background.paper",
-                }}
-            >
+            <Paper elevation={3} sx={{p: 3, borderRadius: 2, bgcolor: "background.paper"}}>
                 <Typography variant="h4" component="h1" gutterBottom align="center" sx={{mb: 4}}>
                     Node Status
                 </Typography>
 
-                {nodeStatus.length === 0 ? (
+                {Object.keys(nodeStatus).length === 0 ? (
                     <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
                         <CircularProgress/>
                     </Box>
                 ) : (
                     <TableContainer component={Paper} elevation={0}>
-                        <Table sx={{width: "100%", tableLayout: "fixed" }} aria-label="nodes table">
-                        <TableHead>
+                        <Table sx={{width: "100%", tableLayout: "fixed"}} aria-label="nodes table">
+                            <TableHead>
                                 <TableRow sx={{bgcolor: blue[500]}}>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>Name</TableCell>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>State</TableCell>
@@ -130,22 +128,11 @@ const NodesTable = () => {
                                     const isFrozen = status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z";
 
                                     return (
-                                        <TableRow
-                                            key={index}
-                                            hover
-                                            sx={{
-                                                "&:last-child td, &:last-child th": {border: 0},
-                                                transition: "background-color 0.2s",
-                                            }}
-                                        >
-                                            <TableCell component="th" scope="row">
-                                                {nodename || "-"}
-                                            </TableCell>
+                                        <TableRow key={index} hover>
+                                            <TableCell>{nodename || "-"}</TableCell>
                                             <TableCell>
                                                 <Box sx={{display: "flex", gap: 1}}>
-                                                    {monitor?.state && monitor?.state !== "idle" && (
-                                                        monitor.state
-                                                    )}
+                                                    {monitor?.state && monitor?.state !== "idle" && monitor.state}
                                                     {isFrozen && (
                                                         <Tooltip title="Frozen">
                                                             <span><FaSnowflake style={{color: blue[200]}} /></span>
@@ -192,14 +179,32 @@ const NodesTable = () => {
                                             <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
                                             <TableCell>{status?.agent || "N/A"}</TableCell>
                                             <TableCell>
-                                                <Button
-                                                    variant="outlined"
-                                                    size="small"
-                                                    color={isFrozen ? "success" : "error"}
-                                                    onClick={() => toggleFreeze(nodename, !isFrozen)}
+                                                <IconButton onClick={(e) => handleMenuOpen(e, nodename)}>
+                                                    <MoreVertIcon/>
+                                                </IconButton>
+                                                <Menu
+                                                    anchorEl={anchorEls[nodename]}
+                                                    open={Boolean(anchorEls[nodename])}
+                                                    onClose={() => handleMenuClose(nodename)}
                                                 >
-                                                    {isFrozen ? "Unfreeze" : "Freeze"}
-                                                </Button>
+                                                    {!isFrozen && (
+                                                        <MenuItem
+                                                            onClick={() => handleAction(nodename, "action/freeze")}>Freeze</MenuItem>
+                                                    )}
+                                                    {isFrozen && (
+                                                        <MenuItem
+                                                            onClick={() => handleAction(nodename, "action/unfreeze")}>Unfreeze</MenuItem>
+                                                    )}
+                                                    <MenuItem
+                                                        onClick={() => handleAction(nodename, "daemon/action/restart")}>Restart
+                                                        Daemon</MenuItem>
+                                                    <MenuItem
+                                                        onClick={() => handleAction(nodename, "daemon/action/shutdown")}>Shutdown
+                                                        Daemon</MenuItem>
+                                                    <MenuItem
+                                                        onClick={() => handleAction(nodename, "daemon/action/stop")}>Stop
+                                                        Daemon</MenuItem>
+                                                </Menu>
                                             </TableCell>
                                         </TableRow>
                                     );

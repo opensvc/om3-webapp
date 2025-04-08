@@ -89,8 +89,8 @@ const NodesTable = () => {
                     </Box>
                 ) : (
                     <TableContainer component={Paper} elevation={0}>
-                        <Table sx={{minWidth: 650}} aria-label="nodes table">
-                            <TableHead>
+                        <Table sx={{width: "100%", tableLayout: "fixed" }} aria-label="nodes table">
+                        <TableHead>
                                 <TableRow sx={{bgcolor: blue[500]}}>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>Name</TableCell>
                                     <TableCell sx={{color: "white", fontWeight: "bold"}}>State</TableCell>

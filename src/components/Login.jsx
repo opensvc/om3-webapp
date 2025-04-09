@@ -1,7 +1,7 @@
-import React, { useState, forwardRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { useStateValue } from '../state.jsx';
+import React, {useState, forwardRef} from 'react';
+import {useTranslation} from 'react-i18next';
+import {useNavigate} from 'react-router-dom';
+import {useStateValue} from '../state.jsx';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -26,8 +26,8 @@ const Login = forwardRef((props, ref) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [{ basicLogin }, dispatch] = useStateValue();
-    const { t } = useTranslation();
+    const [{basicLogin}, dispatch] = useStateValue();
+    const {t} = useTranslation();
 
     const refreshToken = async () => {
         const token = localStorage.getItem('authToken');
@@ -35,12 +35,12 @@ const Login = forwardRef((props, ref) => {
             try {
                 const response = await fetch('/auth/token', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
+                    headers: {'Authorization': `Bearer ${token}`},
                 });
                 if (!response.ok) throw new Error('Token refresh failed');
                 const data = await response.json();
                 localStorage.setItem('authToken', data.token);
-                dispatch({ type: 'setBasicLogin', data: { ...basicLogin, token: data.token } });
+                dispatch({type: 'setBasicLogin', data: {...basicLogin, token: data.token}});
             } catch (error) {
                 console.error('Error refreshing token:', error);
             }
@@ -63,7 +63,7 @@ const Login = forwardRef((props, ref) => {
             const data = await response.json();
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
-            dispatch({ type: 'setBasicLogin', data: { username, password, token: data.token } });
+            dispatch({type: 'setBasicLogin', data: {username, password, token: data.token}});
 
             const payload = decodeToken(data.token);
             if (payload?.exp) {
@@ -92,7 +92,7 @@ const Login = forwardRef((props, ref) => {
     };
 
     const handleChangeMethod = () => {
-        dispatch({ type: 'setAuthChoice', data: '' });
+        dispatch({type: 'setAuthChoice', data: ''});
     };
 
     return (
@@ -123,7 +123,7 @@ const Login = forwardRef((props, ref) => {
             >
                 {t('Login')}
             </DialogTitle>
-            <DialogContent sx={{ px: 3 }}>
+            <DialogContent sx={{px: 3}}>
                 <TextField
                     margin="normal"
                     fullWidth
@@ -131,7 +131,7 @@ const Login = forwardRef((props, ref) => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     autoFocus
-                    sx={{ mb: 2 }}
+                    sx={{mb: 2}}
                 />
                 <TextField
                     margin="normal"
@@ -141,7 +141,7 @@ const Login = forwardRef((props, ref) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    sx={{ mb: 2 }}
+                    sx={{mb: 2}}
                 />
                 {errorMessage && (
                     <Typography

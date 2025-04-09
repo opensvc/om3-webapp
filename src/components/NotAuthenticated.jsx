@@ -1,5 +1,5 @@
 import React from "react"
-import { useTranslation } from "react-i18next"
+import {useTranslation} from "react-i18next"
 import Dialog from '@mui/material/Dialog'
 //import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'

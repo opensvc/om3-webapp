@@ -39,7 +39,7 @@ const NodesTable = () => {
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
-            createEventSource("/sse", storedToken); // Utilisation du cache global
+            createEventSource("/sse", storedToken);
         }
     }, []);
 
@@ -79,18 +79,6 @@ const NodesTable = () => {
 
     return (
         <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3}}>
-            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 3}}>
-                <Button
-                    variant="contained"
-                    color="error"
-                    startIcon={<FaSignOutAlt/>}
-                    onClick={handleLogout}
-                    sx={{boxShadow: 3}}
-                >
-                    Logout
-                </Button>
-            </Box>
-
             <Paper elevation={3} sx={{p: 3, borderRadius: 2, bgcolor: "background.paper"}}>
                 <Typography variant="h4" component="h1" gutterBottom align="center" sx={{mb: 4}}>
                     Node Status

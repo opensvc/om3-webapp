@@ -1,8 +1,8 @@
 /* eslint-disable no-unused-vars */
 
-import { useState, useRef } from "react";
-import { createEventSource, closeEventSource } from "../eventSourceManager";
-import { fetchDaemonStatus } from "../services/api";
+import {useState, useRef} from "react";
+import {createEventSource, closeEventSource} from "../eventSourceManager";
+import {fetchDaemonStatus} from "../services/api";
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
@@ -51,7 +51,7 @@ const useFetchDaemonStatus = () => {
         eventSourceRef.current = createEventSource("/sse", token);
     };
 
-    return { daemon, nodes, error, loading, fetchNodes: refreshDaemonStatus, startEventReception };
+    return {daemon, nodes, error, loading, fetchNodes: refreshDaemonStatus, startEventReception};
 };
 
 export default useFetchDaemonStatus;

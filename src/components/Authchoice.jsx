@@ -1,5 +1,5 @@
 import React from "react";
-import { useStateValue } from "../state";
+import {useStateValue} from "../state";
 import {
     Dialog,
     DialogActions,
@@ -10,14 +10,14 @@ import {
     Typography,
     Stack
 } from "@mui/material";
-import { FaKey, FaIdCard, FaUserShield } from "react-icons/fa";
+import {FaKey, FaIdCard, FaUserShield} from "react-icons/fa";
 
 function AuthChoice() {
     const [state, dispatch] = useStateValue();
-    const { authInfo } = state;
+    const {authInfo} = state;
 
     const handleAuthChoice = (choice) => {
-        dispatch({ type: "setAuthChoice", data: choice });
+        dispatch({type: "setAuthChoice", data: choice});
     };
 
     return (
@@ -36,7 +36,7 @@ function AuthChoice() {
                         <Button
                             variant="contained"
                             color="primary"
-                            startIcon={<FaKey />}
+                            startIcon={<FaKey/>}
                             fullWidth
                             onClick={() => handleAuthChoice("openid")}
                         >
@@ -46,7 +46,7 @@ function AuthChoice() {
                     <Button
                         variant="contained"
                         color="success"
-                        startIcon={<FaIdCard />}
+                        startIcon={<FaIdCard/>}
                         fullWidth
                         onClick={() => handleAuthChoice("x509")}
                     >
@@ -56,7 +56,7 @@ function AuthChoice() {
                         <Button
                             variant="contained"
                             color="secondary"
-                            startIcon={<FaUserShield />}
+                            startIcon={<FaUserShield/>}
                             fullWidth
                             onClick={() => handleAuthChoice("basic")}
                         >
@@ -66,7 +66,7 @@ function AuthChoice() {
                 </Stack>
             </DialogContent>
             <DialogActions>
-                <Box flexGrow={1} />
+                <Box flexGrow={1}/>
             </DialogActions>
         </Dialog>
     );

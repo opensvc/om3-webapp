@@ -71,7 +71,6 @@ export const createEventSource = (url, token) => {
     });
 
 
-
     return eventSource;
 }
 

@@ -1,7 +1,7 @@
 import React from "react"
-import { useTranslation } from "react-i18next"
+import {useTranslation} from "react-i18next"
 import useAuthInfo from "../hooks/AuthInfo.jsx"
-import { useStateValue } from '../state.jsx'
+import {useStateValue} from '../state.jsx'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -12,7 +12,7 @@ import Button from '@mui/material/Button'
 function NotAuthorized() {
     const {t} = useTranslation()
     const authInfo = useAuthInfo()
-    const [{ authChoice }, dispatch] = useStateValue()
+    const [{authChoice}, dispatch] = useStateValue()
 
     return (
         <Dialog

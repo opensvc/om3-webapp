@@ -123,10 +123,11 @@ const Objects = () => {
                                                 {avail === "down" && <FiberManualRecordIcon sx={{color: red[500]}}/>}
                                                 {frozen === "frozen" ? (
                                                     <Tooltip title="Frozen">
-                                                        <AcUnitIcon fontSize="small" sx={{ color: blue[200] }} />
+                                                        <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
                                                     </Tooltip>
                                                 ) : frozen !== "unfrozen" && frozen ? (
-                                                    <Typography variant="body2" color="text.secondary">{frozen}</Typography>
+                                                    <Typography variant="body2"
+                                                                color="text.secondary">{frozen}</Typography>
                                                 ) : null}
                                             </Box>
                                         </TableCell>

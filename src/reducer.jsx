@@ -1,6 +1,6 @@
 export const initialState = {
     authChoice: null,
     user: null,
-    basicLogin: { username: "", password: "" },
+    basicLogin: {username: "", password: ""},
     authInfo: {}
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { OidcProvider } from '@axa-fr/react-oidc';
+import {OidcProvider} from '@axa-fr/react-oidc';
 import OidcConfiguration from './config/oidcConfiguration';
 import App from './components/App';
 import './styles/main.css'
@@ -13,7 +13,7 @@ if (rootElement) {
 
     root.render(
         <OidcProvider configuration={OidcConfiguration()}>
-            <App />
+            <App/>
         </OidcProvider>
     );
 } else {

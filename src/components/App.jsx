@@ -15,7 +15,8 @@ import Authenticating from "./Authenticating.jsx";
 import LoginCallback from "./LoginCallback.jsx";
 import '../styles/main.css';
 import NodesTable from "./NodesTable";
-import Objects from "./Objects"; // ✅ AJOUT ICI
+import Objects from "./Objects";
+import NavBar from './NavBar';
 
 let enabled;
 
@@ -178,6 +179,7 @@ const App = () => {
     return (
         <AppStateProvider>
             <Router>
+                <NavBar />
                 <Routes>
                     <Route path="/" element={<Navigate to="/nodes" replace/>}/>
                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>

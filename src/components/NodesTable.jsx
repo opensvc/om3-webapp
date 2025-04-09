@@ -23,29 +23,23 @@ import {
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {blue, green} from "@mui/material/colors";
+import useEventStore from "../store/useEventStore";
 
 const NodesTable = () => {
-    const {daemon, nodes, fetchNodes} = useFetchDaemonStatus();
+    const {daemon, fetchNodes} = useFetchDaemonStatus();
+    const nodeStatus = useEventStore((state) => state.nodeStatus);
+    const nodeStats = useEventStore((state) => state.nodeStats);
+    const nodeMonitor = useEventStore((state) => state.nodeMonitor);
     const [token, setToken] = useState("");
-    const [nodeStatus, setNodeStatus] = useState({});
-    const [nodeStats, setNodeStats] = useState({});
-    const [nodeMonitor, setNodeMonitor] = useState({});
     const [anchorEls, setAnchorEls] = useState({});
     const navigate = useNavigate();
-
-    const onEventToState = {
-        NodeStatusUpdated: setNodeStatus,
-        NodeMonitorUpdated: setNodeMonitor,
-        NodeStatsUpdated: setNodeStats,
-        //InstanceStatusUpdated: setInstanceStatus
-    };
 
     useEffect(() => {
         const storedToken = localStorage.getItem("authToken");
         if (storedToken) {
             setToken(storedToken);
             fetchNodes(storedToken);
-            createEventSource("/sse", storedToken, onEventToState);
+            createEventSource("/sse", storedToken); // Utilisation du cache global
         }
     }, []);
 
@@ -136,7 +130,7 @@ const NodesTable = () => {
                                                     {monitor?.state && monitor?.state !== "idle" && monitor.state}
                                                     {isFrozen && (
                                                         <Tooltip title="Frozen">
-                                                            <span><FaSnowflake style={{color: blue[200]}} /></span>
+                                                            <span><FaSnowflake style={{color: blue[200]}}/></span>
                                                         </Tooltip>
                                                     )}
                                                     {daemon.nodename === nodename && (
@@ -190,15 +184,23 @@ const NodesTable = () => {
                                                 >
                                                     {!isFrozen && (
                                                         <MenuItem
-                                                            onClick={() => handleAction(nodename, "action/freeze")}>Freeze</MenuItem>
+                                                            onClick={() => handleAction(nodename, "action/freeze")}
+                                                        >
+                                                            Freeze
+                                                        </MenuItem>
                                                     )}
                                                     {isFrozen && (
                                                         <MenuItem
-                                                            onClick={() => handleAction(nodename, "action/unfreeze")}>Unfreeze</MenuItem>
+                                                            onClick={() => handleAction(nodename, "action/unfreeze")}
+                                                        >
+                                                            Unfreeze
+                                                        </MenuItem>
                                                     )}
                                                     <MenuItem
-                                                        onClick={() => handleAction(nodename, "daemon/action/restart")}>Restart
-                                                        Daemon</MenuItem>
+                                                        onClick={() => handleAction(nodename, "daemon/action/restart")}
+                                                    >
+                                                        Restart Daemon
+                                                    </MenuItem>
                                                 </Menu>
                                             </TableCell>
                                         </TableRow>

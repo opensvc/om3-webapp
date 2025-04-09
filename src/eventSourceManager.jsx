@@ -1,4 +1,4 @@
-import useEventStore from "./store/useEventStore"; // nouveau
+import useEventStore from "./store/useEventStore";
 
 export const createEventSource = (url, token) => {
     if (!token) {
@@ -6,10 +6,20 @@ export const createEventSource = (url, token) => {
         return null;
     }
 
-    const {updateNodeStatus, updateNodeMonitor, updateNodeStats} = useEventStore.getState();
+    const {
+        updateNodeStatus,
+        updateNodeMonitor,
+        updateNodeStats,
+        updateObjectStatus,
+    } = useEventStore.getState();
 
     let cachedUrl = "/sse?cache=true&token=" + token;
-    const filters = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
+    const filters = [
+        "NodeStatusUpdated",
+        "NodeMonitorUpdated",
+        "NodeStatsUpdated",
+        "ObjectStatusUpdated", // 👈 Nouveau
+    ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
     const eventSource = new EventSource(cachedUrl);
@@ -41,6 +51,26 @@ export const createEventSource = (url, token) => {
         const {node, node_stats} = JSON.parse(event.data);
         updateNodeStats(node, node_stats);
     });
+
+    eventSource.addEventListener("ObjectStatusUpdated", (event) => {
+        try {
+            const parsed = JSON.parse(event.data);
+            const object_name = parsed.path ?? parsed.labels?.path;
+            const object_status = parsed.object_status;
+
+            if (!object_name || !object_status) {
+                console.warn("⛔ Event is missing object_name or object_status", parsed);
+                return;
+            }
+
+            console.log("📦 ObjectStatusUpdated:", object_name, object_status);
+            updateObjectStatus(object_name, object_status);
+        } catch (err) {
+            console.error("❌ Failed to handle ObjectStatusUpdated event", err);
+        }
+    });
+
+
 
     return eventSource;
 }

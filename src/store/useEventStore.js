@@ -4,6 +4,7 @@ const useEventStore = create((set) => ({
     nodeStatus: {},
     nodeMonitor: {},
     nodeStats: {},
+    objectStatus: {},
 
     updateNodeStatus: (node, data) =>
         set((state) => ({
@@ -19,6 +20,18 @@ const useEventStore = create((set) => ({
         set((state) => ({
             nodeStats: { ...state.nodeStats, [node]: data },
         })),
+
+    updateObjectStatus: (objectName, newStatus) =>
+        set((state) => ({
+            objectStatus: {
+                ...state.objectStatus,
+                [objectName]: {
+                    ...(state.objectStatus[objectName] || {}),
+                    ...newStatus,
+                },
+            },
+        })),
 }));
+
 
 export default useEventStore;

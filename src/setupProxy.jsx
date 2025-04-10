@@ -1,4 +1,4 @@
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const {createProxyMiddleware} = require('http-proxy-middleware');
 
 const baseUrl = process.env.BASE_URL || 'https://localhost:1215';
 
@@ -26,7 +26,7 @@ module.exports = function (app) {
                 //const authToken = req.headers['authorization'];
                 console.log("authToken: ", authToken);
                 if (authToken) {
-                    proxyReq.setHeader('Authorization',  `Bearer ${authToken}`);
+                    proxyReq.setHeader('Authorization', `Bearer ${authToken}`);
                 } else {
                     console.error('❌ No authentication token found in the headers!');
                 }

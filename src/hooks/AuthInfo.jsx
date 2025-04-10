@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import {useState, useEffect} from "react";
 
 function useAuthInfo() {
     const [authInfo, setAuthInfo] = useState()
@@ -14,8 +14,10 @@ function useAuthInfo() {
                     console.log(e)
                 })
         }
+
         fetchData()
     }, [])
     return authInfo
 }
+
 export default useAuthInfo

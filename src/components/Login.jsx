@@ -1,7 +1,7 @@
-import React, { useState, forwardRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { useStateValue } from '../state.jsx';
+import React, {useState, forwardRef} from 'react';
+import {useTranslation} from 'react-i18next';
+import {useNavigate} from 'react-router-dom';
+import {useStateValue} from '../state.jsx';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -26,26 +26,8 @@ const Login = forwardRef((props, ref) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [{ basicLogin }, dispatch] = useStateValue();
-    const { t } = useTranslation();
-
-    const refreshToken = async () => {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            try {
-                const response = await fetch('/auth/token', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Token refresh failed');
-                const data = await response.json();
-                localStorage.setItem('authToken', data.token);
-                dispatch({ type: 'setBasicLogin', data: { ...basicLogin, token: data.token } });
-            } catch (error) {
-                console.error('Error refreshing token:', error);
-            }
-        }
-    };
+    const [{basicLogin}, dispatch] = useStateValue();
+    const {t} = useTranslation();
 
     const handleLogin = async (username, password) => {
         try {
@@ -63,7 +45,9 @@ const Login = forwardRef((props, ref) => {
             const data = await response.json();
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
-            dispatch({ type: 'setBasicLogin', data: { username, password, token: data.token } });
+            const expirationTime = Date.now() + 30000;
+            localStorage.setItem('tokenExpiration', expirationTime);
+            dispatch({type: 'setBasicLogin', data: {username, password, token: data.token}});
 
             const payload = decodeToken(data.token);
             if (payload?.exp) {
@@ -80,6 +64,53 @@ const Login = forwardRef((props, ref) => {
         }
     };
 
+    const refreshToken = async () => {
+        const token = localStorage.getItem('authToken');
+        const tokenExpiration = localStorage.getItem('tokenExpiration');
+        const currentTime = Date.now();
+
+        console.log('Checking token validity...');
+        console.log('Current time:', new Date(currentTime).toLocaleString());
+        console.log('Token expiration time:', new Date(Number(tokenExpiration)).toLocaleString());
+
+        if (token && tokenExpiration && currentTime < tokenExpiration) {
+            console.log('Token is still valid, attempting to refresh...');
+            try {
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`},
+                });
+
+                if (!response.ok) throw new Error('Token refresh failed');
+                const data = await response.json();
+                console.log('✅ Token refreshed successfully:', data.token);
+
+                localStorage.setItem('authToken', data.token);
+                const expirationTime = Date.now() + 30000;
+                localStorage.setItem('tokenExpiration', expirationTime);
+                console.log('New token expiration set for:', new Date(expirationTime).toLocaleString());
+
+                dispatch({type: 'setBasicLogin', data: {...basicLogin, token: data.token}});
+
+                // Decode the new token and re-set the timeout
+                const payload = decodeToken(data.token);
+                if (payload?.exp) {
+                    const refreshTime = payload.exp * 1000 - Date.now() - 5000;
+                    if (refreshTime > 0) {
+                        console.log('Next refresh in:', refreshTime / 1000, 'seconds');
+                        setTimeout(refreshToken, refreshTime);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error refreshing token:', error);
+                navigate('/login');
+            }
+        } else {
+            console.warn('⚠️ Token expired or missing, redirecting to login...');
+            navigate('/login');
+        }
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         handleLogin(username, password);
@@ -92,7 +123,7 @@ const Login = forwardRef((props, ref) => {
     };
 
     const handleChangeMethod = () => {
-        dispatch({ type: 'setAuthChoice', data: '' });
+        dispatch({type: 'setAuthChoice', data: ''});
     };
 
     return (
@@ -123,7 +154,7 @@ const Login = forwardRef((props, ref) => {
             >
                 {t('Login')}
             </DialogTitle>
-            <DialogContent sx={{ px: 3 }}>
+            <DialogContent sx={{px: 3}}>
                 <TextField
                     margin="normal"
                     fullWidth
@@ -131,7 +162,7 @@ const Login = forwardRef((props, ref) => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     autoFocus
-                    sx={{ mb: 2 }}
+                    sx={{mb: 2}}
                 />
                 <TextField
                     margin="normal"
@@ -141,7 +172,7 @@ const Login = forwardRef((props, ref) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    sx={{ mb: 2 }}
+                    sx={{mb: 2}}
                 />
                 {errorMessage && (
                     <Typography

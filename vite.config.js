@@ -13,13 +13,17 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
-
             '/daemon/status': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
             '/node/name': {
+                target: baseUrl,
+                changeOrigin: true,
+                secure: false,
+            },
+            '/object/path': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,

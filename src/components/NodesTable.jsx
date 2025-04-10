@@ -1,49 +1,32 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {useEffect, useState} from "react";
+import {useNavigate} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import { createEventSource } from "../eventSourceManager";
-import { FaSnowflake, FaWifi } from "react-icons/fa";
+import {createEventSource} from "../eventSourceManager";
+import {FaSnowflake, FaWifi} from "react-icons/fa";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Typography,
-    Button,
-    CircularProgress,
-    Box,
-    IconButton,
-    Tooltip,
-    LinearProgress,
-    Menu,
-    MenuItem,
-    Checkbox,
-    ListItemIcon,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+    Paper, Typography, Button, CircularProgress, Box, IconButton,
+    Tooltip, LinearProgress, Menu, MenuItem, Checkbox
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import { blue, green } from "@mui/material/colors";
+import {blue, green} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
 
 const NodesTable = () => {
-    const { daemon, fetchNodes } = useFetchDaemonStatus();
+    const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
-    const [token, setToken] = useState("");
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);  // Etat pour le menu des actions
+    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
-        const storedToken = localStorage.getItem("authToken");
-        if (storedToken) {
-            setToken(storedToken);
-            fetchNodes(storedToken);
-            createEventSource("/sse", storedToken);
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            createEventSource(`/sse`, token);
         }
     }, []);
 
@@ -53,14 +36,16 @@ const NodesTable = () => {
     };
 
     const handleMenuOpen = (event, nodename) => {
-        setAnchorEls((prev) => ({ ...prev, [nodename]: event.currentTarget }));
+        setAnchorEls((prev) => ({...prev, [nodename]: event.currentTarget}));
     };
 
     const handleMenuClose = (nodename) => {
-        setAnchorEls((prev) => ({ ...prev, [nodename]: null }));
+        setAnchorEls((prev) => ({...prev, [nodename]: null}));
     };
 
     const handleAction = async (nodename, action) => {
+        const token = localStorage.getItem("authToken");
+
         try {
             const response = await fetch(`/node/name/${nodename}/${action}`, {
                 method: "POST",
@@ -72,7 +57,6 @@ const NodesTable = () => {
             if (!response.ok) {
                 throw new Error(`Failed to ${action} node`);
             }
-
             console.log(`✅ Node ${nodename} ${action}d successfully`);
         } catch (error) {
             console.error("🚨 Error performing action:", error);
@@ -105,14 +89,12 @@ const NodesTable = () => {
     };
 
     return (
-        <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 3 }}>
-            <Paper elevation={3} sx={{ p: 3, borderRadius: 2, bgcolor: "background.paper" }}>
-                <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ mb: 4 }}>
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3}}>
+            <Paper elevation={3} sx={{p: 3, borderRadius: 2, bgcolor: "background.paper"}}>
+                <Typography variant="h4" component="h1" gutterBottom align="center" sx={{mb: 4}}>
                     Node Status
                 </Typography>
-
-                {/* Menu déroulant des actions */}
-                <Box sx={{ mb: 3 }}>
+                <Box sx={{mb: 3}}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -126,47 +108,40 @@ const NodesTable = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>
-                            Freeze
-                        </MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>
-                            Unfreeze
-                        </MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>
-                            Restart Daemon
-                        </MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart
+                            Daemon</MenuItem>
                     </Menu>
                 </Box>
 
                 {Object.keys(nodeStatus).length === 0 ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
-                        <CircularProgress />
+                    <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
+                        <CircularProgress/>
                     </Box>
                 ) : (
                     <TableContainer component={Paper} elevation={0}>
-                        <Table sx={{ width: "100%", tableLayout: "fixed" }} aria-label="nodes table">
+                        <Table sx={{width: "100%", tableLayout: "fixed"}} aria-label="nodes table">
                             <TableHead>
-                                <TableRow sx={{ bgcolor: blue[500] }}>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                                <TableRow sx={{bgcolor: blue[500]}}>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>
                                         <Checkbox
                                             checked={selectedNodes.length === Object.keys(nodeStatus).length}
                                             onChange={(e) =>
                                                 setSelectedNodes(
-                                                    e.target.checked
-                                                        ? Object.keys(nodeStatus)
-                                                        : []
+                                                    e.target.checked ? Object.keys(nodeStatus) : []
                                                 )
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Name</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>State</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Score</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Load (15m)</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Mem Avail</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Swap Avail</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Version</TableCell>
-                                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>Action</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Name</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>State</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Score</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Load (15m)</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Mem Avail</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Swap Avail</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Version</TableCell>
+                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Action</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -174,8 +149,7 @@ const NodesTable = () => {
                                     const stats = nodeStats[nodename];
                                     const status = nodeStatus[nodename];
                                     const monitor = nodeMonitor[nodename];
-                                    const isFrozen =
-                                        status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z";
+                                    const isFrozen = status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z";
 
                                     return (
                                         <TableRow key={index} hover>
@@ -187,20 +161,16 @@ const NodesTable = () => {
                                             </TableCell>
                                             <TableCell>{nodename || "-"}</TableCell>
                                             <TableCell>
-                                                <Box sx={{ display: "flex", gap: 1 }}>
+                                                <Box sx={{display: "flex", gap: 1}}>
                                                     {monitor?.state && monitor?.state !== "idle" && monitor.state}
                                                     {isFrozen && (
                                                         <Tooltip title="Frozen">
-                                                            <span>
-                                                                <FaSnowflake style={{ color: blue[200] }} />
-                                                            </span>
+                                                            <span><FaSnowflake style={{color: blue[200]}}/></span>
                                                         </Tooltip>
                                                     )}
                                                     {daemon.nodename === nodename && (
                                                         <Tooltip title="Daemon Node">
-                                                            <span>
-                                                                <FaWifi style={{ color: green[500] }} />
-                                                            </span>
+                                                            <span><FaWifi style={{color: green[500]}}/></span>
                                                         </Tooltip>
                                                     )}
                                                 </Box>
@@ -213,7 +183,7 @@ const NodesTable = () => {
                                                         <LinearProgress
                                                             variant="determinate"
                                                             value={Math.min(stats?.load_15m * 20, 100)}
-                                                            sx={{ mt: 1, height: 4 }}
+                                                            sx={{mt: 1, height: 4}}
                                                             color={
                                                                 stats?.load_15m > 4
                                                                     ? "error"
@@ -223,9 +193,7 @@ const NodesTable = () => {
                                                             }
                                                         />
                                                     </>
-                                                ) : (
-                                                    "N/A"
-                                                )}
+                                                ) : "N/A"}
                                             </TableCell>
                                             <TableCell>
                                                 {stats?.mem_avail || "N/A"}%
@@ -233,7 +201,7 @@ const NodesTable = () => {
                                                     <LinearProgress
                                                         variant="determinate"
                                                         value={stats?.mem_avail}
-                                                        sx={{ mt: 1, height: 4 }}
+                                                        sx={{mt: 1, height: 4}}
                                                         color={
                                                             stats?.mem_avail < 20
                                                                 ? "error"
@@ -248,7 +216,7 @@ const NodesTable = () => {
                                             <TableCell>{status?.agent || "N/A"}</TableCell>
                                             <TableCell>
                                                 <IconButton onClick={(e) => handleMenuOpen(e, nodename)}>
-                                                    <MoreVertIcon />
+                                                    <MoreVertIcon/>
                                                 </IconButton>
                                                 <Menu
                                                     anchorEl={anchorEls[nodename]}
@@ -256,18 +224,19 @@ const NodesTable = () => {
                                                     onClose={() => handleMenuClose(nodename)}
                                                 >
                                                     {!isFrozen && (
-                                                        <MenuItem onClick={() => handleAction(nodename, "action/freeze")}>
+                                                        <MenuItem
+                                                            onClick={() => handleAction(nodename, "action/freeze")}>
                                                             Freeze
                                                         </MenuItem>
                                                     )}
                                                     {isFrozen && (
                                                         <MenuItem
-                                                            onClick={() => handleAction(nodename, "action/unfreeze")}
-                                                        >
+                                                            onClick={() => handleAction(nodename, "action/unfreeze")}>
                                                             Unfreeze
                                                         </MenuItem>
                                                     )}
-                                                    <MenuItem onClick={() => handleAction(nodename, "daemon/action/restart")}>
+                                                    <MenuItem
+                                                        onClick={() => handleAction(nodename, "daemon/action/restart")}>
                                                         Restart Daemon
                                                     </MenuItem>
                                                 </Menu>

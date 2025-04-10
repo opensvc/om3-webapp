@@ -29,24 +29,6 @@ const Login = forwardRef((props, ref) => {
     const [{basicLogin}, dispatch] = useStateValue();
     const {t} = useTranslation();
 
-    const refreshToken = async () => {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            try {
-                const response = await fetch('/auth/token', {
-                    method: 'POST',
-                    headers: {'Authorization': `Bearer ${token}`},
-                });
-                if (!response.ok) throw new Error('Token refresh failed');
-                const data = await response.json();
-                localStorage.setItem('authToken', data.token);
-                dispatch({type: 'setBasicLogin', data: {...basicLogin, token: data.token}});
-            } catch (error) {
-                console.error('Error refreshing token:', error);
-            }
-        }
-    };
-
     const handleLogin = async (username, password) => {
         try {
             const response = await fetch('/auth/token', {
@@ -63,6 +45,8 @@ const Login = forwardRef((props, ref) => {
             const data = await response.json();
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
+            const expirationTime = Date.now() + 30000;
+            localStorage.setItem('tokenExpiration', expirationTime);
             dispatch({type: 'setBasicLogin', data: {username, password, token: data.token}});
 
             const payload = decodeToken(data.token);
@@ -77,6 +61,53 @@ const Login = forwardRef((props, ref) => {
         } catch (error) {
             console.error('Authentication error:', error);
             setErrorMessage(error.message);
+        }
+    };
+
+    const refreshToken = async () => {
+        const token = localStorage.getItem('authToken');
+        const tokenExpiration = localStorage.getItem('tokenExpiration');
+        const currentTime = Date.now();
+
+        console.log('Checking token validity...');
+        console.log('Current time:', new Date(currentTime).toLocaleString());
+        console.log('Token expiration time:', new Date(Number(tokenExpiration)).toLocaleString());
+
+        if (token && tokenExpiration && currentTime < tokenExpiration) {
+            console.log('Token is still valid, attempting to refresh...');
+            try {
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`},
+                });
+
+                if (!response.ok) throw new Error('Token refresh failed');
+                const data = await response.json();
+                console.log('✅ Token refreshed successfully:', data.token);
+
+                localStorage.setItem('authToken', data.token);
+                const expirationTime = Date.now() + 30000;
+                localStorage.setItem('tokenExpiration', expirationTime);
+                console.log('New token expiration set for:', new Date(expirationTime).toLocaleString());
+
+                dispatch({type: 'setBasicLogin', data: {...basicLogin, token: data.token}});
+
+                // Decode the new token and re-set the timeout
+                const payload = decodeToken(data.token);
+                if (payload?.exp) {
+                    const refreshTime = payload.exp * 1000 - Date.now() - 5000;
+                    if (refreshTime > 0) {
+                        console.log('Next refresh in:', refreshTime / 1000, 'seconds');
+                        setTimeout(refreshToken, refreshTime);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error refreshing token:', error);
+                navigate('/login');
+            }
+        } else {
+            console.warn('⚠️ Token expired or missing, redirecting to login...');
+            navigate('/login');
         }
     };
 

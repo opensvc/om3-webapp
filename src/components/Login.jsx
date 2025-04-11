@@ -45,7 +45,8 @@ const Login = forwardRef((props, ref) => {
             const data = await response.json();
             setErrorMessage('');
             localStorage.setItem('authToken', data.token);
-            const expirationTime = Date.now() + 30000;
+            const newPayload = decodeToken(data.token);
+            const expirationTime = newPayload?.exp * 1000;
             localStorage.setItem('tokenExpiration', expirationTime);
             dispatch({type: 'setBasicLogin', data: {username, password, token: data.token}});
 

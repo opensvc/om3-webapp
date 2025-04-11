@@ -18,7 +18,7 @@ export const createEventSource = (url, token) => {
         "NodeStatusUpdated",
         "NodeMonitorUpdated",
         "NodeStatsUpdated",
-        "ObjectStatusUpdated", // 👈 Nouveau
+        "ObjectStatusUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
@@ -52,6 +52,21 @@ export const createEventSource = (url, token) => {
         updateNodeStats(node, node_stats);
     });
 
+    // Add a buffer to temporarily store updates
+    let objectStatusBuffer = {};
+    let updateTimeout = null;
+
+    const flushObjectStatusBuffer = () => {
+        const {updateObjectStatus} = useEventStore.getState();
+
+        for (const objectName in objectStatusBuffer) {
+            updateObjectStatus(objectName, objectStatusBuffer[objectName]);
+        }
+
+        objectStatusBuffer = {};
+        updateTimeout = null;
+    };
+
     eventSource.addEventListener("ObjectStatusUpdated", (event) => {
         try {
             const parsed = JSON.parse(event.data);
@@ -63,16 +78,24 @@ export const createEventSource = (url, token) => {
                 return;
             }
 
-            console.log("📦 ObjectStatusUpdated:", object_name, object_status);
-            updateObjectStatus(object_name, object_status);
+            // Update the buffer instead of the store directly
+            objectStatusBuffer[object_name] = {
+                ...(objectStatusBuffer[object_name] || {}),
+                ...object_status,
+            };
+
+            // Schedule a batch update (every 100ms)
+            if (!updateTimeout) {
+                updateTimeout = setTimeout(flushObjectStatusBuffer, 100);
+            }
+
         } catch (err) {
             console.error("❌ Failed to handle ObjectStatusUpdated event", err);
         }
     });
 
-
     return eventSource;
-}
+};
 
 // Function to close the EventSource
 export const closeEventSource = (eventSource) => {

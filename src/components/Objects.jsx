@@ -29,7 +29,6 @@ const Objects = () => {
         }
 
         fetchDaemonStatus(token);
-        createEventSource("/sse", token);
     }, []);
 
     const fetchDaemonStatus = async (authToken) => {

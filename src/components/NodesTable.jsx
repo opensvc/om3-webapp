@@ -2,15 +2,13 @@ import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {createEventSource} from "../eventSourceManager";
-import {FaSnowflake, FaWifi} from "react-icons/fa";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Typography, Button, CircularProgress, Box, IconButton,
-    Tooltip, LinearProgress, Menu, MenuItem, Checkbox
+    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem, Checkbox
 } from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import {blue, green} from "@mui/material/colors";
+import {blue} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
+import NodeRow from "../components/NodeRow.jsx";
 
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
@@ -110,8 +108,9 @@ const NodesTable = () => {
                     >
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart
-                            Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>
+                            Restart Daemon
+                        </MenuItem>
                     </Menu>
                 </Box>
 
@@ -145,105 +144,22 @@ const NodesTable = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {Object.keys(nodeStatus).map((nodename, index) => {
-                                    const stats = nodeStats[nodename];
-                                    const status = nodeStatus[nodename];
-                                    const monitor = nodeMonitor[nodename];
-                                    const isFrozen = status?.frozen_at && status?.frozen_at !== "0001-01-01T00:00:00Z";
-
-                                    return (
-                                        <TableRow key={index} hover>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={selectedNodes.includes(nodename)}
-                                                    onChange={(e) => handleSelectNode(e, nodename)}
-                                                />
-                                            </TableCell>
-                                            <TableCell>{nodename || "-"}</TableCell>
-                                            <TableCell>
-                                                <Box sx={{display: "flex", gap: 1}}>
-                                                    {monitor?.state && monitor?.state !== "idle" && monitor.state}
-                                                    {isFrozen && (
-                                                        <Tooltip title="Frozen">
-                                                            <span><FaSnowflake style={{color: blue[200]}}/></span>
-                                                        </Tooltip>
-                                                    )}
-                                                    {daemon.nodename === nodename && (
-                                                        <Tooltip title="Daemon Node">
-                                                            <span><FaWifi style={{color: green[500]}}/></span>
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>{stats?.score || "N/A"}</TableCell>
-                                            <TableCell>
-                                                {stats?.load_15m ? (
-                                                    <>
-                                                        {stats?.load_15m}
-                                                        <LinearProgress
-                                                            variant="determinate"
-                                                            value={Math.min(stats?.load_15m * 20, 100)}
-                                                            sx={{mt: 1, height: 4}}
-                                                            color={
-                                                                stats?.load_15m > 4
-                                                                    ? "error"
-                                                                    : stats?.load_15m > 2
-                                                                        ? "warning"
-                                                                        : "success"
-                                                            }
-                                                        />
-                                                    </>
-                                                ) : "N/A"}
-                                            </TableCell>
-                                            <TableCell>
-                                                {stats?.mem_avail || "N/A"}%
-                                                {stats?.mem_avail && (
-                                                    <LinearProgress
-                                                        variant="determinate"
-                                                        value={stats?.mem_avail}
-                                                        sx={{mt: 1, height: 4}}
-                                                        color={
-                                                            stats?.mem_avail < 20
-                                                                ? "error"
-                                                                : stats?.mem_avail < 50
-                                                                    ? "warning"
-                                                                    : "success"
-                                                        }
-                                                    />
-                                                )}
-                                            </TableCell>
-                                            <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
-                                            <TableCell>{status?.agent || "N/A"}</TableCell>
-                                            <TableCell>
-                                                <IconButton onClick={(e) => handleMenuOpen(e, nodename)}>
-                                                    <MoreVertIcon/>
-                                                </IconButton>
-                                                <Menu
-                                                    anchorEl={anchorEls[nodename]}
-                                                    open={Boolean(anchorEls[nodename])}
-                                                    onClose={() => handleMenuClose(nodename)}
-                                                >
-                                                    {!isFrozen && (
-                                                        <MenuItem
-                                                            onClick={() => handleAction(nodename, "action/freeze")}>
-                                                            Freeze
-                                                        </MenuItem>
-                                                    )}
-                                                    {isFrozen && (
-                                                        <MenuItem
-                                                            onClick={() => handleAction(nodename, "action/unfreeze")}>
-                                                            Unfreeze
-                                                        </MenuItem>
-                                                    )}
-                                                    <MenuItem
-                                                        onClick={() => handleAction(nodename, "daemon/action/restart")}>
-                                                        Restart Daemon
-                                                    </MenuItem>
-                                                </Menu>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
+                                {Object.keys(nodeStatus).map((nodename, index) => (
+                                    <NodeRow
+                                        key={index}
+                                        nodename={nodename}
+                                        stats={nodeStats[nodename]}
+                                        status={nodeStatus[nodename]}
+                                        monitor={nodeMonitor[nodename]}
+                                        isSelected={selectedNodes.includes(nodename)}
+                                        daemonNodename={daemon.nodename}
+                                        onSelect={handleSelectNode}
+                                        onMenuOpen={handleMenuOpen}
+                                        onMenuClose={handleMenuClose}
+                                        onAction={handleAction}
+                                        anchorEl={anchorEls[nodename]}
+                                    />
+                                ))}
                             </TableBody>
                         </Table>
                     </TableContainer>

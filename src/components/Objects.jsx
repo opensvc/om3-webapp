@@ -4,7 +4,7 @@ import {
     TableContainer, TableHead, TableRow, Typography, Tooltip,
     Button, Menu, MenuItem, Checkbox, FormControl, InputLabel, Select
 } from "@mui/material";
-import {green, red, blue} from "@mui/material/colors";
+import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import useEventStore from "../store/useEventStore";
@@ -18,6 +18,7 @@ const Objects = () => {
     const [selectedNamespace, setSelectedNamespace] = useState("all");
 
     const objectStatus = useEventStore((state) => state.objectStatus);
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -70,7 +71,6 @@ const Objects = () => {
 
         for (let objectName of selectedObjects) {
             const rawObj = objectStatus[objectName];
-
             if (!rawObj) continue;
 
             const parts = objectName.split("/");
@@ -97,8 +97,8 @@ const Objects = () => {
                 const response = await fetch(url, {
                     method: "POST",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "Content-Type": "application/json"
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
                     },
                 });
 
@@ -130,9 +130,7 @@ const Objects = () => {
         ? objectStatus
         : daemonStatus?.cluster?.object || {};
 
-    const allObjectNames = Object.keys(objects).filter(
-        (key) => key && typeof objects[key] === "object"
-    );
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
 
     const extractNamespace = (objectName) => {
         const parts = objectName.split("/");
@@ -155,15 +153,7 @@ const Objects = () => {
     }
 
     return (
-        <Box
-            sx={{
-                minHeight: "100vh",
-                bgcolor: "background.default",
-                p: 3,
-                display: "flex",
-                justifyContent: "center"
-            }}
-        >
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
             <Box sx={{width: "100%", maxWidth: "1000px"}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
                     <Typography variant="h4" gutterBottom align="center">
@@ -218,7 +208,7 @@ const Objects = () => {
                                         />
                                     </TableCell>
                                     <TableCell><strong>Object</strong></TableCell>
-                                    <TableCell align="center"><strong>State</strong></TableCell>
+                                    <TableCell align="center"><strong>Global</strong></TableCell>
                                     {nodeNames.map((node) => (
                                         <TableCell key={node} align="center"><strong>{node}</strong></TableCell>
                                     ))}
@@ -226,10 +216,11 @@ const Objects = () => {
                             </TableHead>
                             <TableBody>
                                 {filteredObjectNames.map((objectName) => {
-                                    const obj = objects[objectName];
+                                    const obj = objects[objectName] || {};
                                     const scope = obj?.scope || [];
                                     const avail = obj?.avail;
                                     const frozen = obj?.frozen;
+                                    const instances = objectInstanceStatus[objectName] || {};
 
                                     return (
                                         <TableRow key={objectName}>
@@ -253,15 +244,18 @@ const Objects = () => {
                                                     )}
                                                 </Box>
                                             </TableCell>
-                                            {nodeNames.map((node) => (
-                                                <TableCell key={node} align="center">
-                                                    <Box display="flex" justifyContent="center" alignItems="center">
-                                                        <FiberManualRecordIcon
-                                                            sx={{color: scope.includes(node) ? green[500] : red[500]}}
-                                                        />
-                                                    </Box>
-                                                </TableCell>
-                                            ))}
+                                            {nodeNames.map((node) => {
+                                                const instance = instances[node];
+                                                let color = grey[500]; // default
+                                                if (instance?.avail === "up") color = green[500];
+                                                else if (instance?.avail === "down") color = red[500];
+
+                                                return (
+                                                    <TableCell key={node} align="center">
+                                                        <FiberManualRecordIcon sx={{color}}/>
+                                                    </TableCell>
+                                                );
+                                            })}
                                         </TableRow>
                                     );
                                 })}

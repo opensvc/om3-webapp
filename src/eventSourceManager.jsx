@@ -11,6 +11,7 @@ export const createEventSource = (url, token) => {
         updateNodeMonitor,
         updateNodeStats,
         updateObjectStatus,
+        updateObjectInstanceStatus
     } = useEventStore.getState();
 
     let cachedUrl = "/sse?cache=true&token=" + token;
@@ -19,6 +20,7 @@ export const createEventSource = (url, token) => {
         "NodeMonitorUpdated",
         "NodeStatsUpdated",
         "ObjectStatusUpdated",
+        "InstanceStatusUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
@@ -83,7 +85,6 @@ export const createEventSource = (url, token) => {
                 ...(objectStatusBuffer[object_name] || {}),
                 ...object_status,
             };
-
             // Schedule a batch update (every 100ms)
             if (!updateTimeout) {
                 updateTimeout = setTimeout(flushObjectStatusBuffer, 100);
@@ -91,6 +92,36 @@ export const createEventSource = (url, token) => {
 
         } catch (err) {
             console.error("❌ Failed to handle ObjectStatusUpdated event", err);
+        }
+    });
+
+    eventSource.addEventListener("InstanceStatusUpdated", (event) => {
+        try {
+            if (!event.data) {
+                console.error("❌ No event data received");
+                return;
+            }
+            let parsed;
+            try {
+                parsed = JSON.parse(event.data);
+                console.log("📥 Raw InstanceStatusUpdated data:", parsed);
+            } catch (parseError) {
+                console.error("❌ Failed to parse JSON:", parseError);
+                console.log("📥 Raw event data:", event.data);
+                return;
+            }
+
+            const objectName = parsed.path || parsed.labels?.path;
+            const node = parsed.node;
+            const instanceStatus = parsed.instance_status;
+
+            if (!objectName || !node || !instanceStatus) {
+                console.error("❌ Missing required fields in event data", parsed);
+                return;
+            }
+            useEventStore.getState().updateObjectInstanceStatus(objectName, node, instanceStatus);
+        } catch (err) {
+            console.error("❌ Failed to handle InstanceStatusUpdated event", err);
         }
     });
 

@@ -104,10 +104,8 @@ export const createEventSource = (url, token) => {
             let parsed;
             try {
                 parsed = JSON.parse(event.data);
-                console.log("📥 Raw InstanceStatusUpdated data:", parsed);
             } catch (parseError) {
                 console.error("❌ Failed to parse JSON:", parseError);
-                console.log("📥 Raw event data:", event.data);
                 return;
             }
 

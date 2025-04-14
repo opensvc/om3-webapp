@@ -7,6 +7,7 @@ import {
 import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
+import {useNavigate} from "react-router-dom";
 import useEventStore from "../store/useEventStore";
 
 const Objects = () => {
@@ -20,6 +21,8 @@ const Objects = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
 
+    const navigate = useNavigate();
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -27,7 +30,6 @@ const Objects = () => {
             setLoading(false);
             return;
         }
-
         fetchDaemonStatus(token);
     }, []);
 
@@ -38,9 +40,7 @@ const Objects = () => {
                     Authorization: `Bearer ${authToken}`,
                 },
             });
-
             if (!response.ok) throw new Error("Failed to fetch daemon status");
-
             const data = await response.json();
             setDaemonStatus(data);
         } catch (error) {
@@ -112,6 +112,13 @@ const Objects = () => {
 
         setSelectedObjects([]);
         handleActionsMenuClose();
+    };
+
+    const handleObjectClick = (objectName) => {
+        const objectInstance = objectInstanceStatus[objectName];
+        if (objectInstance) {
+            navigate(`/objects/${encodeURIComponent(objectName)}`);
+        }
     };
 
     if (loading) {
@@ -217,17 +224,21 @@ const Objects = () => {
                             <TableBody>
                                 {filteredObjectNames.map((objectName) => {
                                     const obj = objects[objectName] || {};
-                                    const scope = obj?.scope || [];
                                     const avail = obj?.avail;
                                     const frozen = obj?.frozen;
                                     const instances = objectInstanceStatus[objectName] || {};
 
                                     return (
-                                        <TableRow key={objectName}>
+                                        <TableRow
+                                            key={objectName}
+                                            onClick={() => handleObjectClick(objectName)}
+                                            sx={{cursor: "pointer"}}
+                                        >
                                             <TableCell>
                                                 <Checkbox
                                                     checked={selectedObjects.includes(objectName)}
                                                     onChange={(e) => handleSelectObject(e, objectName)}
+                                                    onClick={(e) => e.stopPropagation()}
                                                 />
                                             </TableCell>
                                             <TableCell>{objectName}</TableCell>
@@ -246,7 +257,7 @@ const Objects = () => {
                                             </TableCell>
                                             {nodeNames.map((node) => {
                                                 const instance = instances[node];
-                                                let color = grey[500]; // default
+                                                let color = grey[500];
                                                 if (instance?.avail === "up") color = green[500];
                                                 else if (instance?.avail === "down") color = red[500];
 

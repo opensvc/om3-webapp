@@ -16,6 +16,7 @@ import LoginCallback from "./LoginCallback.jsx";
 import '../styles/main.css';
 import NodesTable from "./NodesTable";
 import Objects from "./Objects";
+import ObjectDetails from "./ObjectDetails";
 import NavBar from './NavBar';
 
 let enabled;
@@ -179,11 +180,12 @@ const App = () => {
     return (
         <AppStateProvider>
             <Router>
-                <NavBar />
+                <NavBar/>
                 <Routes>
                     <Route path="/" element={<Navigate to="/nodes" replace/>}/>
                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                    <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
                     <Route path="/login" element={<AuthProvider><Login/></AuthProvider>}/>
                     <Route path="/unauthorized" element={<NotAuthorized/>}/>
                     <Route path="*" element={<Navigate to="/"/>}/>

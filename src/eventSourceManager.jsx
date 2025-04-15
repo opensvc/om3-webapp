@@ -11,6 +11,7 @@ export const createEventSource = (url, token) => {
         updateNodeMonitor,
         updateNodeStats,
         updateObjectStatus,
+        updateObjectInstanceStatus
     } = useEventStore.getState();
 
     let cachedUrl = "/sse?cache=true&token=" + token;
@@ -18,7 +19,8 @@ export const createEventSource = (url, token) => {
         "NodeStatusUpdated",
         "NodeMonitorUpdated",
         "NodeStatsUpdated",
-        "ObjectStatusUpdated", // 👈 Nouveau
+        "ObjectStatusUpdated",
+        "InstanceStatusUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
@@ -52,6 +54,21 @@ export const createEventSource = (url, token) => {
         updateNodeStats(node, node_stats);
     });
 
+    // Add a buffer to temporarily store updates
+    let objectStatusBuffer = {};
+    let updateTimeout = null;
+
+    const flushObjectStatusBuffer = () => {
+        const {updateObjectStatus} = useEventStore.getState();
+
+        for (const objectName in objectStatusBuffer) {
+            updateObjectStatus(objectName, objectStatusBuffer[objectName]);
+        }
+
+        objectStatusBuffer = {};
+        updateTimeout = null;
+    };
+
     eventSource.addEventListener("ObjectStatusUpdated", (event) => {
         try {
             const parsed = JSON.parse(event.data);
@@ -63,16 +80,51 @@ export const createEventSource = (url, token) => {
                 return;
             }
 
-            console.log("📦 ObjectStatusUpdated:", object_name, object_status);
-            updateObjectStatus(object_name, object_status);
+            // Update the buffer instead of the store directly
+            objectStatusBuffer[object_name] = {
+                ...(objectStatusBuffer[object_name] || {}),
+                ...object_status,
+            };
+            // Schedule a batch update (every 100ms)
+            if (!updateTimeout) {
+                updateTimeout = setTimeout(flushObjectStatusBuffer, 100);
+            }
+
         } catch (err) {
             console.error("❌ Failed to handle ObjectStatusUpdated event", err);
         }
     });
 
+    eventSource.addEventListener("InstanceStatusUpdated", (event) => {
+        try {
+            if (!event.data) {
+                console.error("❌ No event data received");
+                return;
+            }
+            let parsed;
+            try {
+                parsed = JSON.parse(event.data);
+            } catch (parseError) {
+                console.error("❌ Failed to parse JSON:", parseError);
+                return;
+            }
+
+            const objectName = parsed.path || parsed.labels?.path;
+            const node = parsed.node;
+            const instanceStatus = parsed.instance_status;
+
+            if (!objectName || !node || !instanceStatus) {
+                console.error("❌ Missing required fields in event data", parsed);
+                return;
+            }
+            useEventStore.getState().updateObjectInstanceStatus(objectName, node, instanceStatus);
+        } catch (err) {
+            console.error("❌ Failed to handle InstanceStatusUpdated event", err);
+        }
+    });
 
     return eventSource;
-}
+};
 
 // Function to close the EventSource
 export const closeEventSource = (eventSource) => {

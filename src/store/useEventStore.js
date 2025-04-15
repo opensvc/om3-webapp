@@ -5,6 +5,7 @@ const useEventStore = create((set) => ({
     nodeMonitor: {},
     nodeStats: {},
     objectStatus: {},
+    objectInstanceStatus: {},
 
     updateNodeStatus: (node, data) =>
         set((state) => ({
@@ -31,6 +32,17 @@ const useEventStore = create((set) => ({
                 },
             },
         })),
+    updateObjectInstanceStatus: (objectName, node, status) =>
+        set((state) => ({
+            objectInstanceStatus: {
+                ...state.objectInstanceStatus,
+                [objectName]: {
+                    ...(state.objectInstanceStatus[objectName] || {}),
+                    [node]: status,
+                },
+            },
+        })),
+
 }));
 
 

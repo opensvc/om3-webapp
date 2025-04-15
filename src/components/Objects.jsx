@@ -2,14 +2,13 @@ import React, {useEffect, useState} from "react";
 import {
     Box, CircularProgress, Paper, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Tooltip,
-    Button, Menu, MenuItem, Checkbox, IconButton
+    Button, Menu, MenuItem, Checkbox, FormControl, InputLabel, Select
 } from "@mui/material";
-import {green, red, blue} from "@mui/material/colors";
+import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import {useNavigate} from "react-router-dom";
 import useEventStore from "../store/useEventStore";
-import {createEventSource} from "../eventSourceManager";
 
 const Objects = () => {
     const [daemonStatus, setDaemonStatus] = useState(null);
@@ -17,8 +16,12 @@ const Objects = () => {
     const [error, setError] = useState(null);
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+    const [selectedNamespace, setSelectedNamespace] = useState("all");
 
     const objectStatus = useEventStore((state) => state.objectStatus);
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+
+    const navigate = useNavigate();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -27,9 +30,7 @@ const Objects = () => {
             setLoading(false);
             return;
         }
-
         fetchDaemonStatus(token);
-        createEventSource("/sse", token);
     }, []);
 
     const fetchDaemonStatus = async (authToken) => {
@@ -39,14 +40,10 @@ const Objects = () => {
                     Authorization: `Bearer ${authToken}`,
                 },
             });
-
             if (!response.ok) throw new Error("Failed to fetch daemon status");
-
             const data = await response.json();
-            console.log("✅ Daemon status response:", data);
             setDaemonStatus(data);
         } catch (error) {
-            console.error("❌ Error fetching daemon status:", error);
             setError(error.message);
         } finally {
             setLoading(false);
@@ -74,11 +71,7 @@ const Objects = () => {
 
         for (let objectName of selectedObjects) {
             const rawObj = objectStatus[objectName];
-
-            if (!rawObj) {
-                console.error(`❌ Object ${objectName} is undefined`);
-                continue;
-            }
+            if (!rawObj) continue;
 
             const parts = objectName.split("/");
             let namespace, kind, name;
@@ -90,7 +83,6 @@ const Objects = () => {
                 kind = "svc";
                 name = parts[0];
             } else {
-                console.error(`❌ Invalid object format: ${objectName}`);
                 continue;
             }
 
@@ -105,15 +97,14 @@ const Objects = () => {
                 const response = await fetch(url, {
                     method: "POST",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "Content-Type": "application/json"
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
                     },
                 });
 
                 if (!response.ok) {
                     throw new Error(`Failed to ${action} object ${objectName}`);
                 }
-                console.log(`✅ Object ${objectName} ${action}d successfully`);
             } catch (error) {
                 console.error("🚨 Error performing action:", error);
             }
@@ -121,6 +112,13 @@ const Objects = () => {
 
         setSelectedObjects([]);
         handleActionsMenuClose();
+    };
+
+    const handleObjectClick = (objectName) => {
+        const objectInstance = objectInstanceStatus[objectName];
+        if (objectInstance) {
+            navigate(`/objects/${encodeURIComponent(objectName)}`);
+        }
     };
 
     if (loading) {
@@ -139,114 +137,144 @@ const Objects = () => {
         ? objectStatus
         : daemonStatus?.cluster?.object || {};
 
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
+
+    const extractNamespace = (objectName) => {
+        const parts = objectName.split("/");
+        return parts.length === 3 ? parts[0] : "root";
+    };
+
+    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+
+    const filteredObjectNames = selectedNamespace === "all"
+        ? allObjectNames
+        : allObjectNames.filter(name => extractNamespace(name) === selectedNamespace);
+
     const nodeList = daemonStatus?.cluster?.config?.nodes || [];
     const nodeNames = Array.isArray(nodeList)
         ? nodeList.map((n) => typeof n === "string" ? n : n.name)
         : Object.keys(nodeList);
 
-    const objectNames = Object.keys(objects).filter(
-        (key) => key && typeof objects[key] === "object"
-    );
-
-    if (!objectNames.length || !nodeNames.length) {
+    if (!allObjectNames.length || !nodeNames.length) {
         return <Typography variant="h6" align="center">No data available (empty objects or nodes)</Typography>;
     }
 
     return (
-        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3}}>
-            <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                <Typography variant="h4" gutterBottom align="center">
-                    Objects by Node
-                </Typography>
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
+            <Box sx={{width: "100%", maxWidth: "1000px"}}>
+                <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
+                    <Typography variant="h4" gutterBottom align="center">
+                        Objects by Node
+                    </Typography>
 
-                <Box sx={{mb: 3}}>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleActionsMenuOpen}
-                        disabled={selectedObjects.length === 0}
-                    >
-                        Actions on selected objects
-                    </Button>
-                    <Menu
-                        anchorEl={actionsMenuAnchor}
-                        open={Boolean(actionsMenuAnchor)}
-                        onClose={handleActionsMenuClose}
-                    >
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("freeze")}>
-                            Freeze
-                        </MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("unfreeze")}>
-                            Unfreeze
-                        </MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("restart")}>
-                            Restart
-                        </MenuItem>
-                    </Menu>
-                </Box>
-
-                <TableContainer component={Paper}>
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>
-                                    <Checkbox
-                                        checked={selectedObjects.length === objectNames.length}
-                                        onChange={(e) =>
-                                            setSelectedObjects(e.target.checked ? objectNames : [])
-                                        }
-                                    />
-                                </TableCell>
-                                <TableCell><strong>Object</strong></TableCell>
-                                <TableCell align="center"><strong>State</strong></TableCell>
-                                {nodeNames.map((node) => (
-                                    <TableCell key={node} align="center"><strong>{node}</strong></TableCell>
+                    <Box sx={{display: "flex", justifyContent: "space-between", mb: 3, gap: 2}}>
+                        <FormControl sx={{minWidth: 200}}>
+                            <InputLabel>Namespace</InputLabel>
+                            <Select
+                                value={selectedNamespace}
+                                label="Namespace"
+                                onChange={(e) => setSelectedNamespace(e.target.value)}
+                            >
+                                <MenuItem value="all">All namespaces</MenuItem>
+                                {namespaces.map((ns) => (
+                                    <MenuItem key={ns} value={ns}>{ns}</MenuItem>
                                 ))}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {objectNames.map((objectName) => {
-                                const obj = objects[objectName];
-                                const scope = obj?.scope || [];
-                                const avail = obj?.avail;
-                                const frozen = obj?.frozen;
+                            </Select>
+                        </FormControl>
 
-                                return (
-                                    <TableRow key={objectName}>
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedObjects.includes(objectName)}
-                                                onChange={(e) => handleSelectObject(e, objectName)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>{objectName}</TableCell>
-                                        <TableCell align="center">
-                                            <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                {avail === "up" && <FiberManualRecordIcon sx={{color: green[500]}}/>}
-                                                {avail === "down" && <FiberManualRecordIcon sx={{color: red[500]}}/>}
-                                                {frozen === "frozen" && (
-                                                    <Tooltip title="Frozen">
-                                                        <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
-                                                    </Tooltip>
-                                                )}
-                                            </Box>
-                                        </TableCell>
-                                        {nodeNames.map((node) => (
-                                            <TableCell key={node} align="center">
-                                                <Box display="flex" justifyContent="center" alignItems="center">
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: scope.includes(node) ? green[500] : red[500]}}
-                                                    />
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleActionsMenuOpen}
+                            disabled={selectedObjects.length === 0}
+                        >
+                            Actions on selected objects
+                        </Button>
+
+                        <Menu
+                            anchorEl={actionsMenuAnchor}
+                            open={Boolean(actionsMenuAnchor)}
+                            onClose={handleActionsMenuClose}
+                        >
+                            <MenuItem onClick={() => handleExecuteActionOnSelected("freeze")}>Freeze</MenuItem>
+                            <MenuItem onClick={() => handleExecuteActionOnSelected("unfreeze")}>Unfreeze</MenuItem>
+                            <MenuItem onClick={() => handleExecuteActionOnSelected("restart")}>Restart</MenuItem>
+                        </Menu>
+                    </Box>
+
+                    <TableContainer component={Paper}>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedObjects.length === filteredObjectNames.length}
+                                            onChange={(e) =>
+                                                setSelectedObjects(e.target.checked ? filteredObjectNames : [])
+                                            }
+                                        />
+                                    </TableCell>
+                                    <TableCell><strong>Object</strong></TableCell>
+                                    <TableCell align="center"><strong>Global</strong></TableCell>
+                                    {nodeNames.map((node) => (
+                                        <TableCell key={node} align="center"><strong>{node}</strong></TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {filteredObjectNames.map((objectName) => {
+                                    const obj = objects[objectName] || {};
+                                    const avail = obj?.avail;
+                                    const frozen = obj?.frozen;
+                                    const instances = objectInstanceStatus[objectName] || {};
+
+                                    return (
+                                        <TableRow
+                                            key={objectName}
+                                            onClick={() => handleObjectClick(objectName)}
+                                            sx={{cursor: "pointer"}}
+                                        >
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedObjects.includes(objectName)}
+                                                    onChange={(e) => handleSelectObject(e, objectName)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </TableCell>
+                                            <TableCell>{objectName}</TableCell>
+                                            <TableCell align="center">
+                                                <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+                                                    {avail === "up" &&
+                                                        <FiberManualRecordIcon sx={{color: green[500]}}/>}
+                                                    {avail === "down" &&
+                                                        <FiberManualRecordIcon sx={{color: red[500]}}/>}
+                                                    {frozen === "frozen" && (
+                                                        <Tooltip title="Frozen">
+                                                            <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
+                                                        </Tooltip>
+                                                    )}
                                                 </Box>
                                             </TableCell>
-                                        ))}
-                                    </TableRow>
-                                );
-                            })}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Paper>
+                                            {nodeNames.map((node) => {
+                                                const instance = instances[node];
+                                                let color = grey[500];
+                                                if (instance?.avail === "up") color = green[500];
+                                                else if (instance?.avail === "down") color = red[500];
+
+                                                return (
+                                                    <TableCell key={node} align="center">
+                                                        <FiberManualRecordIcon sx={{color}}/>
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Paper>
+            </Box>
         </Box>
     );
 };

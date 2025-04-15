@@ -2,7 +2,7 @@ import React, {useEffect, useState} from "react";
 import {
     Box, CircularProgress, Paper, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Tooltip,
-    Button, Menu, MenuItem, Checkbox, FormControl, InputLabel, Select
+    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField
 } from "@mui/material";
 import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -19,6 +19,7 @@ const Objects = () => {
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState("all");
+    const [selectedKind, setSelectedKind] = useState("all");
 
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
@@ -146,11 +147,19 @@ const Objects = () => {
         return parts.length === 3 ? parts[0] : "root";
     };
 
-    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+    const extractKind = (objectName) => {
+        const parts = objectName.split("/");
+        return parts.length === 3 ? parts[1] : "svc";
+    };
 
-    const filteredObjectNames = selectedNamespace === "all"
-        ? allObjectNames
-        : allObjectNames.filter(name => extractNamespace(name) === selectedNamespace);
+    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+    const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
+
+    const filteredObjectNames = allObjectNames.filter(name => {
+        const nsMatch = selectedNamespace === "all" || extractNamespace(name) === selectedNamespace;
+        const kindMatch = selectedKind === "all" || extractKind(name) === selectedKind;
+        return nsMatch && kindMatch;
+    });
 
     const nodeList = daemonStatus?.cluster?.config?.nodes || [];
     const nodeNames = Array.isArray(nodeList)
@@ -169,20 +178,26 @@ const Objects = () => {
                         Objects by Node
                     </Typography>
 
-                    <Box sx={{display: "flex", justifyContent: "space-between", mb: 3, gap: 2}}>
-                        <FormControl sx={{minWidth: 200}}>
-                            <InputLabel>Namespace</InputLabel>
-                            <Select
-                                value={selectedNamespace}
-                                label="Namespace"
-                                onChange={(e) => setSelectedNamespace(e.target.value)}
-                            >
-                                <MenuItem value="all">All namespaces</MenuItem>
-                                {namespaces.map((ns) => (
-                                    <MenuItem key={ns} value={ns}>{ns}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                    <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, mb: 3}}>
+                        <Autocomplete
+                            sx={{minWidth: 200}}
+                            options={["all", ...namespaces]}
+                            value={selectedNamespace}
+                            onChange={(event, newValue) => {
+                                if (newValue) setSelectedNamespace(newValue);
+                            }}
+                            renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                        />
+
+                        <Autocomplete
+                            sx={{minWidth: 200}}
+                            options={["all", ...kinds]}
+                            value={selectedKind}
+                            onChange={(event, newValue) => {
+                                if (newValue) setSelectedKind(newValue);
+                            }}
+                            renderInput={(params) => <TextField {...params} label="Kind"/>}
+                        />
 
                         <Button
                             variant="contained"

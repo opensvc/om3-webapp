@@ -2,7 +2,7 @@ import React from "react";
 import {useParams} from "react-router-dom";
 import {
     Box, Paper, Table, TableBody, TableCell, TableContainer,
-    TableHead, TableRow, Typography, Tooltip
+    TableHead, TableRow, Typography, Tooltip, Divider
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -36,93 +36,113 @@ const ObjectDetail = () => {
     }
 
     return (
-        <Box p={4}>
-            <Typography variant="h4" gutterBottom>
-                Object: <code>{decodedObjectName}</code>
-            </Typography>
+        <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
+            <Box sx={{width: "100%", maxWidth: "1400px"}}>
+                <Typography variant="h4" gutterBottom fontWeight="bold">
+                    {decodedObjectName}
+                </Typography>
 
-            {globalStatus && (
-                <Box display="flex" alignItems="center" gap={2} mb={4}>
-                    <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail)}}/>
-                    <Typography fontSize="1.15rem">
-                        Global Status: {globalStatus.avail || "unknown"}
-                    </Typography>
-                    {globalStatus.frozen === "frozen" && (
-                        <Tooltip title="Frozen">
-                            <AcUnitIcon fontSize="small" sx={{color: blue[300]}}/>
-                        </Tooltip>
-                    )}
-                </Box>
-            )}
-
-            {Object.entries(objectData).map(([node, objectState]) => {
-                if (!objectState) return null;
-
-                const {avail, frozen_at, resources = {}} = objectState;
-                const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
-
-                return (
-                    <Paper key={node} elevation={2} sx={{p: 3, mb: 4, borderRadius: 3}}>
-                        <Typography variant="h6" gutterBottom>
-                            Node: {node}
-                        </Typography>
-
-                        <Box display="flex" alignItems="center" gap={2} mb={2}>
-                            <FiberManualRecordIcon sx={{color: getColor(avail)}}/>
-                            <Typography fontSize="1.05rem">
-                                Node Status: {avail || "unknown"}
+                {globalStatus && (
+                    <Paper elevation={2} sx={{p: 3, borderRadius: 3, mb: 4, backgroundColor: "#f9fafb"}}>
+                        <Box display="flex" alignItems="center" justifyContent="space-between">
+                            <Typography variant="h6" fontWeight="medium" fontSize="1.3rem">
+                                Global Status
                             </Typography>
-                            {isFrozen && (
-                                <Tooltip title="Frozen">
-                                    <AcUnitIcon fontSize="small" sx={{color: blue[300]}}/>
-                                </Tooltip>
-                            )}
+                            <Box display="flex" alignItems="center" gap={2}>
+                                <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}/>
+                                {globalStatus.frozen === "frozen" && (
+                                    <Tooltip title="Frozen">
+                                        <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
+                                    </Tooltip>
+                                )}
+                            </Box>
                         </Box>
-
-                        <Typography variant="subtitle1" gutterBottom>
-                            Resources
-                        </Typography>
-
-                        <TableContainer component={Paper}>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell><strong>Name</strong></TableCell>
-                                        <TableCell><strong>Label</strong></TableCell>
-                                        <TableCell><strong>Status</strong></TableCell>
-                                        <TableCell><strong>Type</strong></TableCell>
-                                        <TableCell><strong>Provisioned</strong></TableCell>
-                                        <TableCell><strong>Last Updated</strong></TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {Object.entries(resources).map(([resName, res]) => (
-                                        <TableRow key={resName}>
-                                            <TableCell>{resName}</TableCell>
-                                            <TableCell>{res.label}</TableCell>
-                                            <TableCell>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <FiberManualRecordIcon sx={{color: getColor(res.status)}}/>
-                                                    {res.status}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>{res.type}</TableCell>
-                                            <TableCell>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: res.provisioned?.state ? green[500] : red[500]}}/>
-                                                    {res.provisioned?.state ? "Yes" : "No"}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>{res.provisioned?.mtime}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
                     </Paper>
-                );
-            })}
+                )}
+
+                {Object.entries(objectData).map(([node, objectState]) => {
+                    if (!objectState) return null;
+
+                    const {avail, frozen_at, resources = {}} = objectState;
+                    const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
+
+                    return (
+                        <Paper
+                            key={node}
+                            elevation={3}
+                            sx={{
+                                p: 3,
+                                mb: 5,
+                                borderRadius: 3,
+                                backgroundColor: "#ffffff",
+                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)"
+                            }}
+                        >
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                                <Typography variant="h6" fontWeight="medium" fontSize="1.25rem">
+                                    Node: {node}
+                                </Typography>
+                                <Box display="flex" alignItems="center" gap={2}>
+                                    <FiberManualRecordIcon sx={{color: getColor(avail), fontSize: "1.2rem"}}/>
+                                    {isFrozen && (
+                                        <Tooltip title="Frozen">
+                                            <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
+                                        </Tooltip>
+                                    )}
+                                </Box>
+                            </Box>
+
+                            <Divider sx={{mb: 2}}/>
+
+                            <Typography variant="subtitle1" fontWeight="medium" mb={1} fontSize="1.1rem">
+                                Resources
+                            </Typography>
+
+                            <TableContainer component={Paper} variant="outlined" sx={{borderRadius: 2}}>
+                                <Table size="medium">
+                                    <TableHead sx={{backgroundColor: "#f4f6f8"}}>
+                                        <TableRow>
+                                            <TableCell><strong>Name</strong></TableCell>
+                                            <TableCell><strong>Label</strong></TableCell>
+                                            <TableCell align="center"><strong>Status</strong></TableCell>
+                                            <TableCell><strong>Type</strong></TableCell>
+                                            <TableCell align="center"><strong>Provisioned</strong></TableCell>
+                                            <TableCell><strong>Last Updated</strong></TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {Object.entries(resources).map(([resName, res]) => (
+                                            <TableRow key={resName} hover>
+                                                <TableCell>{resName}</TableCell>
+                                                <TableCell>{res.label}</TableCell>
+                                                <TableCell align="center">
+                                                    <Box display="flex" justifyContent="center">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: getColor(res.status), fontSize: "1rem"}}
+                                                        />
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell>{res.type}</TableCell>
+                                                <TableCell align="center">
+                                                    <Box display="flex" justifyContent="center">
+                                                        <FiberManualRecordIcon
+                                                            sx={{
+                                                                color: res.provisioned?.state ? green[500] : red[500],
+                                                                fontSize: "1rem"
+                                                            }}
+                                                        />
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell>{res.provisioned?.mtime}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Paper>
+                    );
+                })}
+            </Box>
         </Box>
     );
 };

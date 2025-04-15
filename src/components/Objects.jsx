@@ -10,6 +10,8 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import {useNavigate} from "react-router-dom";
 import useEventStore from "../store/useEventStore";
 
+const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze"];
+
 const Objects = () => {
     const [daemonStatus, setDaemonStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -196,9 +198,11 @@ const Objects = () => {
                             open={Boolean(actionsMenuAnchor)}
                             onClose={handleActionsMenuClose}
                         >
-                            <MenuItem onClick={() => handleExecuteActionOnSelected("freeze")}>Freeze</MenuItem>
-                            <MenuItem onClick={() => handleExecuteActionOnSelected("unfreeze")}>Unfreeze</MenuItem>
-                            <MenuItem onClick={() => handleExecuteActionOnSelected("restart")}>Restart</MenuItem>
+                            {AVAILABLE_ACTIONS.map((action) => (
+                                <MenuItem key={action} onClick={() => handleExecuteActionOnSelected(action)}>
+                                    {action.charAt(0).toUpperCase() + action.slice(1)}
+                                </MenuItem>
+                            ))}
                         </Menu>
                     </Box>
 

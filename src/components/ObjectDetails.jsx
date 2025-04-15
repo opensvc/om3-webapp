@@ -1,13 +1,17 @@
-import React from "react";
+import React, {useState} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box, Paper, Table, TableBody, TableCell, TableContainer,
-    TableHead, TableRow, Typography, Tooltip, Divider
+    TableHead, TableRow, Typography, Tooltip, Divider,
+    Snackbar, Alert, Menu, MenuItem, IconButton
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, grey, blue} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
+
+const AVAILABLE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -19,10 +23,77 @@ const ObjectDetail = () => {
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
+    const [menuAnchor, setMenuAnchor] = useState(null);
+    const [selectedNode, setSelectedNode] = useState(null);
+
+    const openSnackbar = (message, severity = "success") => {
+        setSnackbar({open: true, message, severity});
+    };
+
+    const closeSnackbar = () => {
+        setSnackbar({...snackbar, open: false});
+    };
+
+    const parseObjectPath = (objName) => {
+        const parts = objName.split("/");
+        if (parts.length === 3) {
+            return {namespace: parts[0], kind: parts[1], name: parts[2]};
+        } else {
+            return {namespace: "root", kind: "svc", name: objName};
+        }
+    };
+
+    const postAction = async ({node, action}) => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!res.ok) throw new Error(`Failed to ${action} on ${node}`);
+
+            openSnackbar(`Action '${action}' sent to node '${node}'`);
+        } catch (err) {
+            console.error(err);
+            openSnackbar(`Error: ${err.message}`, "error");
+        }
+    };
+
     const getColor = (status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
         return grey[500];
+    };
+
+    const handleMenuOpen = (event, node) => {
+        setSelectedNode(node);
+        setMenuAnchor(event.currentTarget);
+    };
+
+    const handleMenuClose = () => {
+        setMenuAnchor(null);
+        setSelectedNode(null);
+    };
+
+    const handleActionClick = (action) => {
+        if (selectedNode) {
+            postAction({node: selectedNode, action});
+        }
+        handleMenuClose();
     };
 
     if (!objectData) {
@@ -70,13 +141,7 @@ const ObjectDetail = () => {
                         <Paper
                             key={node}
                             elevation={3}
-                            sx={{
-                                p: 3,
-                                mb: 5,
-                                borderRadius: 3,
-                                backgroundColor: "#ffffff",
-                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)"
-                            }}
+                            sx={{p: 3, mb: 5, borderRadius: 3, backgroundColor: "#ffffff"}}
                         >
                             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                                 <Typography variant="h6" fontWeight="medium" fontSize="1.25rem">
@@ -89,6 +154,9 @@ const ObjectDetail = () => {
                                             <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
                                         </Tooltip>
                                     )}
+                                    <IconButton onClick={(e) => handleMenuOpen(e, node)}>
+                                        <MoreVertIcon/>
+                                    </IconButton>
                                 </Box>
                             </Box>
 
@@ -142,6 +210,29 @@ const ObjectDetail = () => {
                         </Paper>
                     );
                 })}
+                <Menu
+                    anchorEl={menuAnchor}
+                    open={Boolean(menuAnchor)}
+                    onClose={handleMenuClose}
+                >
+                    {AVAILABLE_ACTIONS.map((action) => (
+                        <MenuItem key={action} onClick={() => handleActionClick(action)}>
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
+
+                {/* Snackbar */}
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={4000}
+                    onClose={closeSnackbar}
+                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+                >
+                    <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{width: '100%'}}>
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
             </Box>
         </Box>
     );

@@ -3,7 +3,9 @@ import {useParams} from "react-router-dom";
 import {
     Box, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Typography, Tooltip, Divider,
-    Snackbar, Alert, Menu, MenuItem, IconButton
+    Snackbar, Alert, Menu, MenuItem, IconButton,
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Button, Checkbox, FormControlLabel
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -27,6 +29,10 @@ const ObjectDetail = () => {
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [selectedNode, setSelectedNode] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
+    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+    const [simpleConfirmOpen, setSimpleConfirmOpen] = useState(false);
+    const [checkboxes, setCheckboxes] = useState({failover: false, interruption: false});
 
     const openSnackbar = (message, severity = "success") => {
         setSnackbar({open: true, message, severity});
@@ -96,8 +102,11 @@ const ObjectDetail = () => {
     };
 
     const handleActionClick = (action) => {
-        if (selectedNode) {
-            postAction({node: selectedNode, action});
+        setPendingAction({action, node: selectedNode});
+        if (action === "freeze" || action === "stop") {
+            setConfirmDialogOpen(true);
+        } else {
+            setSimpleConfirmOpen(true);
         }
         handleMenuClose();
     };
@@ -234,6 +243,119 @@ const ObjectDetail = () => {
                         </MenuItem>
                     ))}
                 </Menu>
+
+                {/* Dialog for freeze or stop */}
+                <Dialog
+                    open={confirmDialogOpen}
+                    onClose={() => setConfirmDialogOpen(false)}
+                    fullWidth
+                    maxWidth="sm"
+                >
+                    <DialogTitle>
+                        Confirm {pendingAction?.action} Action
+                    </DialogTitle>
+                    <DialogContent>
+                        {pendingAction?.action === "freeze" && (
+                            <>
+                                <Typography gutterBottom>
+                                    <strong>
+                                        I understand the selected instances will no longer be a failover candidate.
+                                    </strong>
+                                </Typography>
+                                <Typography gutterBottom>
+                                    <strong>
+                                        I understand the selected resources will no longer be monitored.
+                                    </strong>
+                                </Typography>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={checkboxes.failover}
+                                            onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
+                                        />
+                                    }
+                                    label="I understand and confirm."
+                                    sx={{mt: 2}}
+                                />
+                            </>
+                        )}
+                        {pendingAction?.action === "stop" && (
+                            <>
+                                <Typography gutterBottom>
+                                    <strong>
+                                        I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured.
+                                    </strong>
+                                </Typography>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={checkboxes.interruption}
+                                            onChange={(e) => setCheckboxes({...checkboxes, interruption: e.target.checked})}
+                                        />
+                                    }
+                                    label="I understand the interruption."
+                                    sx={{mt: 2}}
+                                />
+                            </>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setConfirmDialogOpen(false)} color="secondary">
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                const confirmed =
+                                    (pendingAction?.action === "freeze" && checkboxes.failover) ||
+                                    (pendingAction?.action === "stop" && checkboxes.interruption);
+
+                                if (confirmed) {
+                                    postAction(pendingAction);
+                                    setConfirmDialogOpen(false);
+                                    setCheckboxes({failover: false, interruption: false});
+                                }
+                            }}
+                            disabled={
+                                (pendingAction?.action === "freeze" && !checkboxes.failover) ||
+                                (pendingAction?.action === "stop" && !checkboxes.interruption)
+                            }
+                            variant="contained"
+                            color="primary"
+                        >
+                            Confirm
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Simple confirm dialog for other actions */}
+                <Dialog
+                    open={simpleConfirmOpen}
+                    onClose={() => setSimpleConfirmOpen(false)}
+                    fullWidth
+                    maxWidth="xs"
+                >
+                    <DialogTitle>Confirm Action</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            Are you sure you want to <strong>{pendingAction?.action}</strong> on node <strong>{pendingAction?.node}</strong>?
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setSimpleConfirmOpen(false)} color="secondary">
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                postAction(pendingAction);
+                                setSimpleConfirmOpen(false);
+                            }}
+                            color="primary"
+                            variant="contained"
+                        >
+                            OK
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 <Snackbar
                     open={snackbar.open}

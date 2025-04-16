@@ -2,7 +2,7 @@ import React, {useEffect, useState} from "react";
 import {
     Box, CircularProgress, Paper, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Tooltip,
-    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField
+    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField, Snackbar, Alert
 } from "@mui/material";
 import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -20,6 +20,7 @@ const Objects = () => {
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState("all");
     const [selectedKind, setSelectedKind] = useState("all");
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
 
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
@@ -72,6 +73,15 @@ const Objects = () => {
     const handleExecuteActionOnSelected = async (action) => {
         const token = localStorage.getItem("authToken");
 
+        setSnackbar({
+            open: true,
+            message: `Executing action '${action}'...`,
+            severity: "info"
+        });
+
+        let successCount = 0;
+        let errorCount = 0;
+
         for (let objectName of selectedObjects) {
             const rawObj = objectStatus[objectName];
             if (!rawObj) continue;
@@ -106,11 +116,36 @@ const Objects = () => {
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Failed to ${action} object ${objectName}`);
+                    errorCount++;
+                    console.error(`❌ Failed to ${action} ${objectName}`);
+                    continue;
                 }
+
+                successCount++;
             } catch (error) {
+                errorCount++;
                 console.error("🚨 Error performing action:", error);
             }
+        }
+
+        if (successCount && !errorCount) {
+            setSnackbar({
+                open: true,
+                message: `✅ Action '${action}' succeeded on ${successCount} object(s).`,
+                severity: "success"
+            });
+        } else if (successCount && errorCount) {
+            setSnackbar({
+                open: true,
+                message: `⚠️ Action '${action}' partially succeeded: ${successCount} ok, ${errorCount} failure(s).`,
+                severity: "warning"
+            });
+        } else {
+            setSnackbar({
+                open: true,
+                message: `❌ Action '${action}' failed on all objects.`,
+                severity: "error"
+            });
         }
 
         setSelectedObjects([]);
@@ -294,6 +329,17 @@ const Objects = () => {
                     </TableContainer>
                 </Paper>
             </Box>
+
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar({...snackbar, open: false})}
+                anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+            >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

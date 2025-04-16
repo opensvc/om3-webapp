@@ -26,6 +26,7 @@ const ObjectDetail = () => {
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [selectedNode, setSelectedNode] = useState(null);
+    const [actionInProgress, setActionInProgress] = useState(false);
 
     const openSnackbar = (message, severity = "success") => {
         setSnackbar({open: true, message, severity});
@@ -53,6 +54,9 @@ const ObjectDetail = () => {
             return;
         }
 
+        setActionInProgress(true);
+        openSnackbar(`Executing ${action} action on node ${node}...`, "info");
+
         const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
 
         try {
@@ -66,10 +70,12 @@ const ObjectDetail = () => {
 
             if (!res.ok) throw new Error(`Failed to ${action} on ${node}`);
 
-            openSnackbar(`Action '${action}' sent to node '${node}'`);
+            openSnackbar(`Successfully executed '${action}' on node '${node}'`);
         } catch (err) {
             console.error(err);
-            openSnackbar(`Error: ${err.message}`, "error");
+            openSnackbar(`Error executing action: ${err.message}`, "error");
+        } finally {
+            setActionInProgress(false);
         }
     };
 
@@ -154,7 +160,10 @@ const ObjectDetail = () => {
                                             <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
                                         </Tooltip>
                                     )}
-                                    <IconButton onClick={(e) => handleMenuOpen(e, node)}>
+                                    <IconButton
+                                        onClick={(e) => handleMenuOpen(e, node)}
+                                        disabled={actionInProgress}
+                                    >
                                         <MoreVertIcon/>
                                     </IconButton>
                                 </Box>
@@ -216,20 +225,28 @@ const ObjectDetail = () => {
                     onClose={handleMenuClose}
                 >
                     {AVAILABLE_ACTIONS.map((action) => (
-                        <MenuItem key={action} onClick={() => handleActionClick(action)}>
+                        <MenuItem
+                            key={action}
+                            onClick={() => handleActionClick(action)}
+                            disabled={actionInProgress}
+                        >
                             {action}
                         </MenuItem>
                     ))}
                 </Menu>
 
-                {/* Snackbar */}
                 <Snackbar
                     open={snackbar.open}
-                    autoHideDuration={4000}
+                    autoHideDuration={6000}
                     onClose={closeSnackbar}
                     anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                 >
-                    <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{width: '100%'}}>
+                    <Alert
+                        onClose={closeSnackbar}
+                        severity={snackbar.severity}
+                        sx={{width: '100%'}}
+                        variant="filled"
+                    >
                         {snackbar.message}
                     </Alert>
                 </Snackbar>

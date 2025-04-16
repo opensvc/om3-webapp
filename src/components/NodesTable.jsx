@@ -4,7 +4,8 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {createEventSource} from "../eventSourceManager";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem, Checkbox, Snackbar, Alert
+    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem,
+    Checkbox, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import {blue} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
@@ -15,10 +16,15 @@ const NodesTable = () => {
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
+
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [snackbar, setSnackbar] = useState({open: false, message: '', severity: 'info'});
+
+    const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -42,32 +48,6 @@ const NodesTable = () => {
         setAnchorEls((prev) => ({...prev, [nodename]: null}));
     };
 
-    const handleAction = async (nodename, action) => {
-        const token = localStorage.getItem("authToken");
-
-        setSnackbar({open: true, message: `Executing ${action} on ${nodename}...`, severity: 'info'});
-
-        try {
-            const response = await fetch(`/node/name/${nodename}/${action}`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to ${action} node`);
-            }
-
-            setSnackbar({open: true, message: `✅ ${action} on ${nodename} succeeded`, severity: 'success'});
-        } catch (error) {
-            console.error("🚨 Error performing action:", error);
-            setSnackbar({open: true, message: `❌ ${action} on ${nodename} failed`, severity: 'error'});
-        } finally {
-            handleMenuClose(nodename);
-        }
-    };
-
     const handleSelectNode = (event, nodename) => {
         if (event.target.checked) {
             setSelectedNodes((prev) => [...prev, nodename]);
@@ -76,11 +56,37 @@ const NodesTable = () => {
         }
     };
 
+    const handleTriggerAction = (nodename, action) => {
+        setPendingAction({nodes: [nodename], action});
+        setSimpleDialogOpen(true);
+    };
+
     const handleExecuteActionOnSelected = (action) => {
-        selectedNodes.forEach((nodename) => {
-            handleAction(nodename, action);
-        });
-        setSelectedNodes([]);
+        setPendingAction({nodes: [...selectedNodes], action});
+        setSimpleDialogOpen(true);
+        setActionsMenuAnchor(null);
+    };
+
+    const postAction = async ({node, action}) => {
+        const token = localStorage.getItem("authToken");
+        setSnackbar({open: true, message: `Executing ${action} on ${node}...`, severity: "info"});
+
+        try {
+            const response = await fetch(`/node/name/${node}/${action}`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) throw new Error();
+
+            setSnackbar({open: true, message: `✅ ${action} on ${node} succeeded`, severity: "success"});
+        } catch (e) {
+            setSnackbar({open: true, message: `❌ ${action} on ${node} failed`, severity: "error"});
+        }
+
+        handleMenuClose(node);
     };
 
     const handleActionsMenuOpen = (event) => {
@@ -89,6 +95,17 @@ const NodesTable = () => {
 
     const handleActionsMenuClose = () => {
         setActionsMenuAnchor(null);
+    };
+
+    const handleConfirmAction = async () => {
+        if (pendingAction) {
+            for (const node of pendingAction.nodes) {
+                await postAction({node, action: pendingAction.action});
+            }
+            setSelectedNodes([]);
+        }
+        setSimpleDialogOpen(false);
+        setPendingAction(null);
     };
 
     return (
@@ -113,7 +130,8 @@ const NodesTable = () => {
                     >
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart
+                            Daemon</MenuItem>
                     </Menu>
                 </Box>
 
@@ -159,7 +177,7 @@ const NodesTable = () => {
                                         onSelect={handleSelectNode}
                                         onMenuOpen={handleMenuOpen}
                                         onMenuClose={handleMenuClose}
-                                        onAction={handleAction}
+                                        onAction={handleTriggerAction}
                                         anchorEl={anchorEls[nodename]}
                                     />
                                 ))}
@@ -183,6 +201,36 @@ const NodesTable = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>
+                    Confirm {pendingAction?.action} Action
+                </DialogTitle>
+                <DialogContent sx={{padding: 3}}>
+                    <Typography>
+                        Are you sure you want to execute <strong>{pendingAction?.action}</strong> on
+                        {" "}
+                        <strong>
+                            {pendingAction?.nodes.length === 1
+                                ? pendingAction?.nodes[0]
+                                : `${pendingAction?.nodes.length} nodes`}
+                        </strong>
+                        ?
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
+                    <Button onClick={() => setSimpleDialogOpen(false)} variant="outlined">
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleConfirmAction}
+                    >
+                        OK
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

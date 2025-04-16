@@ -5,7 +5,7 @@ import {
     TableHead, TableRow, Typography, Tooltip, Divider,
     Snackbar, Alert, Menu, MenuItem, IconButton,
     Dialog, DialogTitle, DialogContent, DialogActions,
-    Button, Checkbox, FormControlLabel
+    FormControlLabel, Checkbox, Button
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -29,10 +29,17 @@ const ObjectDetail = () => {
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [selectedNode, setSelectedNode] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
-    const [pendingAction, setPendingAction] = useState(null);
+
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-    const [simpleConfirmOpen, setSimpleConfirmOpen] = useState(false);
-    const [checkboxes, setCheckboxes] = useState({failover: false, interruption: false});
+    const [stopDialogOpen, setStopDialogOpen] = useState(false);
+    const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
+
+    const [checkboxes, setCheckboxes] = useState({
+        failover: false,
+        monitoring: false
+    });
+    const [stopCheckbox, setStopCheckbox] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
 
     const openSnackbar = (message, severity = "success") => {
         setSnackbar({open: true, message, severity});
@@ -102,12 +109,17 @@ const ObjectDetail = () => {
     };
 
     const handleActionClick = (action) => {
+        const actionType = action.toLowerCase();
         setPendingAction({action, node: selectedNode});
-        if (action === "freeze" || action === "stop") {
+
+        if (actionType === "freeze") {
             setConfirmDialogOpen(true);
+        } else if (actionType === "stop") {
+            setStopDialogOpen(true);
         } else {
-            setSimpleConfirmOpen(true);
+            setSimpleDialogOpen(true);
         }
+
         handleMenuClose();
     };
 
@@ -153,15 +165,9 @@ const ObjectDetail = () => {
                     const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
 
                     return (
-                        <Paper
-                            key={node}
-                            elevation={3}
-                            sx={{p: 3, mb: 5, borderRadius: 3, backgroundColor: "#ffffff"}}
-                        >
+                        <Paper key={node} elevation={3} sx={{p: 3, mb: 5, borderRadius: 3}}>
                             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                                <Typography variant="h6" fontWeight="medium" fontSize="1.25rem">
-                                    Node: {node}
-                                </Typography>
+                                <Typography variant="h6">Node: {node}</Typography>
                                 <Box display="flex" alignItems="center" gap={2}>
                                     <FiberManualRecordIcon sx={{color: getColor(avail), fontSize: "1.2rem"}}/>
                                     {isFrozen && (
@@ -180,7 +186,7 @@ const ObjectDetail = () => {
 
                             <Divider sx={{mb: 2}}/>
 
-                            <Typography variant="subtitle1" fontWeight="medium" mb={1} fontSize="1.1rem">
+                            <Typography variant="subtitle1" fontWeight="medium" mb={1}>
                                 Resources
                             </Typography>
 
@@ -202,22 +208,18 @@ const ObjectDetail = () => {
                                                 <TableCell>{resName}</TableCell>
                                                 <TableCell>{res.label}</TableCell>
                                                 <TableCell align="center">
-                                                    <Box display="flex" justifyContent="center">
-                                                        <FiberManualRecordIcon
-                                                            sx={{color: getColor(res.status), fontSize: "1rem"}}
-                                                        />
-                                                    </Box>
+                                                    <FiberManualRecordIcon
+                                                        sx={{color: getColor(res.status), fontSize: "1rem"}}
+                                                    />
                                                 </TableCell>
                                                 <TableCell>{res.type}</TableCell>
                                                 <TableCell align="center">
-                                                    <Box display="flex" justifyContent="center">
-                                                        <FiberManualRecordIcon
-                                                            sx={{
-                                                                color: res.provisioned?.state ? green[500] : red[500],
-                                                                fontSize: "1rem"
-                                                            }}
-                                                        />
-                                                    </Box>
+                                                    <FiberManualRecordIcon
+                                                        sx={{
+                                                            color: res.provisioned?.state ? green[500] : red[500],
+                                                            fontSize: "1rem"
+                                                        }}
+                                                    />
                                                 </TableCell>
                                                 <TableCell>{res.provisioned?.mtime}</TableCell>
                                             </TableRow>
@@ -228,11 +230,8 @@ const ObjectDetail = () => {
                         </Paper>
                     );
                 })}
-                <Menu
-                    anchorEl={menuAnchor}
-                    open={Boolean(menuAnchor)}
-                    onClose={handleMenuClose}
-                >
+
+                <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
                     {AVAILABLE_ACTIONS.map((action) => (
                         <MenuItem
                             key={action}
@@ -244,113 +243,112 @@ const ObjectDetail = () => {
                     ))}
                 </Menu>
 
-                {/* Dialog for freeze or stop */}
-                <Dialog
-                    open={confirmDialogOpen}
-                    onClose={() => setConfirmDialogOpen(false)}
-                    fullWidth
-                    maxWidth="sm"
-                >
-                    <DialogTitle>
-                        Confirm {pendingAction?.action} Action
-                    </DialogTitle>
-                    <DialogContent>
-                        {pendingAction?.action === "freeze" && (
-                            <>
-                                <Typography gutterBottom>
-                                    <strong>
-                                        I understand the selected instances will no longer be a failover candidate.
-                                    </strong>
-                                </Typography>
-                                <Typography gutterBottom>
-                                    <strong>
-                                        I understand the selected resources will no longer be monitored.
-                                    </strong>
-                                </Typography>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={checkboxes.failover}
-                                            onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
-                                        />
-                                    }
-                                    label="I understand and confirm."
-                                    sx={{mt: 2}}
+                {/* Freeze Dialog */}
+                <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Freeze Action</DialogTitle>
+                    <DialogContent sx={{padding: 3}}>
+                        <Typography paragraph>
+                            Please confirm the following actions before freezing the node:
+                        </Typography>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={checkboxes.failover}
+                                    onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
                                 />
-                            </>
-                        )}
-                        {pendingAction?.action === "stop" && (
-                            <>
-                                <Typography gutterBottom>
-                                    <strong>
-                                        I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured.
-                                    </strong>
-                                </Typography>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={checkboxes.interruption}
-                                            onChange={(e) => setCheckboxes({...checkboxes, interruption: e.target.checked})}
-                                        />
-                                    }
-                                    label="I understand the interruption."
-                                    sx={{mt: 2}}
-                                />
-                            </>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setConfirmDialogOpen(false)} color="secondary">
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={() => {
-                                const confirmed =
-                                    (pendingAction?.action === "freeze" && checkboxes.failover) ||
-                                    (pendingAction?.action === "stop" && checkboxes.interruption);
-
-                                if (confirmed) {
-                                    postAction(pendingAction);
-                                    setConfirmDialogOpen(false);
-                                    setCheckboxes({failover: false, interruption: false});
-                                }
-                            }}
-                            disabled={
-                                (pendingAction?.action === "freeze" && !checkboxes.failover) ||
-                                (pendingAction?.action === "stop" && !checkboxes.interruption)
                             }
+                            label="I understand the selected instances will no longer be a failover candidate."
+                            sx={{mb: 2}}
+                        />
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={checkboxes.monitoring}
+                                    onChange={(e) => setCheckboxes({...checkboxes, monitoring: e.target.checked})}
+                                />
+                            }
+                            label="I understand the selected resources will no longer be monitored."
+                        />
+                    </DialogContent>
+                    <DialogActions sx={{px: 3, pb: 2}}>
+                        <Button onClick={() => setConfirmDialogOpen(false)} variant="outlined">Cancel</Button>
+                        <Button
                             variant="contained"
                             color="primary"
+                            disabled={!checkboxes.failover || !checkboxes.monitoring}
+                            onClick={() => {
+                                setConfirmDialogOpen(false);
+                                if (pendingAction) {
+                                    postAction(pendingAction);
+                                    setPendingAction(null);
+                                    setCheckboxes({failover: false, monitoring: false});
+                                }
+                            }}
                         >
-                            Confirm
+                            Confirm Freeze
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Simple confirm dialog for other actions */}
-                <Dialog
-                    open={simpleConfirmOpen}
-                    onClose={() => setSimpleConfirmOpen(false)}
-                    fullWidth
-                    maxWidth="xs"
-                >
-                    <DialogTitle>Confirm Action</DialogTitle>
-                    <DialogContent>
+                {/* Stop Dialog */}
+                <Dialog open={stopDialogOpen} onClose={() => setStopDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Stop Action</DialogTitle>
+                    <DialogContent sx={{padding: 3}}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={stopCheckbox}
+                                    onChange={(e) => setStopCheckbox(e.target.checked)}
+                                />
+                            }
+                            label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
+                        />
+                    </DialogContent>
+                    <DialogActions sx={{px: 3, pb: 2}}>
+                        <Button onClick={() => setStopDialogOpen(false)} variant="outlined">Cancel</Button>
+                        <Button
+                            variant="contained"
+                            color="error"
+                            disabled={!stopCheckbox}
+                            onClick={() => {
+                                setStopDialogOpen(false);
+                                if (pendingAction) {
+                                    postAction(pendingAction);
+                                    setPendingAction(null);
+                                    setStopCheckbox(false);
+                                }
+                            }}
+                        >
+                            Confirm Stop
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Other Actions Dialog */}
+                <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>
+                        Confirm {pendingAction?.action} Action
+                    </DialogTitle>
+                    <DialogContent sx={{padding: 3}}>
                         <Typography>
-                            Are you sure you want to <strong>{pendingAction?.action}</strong> on node <strong>{pendingAction?.node}</strong>?
+                            Are you sure you want to execute <strong>{pendingAction?.action}</strong> on
+                            node <strong>{pendingAction?.node}</strong>?
                         </Typography>
                     </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setSimpleConfirmOpen(false)} color="secondary">
+                    <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
+                        <Button onClick={() => setSimpleDialogOpen(false)} variant="outlined">
                             Cancel
                         </Button>
                         <Button
-                            onClick={() => {
-                                postAction(pendingAction);
-                                setSimpleConfirmOpen(false);
-                            }}
-                            color="primary"
                             variant="contained"
+                            color="primary"
+                            onClick={() => {
+                                setSimpleDialogOpen(false);
+                                if (pendingAction) {
+                                    postAction(pendingAction);
+                                    setPendingAction(null);
+                                }
+                            }}
                         >
                             OK
                         </Button>
@@ -366,7 +364,7 @@ const ObjectDetail = () => {
                     <Alert
                         onClose={closeSnackbar}
                         severity={snackbar.severity}
-                        sx={{width: '100%'}}
+                        sx={{width: "100%"}}
                         variant="filled"
                     >
                         {snackbar.message}

@@ -2,7 +2,9 @@ import React, {useEffect, useState} from "react";
 import {
     Box, CircularProgress, Paper, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Tooltip,
-    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField, Snackbar, Alert
+    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField,
+    Snackbar, Alert, Dialog, DialogTitle, DialogContent,
+    DialogActions, FormControlLabel
 } from "@mui/material";
 import {green, red, grey, blue} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -22,6 +24,11 @@ const Objects = () => {
     const [selectedKind, setSelectedKind] = useState("all");
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
 
+    const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
+    const [confirmationChecked, setConfirmationChecked] = useState(false);
+    const [pendingAction, setPendingAction] = useState("");
+    const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
+
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
 
@@ -40,9 +47,7 @@ const Objects = () => {
     const fetchDaemonStatus = async (authToken) => {
         try {
             const response = await fetch("/daemon/status", {
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                },
+                headers: {Authorization: `Bearer ${authToken}`},
             });
             if (!response.ok) throw new Error("Failed to fetch daemon status");
             const data = await response.json();
@@ -70,9 +75,19 @@ const Objects = () => {
         setActionsMenuAnchor(null);
     };
 
+    const handleActionClick = (action) => {
+        setPendingAction(action);
+        if (action === "freeze") {
+            setConfirmationChecked(false);
+            setConfirmationDialogOpen(true);
+        } else {
+            setSimpleConfirmDialogOpen(true);
+        }
+        handleActionsMenuClose();
+    };
+
     const handleExecuteActionOnSelected = async (action) => {
         const token = localStorage.getItem("authToken");
-
         setSnackbar({
             open: true,
             message: `Executing action '${action}'...`,
@@ -88,7 +103,6 @@ const Objects = () => {
 
             const parts = objectName.split("/");
             let namespace, kind, name;
-
             if (parts.length === 3) {
                 [namespace, kind, name] = parts;
             } else if (parts.length === 1) {
@@ -100,12 +114,10 @@ const Objects = () => {
             }
 
             const obj = {...rawObj, namespace, kind, name};
-
             if (action === "freeze" && obj.frozen === "frozen") continue;
             if (action === "unfreeze" && obj.frozen === "unfrozen") continue;
 
             const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
-
             try {
                 const response = await fetch(url, {
                     method: "POST",
@@ -114,17 +126,13 @@ const Objects = () => {
                         "Content-Type": "application/json",
                     },
                 });
-
                 if (!response.ok) {
                     errorCount++;
-                    console.error(`❌ Failed to ${action} ${objectName}`);
                     continue;
                 }
-
                 successCount++;
             } catch (error) {
                 errorCount++;
-                console.error("🚨 Error performing action:", error);
             }
         }
 
@@ -149,7 +157,8 @@ const Objects = () => {
         }
 
         setSelectedObjects([]);
-        handleActionsMenuClose();
+        setConfirmationDialogOpen(false);
+        setSimpleConfirmDialogOpen(false);
     };
 
     const handleObjectClick = (objectName) => {
@@ -171,10 +180,7 @@ const Objects = () => {
         return <Typography variant="h6" align="center" color="error">{error}</Typography>;
     }
 
-    const objects = Object.keys(objectStatus).length > 0
-        ? objectStatus
-        : daemonStatus?.cluster?.object || {};
-
+    const objects = Object.keys(objectStatus).length > 0 ? objectStatus : daemonStatus?.cluster?.object || {};
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
 
     const extractNamespace = (objectName) => {
@@ -209,31 +215,23 @@ const Objects = () => {
         <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
             <Box sx={{width: "100%", maxWidth: "1000px"}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center">
-                        Objects by Node
-                    </Typography>
+                    <Typography variant="h4" gutterBottom align="center">Objects by Node</Typography>
 
                     <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, mb: 3}}>
                         <Autocomplete
                             sx={{minWidth: 200}}
                             options={["all", ...namespaces]}
                             value={selectedNamespace}
-                            onChange={(event, newValue) => {
-                                if (newValue) setSelectedNamespace(newValue);
-                            }}
+                            onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
                             renderInput={(params) => <TextField {...params} label="Namespace"/>}
                         />
-
                         <Autocomplete
                             sx={{minWidth: 200}}
                             options={["all", ...kinds]}
                             value={selectedKind}
-                            onChange={(event, newValue) => {
-                                if (newValue) setSelectedKind(newValue);
-                            }}
+                            onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
                             renderInput={(params) => <TextField {...params} label="Kind"/>}
                         />
-
                         <Button
                             variant="contained"
                             color="primary"
@@ -242,14 +240,13 @@ const Objects = () => {
                         >
                             Actions on selected objects
                         </Button>
-
                         <Menu
                             anchorEl={actionsMenuAnchor}
                             open={Boolean(actionsMenuAnchor)}
                             onClose={handleActionsMenuClose}
                         >
                             {AVAILABLE_ACTIONS.map((action) => (
-                                <MenuItem key={action} onClick={() => handleExecuteActionOnSelected(action)}>
+                                <MenuItem key={action} onClick={() => handleActionClick(action)}>
                                     {action.charAt(0).toUpperCase() + action.slice(1)}
                                 </MenuItem>
                             ))}
@@ -330,6 +327,7 @@ const Objects = () => {
                 </Paper>
             </Box>
 
+            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={4000}
@@ -340,6 +338,48 @@ const Objects = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            {/* Dialog for freeze */}
+            <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
+                <DialogTitle>Freeze selected objects</DialogTitle>
+                <DialogContent>
+                    <FormControlLabel
+                        control={
+                            <Checkbox
+                                checked={confirmationChecked}
+                                onChange={(e) => setConfirmationChecked(e.target.checked)}
+                            />
+                        }
+                        label="I understand the selected services orchestration will be paused."
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmationDialogOpen(false)}>Cancel</Button>
+                    <Button
+                        onClick={() => handleExecuteActionOnSelected(pendingAction)}
+                        disabled={!confirmationChecked}
+                        variant="contained"
+                        color="primary"
+                    >
+                        Confirm
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog for other actions */}
+            <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
+                <DialogTitle>Confirm action</DialogTitle>
+                <DialogContent>
+                    Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={() => handleExecuteActionOnSelected(pendingAction)} variant="contained"
+                            color="primary">
+                        OK
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

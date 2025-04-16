@@ -4,7 +4,7 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {createEventSource} from "../eventSourceManager";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem, Checkbox
+    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem, Checkbox, Snackbar, Alert
 } from "@mui/material";
 import {blue} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
@@ -18,6 +18,7 @@ const NodesTable = () => {
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+    const [snackbar, setSnackbar] = useState({open: false, message: '', severity: 'info'});
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -44,6 +45,8 @@ const NodesTable = () => {
     const handleAction = async (nodename, action) => {
         const token = localStorage.getItem("authToken");
 
+        setSnackbar({open: true, message: `Executing ${action} on ${nodename}...`, severity: 'info'});
+
         try {
             const response = await fetch(`/node/name/${nodename}/${action}`, {
                 method: "POST",
@@ -55,9 +58,11 @@ const NodesTable = () => {
             if (!response.ok) {
                 throw new Error(`Failed to ${action} node`);
             }
-            console.log(`✅ Node ${nodename} ${action}d successfully`);
+
+            setSnackbar({open: true, message: `✅ ${action} on ${nodename} succeeded`, severity: 'success'});
         } catch (error) {
             console.error("🚨 Error performing action:", error);
+            setSnackbar({open: true, message: `❌ ${action} on ${nodename} failed`, severity: 'error'});
         } finally {
             handleMenuClose(nodename);
         }
@@ -108,9 +113,7 @@ const NodesTable = () => {
                     >
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>
-                            Restart Daemon
-                        </MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart Daemon</MenuItem>
                     </Menu>
                 </Box>
 
@@ -165,6 +168,21 @@ const NodesTable = () => {
                     </TableContainer>
                 )}
             </Paper>
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar({...snackbar, open: false})}
+                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
+            >
+                <Alert
+                    onClose={() => setSnackbar({...snackbar, open: false})}
+                    severity={snackbar.severity}
+                    variant="filled"
+                    sx={{width: '100%'}}
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

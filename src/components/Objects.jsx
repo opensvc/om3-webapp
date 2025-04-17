@@ -1,14 +1,34 @@
 import React, {useEffect, useState} from "react";
 import {
-    Box, CircularProgress, Paper, Table, TableBody, TableCell,
-    TableContainer, TableHead, TableRow, Typography, Tooltip,
-    Button, Menu, MenuItem, Checkbox, Autocomplete, TextField,
-    Snackbar, Alert, Dialog, DialogTitle, DialogContent,
-    DialogActions, FormControlLabel
+    Box,
+    CircularProgress,
+    Paper,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Typography,
+    Tooltip,
+    Button,
+    Menu,
+    MenuItem,
+    Checkbox,
+    Autocomplete,
+    TextField,
+    Snackbar,
+    Alert,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    FormControlLabel
 } from "@mui/material";
-import {green, red, grey, blue} from "@mui/material/colors";
+import {green, red, grey, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {useNavigate} from "react-router-dom";
 import useEventStore from "../store/useEventStore";
 
@@ -91,7 +111,7 @@ const Objects = () => {
         setSnackbar({
             open: true,
             message: `Executing action '${action}'...`,
-            severity: "info"
+            severity: "info",
         });
 
         let successCount = 0;
@@ -105,12 +125,10 @@ const Objects = () => {
             let namespace, kind, name;
             if (parts.length === 3) {
                 [namespace, kind, name] = parts;
-            } else if (parts.length === 1) {
+            } else {
                 namespace = "root";
                 kind = "svc";
                 name = parts[0];
-            } else {
-                continue;
             }
 
             const obj = {...rawObj, namespace, kind, name};
@@ -131,7 +149,7 @@ const Objects = () => {
                     continue;
                 }
                 successCount++;
-            } catch (error) {
+            } catch {
                 errorCount++;
             }
         }
@@ -140,19 +158,19 @@ const Objects = () => {
             setSnackbar({
                 open: true,
                 message: `✅ Action '${action}' succeeded on ${successCount} object(s).`,
-                severity: "success"
+                severity: "success",
             });
         } else if (successCount && errorCount) {
             setSnackbar({
                 open: true,
                 message: `⚠️ Action '${action}' partially succeeded: ${successCount} ok, ${errorCount} failure(s).`,
-                severity: "warning"
+                severity: "warning",
             });
         } else {
             setSnackbar({
                 open: true,
                 message: `❌ Action '${action}' failed on all objects.`,
-                severity: "error"
+                severity: "error",
             });
         }
 
@@ -177,11 +195,20 @@ const Objects = () => {
     }
 
     if (error) {
-        return <Typography variant="h6" align="center" color="error">{error}</Typography>;
+        return (
+            <Typography variant="h6" align="center" color="error">
+                {error}
+            </Typography>
+        );
     }
 
-    const objects = Object.keys(objectStatus).length > 0 ? objectStatus : daemonStatus?.cluster?.object || {};
-    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
+    const objects =
+        Object.keys(objectStatus).length > 0
+            ? objectStatus
+            : daemonStatus?.cluster?.object || {};
+    const allObjectNames = Object.keys(objects).filter(
+        (key) => key && typeof objects[key] === "object"
+    );
 
     const extractNamespace = (objectName) => {
         const parts = objectName.split("/");
@@ -196,7 +223,7 @@ const Objects = () => {
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
 
-    const filteredObjectNames = allObjectNames.filter(name => {
+    const filteredObjectNames = allObjectNames.filter((name) => {
         const nsMatch = selectedNamespace === "all" || extractNamespace(name) === selectedNamespace;
         const kindMatch = selectedKind === "all" || extractKind(name) === selectedKind;
         return nsMatch && kindMatch;
@@ -204,18 +231,32 @@ const Objects = () => {
 
     const nodeList = daemonStatus?.cluster?.config?.nodes || [];
     const nodeNames = Array.isArray(nodeList)
-        ? nodeList.map((n) => typeof n === "string" ? n : n.name)
+        ? nodeList.map((n) => (typeof n === "string" ? n : n.name))
         : Object.keys(nodeList);
 
     if (!allObjectNames.length || !nodeNames.length) {
-        return <Typography variant="h6" align="center">No data available (empty objects or nodes)</Typography>;
+        return (
+            <Typography variant="h6" align="center">
+                No data available (empty objects or nodes)
+            </Typography>
+        );
     }
 
     return (
-        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
+        <Box
+            sx={{
+                minHeight: "100vh",
+                bgcolor: "background.default",
+                p: 3,
+                display: "flex",
+                justifyContent: "center",
+            }}
+        >
             <Box sx={{width: "100%", maxWidth: "1000px"}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center">Objects by Node</Typography>
+                    <Typography variant="h4" gutterBottom align="center">
+                        Objects by Node
+                    </Typography>
 
                     <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, mb: 3}}>
                         <Autocomplete
@@ -261,14 +302,22 @@ const Objects = () => {
                                         <Checkbox
                                             checked={selectedObjects.length === filteredObjectNames.length}
                                             onChange={(e) =>
-                                                setSelectedObjects(e.target.checked ? filteredObjectNames : [])
+                                                setSelectedObjects(
+                                                    e.target.checked ? filteredObjectNames : []
+                                                )
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell><strong>Object</strong></TableCell>
-                                    <TableCell align="center"><strong>Global</strong></TableCell>
+                                    <TableCell>
+                                        <strong>Object</strong>
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <strong>Global</strong>
+                                    </TableCell>
                                     {nodeNames.map((node) => (
-                                        <TableCell key={node} align="center"><strong>{node}</strong></TableCell>
+                                        <TableCell key={node} align="center">
+                                            <strong>{node}</strong>
+                                        </TableCell>
                                     ))}
                                 </TableRow>
                             </TableHead>
@@ -288,20 +337,45 @@ const Objects = () => {
                                             <TableCell>
                                                 <Checkbox
                                                     checked={selectedObjects.includes(objectName)}
-                                                    onChange={(e) => handleSelectObject(e, objectName)}
+                                                    onChange={(e) =>
+                                                        handleSelectObject(e, objectName)
+                                                    }
                                                     onClick={(e) => e.stopPropagation()}
                                                 />
                                             </TableCell>
                                             <TableCell>{objectName}</TableCell>
                                             <TableCell align="center">
-                                                <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                    {avail === "up" &&
-                                                        <FiberManualRecordIcon sx={{color: green[500]}}/>}
-                                                    {avail === "down" &&
-                                                        <FiberManualRecordIcon sx={{color: red[500]}}/>}
+                                                <Box
+                                                    display="flex"
+                                                    justifyContent="center"
+                                                    alignItems="center"
+                                                    gap={1}
+                                                >
+                                                    {avail === "up" && (
+                                                        <Tooltip title="Available">
+                                                            <FiberManualRecordIcon
+                                                                sx={{color: green[500]}}
+                                                            />
+                                                        </Tooltip>
+                                                    )}
+                                                    {avail === "down" && (
+                                                        <Tooltip title="Unavailable">
+                                                            <FiberManualRecordIcon
+                                                                sx={{color: red[500]}}
+                                                            />
+                                                        </Tooltip>
+                                                    )}
+                                                    {avail === "warn" && (
+                                                        <Tooltip title="Warning">
+                                                            <WarningAmberIcon sx={{color: orange[500]}}/>
+                                                        </Tooltip>
+                                                    )}
                                                     {frozen === "frozen" && (
                                                         <Tooltip title="Frozen">
-                                                            <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
+                                                            <AcUnitIcon
+                                                                fontSize="small"
+                                                                sx={{color: blue[200]}}
+                                                            />
                                                         </Tooltip>
                                                     )}
                                                 </Box>
@@ -311,10 +385,17 @@ const Objects = () => {
                                                 let color = grey[500];
                                                 if (instance?.avail === "up") color = green[500];
                                                 else if (instance?.avail === "down") color = red[500];
+                                                else if (instance?.avail === "warn") color = orange[500];
 
                                                 return (
                                                     <TableCell key={node} align="center">
-                                                        <FiberManualRecordIcon sx={{color}}/>
+                                                        {instance?.avail === "warn" ? (
+                                                            <Tooltip title="Warning">
+                                                                <WarningAmberIcon sx={{color: orange[500]}}/>
+                                                            </Tooltip>
+                                                        ) : (
+                                                            <FiberManualRecordIcon sx={{color}}/>
+                                                        )}
                                                     </TableCell>
                                                 );
                                             })}
@@ -334,13 +415,19 @@ const Objects = () => {
                 onClose={() => setSnackbar({...snackbar, open: false})}
                 anchorOrigin={{vertical: "bottom", horizontal: "center"}}
             >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+                <Alert
+                    severity={snackbar.severity}
+                    onClose={() => setSnackbar({...snackbar, open: false})}
+                >
                     {snackbar.message}
                 </Alert>
             </Snackbar>
 
             {/* Dialog for freeze */}
-            <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
+            <Dialog
+                open={confirmationDialogOpen}
+                onClose={() => setConfirmationDialogOpen(false)}
+            >
                 <DialogTitle>Freeze selected objects</DialogTitle>
                 <DialogContent>
                     <FormControlLabel
@@ -354,7 +441,9 @@ const Objects = () => {
                     />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfirmationDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={() => setConfirmationDialogOpen(false)}>
+                        Cancel
+                    </Button>
                     <Button
                         onClick={() => handleExecuteActionOnSelected(pendingAction)}
                         disabled={!confirmationChecked}
@@ -367,15 +456,24 @@ const Objects = () => {
             </Dialog>
 
             {/* Dialog for other actions */}
-            <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
+            <Dialog
+                open={simpleConfirmDialogOpen}
+                onClose={() => setSimpleConfirmDialogOpen(false)}
+            >
                 <DialogTitle>Confirm action</DialogTitle>
                 <DialogContent>
-                    Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
+                    Are you sure you want to execute{" "}
+                    <strong>{pendingAction}</strong> on the selected objects?
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={() => handleExecuteActionOnSelected(pendingAction)} variant="contained"
-                            color="primary">
+                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={() => handleExecuteActionOnSelected(pendingAction)}
+                        variant="contained"
+                        color="primary"
+                    >
                         OK
                     </Button>
                 </DialogActions>

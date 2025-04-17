@@ -10,7 +10,8 @@ import {
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import {green, red, grey, blue} from "@mui/material/colors";
+import {green, red, grey, blue, orange} from "@mui/material/colors";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import useEventStore from "../store/useEventStore";
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
@@ -129,6 +130,7 @@ const ObjectDetail = () => {
     const getColor = (status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
+        if (status === "warn") return orange[500];
         return grey[500];
     };
 
@@ -246,7 +248,14 @@ const ObjectDetail = () => {
                                 Global Status
                             </Typography>
                             <Box display="flex" alignItems="center" gap={2}>
-                                <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}/>
+                                <FiberManualRecordIcon
+                                    sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}
+                                />
+                                {globalStatus.avail === "warn" && (
+                                    <Tooltip title="Warning">
+                                        <WarningAmberIcon sx={{color: orange[500]}}/>
+                                    </Tooltip>
+                                )}
                                 {globalStatus.frozen === "frozen" && (
                                     <Tooltip title="Frozen">
                                         <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>

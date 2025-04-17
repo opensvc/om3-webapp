@@ -1,11 +1,9 @@
 import React, {useState} from "react";
 import {useParams} from "react-router-dom";
 import {
-    Box, Paper, Table, TableBody, TableCell, TableContainer,
-    TableHead, TableRow, Typography, Tooltip, Divider,
-    Snackbar, Alert, Menu, MenuItem, IconButton,
-    Dialog, DialogTitle, DialogContent, DialogActions,
-    FormControlLabel, Checkbox, Button
+    Box, Paper, Typography, Tooltip, Divider, Snackbar, Alert, Menu, MenuItem, IconButton,
+    Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Button,
+    Table, TableBody, TableCell, TableHead, TableRow, TableContainer
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -13,7 +11,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, grey, blue} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
 
-const AVAILABLE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
+const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
+const OBJECT_ACTIONS = ["restart", "freeze", "unfreeze"];
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -27,17 +26,13 @@ const ObjectDetail = () => {
 
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
     const [menuAnchor, setMenuAnchor] = useState(null);
+    const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
     const [selectedNode, setSelectedNode] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
-
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
-
-    const [checkboxes, setCheckboxes] = useState({
-        failover: false,
-        monitoring: false
-    });
+    const [checkboxes, setCheckboxes] = useState({failover: false, monitoring: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
     const [pendingAction, setPendingAction] = useState(null);
 
@@ -58,17 +53,13 @@ const ObjectDetail = () => {
         }
     };
 
-    const postAction = async ({node, action}) => {
+    const postNodeAction = async ({node, action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
-
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
+        if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
-        openSnackbar(`Executing ${action} action on node ${node}...`, "info");
+        openSnackbar(`Executing ${action} on node ${node}...`, "info");
 
         const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
 
@@ -82,11 +73,39 @@ const ObjectDetail = () => {
             });
 
             if (!res.ok) throw new Error(`Failed to ${action} on ${node}`);
-
             openSnackbar(`Successfully executed '${action}' on node '${node}'`);
         } catch (err) {
             console.error(err);
-            openSnackbar(`Error executing action: ${err.message}`, "error");
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionInProgress(false);
+        }
+    };
+
+    const postObjectAction = async ({action}) => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) return openSnackbar("Auth token not found.", "error");
+
+        setActionInProgress(true);
+        openSnackbar(`Executing ${action} on object...`, "info");
+
+        const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
+
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!res.ok) throw new Error(`Failed to ${action} object`);
+            openSnackbar(`Successfully executed '${action}' on object`);
+        } catch (err) {
+            console.error(err);
+            openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionInProgress(false);
         }
@@ -108,19 +127,46 @@ const ObjectDetail = () => {
         setSelectedNode(null);
     };
 
-    const handleActionClick = (action) => {
-        const actionType = action.toLowerCase();
-        setPendingAction({action, node: selectedNode});
+    const handleObjectMenuOpen = (event) => {
+        setObjectMenuAnchor(event.currentTarget);
+    };
 
-        if (actionType === "freeze") {
+    const handleObjectMenuClose = () => {
+        setObjectMenuAnchor(null);
+    };
+
+    const handleActionClick = (action, node = null) => {
+        const isNodeAction = !!node;
+        const target = isNodeAction ? node : decodedObjectName;
+
+        setPendingAction({action, node: target, isNodeAction});
+
+        if (action === "freeze") {
             setConfirmDialogOpen(true);
-        } else if (actionType === "stop") {
+        } else if (action === "stop" && isNodeAction) {
             setStopDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
 
         handleMenuClose();
+        handleObjectMenuClose();
+    };
+
+    const handleDialogConfirm = () => {
+        if (!pendingAction) return;
+
+        const {isNodeAction, ...rest} = pendingAction;
+
+        if (isNodeAction) {
+            postNodeAction(rest);
+        } else {
+            postObjectAction(rest);
+        }
+
+        setPendingAction(null);
+        setCheckboxes({failover: false, monitoring: false});
+        setStopCheckbox(false);
     };
 
     if (!objectData) {
@@ -136,9 +182,26 @@ const ObjectDetail = () => {
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
-                <Typography variant="h4" gutterBottom fontWeight="bold">
-                    {decodedObjectName}
-                </Typography>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h4" fontWeight="bold">
+                        {decodedObjectName}
+                    </Typography>
+                    <IconButton onClick={handleObjectMenuOpen}>
+                        <MoreVertIcon/>
+                    </IconButton>
+                </Box>
+
+                <Menu anchorEl={objectMenuAnchor} open={Boolean(objectMenuAnchor)} onClose={handleObjectMenuClose}>
+                    {OBJECT_ACTIONS.map((action) => (
+                        <MenuItem
+                            key={action}
+                            onClick={() => handleActionClick(action)}
+                            disabled={actionInProgress}
+                        >
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
 
                 {globalStatus && (
                     <Paper elevation={2} sx={{p: 3, borderRadius: 3, mb: 4, backgroundColor: "#f9fafb"}}>
@@ -232,10 +295,10 @@ const ObjectDetail = () => {
                 })}
 
                 <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
-                    {AVAILABLE_ACTIONS.map((action) => (
+                    {NODE_ACTIONS.map((action) => (
                         <MenuItem
                             key={action}
-                            onClick={() => handleActionClick(action)}
+                            onClick={() => handleActionClick(action, selectedNode)}
                             disabled={actionInProgress}
                         >
                             {action}
@@ -243,22 +306,16 @@ const ObjectDetail = () => {
                     ))}
                 </Menu>
 
-                {/* Freeze Dialog */}
+                {/* Dialogs (reuse existants) */}
                 <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} maxWidth="sm" fullWidth>
-                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Freeze Action</DialogTitle>
+                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Freeze</DialogTitle>
                     <DialogContent sx={{padding: 3}}>
-                        <Typography paragraph>
-                            Please confirm the following actions before freezing the node:
-                        </Typography>
                         <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={checkboxes.failover}
-                                    onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
-                                />
-                            }
-                            label="I understand the selected instances will no longer be a failover candidate."
-                            sx={{mb: 2}}
+                            control={<Checkbox checked={checkboxes.failover} onChange={(e) => setCheckboxes({
+                                ...checkboxes,
+                                failover: e.target.checked
+                            })}/>}
+                            label="I understand the selected service orchestration will be paused."
                         />
                         <FormControlLabel
                             control={
@@ -270,103 +327,75 @@ const ObjectDetail = () => {
                             label="I understand the selected resources will no longer be monitored."
                         />
                     </DialogContent>
-                    <DialogActions sx={{px: 3, pb: 2}}>
-                        <Button onClick={() => setConfirmDialogOpen(false)} variant="outlined">Cancel</Button>
+                    <DialogActions>
+                        <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
                         <Button
                             variant="contained"
-                            color="primary"
-                            disabled={!checkboxes.failover || !checkboxes.monitoring}
+                            disabled={!checkboxes.failover}
                             onClick={() => {
                                 setConfirmDialogOpen(false);
-                                if (pendingAction) {
-                                    postAction(pendingAction);
-                                    setPendingAction(null);
-                                    setCheckboxes({failover: false, monitoring: false});
-                                }
+                                handleDialogConfirm();
                             }}
                         >
-                            Confirm Freeze
+                            Confirm
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Stop Dialog */}
                 <Dialog open={stopDialogOpen} onClose={() => setStopDialogOpen(false)} maxWidth="sm" fullWidth>
-                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Stop Action</DialogTitle>
-                    <DialogContent sx={{padding: 3}}>
+                    <DialogTitle>Confirm Stop</DialogTitle>
+                    <DialogContent>
                         <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={stopCheckbox}
-                                    onChange={(e) => setStopCheckbox(e.target.checked)}
-                                />
-                            }
-                            label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
+                            control={<Checkbox checked={stopCheckbox}
+                                               onChange={(e) => setStopCheckbox(e.target.checked)}/>}
+                            label="I understand this may interrupt services"
                         />
                     </DialogContent>
-                    <DialogActions sx={{px: 3, pb: 2}}>
-                        <Button onClick={() => setStopDialogOpen(false)} variant="outlined">Cancel</Button>
+                    <DialogActions>
+                        <Button onClick={() => setStopDialogOpen(false)}>Cancel</Button>
                         <Button
                             variant="contained"
                             color="error"
                             disabled={!stopCheckbox}
                             onClick={() => {
                                 setStopDialogOpen(false);
-                                if (pendingAction) {
-                                    postAction(pendingAction);
-                                    setPendingAction(null);
-                                    setStopCheckbox(false);
-                                }
+                                handleDialogConfirm();
                             }}
                         >
-                            Confirm Stop
+                            Stop
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Other Actions Dialog */}
                 <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
-                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>
-                        Confirm {pendingAction?.action} Action
-                    </DialogTitle>
-                    <DialogContent sx={{padding: 3}}>
+                    <DialogTitle>Confirm {pendingAction?.action}</DialogTitle>
+                    <DialogContent>
                         <Typography>
-                            Are you sure you want to execute <strong>{pendingAction?.action}</strong> on
-                            node <strong>{pendingAction?.node}</strong>?
+                            Are you sure you want to <strong>{pendingAction?.action}</strong> on{" "}
+                            <strong>{pendingAction?.node}</strong>?
                         </Typography>
                     </DialogContent>
-                    <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-                        <Button onClick={() => setSimpleDialogOpen(false)} variant="outlined">
-                            Cancel
-                        </Button>
+                    <DialogActions>
+                        <Button onClick={() => setSimpleDialogOpen(false)}>Cancel</Button>
                         <Button
                             variant="contained"
-                            color="primary"
                             onClick={() => {
                                 setSimpleDialogOpen(false);
-                                if (pendingAction) {
-                                    postAction(pendingAction);
-                                    setPendingAction(null);
-                                }
+                                handleDialogConfirm();
                             }}
                         >
-                            OK
+                            Confirm
                         </Button>
                     </DialogActions>
                 </Dialog>
 
                 <Snackbar
                     open={snackbar.open}
-                    autoHideDuration={6000}
+                    autoHideDuration={5000}
                     onClose={closeSnackbar}
                     anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                 >
-                    <Alert
-                        onClose={closeSnackbar}
-                        severity={snackbar.severity}
-                        sx={{width: "100%"}}
-                        variant="filled"
-                    >
+                    <Alert onClose={closeSnackbar} severity={snackbar.severity} variant="filled">
                         {snackbar.message}
                     </Alert>
                 </Snackbar>

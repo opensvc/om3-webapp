@@ -117,9 +117,9 @@ const Objects = () => {
         let successCount = 0;
         let errorCount = 0;
 
-        for (let objectName of selectedObjects) {
+        const promises = selectedObjects.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
-            if (!rawObj) continue;
+            if (!rawObj) return;
 
             const parts = objectName.split("/");
             let namespace, kind, name;
@@ -132,8 +132,8 @@ const Objects = () => {
             }
 
             const obj = {...rawObj, namespace, kind, name};
-            if (action === "freeze" && obj.frozen === "frozen") continue;
-            if (action === "unfreeze" && obj.frozen === "unfrozen") continue;
+            if (action === "freeze" && obj.frozen === "frozen") return;
+            if (action === "unfreeze" && obj.frozen === "unfrozen") return;
 
             const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
             try {
@@ -146,13 +146,15 @@ const Objects = () => {
                 });
                 if (!response.ok) {
                     errorCount++;
-                    continue;
+                    return;
                 }
                 successCount++;
             } catch {
                 errorCount++;
             }
-        }
+        });
+
+        await Promise.all(promises);
 
         if (successCount && !errorCount) {
             setSnackbar({

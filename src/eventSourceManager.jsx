@@ -14,6 +14,29 @@ export const createEventSource = (url, token) => {
         updateObjectInstanceStatus
     } = useEventStore.getState();
 
+    let objectStatusBuffer = {};
+    let objectFlushTimeout = null;
+    const flushObjectBuffer = () => {
+        for (const objectName in objectStatusBuffer) {
+            updateObjectStatus(objectName, objectStatusBuffer[objectName]);
+        }
+        objectStatusBuffer = {};
+        objectFlushTimeout = null;
+    };
+
+    let instanceStatusBuffer = {};
+    let instanceFlushTimeout = null;
+    const flushInstanceBuffer = () => {
+        for (const objectName in instanceStatusBuffer) {
+            const perNode = instanceStatusBuffer[objectName];
+            for (const node in perNode) {
+                updateObjectInstanceStatus(objectName, node, perNode[node]);
+            }
+        }
+        instanceStatusBuffer = {};
+        instanceFlushTimeout = null;
+    };
+
     let cachedUrl = "/sse?cache=true&token=" + token;
     const filters = [
         "NodeStatusUpdated",
@@ -54,72 +77,32 @@ export const createEventSource = (url, token) => {
         updateNodeStats(node, node_stats);
     });
 
-    // Add a buffer to temporarily store updates
-    let objectStatusBuffer = {};
-    let updateTimeout = null;
-
-    const flushObjectStatusBuffer = () => {
-        const {updateObjectStatus} = useEventStore.getState();
-
-        for (const objectName in objectStatusBuffer) {
-            updateObjectStatus(objectName, objectStatusBuffer[objectName]);
-        }
-
-        objectStatusBuffer = {};
-        updateTimeout = null;
-    };
-
     eventSource.addEventListener("ObjectStatusUpdated", (event) => {
-        try {
-            const parsed = JSON.parse(event.data);
-            const object_name = parsed.path ?? parsed.labels?.path;
-            const object_status = parsed.object_status;
-
-            if (!object_name || !object_status) {
-                console.warn("⛔ Event is missing object_name or object_status", parsed);
-                return;
-            }
-
-            // Update the buffer instead of the store directly
-            objectStatusBuffer[object_name] = {
-                ...(objectStatusBuffer[object_name] || {}),
-                ...object_status,
-            };
-            // Schedule a batch update (every 100ms)
-            if (!updateTimeout) {
-                updateTimeout = setTimeout(flushObjectStatusBuffer, 100);
-            }
-
-        } catch (err) {
-            console.error("❌ Failed to handle ObjectStatusUpdated event", err);
+        const parsed = JSON.parse(event.data);
+        const object_name = parsed.path || parsed.labels?.path;
+        const object_status = parsed.object_status;
+        if (!object_name || !object_status) return;
+        objectStatusBuffer[object_name] = {
+            ...(objectStatusBuffer[object_name] || {}),
+            ...object_status,
+        };
+        if (!objectFlushTimeout) {
+            objectFlushTimeout = setTimeout(flushObjectBuffer, 100);
         }
     });
 
     eventSource.addEventListener("InstanceStatusUpdated", (event) => {
-        try {
-            if (!event.data) {
-                console.error("❌ No event data received");
-                return;
-            }
-            let parsed;
-            try {
-                parsed = JSON.parse(event.data);
-            } catch (parseError) {
-                console.error("❌ Failed to parse JSON:", parseError);
-                return;
-            }
-
-            const objectName = parsed.path || parsed.labels?.path;
-            const node = parsed.node;
-            const instanceStatus = parsed.instance_status;
-
-            if (!objectName || !node || !instanceStatus) {
-                console.error("❌ Missing required fields in event data", parsed);
-                return;
-            }
-            useEventStore.getState().updateObjectInstanceStatus(objectName, node, instanceStatus);
-        } catch (err) {
-            console.error("❌ Failed to handle InstanceStatusUpdated event", err);
+        const parsed = JSON.parse(event.data);
+        const objectName = parsed.path || parsed.labels?.path;
+        const node = parsed.node;
+        const instanceStatus = parsed.instance_status;
+        if (!objectName || !node || !instanceStatus) return;
+        instanceStatusBuffer[objectName] = {
+            ...(instanceStatusBuffer[objectName] || {}),
+            [node]: instanceStatus,
+        };
+        if (!instanceFlushTimeout) {
+            instanceFlushTimeout = setTimeout(flushInstanceBuffer, 100);
         }
     });
 

@@ -61,10 +61,6 @@ const ObjectDetail = () => {
     const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
 
-    // Debug rendering
-    useEffect(() => {
-        console.log("ObjectDetail rendered", {decodedObjectName, objectData, selectedResourcesByNode});
-    });
 
     // Helper functions
     const parseObjectPath = (objName) => {

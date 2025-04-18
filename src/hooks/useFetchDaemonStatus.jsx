@@ -11,6 +11,7 @@ const useFetchDaemonStatus = () => {
     const [loading, setLoading] = useState(false);
     const eventSourceRef = useRef(null);
     const cacheRef = useRef([]);
+    const [clusterStats, setClusterStats] = useState({});
 
     // Function to fetch daemon statuses with token
     const refreshDaemonStatus = async (token) => {
@@ -22,8 +23,11 @@ const useFetchDaemonStatus = () => {
                 nodename: key,
                 ...result.cluster.node[key],
             }));
-            setDaemon(result.daemon)
+            setDaemon(result.daemon);
             setNodes(nodesArray);
+            setClusterStats({
+                nodeCount: nodesArray.length,
+            });
             cacheRef.current = nodesArray;
         } catch (err) {
             console.error("Error while fetching daemon statuses:", err);
@@ -51,7 +55,7 @@ const useFetchDaemonStatus = () => {
         eventSourceRef.current = createEventSource("/sse", token);
     };
 
-    return {daemon, nodes, error, loading, fetchNodes: refreshDaemonStatus, startEventReception};
+    return { daemon, nodes, clusterStats, error, loading, fetchNodes: refreshDaemonStatus, startEventReception };
 };
 
 export default useFetchDaemonStatus;

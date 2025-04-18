@@ -43,11 +43,12 @@ const Objects = () => {
     const [selectedNamespace, setSelectedNamespace] = useState("all");
     const [selectedKind, setSelectedKind] = useState("all");
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
-
     const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
     const [pendingAction, setPendingAction] = useState("");
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
+
+    const [searchQuery, setSearchQuery] = useState(""); // 🔍 Ajout
 
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
@@ -228,7 +229,8 @@ const Objects = () => {
     const filteredObjectNames = allObjectNames.filter((name) => {
         const nsMatch = selectedNamespace === "all" || extractNamespace(name) === selectedNamespace;
         const kindMatch = selectedKind === "all" || extractKind(name) === selectedKind;
-        return nsMatch && kindMatch;
+        const searchMatch = name.toLowerCase().includes(searchQuery.toLowerCase());
+        return nsMatch && kindMatch && searchMatch;
     });
 
     if (!allObjectNames.length) {
@@ -269,6 +271,12 @@ const Objects = () => {
                             value={selectedKind}
                             onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
                             renderInput={(params) => <TextField {...params} label="Kind"/>}
+                        />
+                        <TextField
+                            label="Name"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            sx={{minWidth: 200}}
                         />
                         <Button
                             variant="contained"

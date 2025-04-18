@@ -21,16 +21,29 @@ const ClusterOverview = () => {
     const nodeCount = Object.keys(nodeStatus).length;
 
     const namespaces = new Set();
-    Object.keys(objectStatus).forEach((objectPath) => {
+    const statusCount = { up: 0, down: 0, warn: 0, unknown: 0 };
+
+    const extractNamespace = (objectPath) => {
         const parts = objectPath.split("/");
-        if (parts.length === 3) {
-            namespaces.add(parts[0]);
+        return parts.length === 3 ? parts[0] : "root";
+    };
+
+    Object.entries(objectStatus).forEach(([objectPath, status]) => {
+        const ns = extractNamespace(objectPath);
+        namespaces.add(ns);
+
+        const s = status?.avail?.toLowerCase();
+        if (s === "up" || s === "down" || s === "warn") {
+            statusCount[s]++;
+        } else {
+            statusCount.unknown++;
         }
     });
+
     const namespaceCount = namespaces.size;
     const objectCount = Object.keys(objectStatus).length;
 
-    const StatCard = ({ title, value, onClick }) => (
+    const StatCard = ({ title, value, subtitle, onClick }) => (
         <Paper
             elevation={3}
             sx={{
@@ -51,6 +64,11 @@ const ClusterOverview = () => {
             <Typography variant="h3" color="primary">
                 {value}
             </Typography>
+            {subtitle && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                    {subtitle}
+                </Typography>
+            )}
         </Paper>
     );
 
@@ -72,6 +90,7 @@ const ClusterOverview = () => {
                     <StatCard
                         title="Objects"
                         value={objectCount}
+                        subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
                         onClick={() => navigate("/objects")}
                     />
                 </Grid>
@@ -79,7 +98,7 @@ const ClusterOverview = () => {
                     <StatCard
                         title="Namespaces"
                         value={namespaceCount}
-                        onClick={() => navigate("/objects")}
+                        onClick={() => navigate("/namespaces")}
                     />
                 </Grid>
             </Grid>

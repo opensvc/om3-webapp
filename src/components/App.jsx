@@ -19,6 +19,7 @@ import Objects from "./Objects";
 import ObjectDetails from "./ObjectDetails";
 import ClusterOverview from "./Cluster";
 import NavBar from './NavBar';
+import Namespaces from "./Namespaces";
 
 let enabled;
 
@@ -185,6 +186,7 @@ const App = () => {
                 <Routes>
                     <Route path="/" element={<Navigate to="/cluster" replace/>}/>
                     <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces /></ProtectedRoute>} />
                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                     <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>

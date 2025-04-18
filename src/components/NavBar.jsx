@@ -1,6 +1,6 @@
-import {Link, useNavigate, useLocation} from "react-router-dom";
-import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
-import {FaSignOutAlt} from "react-icons/fa";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
+import { FaSignOutAlt } from "react-icons/fa";
 
 const NavBar = () => {
     const navigate = useNavigate();
@@ -13,13 +13,24 @@ const NavBar = () => {
 
     const getBreadcrumbItems = () => {
         const pathParts = location.pathname.split("/").filter(Boolean);
-        const breadcrumbItems = [{name: "om3", path: "/"}];
+        const breadcrumbItems = [];
 
+        // Si on est sur /cluster seul, juste afficher "Cluster"
+        if (pathParts.length === 1 && pathParts[0] === "cluster") {
+            breadcrumbItems.push({ name: "Cluster", path: "/cluster" });
+        } else {
+            // Ajouter "Cluster" comme racine
+            breadcrumbItems.push({ name: "Cluster", path: "/cluster" });
 
-        pathParts.forEach((part, index) => {
-            const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-            breadcrumbItems.push({name: part, path: fullPath});
-        });
+            // Ajouter les autres parties (nodes, objects, etc.)
+            pathParts.forEach((part, index) => {
+                const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                // Skip the 'cluster' part, it's already added
+                if (part !== "cluster") {
+                    breadcrumbItems.push({ name: part, path: fullPath });
+                }
+            });
+        }
 
         return breadcrumbItems;
     };
@@ -28,10 +39,11 @@ const NavBar = () => {
 
     return (
         <AppBar position="sticky">
-            <Toolbar sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5}}>
+            <Toolbar sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                {/* Breadcrumb */}
+                <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5 }}>
                     {breadcrumb.map((item, index) => (
-                        <Box key={index} sx={{display: "flex", alignItems: "center"}}>
+                        <Box key={index} sx={{ display: "flex", alignItems: "center" }}>
                             <Typography
                                 component={Link}
                                 to={item.path}
@@ -40,6 +52,7 @@ const NavBar = () => {
                                     textDecoration: "none",
                                     fontWeight: 500,
                                     fontSize: "1.1rem",
+                                    textTransform: "capitalize",
                                     '&:hover': {
                                         textDecoration: "underline"
                                     }
@@ -48,21 +61,19 @@ const NavBar = () => {
                                 {item.name}
                             </Typography>
                             {index < breadcrumb.length - 1 && (
-                                <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
+                                <Typography sx={{ mx: 0.5, fontSize: "1.1rem" }}>{">"}</Typography>
                             )}
                         </Box>
                     ))}
                 </Box>
 
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-                    <Button color="inherit" component={Link} to="/nodes">
-                        Nodes
-                    </Button>
-                    <Button color="inherit" component={Link} to="/objects">
-                        Objects
-                    </Button>
+                {/* Nav buttons */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Button color="inherit" component={Link} to="/cluster">Cluster</Button>
+                    <Button color="inherit" component={Link} to="/nodes">Nodes</Button>
+                    <Button color="inherit" component={Link} to="/objects">Objects</Button>
                     <Button
-                        startIcon={<FaSignOutAlt/>}
+                        startIcon={<FaSignOutAlt />}
                         onClick={handleLogout}
                         sx={{
                             backgroundColor: 'red',

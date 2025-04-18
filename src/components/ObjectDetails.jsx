@@ -1,16 +1,16 @@
-import React, {useState} from "react";
+import React, {useState, useMemo, useEffect} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box, Paper, Typography, Tooltip, Divider, Snackbar, Alert,
     Menu, MenuItem, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, FormControlLabel, Checkbox,
-    Button, Table, TableBody, TableCell, TableHead,
-    TableRow, TableContainer
+    Button, Accordion, AccordionSummary, AccordionDetails
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
 
@@ -36,10 +36,11 @@ const ObjectDetail = () => {
     const [selectedResourcesByNode, setSelectedResourcesByNode] = useState({});
     const [resGroupNode, setResGroupNode] = useState(null);
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
+    const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
+    const [currentResourceId, setCurrentResourceId] = useState(null);
 
     // State for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
-    const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
@@ -54,8 +55,16 @@ const ObjectDetail = () => {
 
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
+    // State for accordion expansion
+    const [expandedAccordions, setExpandedAccordions] = useState({});
+
     const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
+
+    // Debug rendering
+    useEffect(() => {
+        console.log("ObjectDetail rendered", {decodedObjectName, objectData, selectedResourcesByNode});
+    });
 
     // Helper functions
     const parseObjectPath = (objName) => {
@@ -164,6 +173,14 @@ const ObjectDetail = () => {
         handleResourcesActionsClose();
     };
 
+    // Accordion expansion handler
+    const handleAccordionChange = (panel) => (event, isExpanded) => {
+        setExpandedAccordions((prev) => ({
+            ...prev,
+            [panel]: isExpanded,
+        }));
+    };
+
     // Dialog confirm handler
     const handleDialogConfirm = () => {
         if (!pendingAction) return;
@@ -207,7 +224,11 @@ const ObjectDetail = () => {
         });
     };
 
-    if (!objectData) {
+    // Memoize data to prevent unnecessary re-renders
+    const memoizedObjectData = useMemo(() => objectData, [objectData]);
+    const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData || {}), [memoizedObjectData]);
+
+    if (!memoizedObjectData) {
         return (
             <Box p={4}>
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
@@ -216,8 +237,6 @@ const ObjectDetail = () => {
             </Box>
         );
     }
-
-    const nodes = Object.keys(objectData);
 
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
@@ -289,8 +308,8 @@ const ObjectDetail = () => {
                 </Box>
 
                 {/* LIST OF NODES */}
-                {nodes.map((node) => {
-                    const {avail, frozen_at, resources = {}} = objectData[node];
+                {memoizedNodes.map((node) => {
+                    const {avail, frozen_at, resources = {}} = memoizedObjectData[node] || {};
                     const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
                     const resIds = Object.keys(resources);
 
@@ -326,87 +345,103 @@ const ObjectDetail = () => {
 
                             <Divider sx={{mb: 2}}/>
 
-                            {/* RESOURCE BATCH ACTIONS FOR THIS NODE */}
-                            <Box display="flex" alignItems="center" gap={1} mb={2}>
-                                <Checkbox
-                                    checked={(selectedResourcesByNode[node] || []).length === resIds.length}
-                                    onChange={(e) => {
-                                        const next = e.target.checked ? resIds : [];
-                                        setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
-                                    }}
-                                />
-                                <Button
-                                    variant="outlined"
-                                    onClick={(e) => handleResourcesActionsOpen(node, e)}
-                                    disabled={!(selectedResourcesByNode[node] || []).length}
-                                >
-                                    Actions on selected resources
-                                </Button>
-                            </Box>
+                            {/* RESOURCES SECTION */}
+                            <Box mb={2}>
+                                <Box display="flex" alignItems="center" gap={2} mb={1}>
+                                    <Typography variant="subtitle1" fontWeight="medium">
+                                        Resources ({resIds.length})
+                                    </Typography>
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <Checkbox
+                                            checked={(selectedResourcesByNode[node] || []).length === resIds.length && resIds.length > 0}
+                                            onChange={(e) => {
+                                                const next = e.target.checked ? resIds : [];
+                                                setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
+                                            }}
+                                            disabled={resIds.length === 0}
+                                        />
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={(e) => handleResourcesActionsOpen(node, e)}
+                                            disabled={!(selectedResourcesByNode[node] || []).length}
+                                        >
+                                            Actions on selected
+                                        </Button>
+                                    </Box>
+                                </Box>
 
-                            {/* RESOURCES TABLE */}
-                            <Typography variant="subtitle1" fontWeight="medium" mb={1}>
-                                Resources
-                            </Typography>
-                            <TableContainer component={Paper} variant="outlined" sx={{borderRadius: 2}}>
-                                <Table size="medium">
-                                    <TableHead sx={{backgroundColor: "#f4f6f8"}}>
-                                        <TableRow>
-                                            <TableCell/>
-                                            <TableCell><strong>Name</strong></TableCell>
-                                            <TableCell><strong>Label</strong></TableCell>
-                                            <TableCell align="center"><strong>Status</strong></TableCell>
-                                            <TableCell><strong>Type</strong></TableCell>
-                                            <TableCell align="center"><strong>Provisioned</strong></TableCell>
-                                            <TableCell><strong>Last Updated</strong></TableCell>
-                                            <TableCell align="center"><strong>Actions</strong></TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {resIds.map((rid) => {
-                                            const res = resources[rid];
-                                            return (
-                                                <TableRow key={rid} hover>
-                                                    <TableCell>
+                                {resIds.length === 0 ? (
+                                    <Typography color="textSecondary">No resources available.</Typography>
+                                ) : (
+                                    resIds.map((rid) => {
+                                        const res = resources[rid] || {};
+                                        const panelId = `${node}-${rid}`;
+                                        return (
+                                            <Accordion
+                                                key={rid}
+                                                expanded={expandedAccordions[panelId] || false}
+                                                onChange={handleAccordionChange(panelId)}
+                                                sx={{mb: 1}}
+                                            >
+                                                <AccordionSummary
+                                                    expandIcon={<ExpandMoreIcon/>}
+                                                    aria-controls={`panel-${panelId}-content`}
+                                                    id={`panel-${panelId}-header`}
+                                                >
+                                                    <Box display="flex" alignItems="center" gap={2} width="100%">
                                                         <Checkbox
                                                             checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                             onChange={() => toggleResource(node, rid)}
                                                         />
-                                                    </TableCell>
-                                                    <TableCell>{rid}</TableCell>
-                                                    <TableCell>{res.label}</TableCell>
-                                                    <TableCell align="center">
+                                                        <Typography variant="body1">{rid}</Typography>
+                                                        <Box flexGrow={1}/>
                                                         <FiberManualRecordIcon
                                                             sx={{color: getColor(res.status), fontSize: "1rem"}}
                                                         />
-                                                    </TableCell>
-                                                    <TableCell>{res.type}</TableCell>
-                                                    <TableCell align="center">
-                                                        <FiberManualRecordIcon
-                                                            sx={{
-                                                                color: res.provisioned?.state ? green[500] : red[500],
-                                                                fontSize: "1rem"
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>{res.provisioned?.mtime}</TableCell>
-                                                    <TableCell align="center">
-                                                        <IconButton
-                                                            onClick={(e) => {
-                                                                setResGroupNode(node);
-                                                                setResourceMenuAnchor(e.currentTarget);
-                                                            }}
-                                                            disabled={actionInProgress}
-                                                        >
-                                                            <MoreVertIcon fontSize="small"/>
-                                                        </IconButton>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                                                    </Box>
+                                                </AccordionSummary>
+                                                <AccordionDetails>
+                                                    <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
+                                                        <Typography><strong>Label:</strong> {res.label || "N/A"}
+                                                        </Typography>
+                                                        <Typography><strong>Type:</strong> {res.type || "N/A"}
+                                                        </Typography>
+                                                        <Typography>
+                                                            <strong>Provisioned:</strong>
+                                                            <FiberManualRecordIcon
+                                                                sx={{
+                                                                    color: res.provisioned?.state ? green[500] : red[500],
+                                                                    fontSize: "1rem",
+                                                                    ml: 1,
+                                                                    verticalAlign: "middle"
+                                                                }}
+                                                            />
+                                                        </Typography>
+                                                        <Typography><strong>Last
+                                                            Updated:</strong> {res.provisioned?.mtime || "N/A"}
+                                                        </Typography>
+                                                        <Box>
+                                                            <Button
+                                                                variant="outlined"
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    setResGroupNode(node);
+                                                                    setCurrentResourceId(rid);
+                                                                    setResourceMenuAnchor(e.currentTarget);
+                                                                }}
+                                                                disabled={actionInProgress}
+                                                            >
+                                                                Actions
+                                                            </Button>
+                                                        </Box>
+                                                    </Box>
+                                                </AccordionDetails>
+                                            </Accordion>
+                                        );
+                                    })
+                                )}
+                            </Box>
                         </Paper>
                     );
                 })}
@@ -487,13 +522,8 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
-                {/* Snackbar */}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={5000}
-                    onClose={closeSnackbar}
-                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
-                >
+                {/* SNACKBAR */}
+                <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={closeSnackbar}>
                     <Alert onClose={closeSnackbar} severity={snackbar.severity} variant="filled">
                         {snackbar.message}
                     </Alert>
@@ -536,14 +566,11 @@ const ObjectDetail = () => {
                         <MenuItem
                             key={action}
                             onClick={() => {
-                                setPendingAction({
-                                    action,
-                                    node: resGroupNode,
-                                    rid: objectData[resGroupNode]?.resources[resourceMenuAnchor?.dataset?.rid]?.rid
-                                });
+                                setPendingAction({action, node: resGroupNode, rid: currentResourceId});
                                 if (action === "unprovision") setResourceDialogOpen(true);
                                 else setSimpleDialogOpen(true);
                                 setResourceMenuAnchor(null);
+                                setCurrentResourceId(null);
                             }}
                         >
                             {action}

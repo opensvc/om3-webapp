@@ -20,8 +20,21 @@ const ClusterOverview = () => {
 
     const nodeCount = Object.keys(nodeStatus).length;
 
+    let frozenCount = 0;
+    let unfrozenCount = 0;
+
+    Object.values(nodeStatus).forEach((node) => {
+        const isFrozen = node?.frozen_at && node?.frozen_at !== "0001-01-01T00:00:00Z";
+        if (isFrozen) {
+            frozenCount++;
+        } else {
+            unfrozenCount++;
+        }
+    });
+
     const namespaces = new Set();
     const statusCount = { up: 0, down: 0, warn: 0, unknown: 0 };
+    const objectsPerNamespace = {};
 
     const extractNamespace = (objectPath) => {
         const parts = objectPath.split("/");
@@ -31,6 +44,8 @@ const ClusterOverview = () => {
     Object.entries(objectStatus).forEach(([objectPath, status]) => {
         const ns = extractNamespace(objectPath);
         namespaces.add(ns);
+
+        objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
 
         const s = status?.avail?.toLowerCase();
         if (s === "up" || s === "down" || s === "warn") {
@@ -42,6 +57,10 @@ const ClusterOverview = () => {
 
     const namespaceCount = namespaces.size;
     const objectCount = Object.keys(objectStatus).length;
+
+    const namespaceSubtitle = Object.entries(objectsPerNamespace)
+        .map(([ns, count]) => `${ns}: ${count}`)
+        .join(" | ");
 
     const StatCard = ({ title, value, subtitle, onClick }) => (
         <Paper
@@ -83,6 +102,7 @@ const ClusterOverview = () => {
                     <StatCard
                         title="Nodes"
                         value={nodeCount}
+                        subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
                         onClick={() => navigate("/nodes")}
                     />
                 </Grid>
@@ -98,6 +118,7 @@ const ClusterOverview = () => {
                     <StatCard
                         title="Namespaces"
                         value={namespaceCount}
+                        subtitle={namespaceSubtitle}
                         onClick={() => navigate("/namespaces")}
                     />
                 </Grid>

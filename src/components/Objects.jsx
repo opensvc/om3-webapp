@@ -231,15 +231,10 @@ const Objects = () => {
         return nsMatch && kindMatch;
     });
 
-    const nodeList = daemonStatus?.cluster?.config?.nodes || [];
-    const nodeNames = Array.isArray(nodeList)
-        ? nodeList.map((n) => (typeof n === "string" ? n : n.name))
-        : Object.keys(nodeList);
-
-    if (!allObjectNames.length || !nodeNames.length) {
+    if (!allObjectNames.length) {
         return (
             <Typography variant="h6" align="center">
-                No data available (empty objects or nodes)
+                No objects available
             </Typography>
         );
     }
@@ -257,7 +252,7 @@ const Objects = () => {
             <Box sx={{width: "100%", maxWidth: "1000px"}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
                     <Typography variant="h4" gutterBottom align="center">
-                        Objects by Node
+                        Objects
                     </Typography>
 
                     <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, mb: 3}}>
@@ -316,11 +311,6 @@ const Objects = () => {
                                     <TableCell align="center">
                                         <strong>Global</strong>
                                     </TableCell>
-                                    {nodeNames.map((node) => (
-                                        <TableCell key={node} align="center">
-                                            <strong>{node}</strong>
-                                        </TableCell>
-                                    ))}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -328,7 +318,6 @@ const Objects = () => {
                                     const obj = objects[objectName] || {};
                                     const avail = obj?.avail;
                                     const frozen = obj?.frozen;
-                                    const instances = objectInstanceStatus[objectName] || {};
 
                                     return (
                                         <TableRow
@@ -382,25 +371,6 @@ const Objects = () => {
                                                     )}
                                                 </Box>
                                             </TableCell>
-                                            {nodeNames.map((node) => {
-                                                const instance = instances[node];
-                                                let color = grey[500];
-                                                if (instance?.avail === "up") color = green[500];
-                                                else if (instance?.avail === "down") color = red[500];
-                                                else if (instance?.avail === "warn") color = orange[500];
-
-                                                return (
-                                                    <TableCell key={node} align="center">
-                                                        {instance?.avail === "warn" ? (
-                                                            <Tooltip title="Warning">
-                                                                <WarningAmberIcon sx={{color: orange[500]}}/>
-                                                            </Tooltip>
-                                                        ) : (
-                                                            <FiberManualRecordIcon sx={{color}}/>
-                                                        )}
-                                                    </TableCell>
-                                                );
-                                            })}
                                         </TableRow>
                                     );
                                 })}

@@ -50,10 +50,11 @@ export const createEventSource = (url, token) => {
         "NodeStatsUpdated",
         "ObjectStatusUpdated",
         "InstanceStatusUpdated",
+        "DaemonHeartbeatUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
-    currentEventSource = new EventSource(cachedUrl); // ✅ stocké globalement
+    currentEventSource = new EventSource(cachedUrl);
 
     currentEventSource.onopen = () => {
         console.log("✅ SSE connection established!");
@@ -111,6 +112,16 @@ export const createEventSource = (url, token) => {
             instanceFlushTimeout = setTimeout(flushInstanceBuffer, 100);
         }
     });
+
+    currentEventSource.addEventListener("DaemonHeartbeatUpdated", (event) => {
+        const parsed = JSON.parse(event.data);
+        const node = parsed.node || parsed.labels?.node;
+        const status = parsed.hb;
+        console.log("📡 DaemonHeartbeatReceived:", node, status);
+        if (!node || !status) return;
+        useEventStore.getState().updateHeartbeatStatus(node, status);
+    });
+
 
     return currentEventSource;
 };

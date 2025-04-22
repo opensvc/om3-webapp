@@ -37,7 +37,7 @@ import {createEventSource, closeEventSource} from "../eventSourceManager";
 const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze"];
 
 const Objects = () => {
-    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
+    const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
 
@@ -54,16 +54,6 @@ const Objects = () => {
 
     const navigate = useNavigate();
 
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchNodes(token);
-            startEventReception(token);
-        }
-        return () => {
-            closeEventSource();
-        };
-    }, []);
 
     const handleSelectObject = (event, objectName) => {
         if (event.target.checked) {

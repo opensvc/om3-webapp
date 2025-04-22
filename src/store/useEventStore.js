@@ -6,6 +6,7 @@ const useEventStore = create((set) => ({
     nodeStats: {},
     objectStatus: {},
     objectInstanceStatus: {},
+    heartbeatStatus: {},
 
     updateNodeStatus: (node, data) =>
         set((state) => ({
@@ -42,7 +43,13 @@ const useEventStore = create((set) => ({
                 },
             },
         })),
-
+    updateHeartbeatStatus: (node, status) =>
+        set((state) => ({
+            heartbeatStatus: {
+                ...state.heartbeatStatus,
+                [node]: status,
+            },
+        })),
 }));
 
 

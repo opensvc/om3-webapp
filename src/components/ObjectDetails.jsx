@@ -226,18 +226,6 @@ const ObjectDetail = () => {
     const memoizedObjectData = useMemo(() => objectData, [objectData]);
     const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData || {}), [memoizedObjectData]);
 
-    // ✅ Create SSE on mount
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (!token) return;
-
-        const es = createEventSource("/sse", token);
-        setEventSource(es);
-
-        return () => {
-            closeEventSource(es);
-        };
-    }, []);
 
     if (!memoizedObjectData) {
         return (

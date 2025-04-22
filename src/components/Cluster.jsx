@@ -8,6 +8,7 @@ const ClusterOverview = () => {
     const navigate = useNavigate();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const objectStatus = useEventStore((state) => state.objectStatus);
+    const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const { fetchNodes, startEventReception } = useFetchDaemonStatus();
 
     useEffect(() => {
@@ -120,6 +121,14 @@ const ClusterOverview = () => {
                         value={namespaceCount}
                         subtitle={namespaceSubtitle}
                         onClick={() => navigate("/namespaces")}
+                    />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <StatCard
+                        title="Heartbeats"
+                        value={Object.keys(heartbeatStatus).length}
+                        //subtitle="Status of node heartbeats"
+                        onClick={() => navigate("/heartbeats")}
                     />
                 </Grid>
             </Grid>

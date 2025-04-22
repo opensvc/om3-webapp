@@ -31,13 +31,16 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {useNavigate} from "react-router-dom";
 import useEventStore from "../store/useEventStore";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import {createEventSource, closeEventSource} from "../eventSourceManager";
 
 const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze"];
 
 const Objects = () => {
-    const [daemonStatus, setDaemonStatus] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
+    const objectStatus = useEventStore((state) => state.objectStatus);
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState("all");
@@ -47,38 +50,20 @@ const Objects = () => {
     const [confirmationChecked, setConfirmationChecked] = useState(false);
     const [pendingAction, setPendingAction] = useState("");
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
-
-    const [searchQuery, setSearchQuery] = useState(""); // 🔍 Ajout
-
-    const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const navigate = useNavigate();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (!token) {
-            setError("No auth token found.");
-            setLoading(false);
-            return;
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
         }
-        fetchDaemonStatus(token);
+        return () => {
+            closeEventSource();
+        };
     }, []);
-
-    const fetchDaemonStatus = async (authToken) => {
-        try {
-            const response = await fetch("/daemon/status", {
-                headers: {Authorization: `Bearer ${authToken}`},
-            });
-            if (!response.ok) throw new Error("Failed to fetch daemon status");
-            const data = await response.json();
-            setDaemonStatus(data);
-        } catch (error) {
-            setError(error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleSelectObject = (event, objectName) => {
         if (event.target.checked) {
@@ -189,29 +174,11 @@ const Objects = () => {
         }
     };
 
-    if (loading) {
-        return (
-            <Box sx={{display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh"}}>
-                <CircularProgress/>
-            </Box>
-        );
-    }
+    const objects = Object.keys(objectStatus).length > 0
+        ? objectStatus
+        : daemon?.cluster?.object || {};
 
-    if (error) {
-        return (
-            <Typography variant="h6" align="center" color="error">
-                {error}
-            </Typography>
-        );
-    }
-
-    const objects =
-        Object.keys(objectStatus).length > 0
-            ? objectStatus
-            : daemonStatus?.cluster?.object || {};
-    const allObjectNames = Object.keys(objects).filter(
-        (key) => key && typeof objects[key] === "object"
-    );
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
 
     const extractNamespace = (objectName) => {
         const parts = objectName.split("/");
@@ -233,24 +200,8 @@ const Objects = () => {
         return nsMatch && kindMatch && searchMatch;
     });
 
-    if (!allObjectNames.length) {
-        return (
-            <Typography variant="h6" align="center">
-                No objects available
-            </Typography>
-        );
-    }
-
     return (
-        <Box
-            sx={{
-                minHeight: "100vh",
-                bgcolor: "background.default",
-                p: 3,
-                display: "flex",
-                justifyContent: "center",
-            }}
-        >
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
             <Box sx={{width: "100%", maxWidth: "1000px"}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
                     <Typography variant="h4" gutterBottom align="center">
@@ -306,11 +257,7 @@ const Objects = () => {
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedObjects.length === filteredObjectNames.length}
-                                            onChange={(e) =>
-                                                setSelectedObjects(
-                                                    e.target.checked ? filteredObjectNames : []
-                                                )
-                                            }
+                                            onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -328,40 +275,26 @@ const Objects = () => {
                                     const frozen = obj?.frozen;
 
                                     return (
-                                        <TableRow
-                                            key={objectName}
-                                            onClick={() => handleObjectClick(objectName)}
-                                            sx={{cursor: "pointer"}}
-                                        >
+                                        <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
+                                                  sx={{cursor: "pointer"}}>
                                             <TableCell>
                                                 <Checkbox
                                                     checked={selectedObjects.includes(objectName)}
-                                                    onChange={(e) =>
-                                                        handleSelectObject(e, objectName)
-                                                    }
+                                                    onChange={(e) => handleSelectObject(e, objectName)}
                                                     onClick={(e) => e.stopPropagation()}
                                                 />
                                             </TableCell>
                                             <TableCell>{objectName}</TableCell>
                                             <TableCell align="center">
-                                                <Box
-                                                    display="flex"
-                                                    justifyContent="center"
-                                                    alignItems="center"
-                                                    gap={1}
-                                                >
+                                                <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
                                                     {avail === "up" && (
                                                         <Tooltip title="Available">
-                                                            <FiberManualRecordIcon
-                                                                sx={{color: green[500]}}
-                                                            />
+                                                            <FiberManualRecordIcon sx={{color: green[500]}}/>
                                                         </Tooltip>
                                                     )}
                                                     {avail === "down" && (
                                                         <Tooltip title="Unavailable">
-                                                            <FiberManualRecordIcon
-                                                                sx={{color: red[500]}}
-                                                            />
+                                                            <FiberManualRecordIcon sx={{color: red[500]}}/>
                                                         </Tooltip>
                                                     )}
                                                     {avail === "warn" && (
@@ -371,10 +304,7 @@ const Objects = () => {
                                                     )}
                                                     {frozen === "frozen" && (
                                                         <Tooltip title="Frozen">
-                                                            <AcUnitIcon
-                                                                fontSize="small"
-                                                                sx={{color: blue[200]}}
-                                                            />
+                                                            <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
                                                         </Tooltip>
                                                     )}
                                                 </Box>
@@ -395,19 +325,13 @@ const Objects = () => {
                 onClose={() => setSnackbar({...snackbar, open: false})}
                 anchorOrigin={{vertical: "bottom", horizontal: "center"}}
             >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar({...snackbar, open: false})}
-                >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
                     {snackbar.message}
                 </Alert>
             </Snackbar>
 
             {/* Dialog for freeze */}
-            <Dialog
-                open={confirmationDialogOpen}
-                onClose={() => setConfirmationDialogOpen(false)}
-            >
+            <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
                 <DialogTitle>Freeze selected objects</DialogTitle>
                 <DialogContent>
                     <FormControlLabel
@@ -421,9 +345,7 @@ const Objects = () => {
                     />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfirmationDialogOpen(false)}>
-                        Cancel
-                    </Button>
+                    <Button onClick={() => setConfirmationDialogOpen(false)}>Cancel</Button>
                     <Button
                         onClick={() => handleExecuteActionOnSelected(pendingAction)}
                         disabled={!confirmationChecked}
@@ -436,19 +358,13 @@ const Objects = () => {
             </Dialog>
 
             {/* Dialog for other actions */}
-            <Dialog
-                open={simpleConfirmDialogOpen}
-                onClose={() => setSimpleConfirmDialogOpen(false)}
-            >
+            <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
                 <DialogTitle>Confirm action</DialogTitle>
                 <DialogContent>
-                    Are you sure you want to execute{" "}
-                    <strong>{pendingAction}</strong> on the selected objects?
+                    Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>
-                        Cancel
-                    </Button>
+                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>Cancel</Button>
                     <Button
                         onClick={() => handleExecuteActionOnSelected(pendingAction)}
                         variant="contained"

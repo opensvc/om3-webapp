@@ -13,6 +13,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
+import {createEventSource, closeEventSource} from "../eventSourceManager"; // <-- important
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
 const OBJECT_ACTIONS = ["restart", "freeze", "unfreeze"];
@@ -57,6 +58,7 @@ const ObjectDetail = () => {
 
     // State for accordion expansion
     const [expandedAccordions, setExpandedAccordions] = useState({});
+    const [eventSource, setEventSource] = useState(null); // <--- new
 
     const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
@@ -223,6 +225,19 @@ const ObjectDetail = () => {
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => objectData, [objectData]);
     const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData || {}), [memoizedObjectData]);
+
+    // ✅ Create SSE on mount
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        const es = createEventSource("/sse", token);
+        setEventSource(es);
+
+        return () => {
+            closeEventSource(es);
+        };
+    }, []);
 
     if (!memoizedObjectData) {
         return (

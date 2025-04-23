@@ -51,6 +51,7 @@ export const createEventSource = (url, token) => {
         "ObjectStatusUpdated",
         "InstanceStatusUpdated",
         "DaemonHeartbeatUpdated",
+        "ObjectDeleted",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
@@ -121,6 +122,28 @@ export const createEventSource = (url, token) => {
         useEventStore.getState().updateHeartbeatStatus(node, status);
     });
 
+    currentEventSource.addEventListener("ObjectDeleted", (event) => {
+        console.log("📩 Received ObjectDeleted event:", event.data);
+        const parsed = JSON.parse(event.data);
+        const objectName = parsed.path || parsed.labels?.path;
+        if (!objectName) {
+            console.warn("⚠️ ObjectDeleted event missing objectName:", parsed);
+            return;
+        }
+
+        const { objectStatus, objectInstanceStatus } = useEventStore.getState();
+        const newObjectStatus = { ...objectStatus };
+        const newObjectInstanceStatus = { ...objectInstanceStatus };
+        delete newObjectStatus[objectName];
+        delete newObjectInstanceStatus[objectName];
+
+        useEventStore.setState({
+            objectStatus: newObjectStatus,
+            objectInstanceStatus: newObjectInstanceStatus,
+        });
+
+        console.log(`🗑️ Object '${objectName}' deleted from store`);
+    });
 
     return currentEventSource;
 };

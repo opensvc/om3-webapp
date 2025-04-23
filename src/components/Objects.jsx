@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import { useLocation } from "react-router-dom";
+import {useLocation} from "react-router-dom";
 import {
     Box,
     CircularProgress,
@@ -35,15 +35,16 @@ import useEventStore from "../store/useEventStore";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {createEventSource, closeEventSource} from "../eventSourceManager";
 
-const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze"];
+const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete"];
 
 const Objects = () => {
     const location = useLocation();
-    const initialNamespace = location.state?.namespace || "all"; // 👈 SI tu viens de Namespaces, récupère l'info
+    const initialNamespace = location.state?.namespace || "all";
 
-    const {daemon} = useFetchDaemonStatus();
+    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+    const removeObject = useEventStore((state) => state.removeObject);
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
@@ -129,6 +130,11 @@ const Objects = () => {
                     return;
                 }
                 successCount++;
+
+                if (action === "delete") {
+                    removeObject(objectName);
+                }
+
             } catch {
                 errorCount++;
             }

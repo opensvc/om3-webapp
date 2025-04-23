@@ -1,4 +1,4 @@
-import {create} from "zustand";
+import { create } from "zustand";
 
 const useEventStore = create((set) => ({
     nodeStatus: {},
@@ -10,17 +10,17 @@ const useEventStore = create((set) => ({
 
     updateNodeStatus: (node, data) =>
         set((state) => ({
-            nodeStatus: {...state.nodeStatus, [node]: data},
+            nodeStatus: { ...state.nodeStatus, [node]: data },
         })),
 
     updateNodeMonitor: (node, data) =>
         set((state) => ({
-            nodeMonitor: {...state.nodeMonitor, [node]: data},
+            nodeMonitor: { ...state.nodeMonitor, [node]: data },
         })),
 
     updateNodeStats: (node, data) =>
         set((state) => ({
-            nodeStats: {...state.nodeStats, [node]: data},
+            nodeStats: { ...state.nodeStats, [node]: data },
         })),
 
     updateObjectStatus: (objectName, newStatus) =>
@@ -33,6 +33,7 @@ const useEventStore = create((set) => ({
                 },
             },
         })),
+
     updateObjectInstanceStatus: (objectName, node, status) =>
         set((state) => ({
             objectInstanceStatus: {
@@ -43,6 +44,7 @@ const useEventStore = create((set) => ({
                 },
             },
         })),
+
     updateHeartbeatStatus: (node, status) =>
         set((state) => ({
             heartbeatStatus: {
@@ -50,7 +52,18 @@ const useEventStore = create((set) => ({
                 [node]: status,
             },
         })),
-}));
 
+    removeObject: (objectName) =>
+        set((state) => {
+            const newObjectStatus = { ...state.objectStatus };
+            const newObjectInstanceStatus = { ...state.objectInstanceStatus };
+            delete newObjectStatus[objectName];
+            delete newObjectInstanceStatus[objectName];
+            return {
+                objectStatus: newObjectStatus,
+                objectInstanceStatus: newObjectInstanceStatus,
+            };
+        }),
+}));
 
 export default useEventStore;

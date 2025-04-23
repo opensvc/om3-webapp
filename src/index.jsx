@@ -3,9 +3,9 @@ import ReactDOM from 'react-dom/client';
 import {OidcProvider} from '@axa-fr/react-oidc';
 import OidcConfiguration from './config/oidcConfiguration';
 import App from './components/App';
+import './i18n';
 import './styles/main.css'
 
-console.log(document.getElementById('root'));
 const rootElement = document.getElementById('root');
 
 if (rootElement) {

@@ -19,6 +19,7 @@
     "@mui/material": "^6.4.11",
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
+    "axios": "^1.8.4",
     "event-source-polyfill": "^1.0.31",
     "i18next": "^23.11.5",
     "next": "13.5.5",

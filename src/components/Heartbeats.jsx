@@ -41,7 +41,7 @@ const Heartbeats = () => {
                 variant="h5"
                 className="mb-4 font-semibold text-gray-800 text-center"
             >
-                🔄 Heartbeat Status Monitor
+                Heartbeat Status Monitor
             </Typography>
 
             <TableContainer component={Paper} className="shadow-md rounded-lg">

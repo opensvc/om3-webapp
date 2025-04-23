@@ -117,7 +117,6 @@ export const createEventSource = (url, token) => {
         const parsed = JSON.parse(event.data);
         const node = parsed.node || parsed.labels?.node;
         const status = parsed.hb;
-        console.log("📡 DaemonHeartbeatReceived:", node, status);
         if (!node || !status) return;
         useEventStore.getState().updateHeartbeatStatus(node, status);
     });

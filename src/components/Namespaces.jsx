@@ -1,7 +1,6 @@
 import React from "react";
 import {
     Box,
-    CircularProgress,
     Paper,
     Table,
     TableBody,
@@ -14,6 +13,7 @@ import {
 import { green, red, orange, grey } from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../store/useEventStore";
+import { useNavigate } from "react-router-dom"; // 👈 AJOUT
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -35,6 +35,7 @@ const extractNamespace = (objectName) => {
 
 const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
+    const navigate = useNavigate(); // 👈 AJOUT
 
     const allObjectNames = Object.keys(objectStatus).filter(
         (key) => key && typeof objectStatus[key] === "object"
@@ -86,14 +87,17 @@ const Namespaces = () => {
                             </TableHead>
                             <TableBody>
                                 {Object.entries(statusByNamespace).map(([namespace, counts]) => {
-                                    const total =
-                                        counts.up +
-                                        counts.down +
-                                        counts.warn +
-                                        counts.unknown;
+                                    const total = counts.up + counts.down + counts.warn + counts.unknown;
                                     return (
-                                        <TableRow key={namespace}>
-                                            <TableCell sx={{ fontWeight: 500 }}>{namespace}</TableCell>
+                                        <TableRow
+                                            key={namespace}
+                                            hover
+                                            onClick={() => navigate("/objects", { state: { namespace } })}
+                                            sx={{ cursor: "pointer" }}
+                                        >
+                                            <TableCell sx={{ fontWeight: 500 }}>
+                                                {namespace}
+                                            </TableCell>
                                             {["up", "down", "warn", "unknown"].map((status) => (
                                                 <TableCell key={status} align="center">
                                                     <Box display="flex" justifyContent="center" alignItems="center" gap={1}>

@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from "react";
+import { useLocation } from "react-router-dom";
 import {
     Box,
     CircularProgress,
@@ -37,13 +38,16 @@ import {createEventSource, closeEventSource} from "../eventSourceManager";
 const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze"];
 
 const Objects = () => {
+    const location = useLocation();
+    const initialNamespace = location.state?.namespace || "all"; // 👈 SI tu viens de Namespaces, récupère l'info
+
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [selectedNamespace, setSelectedNamespace] = useState("all");
+    const [selectedNamespace, setSelectedNamespace] = useState(initialNamespace);
     const [selectedKind, setSelectedKind] = useState("all");
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);

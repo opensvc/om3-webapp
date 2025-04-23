@@ -1,18 +1,19 @@
-import React, {useState} from "react";
+import React, {useState, useMemo, useEffect} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box, Paper, Typography, Tooltip, Divider, Snackbar, Alert,
     Menu, MenuItem, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, FormControlLabel, Checkbox,
-    Button, Table, TableBody, TableCell, TableHead,
-    TableRow, TableContainer
+    Button, Accordion, AccordionSummary, AccordionDetails
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import {green, red, grey, blue, orange} from "@mui/material/colors";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../store/useEventStore";
+import {createEventSource, closeEventSource} from "../eventSourceManager"; // <-- important
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
 const OBJECT_ACTIONS = ["restart", "freeze", "unfreeze"];
@@ -22,35 +23,48 @@ const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
 
-    const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
-
+    const objectStatus = useEventStore((s) => s.objectStatus);
+    const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
-    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
-    const [menuAnchor, setMenuAnchor] = useState(null);
-    const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
+    // State for batch selection & actions
+    const [selectedNodes, setSelectedNodes] = useState([]);
+    const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
+    const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(null);
+    const [currentNode, setCurrentNode] = useState(null);
+
+    const [selectedResourcesByNode, setSelectedResourcesByNode] = useState({});
+    const [resGroupNode, setResGroupNode] = useState(null);
+    const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
+    const [currentResourceId, setCurrentResourceId] = useState(null);
 
-    const [selectedNode, setSelectedNode] = useState(null);
-    const [pendingResource, setPendingResource] = useState({node: null, rid: null});
-
+    // State for dialogs & snackbar
+    const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
+    const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
+
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
-    const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
     const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
+    const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
 
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
     const [resourceConfirmChecked, setResourceConfirmChecked] = useState(false);
 
-    const [pendingAction, setPendingAction] = useState(null);
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
-    const openSnackbar = (message, severity = "success") => setSnackbar({open: true, message, severity});
-    const closeSnackbar = () => setSnackbar({...snackbar, open: false});
+    // State for accordion expansion
+    const [expandedAccordions, setExpandedAccordions] = useState({});
+    const [eventSource, setEventSource] = useState(null); // <--- new
 
+    const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
+    const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
+
+
+    // Helper functions
     const parseObjectPath = (objName) => {
         const parts = objName.split("/");
         if (parts.length === 3) {
@@ -59,21 +73,18 @@ const ObjectDetail = () => {
         return {namespace: "root", kind: "svc", name: objName};
     };
 
-    const postNodeAction = async ({node, action}) => {
+    const postObjectAction = async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
-        openSnackbar(`Executing ${action} on node ${node}...`, "info");
-        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+        openSnackbar(`Executing ${action} on object…`, "info");
+        const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
         try {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
-            });
-            if (!res.ok) throw new Error(`Failed to ${action} on ${node}`);
-            openSnackbar(`'${action}' succeeded on node '${node}'`);
+            const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
+            if (!res.ok) throw new Error();
+            openSnackbar(`'${action}' succeeded on object`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
@@ -81,21 +92,18 @@ const ObjectDetail = () => {
         }
     };
 
-    const postObjectAction = async ({action}) => {
+    const postNodeAction = async ({node, action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
-        openSnackbar(`Executing ${action} on object...`, "info");
-        const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
+        openSnackbar(`Executing ${action} on node ${node}…`, "info");
+        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
         try {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
-            });
-            if (!res.ok) throw new Error(`Failed to ${action} object`);
-            openSnackbar(`'${action}' succeeded on object`);
+            const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
+            if (!res.ok) throw new Error();
+            openSnackbar(`'${action}' succeeded on node '${node}'`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
@@ -109,16 +117,11 @@ const ObjectDetail = () => {
         if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
-        openSnackbar(`Executing ${action} on resource ${rid}...`, "info");
-        const url =
-            `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}` +
-            `?rid=${encodeURIComponent(rid)}`;
+        openSnackbar(`Executing ${action} on resource ${rid}…`, "info");
+        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}?rid=${encodeURIComponent(rid)}`;
         try {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
-            });
-            if (!res.ok) throw new Error(`Failed to ${action} resource ${rid}`);
+            const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
+            if (!res.ok) throw new Error();
             openSnackbar(`'${action}' succeeded on resource '${rid}'`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -127,6 +130,7 @@ const ObjectDetail = () => {
         }
     };
 
+    // Color helper
     const getColor = (status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
@@ -134,75 +138,96 @@ const ObjectDetail = () => {
         return grey[500];
     };
 
-    const handleMenuOpen = (e, node) => {
-        setSelectedNode(node);
-        setMenuAnchor(e.currentTarget);
-    };
-    const handleMenuClose = () => setMenuAnchor(null);
-
-    const handleObjectMenuOpen = (e) => setObjectMenuAnchor(e.currentTarget);
-    const handleObjectMenuClose = () => setObjectMenuAnchor(null);
-
-    const handleResourceMenuOpen = (e, node, rid) => {
-        setPendingResource({node, rid});
-        setResourceMenuAnchor(e.currentTarget);
-    };
-    const handleResourceMenuClose = () => setResourceMenuAnchor(null);
-
-    const handleObjectActionClick = (action) => {
-        setPendingAction({action, node: decodedObjectName, isNodeAction: false});
-        action === "freeze" ? setConfirmDialogOpen(true)
-            : action === "unfreeze"
-                ? setSimpleDialogOpen(true)
-                : setSimpleDialogOpen(true);
-        handleObjectMenuClose();
+    // Batch node actions handlers
+    const handleNodesActionsOpen = (e) => setNodesActionsAnchor(e.currentTarget);
+    const handleNodesActionsClose = () => setNodesActionsAnchor(null);
+    const handleBatchNodeActionClick = (action) => {
+        setPendingAction({action, batch: "nodes"});
+        if (action === "freeze") setConfirmDialogOpen(true);
+        else if (action === "stop") setStopDialogOpen(true);
+        else setSimpleDialogOpen(true);
+        handleNodesActionsClose();
     };
 
-    const handleNodeActionClick = (action) => {
-        setPendingAction({action, node: selectedNode, isNodeAction: true});
-        action === "freeze" ? setConfirmDialogOpen(true)
-            : action === "stop"
-                ? setStopDialogOpen(true)
-                : setSimpleDialogOpen(true);
-        handleMenuClose();
+    // Individual node actions handlers
+    const handleIndividualNodeActionClick = (action) => {
+        setPendingAction({action, node: currentNode});
+        if (action === "freeze") setConfirmDialogOpen(true);
+        else if (action === "stop") setStopDialogOpen(true);
+        else setSimpleDialogOpen(true);
+        setIndividualNodeMenuAnchor(null);
     };
 
-    const handleResourceActionClick = (action) => {
-        setPendingAction({
-            action,
-            node: pendingResource.node,
-            rid: pendingResource.rid,
-            isResourceAction: true,
-        });
-        action === "unprovision"
-            ? setResourceConfirmChecked(false) || setResourceDialogOpen(true)
-            : setSimpleDialogOpen(true);
-        handleResourceMenuClose();
+    // Batch resource actions handlers
+    const handleResourcesActionsOpen = (node, e) => {
+        setResGroupNode(node);
+        setResourcesActionsAnchor(e.currentTarget);
+    };
+    const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
+    const handleBatchResourceActionClick = (action) => {
+        setPendingAction({action, batch: "resources", node: resGroupNode});
+        if (action === "unprovision") setResourceDialogOpen(true);
+        else setSimpleDialogOpen(true);
+        handleResourcesActionsClose();
     };
 
+    // Accordion expansion handler
+    const handleAccordionChange = (panel) => (event, isExpanded) => {
+        setExpandedAccordions((prev) => ({
+            ...prev,
+            [panel]: isExpanded,
+        }));
+    };
+
+    // Dialog confirm handler
     const handleDialogConfirm = () => {
         if (!pendingAction) return;
-        const {action, node, isNodeAction, isResourceAction, rid} = pendingAction;
-
-        if (isResourceAction) {
-            postResourceAction({node, action, rid});
-        } else if (isNodeAction) {
-            postNodeAction({node, action});
+        if (pendingAction.batch === "nodes") {
+            selectedNodes.forEach((node) => postNodeAction({node, action: pendingAction.action}));
+            setSelectedNodes([]);
+        } else if (pendingAction.node && !pendingAction.rid) {
+            postNodeAction({node: pendingAction.node, action: pendingAction.action});
+        } else if (pendingAction.batch === "resources") {
+            const rids = selectedResourcesByNode[pendingAction.node] || [];
+            rids.forEach((rid) => postResourceAction({node: pendingAction.node, action: pendingAction.action, rid}));
+            setSelectedResourcesByNode((prev) => ({...prev, [pendingAction.node]: []}));
+        } else if (pendingAction.rid) {
+            postResourceAction({node: pendingAction.node, action: pendingAction.action, rid: pendingAction.rid});
         } else {
-            postObjectAction({action});
+            postObjectAction(pendingAction);
         }
-
         setPendingAction(null);
         setCheckboxes({failover: false});
         setStopCheckbox(false);
         setResourceConfirmChecked(false);
         setConfirmDialogOpen(false);
         setStopDialogOpen(false);
-        setSimpleDialogOpen(false);
         setResourceDialogOpen(false);
+        setSimpleDialogOpen(false);
     };
 
-    if (!objectData) {
+    // Selection helpers
+    const toggleNode = (node) =>
+        setSelectedNodes((prev) =>
+            prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
+        );
+
+    const toggleResource = (node, rid) => {
+        setSelectedResourcesByNode((prev) => {
+            const current = prev[node] || [];
+            const next = current.includes(rid)
+                ? current.filter((r) => r !== rid)
+                : [...current, rid];
+            return {...prev, [node]: next};
+        });
+    };
+
+    // Memoize data to prevent unnecessary re-renders
+    const memoizedObjectData = useMemo(() => objectData, [objectData]);
+    const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData || {}), [memoizedObjectData]);
+
+
+    if (!memoizedObjectData) {
         return (
             <Box p={4}>
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
@@ -215,32 +240,38 @@ const ObjectDetail = () => {
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
-                {/* Header */}
+                {/* HEADER */}
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                     <Typography variant="h4" fontWeight="bold">
                         {decodedObjectName}
                     </Typography>
-                    <IconButton onClick={handleObjectMenuOpen}>
-                        <MoreVertIcon/>
-                    </IconButton>
-                </Box>
-                <Menu
-                    anchorEl={objectMenuAnchor}
-                    open={Boolean(objectMenuAnchor)}
-                    onClose={handleObjectMenuClose}
-                >
-                    {OBJECT_ACTIONS.map((action) => (
-                        <MenuItem
-                            key={action}
-                            onClick={() => handleObjectActionClick(action)}
-                            disabled={actionInProgress}
+                    <Box>
+                        <IconButton onClick={(e) => setObjectMenuAnchor(e.currentTarget)} disabled={actionInProgress}>
+                            <MoreVertIcon/>
+                        </IconButton>
+                        <Menu
+                            anchorEl={objectMenuAnchor}
+                            open={Boolean(objectMenuAnchor)}
+                            onClose={() => setObjectMenuAnchor(null)}
                         >
-                            {action}
-                        </MenuItem>
-                    ))}
-                </Menu>
+                            {OBJECT_ACTIONS.map((action) => (
+                                <MenuItem
+                                    key={action}
+                                    onClick={() => {
+                                        setPendingAction({action});
+                                        if (action === "freeze") setConfirmDialogOpen(true);
+                                        else setSimpleDialogOpen(true);
+                                        setObjectMenuAnchor(null);
+                                    }}
+                                >
+                                    {action}
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                    </Box>
+                </Box>
 
-                {/* Global Status */}
+                {/* GLOBAL STATUS */}
                 {globalStatus && (
                     <Paper elevation={2} sx={{p: 3, borderRadius: 3, mb: 4, backgroundColor: "#f9fafb"}}>
                         <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -248,9 +279,7 @@ const ObjectDetail = () => {
                                 Global Status
                             </Typography>
                             <Box display="flex" alignItems="center" gap={2}>
-                                <FiberManualRecordIcon
-                                    sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}
-                                />
+                                <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}/>
                                 {globalStatus.avail === "warn" && (
                                     <Tooltip title="Warning">
                                         <WarningAmberIcon sx={{color: orange[500]}}/>
@@ -266,16 +295,34 @@ const ObjectDetail = () => {
                     </Paper>
                 )}
 
-                {/* Nodes */}
-                {Object.entries(objectData).map(([node, objectState]) => {
-                    if (!objectState) return null;
-                    const {avail, frozen_at, resources = {}} = objectState;
+                {/* BATCH NODE ACTIONS */}
+                <Box display="flex" alignItems="center" gap={1} mb={2}>
+                    <Button
+                        variant="outlined"
+                        onClick={handleNodesActionsOpen}
+                        disabled={selectedNodes.length === 0}
+                    >
+                        Actions on selected nodes
+                    </Button>
+                </Box>
+
+                {/* LIST OF NODES */}
+                {memoizedNodes.map((node) => {
+                    const {avail, frozen_at, resources = {}} = memoizedObjectData[node] || {};
                     const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
+                    const resIds = Object.keys(resources);
 
                     return (
                         <Paper key={node} elevation={3} sx={{p: 3, mb: 5, borderRadius: 3}}>
+                            {/* NODE HEADER WITH SELECT */}
                             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                                <Typography variant="h6">Node: {node}</Typography>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Checkbox
+                                        checked={selectedNodes.includes(node)}
+                                        onChange={() => toggleNode(node)}
+                                    />
+                                    <Typography variant="h6">Node: {node}</Typography>
+                                </Box>
                                 <Box display="flex" alignItems="center" gap={2}>
                                     <FiberManualRecordIcon sx={{color: getColor(avail), fontSize: "1.2rem"}}/>
                                     {isFrozen && (
@@ -284,187 +331,186 @@ const ObjectDetail = () => {
                                         </Tooltip>
                                     )}
                                     <IconButton
-                                        onClick={(e) => handleMenuOpen(e, node)}
+                                        onClick={(e) => {
+                                            setCurrentNode(node);
+                                            setIndividualNodeMenuAnchor(e.currentTarget);
+                                        }}
                                         disabled={actionInProgress}
                                     >
                                         <MoreVertIcon/>
                                     </IconButton>
                                 </Box>
                             </Box>
+
                             <Divider sx={{mb: 2}}/>
 
-                            {/* Resources Table */}
-                            <Typography variant="subtitle1" fontWeight="medium" mb={1}>
-                                Resources
-                            </Typography>
-                            <TableContainer component={Paper} variant="outlined" sx={{borderRadius: 2}}>
-                                <Table size="medium">
-                                    <TableHead sx={{backgroundColor: "#f4f6f8"}}>
-                                        <TableRow>
-                                            <TableCell><strong>Name</strong></TableCell>
-                                            <TableCell><strong>Label</strong></TableCell>
-                                            <TableCell align="center"><strong>Status</strong></TableCell>
-                                            <TableCell><strong>Type</strong></TableCell>
-                                            <TableCell align="center"><strong>Provisioned</strong></TableCell>
-                                            <TableCell><strong>Last Updated</strong></TableCell>
-                                            <TableCell align="center"><strong>Actions</strong></TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {Object.entries(resources).map(([rid, res]) => (
-                                            <TableRow key={rid} hover>
-                                                <TableCell>{rid}</TableCell>
-                                                <TableCell>{res.label}</TableCell>
-                                                <TableCell align="center">
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: getColor(res.status), fontSize: "1rem"}}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>{res.type}</TableCell>
-                                                <TableCell align="center">
-                                                    <FiberManualRecordIcon
-                                                        sx={{
-                                                            color: res.provisioned?.state ? green[500] : red[500],
-                                                            fontSize: "1rem",
-                                                        }}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>{res.provisioned?.mtime}</TableCell>
-                                                <TableCell align="center">
-                                                    <IconButton
-                                                        onClick={(e) => handleResourceMenuOpen(e, node, rid)}
-                                                        disabled={actionInProgress}
-                                                    >
-                                                        <MoreVertIcon fontSize="small"/>
-                                                    </IconButton>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                            {/* RESOURCES SECTION */}
+                            <Box mb={2}>
+                                <Box display="flex" alignItems="center" gap={2} mb={1}>
+                                    <Typography variant="subtitle1" fontWeight="medium">
+                                        Resources ({resIds.length})
+                                    </Typography>
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <Checkbox
+                                            checked={(selectedResourcesByNode[node] || []).length === resIds.length && resIds.length > 0}
+                                            onChange={(e) => {
+                                                const next = e.target.checked ? resIds : [];
+                                                setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
+                                            }}
+                                            disabled={resIds.length === 0}
+                                        />
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={(e) => handleResourcesActionsOpen(node, e)}
+                                            disabled={!(selectedResourcesByNode[node] || []).length}
+                                        >
+                                            Actions on selected
+                                        </Button>
+                                    </Box>
+                                </Box>
 
-                            {/* Resource Actions Menu */}
-                            <Menu
-                                anchorEl={resourceMenuAnchor}
-                                open={Boolean(resourceMenuAnchor)}
-                                onClose={handleResourceMenuClose}
-                            >
-                                {RESOURCE_ACTIONS.map((action) => (
-                                    <MenuItem
-                                        key={action}
-                                        onClick={() => handleResourceActionClick(action)}
-                                        disabled={actionInProgress}
-                                    >
-                                        {action}
-                                    </MenuItem>
-                                ))}
-                            </Menu>
+                                {resIds.length === 0 ? (
+                                    <Typography color="textSecondary">No resources available.</Typography>
+                                ) : (
+                                    resIds.map((rid) => {
+                                        const res = resources[rid] || {};
+                                        const panelId = `${node}-${rid}`;
+                                        return (
+                                            <Accordion
+                                                key={rid}
+                                                expanded={expandedAccordions[panelId] || false}
+                                                onChange={handleAccordionChange(panelId)}
+                                                sx={{mb: 1}}
+                                            >
+                                                <AccordionSummary
+                                                    expandIcon={<ExpandMoreIcon/>}
+                                                    aria-controls={`panel-${panelId}-content`}
+                                                    id={`panel-${panelId}-header`}
+                                                >
+                                                    <Box display="flex" alignItems="center" gap={2} width="100%">
+                                                        <Checkbox
+                                                            checked={(selectedResourcesByNode[node] || []).includes(rid)}
+                                                            onChange={() => toggleResource(node, rid)}
+                                                        />
+                                                        <Typography variant="body1">{rid}</Typography>
+                                                        <Box flexGrow={1}/>
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: getColor(res.status), fontSize: "1rem"}}
+                                                        />
+                                                    </Box>
+                                                </AccordionSummary>
+                                                <AccordionDetails>
+                                                    <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
+                                                        <Typography><strong>Label:</strong> {res.label || "N/A"}
+                                                        </Typography>
+                                                        <Typography><strong>Type:</strong> {res.type || "N/A"}
+                                                        </Typography>
+                                                        <Typography>
+                                                            <strong>Provisioned:</strong>
+                                                            <FiberManualRecordIcon
+                                                                sx={{
+                                                                    color: res.provisioned?.state ? green[500] : red[500],
+                                                                    fontSize: "1rem",
+                                                                    ml: 1,
+                                                                    verticalAlign: "middle"
+                                                                }}
+                                                            />
+                                                        </Typography>
+                                                        <Typography><strong>Last
+                                                            Updated:</strong> {res.provisioned?.mtime || "N/A"}
+                                                        </Typography>
+                                                        <Box>
+                                                            <Button
+                                                                variant="outlined"
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    setResGroupNode(node);
+                                                                    setCurrentResourceId(rid);
+                                                                    setResourceMenuAnchor(e.currentTarget);
+                                                                }}
+                                                                disabled={actionInProgress}
+                                                            >
+                                                                Actions
+                                                            </Button>
+                                                        </Box>
+                                                    </Box>
+                                                </AccordionDetails>
+                                            </Accordion>
+                                        );
+                                    })
+                                )}
+                            </Box>
                         </Paper>
                     );
                 })}
 
-                {/* Node Actions Menu */}
-                <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
-                    {NODE_ACTIONS.map((action) => (
-                        <MenuItem
-                            key={action}
-                            onClick={() => handleNodeActionClick(action)}
-                            disabled={actionInProgress}
-                        >
-                            {action}
-                        </MenuItem>
-                    ))}
-                </Menu>
-
-                {/* Confirm Freeze Dialog */}
+                {/* DIALOGS */}
                 <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} maxWidth="sm" fullWidth>
-                    <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Freeze</DialogTitle>
-                    <DialogContent sx={{padding: 3}}>
+                    <DialogTitle>Confirm Freeze</DialogTitle>
+                    <DialogContent>
                         <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={checkboxes.failover}
-                                    onChange={(e) => setCheckboxes({failover: e.target.checked})}
-                                />
-                            }
-                            label="I understand the selected service orchestration will be paused."
+                            control={<Checkbox checked={checkboxes.failover}
+                                               onChange={(e) => setCheckboxes({failover: e.target.checked})}/>}
+                            label="I understand that the selected service orchestration will be paused."
                         />
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            disabled={!checkboxes.failover}
-                            onClick={handleDialogConfirm}
-                        >
+                        <Button variant="contained" color="primary" disabled={!checkboxes.failover}
+                                onClick={handleDialogConfirm}>
                             Confirm
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Confirm Stop Dialog */}
                 <Dialog open={stopDialogOpen} onClose={() => setStopDialogOpen(false)} maxWidth="sm" fullWidth>
                     <DialogTitle>Confirm Stop</DialogTitle>
                     <DialogContent>
                         <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={stopCheckbox}
-                                    onChange={(e) => setStopCheckbox(e.target.checked)}
-                                />
-                            }
-                            label="I understand this may interrupt services"
+                            control={<Checkbox checked={stopCheckbox}
+                                               onChange={(e) => setStopCheckbox(e.target.checked)}/>}
+                            label="I understand that this may interrupt services."
                         />
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setStopDialogOpen(false)}>Cancel</Button>
-                        <Button
-                            variant="contained"
-                            color="error"
-                            disabled={!stopCheckbox}
-                            onClick={handleDialogConfirm}
-                        >
+                        <Button variant="contained" color="error" disabled={!stopCheckbox}
+                                onClick={handleDialogConfirm}>
                             Stop
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Resource Unprovision Dialog */}
                 <Dialog open={resourceDialogOpen} onClose={() => setResourceDialogOpen(false)} maxWidth="sm" fullWidth>
                     <DialogTitle>Confirm Unprovision</DialogTitle>
                     <DialogContent>
                         <FormControlLabel
-                            control={
-                                <Checkbox
-                                    checked={resourceConfirmChecked}
-                                    onChange={(e) => setResourceConfirmChecked(e.target.checked)}
-                                />
-                            }
-                            label="I understand data will be lost"
+                            control={<Checkbox checked={resourceConfirmChecked}
+                                               onChange={(e) => setResourceConfirmChecked(e.target.checked)}/>}
+                            label="I understand that data will be lost."
                         />
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setResourceDialogOpen(false)}>Cancel</Button>
-                        <Button
-                            variant="contained"
-                            color="error"
-                            disabled={!resourceConfirmChecked}
-                            onClick={handleDialogConfirm}
-                        >
+                        <Button variant="contained" color="error" disabled={!resourceConfirmChecked}
+                                onClick={handleDialogConfirm}>
                             Confirm
                         </Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Simple Confirm Dialog */}
                 <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle>Confirm {pendingAction?.action}</DialogTitle>
                     <DialogContent>
                         <Typography>
                             Are you sure you want to <strong>{pendingAction?.action}</strong> on{" "}
-                            <strong>{pendingAction?.node || pendingResource.rid}</strong>?
+                            {pendingAction?.batch === "nodes" ? "selected nodes" :
+                                pendingAction?.node && !pendingAction?.rid ? `node ${pendingAction.node}` :
+                                    pendingAction?.batch === "resources" ? `selected resources of node ${pendingAction.node}` :
+                                        pendingAction?.rid ? `resource ${pendingAction.rid} of node ${pendingAction.node}` :
+                                            "the object"}
+                            ?
                         </Typography>
                     </DialogContent>
                     <DialogActions>
@@ -475,17 +521,61 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
-                {/* Snackbar */}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={5000}
-                    onClose={closeSnackbar}
-                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
-                >
+                {/* SNACKBAR */}
+                <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={closeSnackbar}>
                     <Alert onClose={closeSnackbar} severity={snackbar.severity} variant="filled">
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
+
+                {/* NODE ACTIONS MENU */}
+                <Menu anchorEl={nodesActionsAnchor} open={Boolean(nodesActionsAnchor)}
+                      onClose={handleNodesActionsClose}>
+                    {NODE_ACTIONS.map((action) => (
+                        <MenuItem key={action} onClick={() => handleBatchNodeActionClick(action)}>
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
+
+                {/* INDIVIDUAL NODE ACTIONS MENU */}
+                <Menu anchorEl={individualNodeMenuAnchor} open={Boolean(individualNodeMenuAnchor)}
+                      onClose={() => setIndividualNodeMenuAnchor(null)}>
+                    {NODE_ACTIONS.map((action) => (
+                        <MenuItem key={action} onClick={() => handleIndividualNodeActionClick(action)}>
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
+
+                {/* RESOURCE ACTIONS MENU */}
+                <Menu anchorEl={resourcesActionsAnchor} open={Boolean(resourcesActionsAnchor)}
+                      onClose={handleResourcesActionsClose}>
+                    {RESOURCE_ACTIONS.map((action) => (
+                        <MenuItem key={action} onClick={() => handleBatchResourceActionClick(action)}>
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
+
+                {/* INDIVIDUAL RESOURCE ACTIONS MENU */}
+                <Menu anchorEl={resourceMenuAnchor} open={Boolean(resourceMenuAnchor)}
+                      onClose={() => setResourceMenuAnchor(null)}>
+                    {RESOURCE_ACTIONS.map((action) => (
+                        <MenuItem
+                            key={action}
+                            onClick={() => {
+                                setPendingAction({action, node: resGroupNode, rid: currentResourceId});
+                                if (action === "unprovision") setResourceDialogOpen(true);
+                                else setSimpleDialogOpen(true);
+                                setResourceMenuAnchor(null);
+                                setCurrentResourceId(null);
+                            }}
+                        >
+                            {action}
+                        </MenuItem>
+                    ))}
+                </Menu>
             </Box>
         </Box>
     );

@@ -17,7 +17,10 @@ import '../styles/main.css';
 import NodesTable from "./NodesTable";
 import Objects from "./Objects";
 import ObjectDetails from "./ObjectDetails";
+import ClusterOverview from "./Cluster";
 import NavBar from './NavBar';
+import Namespaces from "./Namespaces";
+import Heartbeats from "./Heartbeats";
 
 let enabled;
 
@@ -182,7 +185,10 @@ const App = () => {
             <Router>
                 <NavBar/>
                 <Routes>
-                    <Route path="/" element={<Navigate to="/nodes" replace/>}/>
+                    <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                    <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces /></ProtectedRoute>} />
+                    <Route path="/heartbeats" element={<Heartbeats />} />
                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                     <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>

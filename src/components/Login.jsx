@@ -58,7 +58,7 @@ const Login = forwardRef((props, ref) => {
                 }
             }
 
-            navigate('/nodes');
+            navigate('/');
         } catch (error) {
             console.error('Authentication error:', error);
             setErrorMessage(error.message);

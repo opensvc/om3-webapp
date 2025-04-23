@@ -1,7 +1,7 @@
 import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {createEventSource} from "../eventSourceManager";
+import {createEventSource, closeEventSource} from "../eventSourceManager";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem,
@@ -12,7 +12,7 @@ import useEventStore from "../store/useEventStore";
 import NodeRow from "../components/NodeRow.jsx";
 
 const NodesTable = () => {
-    const {daemon, fetchNodes} = useFetchDaemonStatus();
+    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
@@ -31,9 +31,13 @@ const NodesTable = () => {
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchNodes(token);
-            createEventSource(`/sse`, token);
+            startEventReception(token);
         }
+        return () => {
+            closeEventSource();
+        };
     }, []);
+
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");

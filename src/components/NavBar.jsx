@@ -13,13 +13,24 @@ const NavBar = () => {
 
     const getBreadcrumbItems = () => {
         const pathParts = location.pathname.split("/").filter(Boolean);
-        const breadcrumbItems = [{name: "om3", path: "/"}];
+        const breadcrumbItems = [];
 
+        if (pathParts[0] === "login") {
+            return breadcrumbItems;
+        }
 
-        pathParts.forEach((part, index) => {
-            const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-            breadcrumbItems.push({name: part, path: fullPath});
-        });
+        if (pathParts.length === 1 && pathParts[0] === "cluster") {
+            breadcrumbItems.push({name: "Cluster", path: "/cluster"});
+        } else {
+            breadcrumbItems.push({name: "Cluster", path: "/cluster"});
+
+            pathParts.forEach((part, index) => {
+                const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                if (part !== "cluster") {
+                    breadcrumbItems.push({name: part, path: fullPath});
+                }
+            });
+        }
 
         return breadcrumbItems;
     };
@@ -30,7 +41,7 @@ const NavBar = () => {
         <AppBar position="sticky">
             <Toolbar sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                 <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5}}>
-                    {breadcrumb.map((item, index) => (
+                    {breadcrumb.length > 0 && breadcrumb.map((item, index) => (
                         <Box key={index} sx={{display: "flex", alignItems: "center"}}>
                             <Typography
                                 component={Link}
@@ -40,6 +51,7 @@ const NavBar = () => {
                                     textDecoration: "none",
                                     fontWeight: 500,
                                     fontSize: "1.1rem",
+                                    textTransform: "capitalize",
                                     '&:hover': {
                                         textDecoration: "underline"
                                     }
@@ -55,12 +67,6 @@ const NavBar = () => {
                 </Box>
 
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-                    <Button color="inherit" component={Link} to="/nodes">
-                        Nodes
-                    </Button>
-                    <Button color="inherit" component={Link} to="/objects">
-                        Objects
-                    </Button>
                     <Button
                         startIcon={<FaSignOutAlt/>}
                         onClick={handleLogout}

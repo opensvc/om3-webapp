@@ -1,9 +1,15 @@
 import useEventStore from "./store/useEventStore";
 
+let currentEventSource = null;
+
 export const createEventSource = (url, token) => {
     if (!token) {
         console.error("❌ Missing token for EventSource!");
         return null;
+    }
+
+    if (currentEventSource) {
+        currentEventSource.close();
     }
 
     const {
@@ -44,40 +50,41 @@ export const createEventSource = (url, token) => {
         "NodeStatsUpdated",
         "ObjectStatusUpdated",
         "InstanceStatusUpdated",
+        "DaemonHeartbeatUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
-    const eventSource = new EventSource(cachedUrl);
+    currentEventSource = new EventSource(cachedUrl);
 
-    eventSource.onopen = () => {
+    currentEventSource.onopen = () => {
         console.log("✅ SSE connection established!");
     };
 
-    eventSource.onerror = (error) => {
+    currentEventSource.onerror = (error) => {
         console.error("🚨 EventSource error:", error);
-        eventSource.close();
+        currentEventSource.close();
         setTimeout(() => {
             console.log("🔄 Attempting to reconnect...");
             createEventSource(url, token);
         }, 5000);
     };
 
-    eventSource.addEventListener("NodeStatusUpdated", (event) => {
+    currentEventSource.addEventListener("NodeStatusUpdated", (event) => {
         const {node, node_status} = JSON.parse(event.data);
         updateNodeStatus(node, node_status);
     });
 
-    eventSource.addEventListener("NodeMonitorUpdated", (event) => {
+    currentEventSource.addEventListener("NodeMonitorUpdated", (event) => {
         const {node, node_monitor} = JSON.parse(event.data);
         updateNodeMonitor(node, node_monitor);
     });
 
-    eventSource.addEventListener("NodeStatsUpdated", (event) => {
+    currentEventSource.addEventListener("NodeStatsUpdated", (event) => {
         const {node, node_stats} = JSON.parse(event.data);
         updateNodeStats(node, node_stats);
     });
 
-    eventSource.addEventListener("ObjectStatusUpdated", (event) => {
+    currentEventSource.addEventListener("ObjectStatusUpdated", (event) => {
         const parsed = JSON.parse(event.data);
         const object_name = parsed.path || parsed.labels?.path;
         const object_status = parsed.object_status;
@@ -91,7 +98,7 @@ export const createEventSource = (url, token) => {
         }
     });
 
-    eventSource.addEventListener("InstanceStatusUpdated", (event) => {
+    currentEventSource.addEventListener("InstanceStatusUpdated", (event) => {
         const parsed = JSON.parse(event.data);
         const objectName = parsed.path || parsed.labels?.path;
         const node = parsed.node;
@@ -106,13 +113,23 @@ export const createEventSource = (url, token) => {
         }
     });
 
-    return eventSource;
+    currentEventSource.addEventListener("DaemonHeartbeatUpdated", (event) => {
+        const parsed = JSON.parse(event.data);
+        const node = parsed.node || parsed.labels?.node;
+        const status = parsed.hb;
+        console.log("📡 DaemonHeartbeatReceived:", node, status);
+        if (!node || !status) return;
+        useEventStore.getState().updateHeartbeatStatus(node, status);
+    });
+
+
+    return currentEventSource;
 };
 
-// Function to close the EventSource
-export const closeEventSource = (eventSource) => {
-    if (eventSource) {
-        console.log("🛑 Closing EventSource");
-        eventSource.close();
+export const closeEventSource = () => {
+    if (currentEventSource) {
+        console.log("🛑 Closing current EventSource");
+        currentEventSource.close();
+        currentEventSource = null;
     }
 };

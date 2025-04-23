@@ -13,7 +13,7 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
-            '/daemon/status': {
+            '/cluster/status': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,

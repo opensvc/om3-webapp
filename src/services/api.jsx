@@ -1,5 +1,5 @@
 export const fetchDaemonStatus = async (token) => {
-    const url = '/daemon/status';
+    const url = '/cluster/status';
 
     const response = await fetch(url, {
         method: 'GET',

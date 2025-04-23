@@ -54,20 +54,13 @@ const AppStateProvider = ({children}) => {
     const initialState = {
         theme: initialTheme || "light",
         authChoice: localStorage.getItem("opensvc.authChoice"),
-        cstat: {},
         user: {},
         basicLogin: {},
-        alerts: [],
-        eventSourceAlive: false,
         authInfo: null,
     };
 
     const reducer = (state, action) => {
         switch (action.type) {
-            case "loadUser":
-                return {...state, user: action.data};
-            case "setEventSourceAlive":
-                return action.data === state.eventSourceAlive ? state : {...state, eventSourceAlive: action.data};
             case "setBasicLogin":
                 return {...state, basicLogin: action.data};
             case "setAuthChoice":
@@ -76,16 +69,6 @@ const AppStateProvider = ({children}) => {
             case "setTheme":
                 localStorage.setItem("opensvc.theme", action.data);
                 return {...state, theme: action.data};
-            case "loadCstat":
-                if (!action.data.cluster) return state;
-                document.title = action.data.cluster.name || "App";
-                return {...state, cstat: action.data};
-            case "pushAlerts":
-                return {...state, alerts: [...state.alerts, ...action.data]};
-            case "pushAlert":
-                return {...state, alerts: [...state.alerts, {...action.data, date: new Date()}]};
-            case "closeAlert":
-                return {...state, alerts: state.alerts.filter((_, i) => i !== action.i)};
             case "setAuthInfo":
                 return {...state, authInfo: action.data};
             default:

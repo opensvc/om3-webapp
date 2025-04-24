@@ -8,7 +8,7 @@ import {
     Checkbox, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import {blue} from "@mui/material/colors";
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 
 const NodesTable = () => {

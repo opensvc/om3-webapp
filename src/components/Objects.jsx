@@ -31,7 +31,7 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {useNavigate} from "react-router-dom";
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {createEventSource, closeEventSource} from "../eventSourceManager";
 

@@ -23,14 +23,22 @@ const useEventStore = create((set) => ({
             nodeStats: { ...state.nodeStats, [node]: data },
         })),
 
+    /**
+     * Updates the status of a specified object within the state.
+     *
+     * @function
+     * @param {string} objectName - The name of the object to update the status for.
+     * @param {string} newStatus - The new status to assign to the specified object.
+     * @returns {void}
+     *
+     * Note: Clients that use cache with setObjectStatuses should avoid using
+     * removeObject and updateObjectStatus
+     */
     updateObjectStatus: (objectName, newStatus) =>
         set((state) => ({
             objectStatus: {
                 ...state.objectStatus,
-                [objectName]: {
-                    ...(state.objectStatus[objectName] || {}),
-                    ...newStatus,
-                },
+                [objectName]: newStatus,
             },
         })),
 

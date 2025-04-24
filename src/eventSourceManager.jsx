@@ -13,26 +13,24 @@ export const createEventSource = (url, token) => {
     }
 
     const {
+        setObjectStatuses,
         updateNodeStatus,
         updateNodeMonitor,
         updateNodeStats,
-        updateObjectStatus,
-        updateObjectInstanceStatus
+        updateObjectInstanceStatus,
     } = useEventStore.getState();
 
     let objectStatusBuffer = {};
-    let objectFlushTimeout = null;
+    let objectFlushTimeoutID = null;
     const flushObjectBuffer = () => {
-        for (const objectName in objectStatusBuffer) {
-            updateObjectStatus(objectName, objectStatusBuffer[objectName]);
-        }
-        objectStatusBuffer = {};
-        objectFlushTimeout = null;
+        setObjectStatuses(objectStatusBuffer);
+        objectFlushTimeoutID = null;
     };
 
     let instanceStatusBuffer = {};
-    let instanceFlushTimeout = null;
+    let instanceFlushTimeoutID = null;
     const flushInstanceBuffer = () => {
+        // TODO: fix with new setInstanceStatuses
         for (const objectName in instanceStatusBuffer) {
             const perNode = instanceStatusBuffer[objectName];
             for (const node in perNode) {
@@ -40,7 +38,7 @@ export const createEventSource = (url, token) => {
             }
         }
         instanceStatusBuffer = {};
-        instanceFlushTimeout = null;
+        instanceFlushTimeoutID = null;
     };
 
     let cachedUrl = "/sse?cache=true&token=" + token;
@@ -90,12 +88,10 @@ export const createEventSource = (url, token) => {
         const object_name = parsed.path || parsed.labels?.path;
         const object_status = parsed.object_status;
         if (!object_name || !object_status) return;
-        objectStatusBuffer[object_name] = {
-            ...(objectStatusBuffer[object_name] || {}),
-            ...object_status,
-        };
-        if (!objectFlushTimeout) {
-            objectFlushTimeout = setTimeout(flushObjectBuffer, 100);
+
+        objectStatusBuffer[object_name] = object_status
+        if (!objectFlushTimeoutID) {
+            objectFlushTimeoutID = setTimeout(flushObjectBuffer, 250);
         }
     });
 
@@ -109,8 +105,8 @@ export const createEventSource = (url, token) => {
             ...(instanceStatusBuffer[objectName] || {}),
             [node]: instanceStatus,
         };
-        if (!instanceFlushTimeout) {
-            instanceFlushTimeout = setTimeout(flushInstanceBuffer, 100);
+        if (!instanceFlushTimeoutID) {
+            instanceFlushTimeoutID = setTimeout(flushInstanceBuffer, 250);
         }
     });
 
@@ -131,14 +127,16 @@ export const createEventSource = (url, token) => {
             return;
         }
 
-        const { objectStatus, objectInstanceStatus } = useEventStore.getState();
-        const newObjectStatus = { ...objectStatus };
-        const newObjectInstanceStatus = { ...objectInstanceStatus };
-        delete newObjectStatus[objectName];
+        const {objectInstanceStatus} = useEventStore.getState();
+        const newObjectInstanceStatus = {...objectInstanceStatus};
+        delete objectStatusBuffer[objectName];
         delete newObjectInstanceStatus[objectName];
 
+        if (!objectFlushTimeoutID) {
+            objectFlushTimeoutID = setTimeout(flushObjectBuffer, 205);
+        }
+
         useEventStore.setState({
-            objectStatus: newObjectStatus,
             objectInstanceStatus: newObjectInstanceStatus,
         });
 

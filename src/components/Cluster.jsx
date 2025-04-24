@@ -3,7 +3,7 @@ import {useNavigate} from "react-router-dom";
 import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {StatCard} from "./StatCard.jsx";
 

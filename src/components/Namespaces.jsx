@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import { green, red, orange, grey } from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import { useNavigate } from "react-router-dom"; // 👈 AJOUT
 
 const getColorByStatus = (status) => {

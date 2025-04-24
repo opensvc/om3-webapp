@@ -12,7 +12,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import {createEventSource, closeEventSource} from "../eventSourceManager"; // <-- important
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];

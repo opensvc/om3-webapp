@@ -1,6 +1,7 @@
-import useEventStore from "./store/useEventStore";
+import useEventStore from "./hooks/useEventStore.js";
 
 let currentEventSource = null;
+const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export const createEventSource = (url, token) => {
     if (!token) {
@@ -14,31 +15,44 @@ export const createEventSource = (url, token) => {
 
     const {
         setObjectStatuses,
+        setInstanceStatuses,
         updateNodeStatus,
         updateNodeMonitor,
         updateNodeStats,
-        updateObjectInstanceStatus,
+        removeObject,
     } = useEventStore.getState();
 
+    // Buffers for batching SSE updates
     let objectStatusBuffer = {};
-    let objectFlushTimeoutID = null;
-    const flushObjectBuffer = () => {
-        setObjectStatuses(objectStatusBuffer);
-        objectFlushTimeoutID = null;
+    let instanceStatusBuffer = {};
+    let flushTimeout = null;
+
+    // Schedule a batched flush after 250ms
+    const scheduleFlush = () => {
+        if (!flushTimeout) {
+            flushTimeout = setTimeout(flushBuffers, 250);
+        }
     };
 
-    let instanceStatusBuffer = {};
-    let instanceFlushTimeoutID = null;
-    const flushInstanceBuffer = () => {
-        // TODO: fix with new setInstanceStatuses
-        for (const objectName in instanceStatusBuffer) {
-            const perNode = instanceStatusBuffer[objectName];
-            for (const node in perNode) {
-                updateObjectInstanceStatus(objectName, node, perNode[node]);
-            }
+    // Flush both buffers into the store
+    const flushBuffers = () => {
+        const store = useEventStore.getState();
+
+        // Merge object statuses
+        if (Object.keys(objectStatusBuffer).length > 0) {
+            const merged = {...store.objectStatus, ...objectStatusBuffer};
+            setObjectStatuses(merged);
+            objectStatusBuffer = {};
         }
-        instanceStatusBuffer = {};
-        instanceFlushTimeoutID = null;
+
+        // Merge instance statuses
+        if (Object.keys(instanceStatusBuffer).length > 0) {
+            const mergedInst = {...store.objectInstanceStatus, ...instanceStatusBuffer};
+            setInstanceStatuses(mergedInst);
+            instanceStatusBuffer = {};
+        }
+
+        flushTimeout = null;
     };
 
     let cachedUrl = "/sse?cache=true&token=" + token;
@@ -85,28 +99,31 @@ export const createEventSource = (url, token) => {
 
     currentEventSource.addEventListener("ObjectStatusUpdated", (event) => {
         const parsed = JSON.parse(event.data);
-        const object_name = parsed.path || parsed.labels?.path;
-        const object_status = parsed.object_status;
-        if (!object_name || !object_status) return;
+        const name = parsed.path || parsed.labels?.path;
+        const status = parsed.object_status;
+        if (!name || !status) return;
 
-        objectStatusBuffer[object_name] = object_status
-        if (!objectFlushTimeoutID) {
-            objectFlushTimeoutID = setTimeout(flushObjectBuffer, 250);
+        const current = useEventStore.getState().objectStatus[name];
+        if (!isEqual(current, status)) {
+            objectStatusBuffer[name] = status;
+            scheduleFlush();
         }
     });
 
     currentEventSource.addEventListener("InstanceStatusUpdated", (event) => {
         const parsed = JSON.parse(event.data);
-        const objectName = parsed.path || parsed.labels?.path;
+        const name = parsed.path || parsed.labels?.path;
         const node = parsed.node;
-        const instanceStatus = parsed.instance_status;
-        if (!objectName || !node || !instanceStatus) return;
-        instanceStatusBuffer[objectName] = {
-            ...(instanceStatusBuffer[objectName] || {}),
-            [node]: instanceStatus,
-        };
-        if (!instanceFlushTimeoutID) {
-            instanceFlushTimeoutID = setTimeout(flushInstanceBuffer, 250);
+        const instStatus = parsed.instance_status;
+        if (!name || !node || !instStatus) return;
+
+        const current = useEventStore.getState().objectInstanceStatus?.[name]?.[node];
+        if (!isEqual(current, instStatus)) {
+            instanceStatusBuffer[name] = {
+                ...(instanceStatusBuffer[name] || {}),
+                [node]: instStatus,
+            };
+            scheduleFlush();
         }
     });
 
@@ -121,26 +138,17 @@ export const createEventSource = (url, token) => {
     currentEventSource.addEventListener("ObjectDeleted", (event) => {
         console.log("📩 Received ObjectDeleted event:", event.data);
         const parsed = JSON.parse(event.data);
-        const objectName = parsed.path || parsed.labels?.path;
-        if (!objectName) {
+        const name = parsed.path || parsed.labels?.path;
+        if (!name) {
             console.warn("⚠️ ObjectDeleted event missing objectName:", parsed);
             return;
         }
+        delete objectStatusBuffer[name];
+        delete instanceStatusBuffer[name];
+        removeObject(name);
+        scheduleFlush();
 
-        const {objectInstanceStatus} = useEventStore.getState();
-        const newObjectInstanceStatus = {...objectInstanceStatus};
-        delete objectStatusBuffer[objectName];
-        delete newObjectInstanceStatus[objectName];
-
-        if (!objectFlushTimeoutID) {
-            objectFlushTimeoutID = setTimeout(flushObjectBuffer, 205);
-        }
-
-        useEventStore.setState({
-            objectInstanceStatus: newObjectInstanceStatus,
-        });
-
-        console.log(`🗑️ Object '${objectName}' deleted from store`);
+        console.log(`🗑️ Object '${name}' removed`);
     });
 
     return currentEventSource;

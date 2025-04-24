@@ -1,7 +1,6 @@
 import React, {useState, forwardRef} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router-dom';
-import {useStateValue} from '../state.jsx';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -9,6 +8,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
 
 const decodeToken = (token) => {
     if (!token) return null;
@@ -26,12 +26,12 @@ const Login = forwardRef((props, ref) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [{basicLogin}, dispatch] = useStateValue();
+    const dispatch = useAuthDispatch();
     const {t} = useTranslation();
 
     const handleLogin = async (username, password) => {
         try {
-            const response = await fetch('/auth/token', {
+            const response = await fetch('/auth/token?duration=30s', {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Basic ' + btoa(`${username}:${password}`),
@@ -48,7 +48,7 @@ const Login = forwardRef((props, ref) => {
             const newPayload = decodeToken(data.token);
             const expirationTime = newPayload?.exp * 1000;
             localStorage.setItem('tokenExpiration', expirationTime);
-            dispatch({type: 'setBasicLogin', data: {username, password, token: data.token}});
+            dispatch({type: SetAccessToken, data: data.token});
 
             const payload = decodeToken(data.token);
             if (payload?.exp) {
@@ -77,7 +77,7 @@ const Login = forwardRef((props, ref) => {
         if (token && tokenExpiration && currentTime < tokenExpiration) {
             console.log('Token is still valid, attempting to refresh...');
             try {
-                const response = await fetch('/auth/token', {
+                const response = await fetch('/auth/token?duration=30s', {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${token}`},
                 });
@@ -91,7 +91,7 @@ const Login = forwardRef((props, ref) => {
                 localStorage.setItem('tokenExpiration', expirationTime);
                 console.log('New token expiration set for:', new Date(expirationTime).toLocaleString());
 
-                dispatch({type: 'setBasicLogin', data: {...basicLogin, token: data.token}});
+                dispatch({type: SetAccessToken, data: data.token});
 
                 // Decode the new token and re-set the timeout
                 const payload = decodeToken(data.token);
@@ -104,11 +104,11 @@ const Login = forwardRef((props, ref) => {
                 }
             } catch (error) {
                 console.error('❌ Error refreshing token:', error);
-                navigate('/login');
+                navigate('/auth/login');
             }
         } else {
             console.warn('⚠️ Token expired or missing, redirecting to login...');
-            navigate('/login');
+            navigate('/auth/login');
         }
     };
 
@@ -124,7 +124,8 @@ const Login = forwardRef((props, ref) => {
     };
 
     const handleChangeMethod = () => {
-        dispatch({type: 'setAuthChoice', data: ''});
+        dispatch({type: SetAuthChoice, data: ''})
+        navigate('/auth-choice')
     };
 
     return (

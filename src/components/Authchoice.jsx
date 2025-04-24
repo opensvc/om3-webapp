@@ -1,5 +1,4 @@
-import React from "react";
-import {useStateValue} from "../state";
+import React, {useEffect} from "react";
 import {
     Dialog,
     DialogActions,
@@ -11,19 +10,39 @@ import {
     Stack
 } from "@mui/material";
 import {FaKey, FaIdCard, FaUserShield} from "react-icons/fa";
+import useAuthInfo from "../hooks/AuthInfo.jsx";
+import oidcConfiguration from "../config/oidcConfiguration.js";
+import {useNavigate} from "react-router-dom";
+import {useOidc} from "../context/OidcAuthContext.tsx";
 
 function AuthChoice() {
-    const [state, dispatch] = useStateValue();
-    const {authInfo} = state;
+    const {userManager, recreateUserManager} = useOidc();
+    const authInfo = useAuthInfo();
+    const navigate = useNavigate();
 
     const handleAuthChoice = (choice) => {
-        dispatch({type: "setAuthChoice", data: choice});
+        if (choice === "openid") {
+            if (!userManager) {
+                console.log("handleAuthChoice openid skipped can't create userManager")
+                return
+            }
+            userManager.signinRedirect()
+                .catch((err) => console.error("handleAuthChoice signinRedirect:", err))
+        } else if (choice === "basic") {
+            return navigate('/auth/login')
+        }
     };
+
+    useEffect(() => {
+        if (authInfo?.openid?.well_known_uri && !userManager) {
+            recreateUserManager(oidcConfiguration(authInfo))
+        }
+    }, [authInfo])
 
     return (
         <Dialog open={true} maxWidth="xs" fullWidth>
             <DialogTitle>
-                <Typography variant="h6" fontWeight="bold" textAlign="center">
+                <Typography fontWeight="bold" textAlign="center">
                     Authentication Methods
                 </Typography>
             </DialogTitle>

@@ -41,7 +41,7 @@ const NodesTable = () => {
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");
-        navigate("/login");
+        navigate("/auth/login");
     };
 
     const handleMenuOpen = (event, nodename) => {

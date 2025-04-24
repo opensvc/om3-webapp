@@ -12,8 +12,6 @@
     "lint": "eslint src --ext .js,.jsx"
   },
   "dependencies": {
-    "@axa-fr/react-oidc": "^7.25.3",
-    "@axa-fr/react-oidc-context": "^5.14.2",
     "@emotion/css": "^11.13.5",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
@@ -25,6 +23,7 @@
     "i18next": "^23.11.5",
     "next": "13.5.5",
     "oidc-client": "^1.11.5",
+    "oidc-client-ts": "^3.2.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-i18next": "^15.4.1",

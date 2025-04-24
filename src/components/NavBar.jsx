@@ -1,15 +1,25 @@
 import {Link, useNavigate, useLocation} from "react-router-dom";
 import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
 import {FaSignOutAlt} from "react-icons/fa";
+import {useOidc} from "../context/OidcAuthContext.js";
+import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 
 const NavBar = () => {
+    const {userManager} = useOidc();
     const navigate = useNavigate();
+    const auth = useAuth()
     const location = useLocation();
+    const authDispatch = useAuthDispatch()
 
     const handleLogout = () => {
+        if (auth?.authChoice === "openid") {
+            userManager.signoutRedirect();
+            userManager.removeUser();
+        }
         localStorage.removeItem("authToken");
-        navigate("/login");
-    };
+        authDispatch({type: Logout})
+        navigate("/auth-choice");
+    };{}
 
     const getBreadcrumbItems = () => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -85,6 +95,6 @@ const NavBar = () => {
             </Toolbar>
         </AppBar>
     );
-};
+}
 
 export default NavBar;

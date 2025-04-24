@@ -8,12 +8,17 @@ export default defineConfig({
     plugins: [react(), tailwindcss()],
     server: {
         proxy: {
-            '/auth': {
+            '/auth/info': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/daemon/status': {
+            '/auth/token': {
+                target: baseUrl,
+                changeOrigin: true,
+                secure: false,
+            },
+            '/cluster/status': {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,

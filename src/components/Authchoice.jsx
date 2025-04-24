@@ -34,7 +34,7 @@ function AuthChoice() {
     };
 
     useEffect(() => {
-        if (authInfo?.openid?.well_known_uri && !userManager) {
+        if (authInfo?.openid?.authority && !userManager) {
             recreateUserManager(oidcConfiguration(authInfo))
         }
     }, [authInfo])
@@ -51,7 +51,7 @@ function AuthChoice() {
                     Please select one of the authentication methods the cluster advertises.
                 </Typography>
                 <Stack spacing={2} mt={2}>
-                    {authInfo?.openid?.well_known_uri && (
+                    {authInfo?.openid?.authority && (
                         <Button
                             variant="contained"
                             color="primary"

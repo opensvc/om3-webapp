@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Paper, Typography, Grid } from "@mui/material";
+import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
 import useEventStore from "../store/useEventStore";
@@ -97,46 +97,46 @@ const ClusterOverview = () => {
                 Cluster Overview
             </Typography>
 
-            <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+            <Grid2 container spacing={3}>
+                <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Nodes"
                         value={nodeCount}
                         subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
                         onClick={() => navigate("/nodes")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Objects"
                         value={objectCount}
                         subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
                         onClick={() => navigate("/objects")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Namespaces"
                         value={namespaceCount}
                         subtitle={namespaceSubtitle}
                         onClick={() => navigate("/namespaces")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Heartbeats"
                         value={Object.keys(heartbeatStatus).length}
                         onClick={() => navigate("/heartbeats")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Pools"
                         value={poolCount}
                         onClick={() => navigate("/pools")}
                     />
-                </Grid>
-            </Grid>
+                </Grid2>
+            </Grid2>
         </Box>
     );
 };

@@ -31,7 +31,7 @@ const Login = forwardRef((props, ref) => {
 
     const handleLogin = async (username, password) => {
         try {
-            const response = await fetch('/auth/token?duration=30s', {
+            const response = await fetch('/auth/token', {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Basic ' + btoa(`${username}:${password}`),
@@ -77,7 +77,7 @@ const Login = forwardRef((props, ref) => {
         if (token && tokenExpiration && currentTime < tokenExpiration) {
             console.log('Token is still valid, attempting to refresh...');
             try {
-                const response = await fetch('/auth/token?duration=30s', {
+                const response = await fetch('/auth/token', {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${token}`},
                 });

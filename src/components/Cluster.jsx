@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Box, Paper, Typography, Grid } from "@mui/material";
+import React, {useEffect, useState} from "react";
+import {useNavigate} from "react-router-dom";
+import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
 import useEventStore from "../store/useEventStore";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import {StatCard} from "./StatCard.jsx";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const objectStatus = useEventStore((state) => state.objectStatus);
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const { fetchNodes, startEventReception } = useFetchDaemonStatus();
+    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const [poolCount, setPoolCount] = useState(0);
 
@@ -22,7 +23,7 @@ const ClusterOverview = () => {
             startEventReception(token);
 
             axios.get("/pool", {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: {Authorization: `Bearer ${token}`}
             })
                 .then((res) => {
                     const items = res.data?.items || [];
@@ -43,7 +44,7 @@ const ClusterOverview = () => {
     });
 
     const namespaces = new Set();
-    const statusCount = { up: 0, down: 0, warn: 0, unknown: 0 };
+    const statusCount = {up: 0, down: 0, warn: 0, unknown: 0};
     const objectsPerNamespace = {};
 
     const extractNamespace = (objectPath) => {
@@ -62,81 +63,57 @@ const ClusterOverview = () => {
     });
 
     const namespaceCount = namespaces.size;
-    const objectCount = Object.keys(objectStatus).length;
 
     const namespaceSubtitle = Object.entries(objectsPerNamespace)
         .map(([ns, count]) => `${ns}: ${count}`)
         .join(" | ");
 
-    const StatCard = ({ title, value, subtitle, onClick }) => (
-        <Paper
-            elevation={3}
-            sx={{
-                p: 3,
-                borderRadius: 2,
-                textAlign: "center",
-                cursor: "pointer",
-                "&:hover": {
-                    boxShadow: 6,
-                    transition: "box-shadow 0.3s ease-in-out"
-                }
-            }}
-            onClick={onClick}
-        >
-            <Typography variant="h6" gutterBottom>{title}</Typography>
-            <Typography variant="h3" color="primary">{value}</Typography>
-            {subtitle && (
-                <Typography variant="body2" sx={{ mt: 1 }}>{subtitle}</Typography>
-            )}
-        </Paper>
-    );
-
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+        <Box sx={{p: 3}}>
+            <Typography variant="h4" gutterBottom sx={{mb: 4}}>
                 Cluster Overview
             </Typography>
 
-            <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+            <Grid2 container spacing={3}>
+                <Grid2  size={{ xs: 12, md: 4 }}>
                     <StatCard
                         title="Nodes"
                         value={nodeCount}
                         subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
                         onClick={() => navigate("/nodes")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2  size={{ xs: 12, md: 4 }}>
                     <StatCard
                         title="Objects"
-                        value={objectCount}
+                        value={Object.keys(objectStatus).length}
                         subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
                         onClick={() => navigate("/objects")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2  size={{ xs: 12, md: 4 }}>
                     <StatCard
                         title="Namespaces"
                         value={namespaceCount}
                         subtitle={namespaceSubtitle}
                         onClick={() => navigate("/namespaces")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2  size={{ xs: 12, md: 4 }}>
                     <StatCard
                         title="Heartbeats"
                         value={Object.keys(heartbeatStatus).length}
                         onClick={() => navigate("/heartbeats")}
                     />
-                </Grid>
-                <Grid item xs={12} md={4}>
+                </Grid2>
+                <Grid2  size={{ xs: 12, md: 4 }}>
                     <StatCard
                         title="Pools"
                         value={poolCount}
                         onClick={() => navigate("/pools")}
                     />
-                </Grid>
-            </Grid>
+                </Grid2>
+            </Grid2>
         </Box>
     );
 };

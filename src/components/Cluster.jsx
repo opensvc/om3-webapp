@@ -44,7 +44,7 @@ const ClusterOverview = () => {
     });
 
     const namespaces = new Set();
-    const statusCount = { up: 0, down: 0, warn: 0, unknown: 0 };
+    const statusCount = {up: 0, down: 0, warn: 0, unknown: 0};
     const objectsPerNamespace = {};
 
     const extractNamespace = (objectPath) => {
@@ -87,7 +87,7 @@ const ClusterOverview = () => {
                 <Grid2 item xs={12} md={4}>
                     <StatCard
                         title="Objects"
-                        value={objectCount}
+                        value={Object.keys(objectStatus).length}
                         subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
                         onClick={() => navigate("/objects")}
                     />

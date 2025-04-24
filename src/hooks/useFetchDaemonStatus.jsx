@@ -44,8 +44,6 @@ const useFetchDaemonStatus = () => {
             return;
         }
 
-        console.log("🔗 Connecting SSE with token...", token);
-
         // Close previous connection before opening a new one
         if (eventSourceRef.current) {
             closeEventSource(eventSourceRef.current);

@@ -33,6 +33,11 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
+            '/pool': {
+                target: baseUrl,
+                changeOrigin: true,
+                secure: false,
+            },
             '/sse': {
                 target: baseUrl,
                 changeOrigin: true,

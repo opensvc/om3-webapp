@@ -1,6 +1,8 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Paper, Typography, Grid } from "@mui/material";
+import axios from "axios";
+
 import useEventStore from "../store/useEventStore";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 
@@ -11,11 +13,21 @@ const ClusterOverview = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const { fetchNodes, startEventReception } = useFetchDaemonStatus();
 
+    const [poolCount, setPoolCount] = useState(0);
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchNodes(token);
             startEventReception(token);
+
+            axios.get("/pool", {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+                .then((res) => {
+                    const items = res.data?.items || [];
+                    setPoolCount(items.length);
+                })
         }
     }, []);
 
@@ -26,11 +38,8 @@ const ClusterOverview = () => {
 
     Object.values(nodeStatus).forEach((node) => {
         const isFrozen = node?.frozen_at && node?.frozen_at !== "0001-01-01T00:00:00Z";
-        if (isFrozen) {
-            frozenCount++;
-        } else {
-            unfrozenCount++;
-        }
+        if (isFrozen) frozenCount++;
+        else unfrozenCount++;
     });
 
     const namespaces = new Set();
@@ -45,15 +54,11 @@ const ClusterOverview = () => {
     Object.entries(objectStatus).forEach(([objectPath, status]) => {
         const ns = extractNamespace(objectPath);
         namespaces.add(ns);
-
         objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
 
         const s = status?.avail?.toLowerCase();
-        if (s === "up" || s === "down" || s === "warn") {
-            statusCount[s]++;
-        } else {
-            statusCount.unknown++;
-        }
+        if (s === "up" || s === "down" || s === "warn") statusCount[s]++;
+        else statusCount.unknown++;
     });
 
     const namespaceCount = namespaces.size;
@@ -69,25 +74,19 @@ const ClusterOverview = () => {
             sx={{
                 p: 3,
                 borderRadius: 2,
-                textAlign: 'center',
-                cursor: 'pointer',
-                '&:hover': {
+                textAlign: "center",
+                cursor: "pointer",
+                "&:hover": {
                     boxShadow: 6,
-                    transition: 'box-shadow 0.3s ease-in-out'
+                    transition: "box-shadow 0.3s ease-in-out"
                 }
             }}
             onClick={onClick}
         >
-            <Typography variant="h6" gutterBottom>
-                {title}
-            </Typography>
-            <Typography variant="h3" color="primary">
-                {value}
-            </Typography>
+            <Typography variant="h6" gutterBottom>{title}</Typography>
+            <Typography variant="h3" color="primary">{value}</Typography>
             {subtitle && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                    {subtitle}
-                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>{subtitle}</Typography>
             )}
         </Paper>
     );
@@ -127,8 +126,14 @@ const ClusterOverview = () => {
                     <StatCard
                         title="Heartbeats"
                         value={Object.keys(heartbeatStatus).length}
-                        //subtitle="Status of node heartbeats"
                         onClick={() => navigate("/heartbeats")}
+                    />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <StatCard
+                        title="Pools"
+                        value={poolCount}
+                        onClick={() => navigate("/pools")}
                     />
                 </Grid>
             </Grid>

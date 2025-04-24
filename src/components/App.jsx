@@ -13,6 +13,7 @@ import ClusterOverview from "./Cluster";
 import NavBar from './NavBar';
 import Namespaces from "./Namespaces";
 import Heartbeats from "./Heartbeats";
+import Pools from "./Pools";
 import {OidcProvider} from "../context/OidcAuthContext.js";
 import {AuthProvider} from "../context/AuthProvider.jsx";
 
@@ -71,6 +72,7 @@ const App = () => {
                         <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                         <Route path="/heartbeats" element={<Heartbeats/>}/>
                         <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                        <Route path="/pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
                         <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                         <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
                         <Route path="/auth-callback" element={<OidcCallback/>}/>

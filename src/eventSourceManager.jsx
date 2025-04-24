@@ -1,4 +1,4 @@
-import useEventStore from "./store/useEventStore";
+import useEventStore from "./hooks/useEventStore.js";
 
 let currentEventSource = null;
 

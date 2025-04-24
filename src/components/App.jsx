@@ -16,10 +16,6 @@ import Heartbeats from "./Heartbeats";
 import Pools from "./Pools";
 import {OidcProvider} from "../context/OidcAuthContext.js";
 import {AuthProvider} from "../context/AuthProvider.jsx";
-
-
-let enabled;
-
 const isTokenValid = (token) => {
     if (!token) return false;
 

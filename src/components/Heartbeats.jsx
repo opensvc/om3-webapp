@@ -1,5 +1,5 @@
 import React from "react";
-import useEventStore from "../store/useEventStore";
+import useEventStore from "../hooks/useEventStore.js";
 import {
     Box,
     Paper,

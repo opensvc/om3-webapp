@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, {useEffect, useState} from "react";
+import {useNavigate} from "react-router-dom";
 import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
@@ -12,7 +12,7 @@ const ClusterOverview = () => {
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const objectStatus = useEventStore((state) => state.objectStatus);
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const { fetchNodes, startEventReception } = useFetchDaemonStatus();
+    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const [poolCount, setPoolCount] = useState(0);
 
@@ -23,7 +23,7 @@ const ClusterOverview = () => {
             startEventReception(token);
 
             axios.get("/pool", {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: {Authorization: `Bearer ${token}`}
             })
                 .then((res) => {
                     const items = res.data?.items || [];
@@ -63,15 +63,14 @@ const ClusterOverview = () => {
     });
 
     const namespaceCount = namespaces.size;
-    const objectCount = Object.keys(objectStatus).length;
 
     const namespaceSubtitle = Object.entries(objectsPerNamespace)
         .map(([ns, count]) => `${ns}: ${count}`)
         .join(" | ");
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+        <Box sx={{p: 3}}>
+            <Typography variant="h4" gutterBottom sx={{mb: 4}}>
                 Cluster Overview
             </Typography>
 

@@ -1,11 +1,13 @@
-import { defineConfig } from 'vite';
+import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
+import {viteSingleFile} from "vite-plugin-singlefile"
 import tailwindcss from '@tailwindcss/vite';
+
 
 const baseUrl = process.env.BASE_URL || 'https://localhost:1215/';
 
 export default defineConfig({
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), viteSingleFile()],
     server: {
         proxy: {
             '/auth/info': {
@@ -68,4 +70,9 @@ export default defineConfig({
             },
         },
     },
+    "build": {
+        assetsInlineLimit: Infinity, // ensure all assets are inlined
+        cssCodeSplit: false,         // don't split CSS
+        target: 'esnext',
+    }
 });

@@ -47,7 +47,14 @@ export const createEventSource = (url, token) => {
 
         // Merge instance statuses
         if (Object.keys(instanceStatusBuffer).length > 0) {
-            const mergedInst = {...store.objectInstanceStatus, ...instanceStatusBuffer};
+            const mergedInst = {...store.objectInstanceStatus};
+
+            for (const obj of Object.keys(instanceStatusBuffer)) {
+                mergedInst[obj] = {
+                    ...mergedInst[obj],
+                    ...instanceStatusBuffer[obj],
+                };
+            }
             setInstanceStatuses(mergedInst);
             instanceStatusBuffer = {};
         }

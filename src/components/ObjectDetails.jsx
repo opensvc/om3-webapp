@@ -13,20 +13,32 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
-import {createEventSource, closeEventSource} from "../eventSourceManager"; // <-- important
+import {closeEventSource} from "../eventSourceManager.jsx";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 
-const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze"];
-const OBJECT_ACTIONS = ["restart", "freeze", "unfreeze"];
-const RESOURCE_ACTIONS = ["start", "restart", "stop", "provision", "unprovision"];
+const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "provision", "unprovision"];
+const OBJECT_ACTIONS = ["start", "restart", "freeze", "unfreeze", "stop", "provision", "unprovision", "purge"];
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
+    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, []);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -58,7 +70,6 @@ const ObjectDetail = () => {
 
     // State for accordion expansion
     const [expandedAccordions, setExpandedAccordions] = useState({});
-    const [eventSource, setEventSource] = useState(null); // <--- new
 
     const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
@@ -551,7 +562,7 @@ const ObjectDetail = () => {
                 {/* RESOURCE ACTIONS MENU */}
                 <Menu anchorEl={resourcesActionsAnchor} open={Boolean(resourcesActionsAnchor)}
                       onClose={handleResourcesActionsClose}>
-                    {RESOURCE_ACTIONS.map((action) => (
+                    {NODE_ACTIONS.map((action) => (
                         <MenuItem key={action} onClick={() => handleBatchResourceActionClick(action)}>
                             {action}
                         </MenuItem>
@@ -561,7 +572,7 @@ const ObjectDetail = () => {
                 {/* INDIVIDUAL RESOURCE ACTIONS MENU */}
                 <Menu anchorEl={resourceMenuAnchor} open={Boolean(resourceMenuAnchor)}
                       onClose={() => setResourceMenuAnchor(null)}>
-                    {RESOURCE_ACTIONS.map((action) => (
+                    {NODE_ACTIONS.map((action) => (
                         <MenuItem
                             key={action}
                             onClick={() => {

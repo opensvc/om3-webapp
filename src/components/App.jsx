@@ -68,7 +68,7 @@ const App = () => {
                         <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                         <Route path="/heartbeats" element={<Heartbeats/>}/>
                         <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                        <Route path="/pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
+                        <Route path="/storage-pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
                         <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                         <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
                         <Route path="/auth-callback" element={<OidcCallback/>}/>

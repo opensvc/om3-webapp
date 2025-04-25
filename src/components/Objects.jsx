@@ -2,7 +2,6 @@ import React, {useEffect, useState} from "react";
 import {useLocation} from "react-router-dom";
 import {
     Box,
-    CircularProgress,
     Paper,
     Table,
     TableBody,
@@ -33,9 +32,9 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
-import {createEventSource, closeEventSource} from "../eventSourceManager";
+import {closeEventSource} from "../eventSourceManager";
 
-const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete"];
+const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge"];
 
 const Objects = () => {
     const location = useLocation();
@@ -58,6 +57,17 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState("");
 
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, []);
 
 
     const handleSelectObject = (event, objectName) => {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useEffect} from "react";
 import useEventStore from "../hooks/useEventStore.js";
 import {
     Box,
@@ -16,6 +16,8 @@ import HeartIcon from "@mui/icons-material/Favorite";
 import HeartBrokenIcon from "@mui/icons-material/FavoriteBorder";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import ErrorIcon from "@mui/icons-material/Error";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
+import {closeEventSource} from "../eventSourceManager.jsx";
 
 const getStreamStatus = (stream) => {
     if (!stream) return {state: "Unknown", icon: <ErrorIcon color="disabled"/>};
@@ -32,6 +34,18 @@ const getStreamStatus = (stream) => {
 const Heartbeats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const nodes = Object.keys(heartbeatStatus);
+    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, []);
 
     return (
         <Box

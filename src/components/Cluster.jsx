@@ -5,7 +5,13 @@ import axios from "axios";
 
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
-import {StatCard} from "./StatCard.jsx";
+import {
+    GridNodes,
+    GridObjects,
+    GridNamespaces,
+    GridHeartbeats,
+    GridPools
+} from "./ClusterStatGrids.jsx";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
@@ -24,11 +30,10 @@ const ClusterOverview = () => {
 
             axios.get("/pool", {
                 headers: {Authorization: `Bearer ${token}`}
-            })
-                .then((res) => {
-                    const items = res.data?.items || [];
-                    setPoolCount(items.length);
-                })
+            }).then((res) => {
+                const items = res.data?.items || [];
+                setPoolCount(items.length);
+            });
         }
     }, []);
 
@@ -75,44 +80,30 @@ const ClusterOverview = () => {
             </Typography>
 
             <Grid2 container spacing={3}>
-                <Grid2  size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        title="Nodes"
-                        value={nodeCount}
-                        subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
-                        onClick={() => navigate("/nodes")}
-                    />
-                </Grid2>
-                <Grid2  size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        title="Objects"
-                        value={Object.keys(objectStatus).length}
-                        subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
-                        onClick={() => navigate("/objects")}
-                    />
-                </Grid2>
-                <Grid2  size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        title="Namespaces"
-                        value={namespaceCount}
-                        subtitle={namespaceSubtitle}
-                        onClick={() => navigate("/namespaces")}
-                    />
-                </Grid2>
-                <Grid2  size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        title="Heartbeats"
-                        value={Object.keys(heartbeatStatus).length}
-                        onClick={() => navigate("/heartbeats")}
-                    />
-                </Grid2>
-                <Grid2  size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        title="Pools"
-                        value={poolCount}
-                        onClick={() => navigate("/pools")}
-                    />
-                </Grid2>
+                <GridNodes
+                    nodeCount={nodeCount}
+                    frozenCount={frozenCount}
+                    unfrozenCount={unfrozenCount}
+                    onClick={() => navigate("/nodes")}
+                />
+                <GridObjects
+                    objectCount={Object.keys(objectStatus).length}
+                    statusCount={statusCount}
+                    onClick={() => navigate("/objects")}
+                />
+                <GridNamespaces
+                    namespaceCount={namespaceCount}
+                    namespaceSubtitle={namespaceSubtitle}
+                    onClick={() => navigate("/namespaces")}
+                />
+                <GridHeartbeats
+                    heartbeatCount={Object.keys(heartbeatStatus).length}
+                    onClick={() => navigate("/heartbeats")}
+                />
+                <GridPools
+                    poolCount={poolCount}
+                    onClick={() => navigate("/storage-pools")}
+                />
             </Grid2>
         </Box>
     );

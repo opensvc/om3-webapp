@@ -102,7 +102,7 @@ const ClusterOverview = () => {
                 />
                 <GridPools
                     poolCount={poolCount}
-                    onClick={() => navigate("/pools")}
+                    onClick={() => navigate("/storage-pools")}
                 />
             </Grid2>
         </Box>

@@ -50,7 +50,7 @@ const useFetchDaemonStatus = () => {
         }
 
         // Create new SSE connection
-        eventSourceRef.current = createEventSource("/sse", token);
+        eventSourceRef.current = createEventSource("/node/name/localhost/daemon/event", token);
     };
 
     return { daemon, nodes, clusterStats, error, loading, fetchNodes: refreshDaemonStatus, startEventReception };

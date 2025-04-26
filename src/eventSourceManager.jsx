@@ -1,4 +1,5 @@
 import useEventStore from "./hooks/useEventStore.js";
+import {EventSourcePolyfill} from 'event-source-polyfill';
 
 let currentEventSource = null;
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -62,7 +63,7 @@ export const createEventSource = (url, token) => {
         flushTimeout = null;
     };
 
-    let cachedUrl = "/sse?cache=true&token=" + token;
+    let cachedUrl = "/node/name/localhost/daemon/event?cache=true";
     const filters = [
         "NodeStatusUpdated",
         "NodeMonitorUpdated",
@@ -74,7 +75,12 @@ export const createEventSource = (url, token) => {
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
-    currentEventSource = new EventSource(cachedUrl);
+    currentEventSource = new EventSourcePolyfill(cachedUrl, {
+        headers: {
+            "Authorization": 'Bearer ' + token,
+            "Content-Type": "text/event-stream",
+        }
+    });
 
     currentEventSource.onopen = () => {
         console.log("✅ SSE connection established!");

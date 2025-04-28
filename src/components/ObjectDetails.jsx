@@ -18,6 +18,7 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "provision", "unprovision"];
 const OBJECT_ACTIONS = ["start", "restart", "freeze", "unfreeze", "stop", "provision", "unprovision", "purge"];
+const RESOURCE_ACTIONS = ["start", "stop", "restart"];
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -38,7 +39,7 @@ const ObjectDetail = () => {
         return () => {
             closeEventSource();
         };
-    }, []);
+    }, [fetchNodes, startEventReception]);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -176,8 +177,7 @@ const ObjectDetail = () => {
     const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
     const handleBatchResourceActionClick = (action) => {
         setPendingAction({action, batch: "resources", node: resGroupNode});
-        if (action === "unprovision") setResourceDialogOpen(true);
-        else setSimpleDialogOpen(true);
+        setSimpleDialogOpen(true);
         handleResourcesActionsClose();
     };
 
@@ -625,7 +625,7 @@ const ObjectDetail = () => {
                     open={Boolean(resourcesActionsAnchor)}
                     onClose={handleResourcesActionsClose}
                 >
-                    {NODE_ACTIONS.map((action) => (
+                    {RESOURCE_ACTIONS.map((action) => (
                         <MenuItem key={action} onClick={() => handleBatchResourceActionClick(action)}>
                             {action}
                         </MenuItem>
@@ -638,14 +638,10 @@ const ObjectDetail = () => {
                     open={Boolean(resourceMenuAnchor)}
                     onClose={() => setResourceMenuAnchor(null)}
                 >
-                    {NODE_ACTIONS.map((action) => {
+                    {RESOURCE_ACTIONS.map((action) => {
                         const handleClick = () => {
                             setPendingAction({action, node: resGroupNode, rid: currentResourceId});
-                            if (action === "unprovision") {
-                                setResourceDialogOpen(true);
-                            } else {
-                                setSimpleDialogOpen(true);
-                            }
+                            setSimpleDialogOpen(true);
                             setResourceMenuAnchor(null);
                             setCurrentResourceId(null);
                         };

@@ -16,39 +16,39 @@ export const createEventSource = (url, token) => {
     const {
         setObjectStatuses,
         setInstanceStatuses,
-        updateNodeStatus,
-        updateNodeMonitor,
-        updateNodeStats,
+        setNodeStatuses,
+        setNodeMonitors,
+        setNodeStats,
+        setHeartbeatStatuses,
         removeObject,
     } = useEventStore.getState();
 
     // Buffers for batching SSE updates
     let objectStatusBuffer = {};
     let instanceStatusBuffer = {};
+    let nodeStatusBuffer = {};
+    let nodeMonitorBuffer = {};
+    let nodeStatsBuffer = {};
+    let heartbeatStatusBuffer = {};
     let flushTimeout = null;
 
-    // Schedule a batched flush after 250ms
     const scheduleFlush = () => {
         if (!flushTimeout) {
             flushTimeout = setTimeout(flushBuffers, 250);
         }
     };
 
-    // Flush both buffers into the store
     const flushBuffers = () => {
         const store = useEventStore.getState();
 
-        // Merge object statuses
         if (Object.keys(objectStatusBuffer).length > 0) {
             const merged = {...store.objectStatus, ...objectStatusBuffer};
             setObjectStatuses(merged);
             objectStatusBuffer = {};
         }
 
-        // Merge instance statuses
         if (Object.keys(instanceStatusBuffer).length > 0) {
             const mergedInst = {...store.objectInstanceStatus};
-
             for (const obj of Object.keys(instanceStatusBuffer)) {
                 mergedInst[obj] = {
                     ...mergedInst[obj],
@@ -57,6 +57,31 @@ export const createEventSource = (url, token) => {
             }
             setInstanceStatuses(mergedInst);
             instanceStatusBuffer = {};
+        }
+
+        if (Object.keys(nodeStatusBuffer).length > 0) {
+            const merged = {...store.nodeStatus, ...nodeStatusBuffer};
+            setNodeStatuses(merged);
+            nodeStatusBuffer = {};
+        }
+
+        if (Object.keys(nodeMonitorBuffer).length > 0) {
+            const merged = {...store.nodeMonitor, ...nodeMonitorBuffer};
+            setNodeMonitors(merged);
+            nodeMonitorBuffer = {};
+        }
+
+        if (Object.keys(nodeStatsBuffer).length > 0) {
+            const merged = {...store.nodeStats, ...nodeStatsBuffer};
+            setNodeStats(merged);
+            nodeStatsBuffer = {};
+        }
+
+        if (Object.keys(heartbeatStatusBuffer).length > 0) {
+            console.log("buffer:", heartbeatStatusBuffer);
+            const merged = {...store.heartbeatStatus, ...heartbeatStatusBuffer};
+            setHeartbeatStatuses(merged);
+            heartbeatStatusBuffer = {};
         }
 
         flushTimeout = null;
@@ -91,17 +116,29 @@ export const createEventSource = (url, token) => {
 
     currentEventSource.addEventListener("NodeStatusUpdated", (event) => {
         const {node, node_status} = JSON.parse(event.data);
-        updateNodeStatus(node, node_status);
+        const current = useEventStore.getState().nodeStatus[node];
+        if (!isEqual(current, node_status)) {
+            nodeStatusBuffer[node] = node_status;
+            scheduleFlush();
+        }
     });
 
     currentEventSource.addEventListener("NodeMonitorUpdated", (event) => {
         const {node, node_monitor} = JSON.parse(event.data);
-        updateNodeMonitor(node, node_monitor);
+        const current = useEventStore.getState().nodeMonitor[node];
+        if (!isEqual(current, node_monitor)) {
+            nodeMonitorBuffer[node] = node_monitor;
+            scheduleFlush();
+        }
     });
 
     currentEventSource.addEventListener("NodeStatsUpdated", (event) => {
         const {node, node_stats} = JSON.parse(event.data);
-        updateNodeStats(node, node_stats);
+        const current = useEventStore.getState().nodeStats[node];
+        if (!isEqual(current, node_stats)) {
+            nodeStatsBuffer[node] = node_stats;
+            scheduleFlush();
+        }
     });
 
     currentEventSource.addEventListener("ObjectStatusUpdated", (event) => {
@@ -135,11 +172,18 @@ export const createEventSource = (url, token) => {
     });
 
     currentEventSource.addEventListener("DaemonHeartbeatUpdated", (event) => {
+        console.log("Received DaemonHeartbeatUpdated:", event.data);
         const parsed = JSON.parse(event.data);
         const node = parsed.node || parsed.labels?.node;
-        const status = parsed.hb;
-        if (!node || !status) return;
-        useEventStore.getState().updateHeartbeatStatus(node, status);
+        const status = parsed.heartbeat;
+        if (!node || status === undefined) return;
+
+
+        const current = useEventStore.getState().heartbeatStatus[node];
+        if (!isEqual(current, status)) {
+            heartbeatStatusBuffer[node] = status;
+            scheduleFlush();
+        }
     });
 
     currentEventSource.addEventListener("ObjectDeleted", (event) => {
@@ -154,7 +198,6 @@ export const createEventSource = (url, token) => {
         delete instanceStatusBuffer[name];
         removeObject(name);
         scheduleFlush();
-
         console.log(`🗑️ Object '${name}' removed`);
     });
 

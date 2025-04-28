@@ -8,48 +8,6 @@ const useEventStore = create((set) => ({
     objectInstanceStatus: {},
     heartbeatStatus: {},
 
-    updateNodeStatus: (node, data) =>
-        set((state) => ({
-            nodeStatus: {...state.nodeStatus, [node]: data},
-        })),
-
-    updateNodeMonitor: (node, data) =>
-        set((state) => ({
-            nodeMonitor: {...state.nodeMonitor, [node]: data},
-        })),
-
-    updateNodeStats: (node, data) =>
-        set((state) => ({
-            nodeStats: {...state.nodeStats, [node]: data},
-        })),
-
-    // updateObjectStatus: (objectName, newStatus) =>
-    //     set((state) => ({
-    //         objectStatus: {
-    //             ...state.objectStatus,
-    //             [objectName]: newStatus,
-    //         },
-    //     })),
-    //
-    // updateObjectInstanceStatus: (objectName, node, status) =>
-    //     set((state) => ({
-    //         objectInstanceStatus: {
-    //             ...state.objectInstanceStatus,
-    //             [objectName]: {
-    //                 ...(state.objectInstanceStatus[objectName] || {}),
-    //                 [node]: status,
-    //             },
-    //         },
-    //     })),
-
-    updateHeartbeatStatus: (node, status) =>
-        set((state) => ({
-            heartbeatStatus: {
-                ...state.heartbeatStatus,
-                [node]: status,
-            },
-        })),
-
     removeObject: (objectName) =>
         set((state) => {
             const newObjectStatus = {...state.objectStatus};
@@ -79,6 +37,27 @@ const useEventStore = create((set) => ({
                 }
             };
         }),
+
+    setNodeStatuses: (nodeStatus) =>
+        set(() => ({
+            nodeStatus: {...nodeStatus}
+        })),
+
+    setNodeMonitors: (nodeMonitor) =>
+        set(() => ({
+            nodeMonitor: {...nodeMonitor}
+        })),
+
+    setNodeStats: (nodeStats) =>
+        set(() => ({
+            nodeStats: {...nodeStats}
+        })),
+
+    setHeartbeatStatuses: (heartbeatStatus) =>
+        set(() => ({
+            heartbeatStatus: {...heartbeatStatus}
+        })),
+
 }));
 
 export default useEventStore;

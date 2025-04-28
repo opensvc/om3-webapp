@@ -2,6 +2,14 @@ import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {viteSingleFile} from "vite-plugin-singlefile"
 import tailwindcss from '@tailwindcss/vite';
+import {
+    URL_AUTH_INFO,
+    URL_CLUSTER_STATUS, URL_NODE,
+    URL_NODE_EVENT,
+    URL_OBJECT,
+    URL_POOL,
+    URL_TOKEN
+} from './src/config/apiPath.js'
 
 
 const baseUrl = process.env.BASE_URL || 'https://localhost:1215/';
@@ -10,37 +18,37 @@ export default defineConfig({
     plugins: [react(), tailwindcss(), viteSingleFile()],
     server: {
         proxy: {
-            '/auth/info': {
+            [URL_AUTH_INFO]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/auth/token': {
+            [URL_TOKEN]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/cluster/status': {
+            [URL_CLUSTER_STATUS]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/node/name': {
+            [URL_NODE]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/object/path': {
+            [URL_OBJECT]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/pool': {
+            [URL_POOL]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,
             },
-            '/node/name/localhost/daemon/event': {
+            [URL_NODE_EVENT]: {
                 target: baseUrl,
                 changeOrigin: true,
                 secure: false,

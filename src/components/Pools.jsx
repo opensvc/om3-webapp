@@ -11,6 +11,7 @@ import {
     TableRow
 } from "@mui/material";
 import axios from "axios";
+import {URL_POOL} from "../config/apiPath.js";
 
 const Pools = () => {
     const [pools, setPools] = useState([]);
@@ -19,7 +20,7 @@ const Pools = () => {
         const fetchPools = async () => {
             try {
                 const token = localStorage.getItem("authToken");
-                const res = await axios.get("/pool", {
+                const res = await axios.get(URL_POOL, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     }

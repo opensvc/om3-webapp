@@ -1,7 +1,7 @@
-export const fetchDaemonStatus = async (token) => {
-    const url = '/cluster/status';
+import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
 
-    const response = await fetch(url, {
+export const fetchDaemonStatus = async (token) => {
+    const response = await fetch(URL_CLUSTER_STATUS, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`

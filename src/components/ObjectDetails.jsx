@@ -104,13 +104,12 @@ const ObjectDetail = () => {
     };
 
     const postNodeAction = async ({node, action}) => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
-        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+        const url = postActionUrl(node, decodedObjectName, action)
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) throw new Error();
@@ -122,14 +121,18 @@ const ObjectDetail = () => {
         }
     };
 
+    const postActionUrl = ({node, objectName, action}) => {
+        const {namespace, kind, name} = parseObjectPath(objectName);
+        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`
+    }
+
     const postResourceAction = async ({node, action, rid}) => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
 
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on resource ${rid}…`, "info");
-        const url = `/node/name/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}?rid=${encodeURIComponent(rid)}`;
+        const url = postActionUrl(node, decodedObjectName, action) + `?rid=${encodeURIComponent(rid)}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) throw new Error();

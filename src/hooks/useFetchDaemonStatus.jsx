@@ -3,6 +3,7 @@
 import {useState, useRef} from "react";
 import {createEventSource, closeEventSource} from "../eventSourceManager";
 import {fetchDaemonStatus} from "../services/api";
+import {URL_NODE_EVENT} from "../config/apiPath.js";
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
@@ -50,7 +51,7 @@ const useFetchDaemonStatus = () => {
         }
 
         // Create new SSE connection
-        eventSourceRef.current = createEventSource("/node/name/localhost/daemon/event", token);
+        eventSourceRef.current = createEventSource(URL_NODE_EVENT, token);
     };
 
     return { daemon, nodes, clusterStats, error, loading, fetchNodes: refreshDaemonStatus, startEventReception };

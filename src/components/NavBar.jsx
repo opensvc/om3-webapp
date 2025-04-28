@@ -61,13 +61,13 @@ const NavBar = () => {
                                     textDecoration: "none",
                                     fontWeight: 500,
                                     fontSize: "1.1rem",
-                                    textTransform: "capitalize",
+                                    textTransform: "none",
                                     '&:hover': {
                                         textDecoration: "underline"
                                     }
                                 }}
                             >
-                                {item.name}
+                                {decodeURIComponent(item.name)}
                             </Typography>
                             {index < breadcrumb.length - 1 && (
                                 <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>

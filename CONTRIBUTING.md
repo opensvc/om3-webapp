@@ -24,8 +24,8 @@ Consistent file naming helps keep your React codebase clean, organized, and easy
 | **Build config (Vite/Webpack)** | kebab-case                | vite.config.js, webpack.config.js |
 | **Linting config**              | dotfile or kebab          | .eslintrc.js, eslint.config.js    |
 | **Formatter config**            | dotfile                   | .prettierrc, .prettierrc.js       |
-| **Jest config**                 | kebab-case or default     | jest.config.js                    |
-| **Babel config**                | dotfile or kebab          | babel.config.js, .babelrc         |
+| **Jest config**                 | kebab-case or default     | jest.config.mjs                    |
+| **Babel config**                | dotfile or kebab          | babel.config.cjs, .babelrc         |
 | **TS Config (if used)**         | kebab-case                | tsconfig.json                     |
 
 
@@ -69,8 +69,8 @@ my-react-app/
 ├── vite.config.js
 ├── .eslintrc.js
 ├── .prettierrc
-├── jest.config.js
-├── babel.config.js
+├── jest.config.mjs
+├── babel.config.cjs
 └── README.md
 ````
 

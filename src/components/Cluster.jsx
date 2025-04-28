@@ -12,6 +12,7 @@ import {
     GridHeartbeats,
     GridPools
 } from "./ClusterStatGrids.jsx";
+import {URL_POOL} from "../config/apiPath.js";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
@@ -28,7 +29,7 @@ const ClusterOverview = () => {
             fetchNodes(token);
             startEventReception(token);
 
-            axios.get("/pool", {
+            axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
             }).then((res) => {
                 const items = res.data?.items || [];

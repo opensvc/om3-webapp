@@ -10,6 +10,7 @@ import {
 import {blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
+import {URL_NODE} from "../config/apiPath.js";
 
 const NodesTable = () => {
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
@@ -71,12 +72,14 @@ const NodesTable = () => {
         setActionsMenuAnchor(null);
     };
 
+    const postActionUrl =  ({node, action}) => `${URL_NODE}/${node}/${action}`
+
     const postAction = async ({node, action}) => {
         const token = localStorage.getItem("authToken");
         setSnackbar({open: true, message: `Executing ${action} on ${node}...`, severity: "info"});
 
         try {
-            const response = await fetch(`/node/name/${node}/${action}`, {
+            const response = await fetch(postActionUrl({node, action}), {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,

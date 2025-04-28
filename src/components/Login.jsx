@@ -9,6 +9,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
+import {URL_TOKEN} from "../config/apiPath.js";
 
 const decodeToken = (token) => {
     if (!token) return null;
@@ -31,7 +32,7 @@ const Login = forwardRef((props, ref) => {
 
     const handleLogin = async (username, password) => {
         try {
-            const response = await fetch('/auth/token', {
+            const response = await fetch(URL_TOKEN, {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Basic ' + btoa(`${username}:${password}`),
@@ -77,7 +78,7 @@ const Login = forwardRef((props, ref) => {
         if (token && tokenExpiration && currentTime < tokenExpiration) {
             console.log('Token is still valid, attempting to refresh...');
             try {
-                const response = await fetch('/auth/token', {
+                const response = await fetch(URL_TOKEN, {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${token}`},
                 });

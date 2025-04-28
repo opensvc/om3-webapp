@@ -1,5 +1,6 @@
 import useEventStore from "./hooks/useEventStore.js";
 import {EventSourcePolyfill} from 'event-source-polyfill';
+import {URL_NODE_EVENT} from "./config/apiPath.js";
 
 let currentEventSource = null;
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -88,7 +89,7 @@ export const createEventSource = (url, token) => {
         flushTimeout = null;
     };
 
-    let cachedUrl = "/node/name/localhost/daemon/event?cache=true";
+    let cachedUrl = URL_NODE_EVENT + "?cache=true";
     const filters = [
         "NodeStatusUpdated",
         "NodeMonitorUpdated",

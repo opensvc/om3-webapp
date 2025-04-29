@@ -23,16 +23,20 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    FormControlLabel
+    FormControlLabel,
+    Collapse
 } from "@mui/material";
-import {green, red, grey, blue, orange} from "@mui/material/colors";
+import {green, red, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {closeEventSource} from "../eventSourceManager";
+import {URL_OBJECT} from '../config/apiPath.js';
 
 const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge"];
 
@@ -55,6 +59,7 @@ const Objects = () => {
     const [pendingAction, setPendingAction] = useState("");
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [showFilters, setShowFilters] = useState(true);
 
     const navigate = useNavigate();
 
@@ -68,7 +73,6 @@ const Objects = () => {
             closeEventSource();
         };
     }, []);
-
 
     const handleSelectObject = (event, objectName) => {
         if (event.target.checked) {
@@ -126,7 +130,7 @@ const Objects = () => {
             if (action === "freeze" && obj.frozen === "frozen") return;
             if (action === "unfreeze" && obj.frozen === "unfrozen") return;
 
-            const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
             try {
                 const response = await fetch(url, {
                     method: "POST",
@@ -202,7 +206,6 @@ const Objects = () => {
 
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
-
     const filteredObjectNames = allObjectNames.filter((name) => {
         const nsMatch = selectedNamespace === "all" || extractNamespace(name) === selectedNamespace;
         const kindMatch = selectedKind === "all" || extractKind(name) === selectedKind;
@@ -223,44 +226,62 @@ const Objects = () => {
                             top: "64px",
                             zIndex: 10,
                             backgroundColor: "background.paper",
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 2,
-                            pb: 2,
                             pt: 2,
-                            mb: 3,
+                            pb: 1,
+                            mb: 2,
                             borderBottom: "1px solid",
-                            borderColor: "divider"
+                            borderColor: "divider",
                         }}
                     >
-                        <Autocomplete
-                            sx={{minWidth: 200}}
-                            options={["all", ...namespaces]}
-                            value={selectedNamespace}
-                            onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
-                            renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                        />
-                        <Autocomplete
-                            sx={{minWidth: 200}}
-                            options={["all", ...kinds]}
-                            value={selectedKind}
-                            onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
-                            renderInput={(params) => <TextField {...params} label="Kind"/>}
-                        />
-                        <TextField
-                            label="Name"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            sx={{minWidth: 200}}
-                        />
                         <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleActionsMenuOpen}
-                            disabled={selectedObjects.length === 0}
+                            onClick={() => setShowFilters(!showFilters)}
+                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                            sx={{mb: 1}}
                         >
-                            Actions on selected objects
+                            {showFilters ? "Hide filters" : "Show filters"}
                         </Button>
+
+                        <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 2,
+                                    alignItems: "center",
+                                    pb: 2
+                                }}
+                            >
+                                <Autocomplete
+                                    sx={{minWidth: 200}}
+                                    options={["all", ...namespaces]}
+                                    value={selectedNamespace}
+                                    onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
+                                    renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                                />
+                                <Autocomplete
+                                    sx={{minWidth: 200}}
+                                    options={["all", ...kinds]}
+                                    value={selectedKind}
+                                    onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
+                                    renderInput={(params) => <TextField {...params} label="Kind"/>}
+                                />
+                                <TextField
+                                    label="Name"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    sx={{minWidth: 200}}
+                                />
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={handleActionsMenuOpen}
+                                    disabled={selectedObjects.length === 0}
+                                >
+                                    Actions on selected objects
+                                </Button>
+                            </Box>
+                        </Collapse>
+
                         <Menu
                             anchorEl={actionsMenuAnchor}
                             open={Boolean(actionsMenuAnchor)}

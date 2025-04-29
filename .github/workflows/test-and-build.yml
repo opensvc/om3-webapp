@@ -37,8 +37,8 @@ jobs:
     - name: Build project
       run: npm run build
 
-    - name: Upload index.html artifact
+    - name: Upload PR build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: index-html
-        path: dist/index.html
+        name: pr-om3-webapp
+        path: dist/

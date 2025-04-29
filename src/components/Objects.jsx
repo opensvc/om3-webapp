@@ -217,8 +217,22 @@ const Objects = () => {
                     <Typography variant="h4" gutterBottom align="center">
                         Objects
                     </Typography>
-
-                    <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, mb: 3}}>
+                    <Box
+                        sx={{
+                            position: "sticky",
+                            top: "64px",
+                            zIndex: 10,
+                            backgroundColor: "background.paper",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 2,
+                            pb: 2,
+                            pt: 2,
+                            mb: 3,
+                            borderBottom: "1px solid",
+                            borderColor: "divider"
+                        }}
+                    >
                         <Autocomplete
                             sx={{minWidth: 200}}
                             options={["all", ...namespaces]}

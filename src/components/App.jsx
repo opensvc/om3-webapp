@@ -44,6 +44,8 @@ const ProtectedRoute = ({children}) => {
 const App = () => {
     console.log("App init");
     const [token, setToken] = useState(localStorage.getItem("authToken") || null);
+    let pathname =  window.location.pathname
+    let basename= pathname.substring(0, pathname.lastIndexOf('/'))
 
     useEffect(() => {
         const checkTokenChange = () => {
@@ -60,7 +62,7 @@ const App = () => {
     return (
         <AuthProvider>
             <OidcProvider>
-                <Router>
+                <Router basename={basename}>
                     <NavBar/>
                     <Routes>
                         <Route path="/" element={<Navigate to="/cluster" replace/>}/>

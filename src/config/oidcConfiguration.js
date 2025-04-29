@@ -1,17 +1,10 @@
 /* eslint-disable no-unused-vars */
 
-//const baseUrl = window.location.protocol + "//" + window.location.host;
-
-const baseUrl = window.location.origin;
-
 const initData = {
     client_id: "om3",
-    redirect_uri: baseUrl + "/auth-callback",
-    silent_redirect_uri: baseUrl + "/auth-callback",
     response_type: "code",
     scope: "openid profile email",
     accessTokenExpiringNotificationTimeInSeconds: 30,
-    post_logout_redirect_uri: baseUrl + "/",
     automaticSilentRenew: true,
 };
 
@@ -33,11 +26,16 @@ function oidcConfiguration(authInfo) {
         return initData; // Returns default configuration if URI is invalid
     }
 
+    let baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'))
+
     // Returns OIDC configuration with custom values
     return {
         ...initData,
         authority: authInfo.openid.authority,
         client_id: authInfo.openid.client_id,
+        redirect_uri: baseUrl + "/auth-callback",
+        silent_redirect_uri: baseUrl + "/auth-callback",
+        post_logout_redirect_uri: baseUrl + "/",
     }
 }
 

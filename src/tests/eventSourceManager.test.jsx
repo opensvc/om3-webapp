@@ -1,11 +1,11 @@
-import {createEventSource, closeEventSource} from './eventSourceManager';
+import {createEventSource, closeEventSource} from '../eventSourceManager.jsx';
 import {EventSourcePolyfill} from 'event-source-polyfill';
-import useEventStore from './hooks/useEventStore.js';
-import {URL_NODE_EVENT} from './config/apiPath.js'
+import useEventStore from '../hooks/useEventStore.js';
+import {URL_NODE_EVENT} from '../config/apiPath.js'
 
 // Mock the external dependencies
 jest.mock('event-source-polyfill');
-jest.mock('./hooks/useEventStore.js');
+jest.mock('../hooks/useEventStore.js');
 
 // Mock timers
 jest.useFakeTimers();

@@ -39,6 +39,12 @@ const NodesTable = () => {
         };
     }, []);
 
+    const cellStyle = {
+        px: { xs: 0.25, sm: 0.5, md: 1 },
+        py: { xs: 0.25, sm: 0.5 },
+        fontSize: { xs: '0.7rem', sm: '0.8rem' },
+    };
+
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");
@@ -72,7 +78,7 @@ const NodesTable = () => {
         setActionsMenuAnchor(null);
     };
 
-    const postActionUrl =  ({node, action}) => `${URL_NODE}/${node}/${action}`
+    const postActionUrl = ({node, action}) => `${URL_NODE}/${node}/${action}`;
 
     const postAction = async ({node, action}) => {
         const token = localStorage.getItem("authToken");
@@ -116,12 +122,19 @@ const NodesTable = () => {
     };
 
     return (
-        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3}}>
-            <Paper elevation={3} sx={{p: 3, borderRadius: 2, bgcolor: "background.paper"}}>
-                <Typography variant="h4" component="h1" gutterBottom align="center" sx={{mb: 4}}>
+        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 2}}>
+            <Paper elevation={3} sx={{p: 2, borderRadius: 2, bgcolor: "background.paper"}}>
+                <Typography variant="h5" component="h1" gutterBottom align="center" sx={{mb: 3}}>
                     Node Status
                 </Typography>
-                <Box sx={{mb: 3}}>
+
+                <Box sx={{
+                    mb: 2,
+                    display: 'flex',
+                    flexDirection: {xs: 'column', sm: 'row'},
+                    alignItems: {xs: 'stretch', sm: 'center'},
+                    gap: 2
+                }}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -137,8 +150,7 @@ const NodesTable = () => {
                     >
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart
-                            Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart Daemon</MenuItem>
                     </Menu>
                 </Box>
 
@@ -147,11 +159,11 @@ const NodesTable = () => {
                         <CircularProgress/>
                     </Box>
                 ) : (
-                    <TableContainer component={Paper} elevation={0}>
-                        <Table sx={{width: "100%", tableLayout: "fixed"}} aria-label="nodes table">
+                    <TableContainer component={Paper} elevation={0} sx={{overflowX: 'auto'}}>
+                        <Table sx={{minWidth: 900}} aria-label="nodes table">
                             <TableHead>
                                 <TableRow sx={{bgcolor: blue[500]}}>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>
                                         <Checkbox
                                             checked={selectedNodes.length === Object.keys(nodeStatus).length}
                                             onChange={(e) =>
@@ -161,14 +173,14 @@ const NodesTable = () => {
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Name</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>State</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Score</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Load (15m)</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Mem Avail</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Swap Avail</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Version</TableCell>
-                                    <TableCell sx={{color: "white", fontWeight: "bold"}}>Action</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Name</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>State</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Score</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Load (15m)</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Mem Avail</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Swap Avail</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Version</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Action</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -186,6 +198,7 @@ const NodesTable = () => {
                                         onMenuClose={handleMenuClose}
                                         onAction={handleTriggerAction}
                                         anchorEl={anchorEls[nodename]}
+                                        cellStyle={cellStyle}
                                     />
                                 ))}
                             </TableBody>

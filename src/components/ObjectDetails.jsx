@@ -15,6 +15,7 @@ import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource} from "../eventSourceManager.jsx";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
+import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 
 const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "provision", "unprovision"];
 const OBJECT_ACTIONS = ["start", "restart", "freeze", "unfreeze", "stop", "provision", "unprovision", "purge"];
@@ -39,7 +40,7 @@ const ObjectDetail = () => {
         return () => {
             closeEventSource();
         };
-    }, [fetchNodes, startEventReception]);
+    }, []);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -77,6 +78,9 @@ const ObjectDetail = () => {
 
     // Helper functions
     const parseObjectPath = (objName) => {
+        if (!objName || typeof objName !== "string") {
+            return {namespace: "root", kind: "svc", name: ""};
+        }
         const parts = objName.split("/");
         if (parts.length === 3) {
             return {namespace: parts[0], kind: parts[1], name: parts[2]};
@@ -91,7 +95,7 @@ const ObjectDetail = () => {
 
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
-        const url = `/object/path/${namespace}/${kind}/${name}/action/${action}`;
+        const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) throw new Error();
@@ -109,7 +113,7 @@ const ObjectDetail = () => {
 
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
-        const url = postActionUrl(node, decodedObjectName, action)
+        const url = postActionUrl({node, objectName: decodedObjectName, action});
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) throw new Error();
@@ -123,8 +127,8 @@ const ObjectDetail = () => {
 
     const postActionUrl = ({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
-        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`
-    }
+        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+    };
 
     const postResourceAction = async ({node, action, rid}) => {
         const token = localStorage.getItem("authToken");
@@ -132,7 +136,7 @@ const ObjectDetail = () => {
 
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on resource ${rid}…`, "info");
-        const url = postActionUrl(node, decodedObjectName, action) + `?rid=${encodeURIComponent(rid)}`;
+        const url = postActionUrl({node, objectName: decodedObjectName, action}) + `?rid=${encodeURIComponent(rid)}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) throw new Error();

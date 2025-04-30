@@ -179,7 +179,6 @@ export const createEventSource = (url, token) => {
     });
 
     currentEventSource.addEventListener("DaemonHeartbeatUpdated", (event) => {
-        console.log("Received DaemonHeartbeatUpdated:", event.data);
         const parsed = JSON.parse(event.data);
         const node = parsed.node || parsed.labels?.node;
         const status = parsed.heartbeat;
@@ -205,7 +204,6 @@ export const createEventSource = (url, token) => {
         delete instanceStatusBuffer[name];
         removeObject(name);
         scheduleFlush();
-        console.log(`🗑️ Object '${name}' removed`);
     });
 
     return currentEventSource;

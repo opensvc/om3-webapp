@@ -1,9 +1,8 @@
-// NavBar.test.jsx
-import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import {render, screen, fireEvent} from '@testing-library/react';
+import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import NavBar from './NavBar';
-import { AuthProvider } from '../context/AuthProvider.jsx'; // adapt if needed
-import { OidcAuthProvider } from '../context/OidcAuthContext.js'; // adapt if needed
+import {AuthProvider} from '../context/AuthProvider';
+import {OidcAuthProvider} from '../context/OidcAuthContext.tsx';
 
 describe('NavBar', () => {
     const renderWithProviders = (initialPath = '/cluster') => {
@@ -12,7 +11,7 @@ describe('NavBar', () => {
                 <OidcAuthProvider>
                     <AuthProvider>
                         <Routes>
-                            <Route path="*" element={<NavBar />} />
+                            <Route path="*" element={<NavBar/>}/>
                         </Routes>
                     </AuthProvider>
                 </OidcAuthProvider>
@@ -36,7 +35,7 @@ describe('NavBar', () => {
         localStorage.setItem('authToken', 'fake-token');
         renderWithProviders('/cluster');
 
-        const logoutButton = screen.getByRole('button', { name: /logout/i });
+        const logoutButton = screen.getByRole('button', {name: /logout/i});
         fireEvent.click(logoutButton);
 
         expect(localStorage.getItem('authToken')).toBeNull();

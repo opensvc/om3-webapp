@@ -411,7 +411,7 @@ const ObjectDetail = () => {
                                 >
                                     <Box display="flex" alignItems="center" gap={2} width="100%">
                                         <Typography variant="subtitle1" fontWeight="medium">
-                                            Resources for {node} ({resIds.length})
+                                            Resources({resIds.length})
                                         </Typography>
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <Checkbox

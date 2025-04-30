@@ -1,3 +1,4 @@
+import React from 'react';
 import {Paper, Typography} from "@mui/material";
 
 export const StatCard = ({title, value, subtitle, onClick}) => (
@@ -14,11 +15,26 @@ export const StatCard = ({title, value, subtitle, onClick}) => (
             }
         }}
         onClick={onClick}
+        data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, '-')}`}
     >
-        <Typography variant="h6" gutterBottom>{title}</Typography>
-        <Typography variant="h3" color="primary">{value}</Typography>
+        <Typography
+            variant="h6"
+            gutterBottom
+            data-testid={`stat-card-title-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+            {title}
+        </Typography>
+        <Typography
+            variant="h3"
+            color="primary"
+            data-testid={`stat-card-value-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+            {value}
+        </Typography>
         {subtitle && (
-            <Typography variant="body2" sx={{mt: 1}}>{subtitle}</Typography>
+            <Typography variant="body2" sx={{mt: 1}}>
+                {subtitle}
+            </Typography>
         )}
     </Paper>
 );

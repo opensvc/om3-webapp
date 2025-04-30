@@ -1,8 +1,7 @@
 import React, {useEffect, useState} from "react";
-import {useLocation} from "react-router-dom";
+import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
-    Paper,
     Table,
     TableBody,
     TableCell,
@@ -32,7 +31,6 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import {useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {closeEventSource} from "../eventSourceManager";
@@ -214,154 +212,165 @@ const Objects = () => {
     });
 
     return (
-        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 3, display: "flex", justifyContent: "center"}}>
-            <Box sx={{width: "100%", maxWidth: "1000px"}}>
-                <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center">
-                        Objects
-                    </Typography>
-                    <Box
-                        sx={{
-                            position: "sticky",
-                            top: "64px",
-                            zIndex: 10,
-                            backgroundColor: "background.paper",
-                            pt: 2,
-                            pb: 1,
-                            mb: 2,
-                            borderBottom: "1px solid",
-                            borderColor: "divider",
-                        }}
+        <Box sx={{
+            minHeight: "100vh",
+            bgcolor: "background.default",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            p: 2,
+        }}>
+            <Box sx={{
+                width: "100%",
+                maxWidth: "1000px",
+                bgcolor: "background.paper",
+                border: "2px solid",
+                borderColor: "divider",
+                borderRadius: 3,
+                boxShadow: 3,
+                p: 3,
+            }}>
+                <Typography variant="h4" gutterBottom align="center">
+                    Objects
+                </Typography>
+
+                <Box
+                    sx={{
+                        position: "sticky",
+                        top: "64px",
+                        zIndex: 10,
+                        backgroundColor: "background.paper",
+                        pt: 2,
+                        pb: 1,
+                        mb: 2,
+                    }}
+                >
+                    <Button
+                        onClick={() => setShowFilters(!showFilters)}
+                        startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                        sx={{mb: 1}}
                     >
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            sx={{mb: 1}}
-                        >
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
+                        {showFilters ? "Hide filters" : "Show filters"}
+                    </Button>
 
-                        <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                            <Box
-                                sx={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 2,
-                                    alignItems: "center",
-                                    pb: 2
-                                }}
+                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 2,
+                                alignItems: "center",
+                                pb: 2
+                            }}
+                        >
+                            <Autocomplete
+                                sx={{minWidth: 200}}
+                                options={["all", ...namespaces]}
+                                value={selectedNamespace}
+                                onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
+                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                            />
+                            <Autocomplete
+                                sx={{minWidth: 200}}
+                                options={["all", ...kinds]}
+                                value={selectedKind}
+                                onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
+                                renderInput={(params) => <TextField {...params} label="Kind"/>}
+                            />
+                            <TextField
+                                label="Name"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                sx={{minWidth: 200}}
+                            />
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={handleActionsMenuOpen}
+                                disabled={selectedObjects.length === 0}
                             >
-                                <Autocomplete
-                                    sx={{minWidth: 200}}
-                                    options={["all", ...namespaces]}
-                                    value={selectedNamespace}
-                                    onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
-                                    renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                                />
-                                <Autocomplete
-                                    sx={{minWidth: 200}}
-                                    options={["all", ...kinds]}
-                                    value={selectedKind}
-                                    onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
-                                    renderInput={(params) => <TextField {...params} label="Kind"/>}
-                                />
-                                <TextField
-                                    label="Name"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    sx={{minWidth: 200}}
-                                />
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    onClick={handleActionsMenuOpen}
-                                    disabled={selectedObjects.length === 0}
-                                >
-                                    Actions on selected objects
-                                </Button>
-                            </Box>
-                        </Collapse>
+                                Actions on selected objects
+                            </Button>
+                        </Box>
+                    </Collapse>
 
-                        <Menu
-                            anchorEl={actionsMenuAnchor}
-                            open={Boolean(actionsMenuAnchor)}
-                            onClose={handleActionsMenuClose}
-                        >
-                            {AVAILABLE_ACTIONS.map((action) => (
-                                <MenuItem key={action} onClick={() => handleActionClick(action)}>
-                                    {action.charAt(0).toUpperCase() + action.slice(1)}
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                    </Box>
+                    <Menu
+                        anchorEl={actionsMenuAnchor}
+                        open={Boolean(actionsMenuAnchor)}
+                        onClose={handleActionsMenuClose}
+                    >
+                        {AVAILABLE_ACTIONS.map((action) => (
+                            <MenuItem key={action} onClick={() => handleActionClick(action)}>
+                                {action.charAt(0).toUpperCase() + action.slice(1)}
+                            </MenuItem>
+                        ))}
+                    </Menu>
+                </Box>
 
-                    <TableContainer component={Paper}>
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedObjects.length === filteredObjectNames.length}
-                                            onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <strong>Object</strong>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <strong>Global</strong>
-                                    </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredObjectNames.map((objectName) => {
-                                    const obj = objects[objectName] || {};
-                                    const avail = obj?.avail;
-                                    const frozen = obj?.frozen;
-
-                                    return (
-                                        <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
-                                                  sx={{cursor: "pointer"}}>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={selectedObjects.includes(objectName)}
-                                                    onChange={(e) => handleSelectObject(e, objectName)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </TableCell>
-                                            <TableCell>{objectName}</TableCell>
-                                            <TableCell align="center">
-                                                <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                    {avail === "up" && (
-                                                        <Tooltip title="Available">
-                                                            <FiberManualRecordIcon sx={{color: green[500]}}/>
-                                                        </Tooltip>
-                                                    )}
-                                                    {avail === "down" && (
-                                                        <Tooltip title="Unavailable">
-                                                            <FiberManualRecordIcon sx={{color: red[500]}}/>
-                                                        </Tooltip>
-                                                    )}
-                                                    {avail === "warn" && (
-                                                        <Tooltip title="Warning">
-                                                            <WarningAmberIcon sx={{color: orange[500]}}/>
-                                                        </Tooltip>
-                                                    )}
-                                                    {frozen === "frozen" && (
-                                                        <Tooltip title="Frozen">
-                                                            <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </Paper>
-            </Box>
+                <TableContainer sx={{boxShadow: "none", border: "none"}}>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>
+                                    <Checkbox
+                                        checked={selectedObjects.length === filteredObjectNames.length}
+                                        onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <strong>Object</strong>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <strong>Global</strong>
+                                </TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredObjectNames.map((objectName) => {
+                                const obj = objects[objectName] || {};
+                                const avail = obj?.avail;
+                                const frozen = obj?.frozen;
+                             return (
+                                 <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
+                                           sx={{cursor: "pointer"}}>
+                                     <TableCell>
+                                         <Checkbox
+                                             checked={selectedObjects.includes(objectName)}
+                                             onChange={(e) => handleSelectObject(e, objectName)}
+                                             onClick={(e) => e.stopPropagation()}
+                                         />
+                                     </TableCell>
+                                     <TableCell>{objectName}</TableCell>
+                                     <TableCell align="center">
+                                         <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+                                             {avail === "up" && (
+                                                 <Tooltip title="Available">
+                                                     <FiberManualRecordIcon sx={{color: green[500]}}/>
+                                                 </Tooltip>
+                                             )}
+                                             {avail === "down" && (
+                                                 <Tooltip title="Unavailable">
+                                                     <FiberManualRecordIcon sx={{color: red[500]}}/>
+                                                 </Tooltip>
+                                             )}
+                                             {avail === "warn" && (
+                                                 <Tooltip title="Warning">
+                                                     <WarningAmberIcon sx={{color: orange[500]}}/>
+                                                 </Tooltip>
+                                             )}
+                                             {frozen === "frozen" && (
+                                                 <Tooltip title="Frozen">
+                                                     <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
+                                                 </Tooltip>
+                                             )}
+                                         </Box>
+                                     </TableCell>
+                                 </TableRow>
+                             );
+                         })}
+                     </TableBody>
+                 </Table>
+             </TableContainer>
 
             {/* Snackbar */}
             <Snackbar
@@ -401,9 +410,7 @@ const Objects = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Dialog for other actions */}
-            <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
+                {/* Dialog for other actions */}<Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
                 <DialogTitle>Confirm action</DialogTitle>
                 <DialogContent>
                     Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
@@ -417,8 +424,8 @@ const Objects = () => {
                     >
                         OK
                     </Button>
-                </DialogActions>
-            </Dialog>
+                </DialogActions></Dialog>
+            </Box>
         </Box>
     );
 };

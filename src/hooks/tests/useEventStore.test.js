@@ -1,4 +1,4 @@
-import useEventStore from './useEventStore';
+import useEventStore from '../useEventStore.js';
 import {act} from 'react';
 
 describe('useEventStore', () => {

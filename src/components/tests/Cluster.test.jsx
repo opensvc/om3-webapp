@@ -4,6 +4,7 @@ import axios from 'axios';
 import ClusterOverview from '../Cluster.jsx';
 import useEventStore from '../../hooks/useEventStore.js';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
+import {URL_POOL} from '../../config/apiPath.js'
 
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -93,7 +94,7 @@ describe('ClusterOverview', () => {
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
         expect(mockFetchNodes).toHaveBeenCalledWith(mockToken);
         expect(mockStartEventReception).toHaveBeenCalledWith(mockToken);
-        expect(axios.get).toHaveBeenCalledWith('/api/pool', {
+        expect(axios.get).toHaveBeenCalledWith(`${URL_POOL}`, {
             headers: {Authorization: `Bearer ${mockToken}`},
         });
 

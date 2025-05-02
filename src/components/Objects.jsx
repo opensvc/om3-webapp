@@ -249,6 +249,7 @@ const Objects = () => {
                         onClick={() => setShowFilters(!showFilters)}
                         startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                         sx={{mb: 1}}
+                        data-testid="filter-toggle-button"
                     >
                         {showFilters ? "Hide filters" : "Show filters"}
                     </Button>
@@ -282,6 +283,7 @@ const Objects = () => {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 sx={{minWidth: 200}}
+                                data-testid="search-name"
                             />
                             <Button
                                 variant="contained"
@@ -330,101 +332,109 @@ const Objects = () => {
                                 const obj = objects[objectName] || {};
                                 const avail = obj?.avail;
                                 const frozen = obj?.frozen;
-                             return (
-                                 <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
-                                           sx={{cursor: "pointer"}}>
-                                     <TableCell>
-                                         <Checkbox
-                                             checked={selectedObjects.includes(objectName)}
-                                             onChange={(e) => handleSelectObject(e, objectName)}
-                                             onClick={(e) => e.stopPropagation()}
-                                         />
-                                     </TableCell>
-                                     <TableCell>{objectName}</TableCell>
-                                     <TableCell align="center">
-                                         <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                             {avail === "up" && (
-                                                 <Tooltip title="Available">
-                                                     <FiberManualRecordIcon sx={{color: green[500]}}/>
-                                                 </Tooltip>
-                                             )}
-                                             {avail === "down" && (
-                                                 <Tooltip title="Unavailable">
-                                                     <FiberManualRecordIcon sx={{color: red[500]}}/>
-                                                 </Tooltip>
-                                             )}
-                                             {avail === "warn" && (
-                                                 <Tooltip title="Warning">
-                                                     <WarningAmberIcon sx={{color: orange[500]}}/>
-                                                 </Tooltip>
-                                             )}
-                                             {frozen === "frozen" && (
-                                                 <Tooltip title="Frozen">
-                                                     <AcUnitIcon fontSize="small" sx={{color: blue[200]}}/>
-                                                 </Tooltip>
-                                             )}
-                                         </Box>
-                                     </TableCell>
-                                 </TableRow>
-                             );
-                         })}
-                     </TableBody>
-                 </Table>
-             </TableContainer>
+                                return (
+                                    <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
+                                              sx={{cursor: "pointer"}}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedObjects.includes(objectName)}
+                                                onChange={(e) => handleSelectObject(e, objectName)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </TableCell>
+                                        <TableCell>{objectName}</TableCell>
+                                        <TableCell align="center">
+                                            <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+                                                {avail === "up" && (
+                                                    <Tooltip title="Available">
+                                                        <FiberManualRecordIcon sx={{color: green[500]}}
+                                                                               data-testid="FiberManualRecordIcon-up"
+                                                                               role="img"/>
+                                                    </Tooltip>
+                                                )}
+                                                {avail === "down" && (
+                                                    <Tooltip title="Unavailable">
+                                                        <FiberManualRecordIcon sx={{color: red[500]}}
+                                                                               data-testid="FiberManualRecordIcon-down"
+                                                                               role="img"/>
+                                                    </Tooltip>
+                                                )}
+                                                {avail === "warn" && (
+                                                    <Tooltip title="Warning">
+                                                        <WarningAmberIcon sx={{color: orange[500]}}
+                                                                          data-testid="WarningAmberIcon" role="img"/>
+                                                    </Tooltip>
+                                                )}
+                                                {frozen === "frozen" && (
+                                                    <Tooltip title="Frozen">
+                                                        <AcUnitIcon fontSize="small" sx={{color: blue[200]}}
+                                                                    data-testid="AcUnitIcon" role="img"/>
+                                                    </Tooltip>
+                                                )}
+                                            </Box>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
 
-            {/* Snackbar */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar({...snackbar, open: false})}
-                anchorOrigin={{vertical: "bottom", horizontal: "center"}}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
+                {/* Snackbar */}
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={4000}
+                    onClose={() => setSnackbar({...snackbar, open: false})}
+                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+                >
+                    <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
 
-            {/* Dialog for freeze */}
-            <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
-                <DialogTitle>Freeze selected objects</DialogTitle>
-                <DialogContent>
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={confirmationChecked}
-                                onChange={(e) => setConfirmationChecked(e.target.checked)}
-                            />
-                        }
-                        label="I understand the selected services orchestration will be paused."
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmationDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={() => handleExecuteActionOnSelected(pendingAction)}
-                        disabled={!confirmationChecked}
-                        variant="contained"
-                        color="primary"
-                    >
-                        Confirm
-                    </Button>
-                </DialogActions>
-            </Dialog>
-                {/* Dialog for other actions */}<Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
-                <DialogTitle>Confirm action</DialogTitle>
-                <DialogContent>
-                    Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSimpleConfirmDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={() => handleExecuteActionOnSelected(pendingAction)}
-                        variant="contained"
-                        color="primary"
-                    >
-                        OK
-                    </Button>
-                </DialogActions></Dialog>
+                {/* Dialog for freeze */}
+                <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
+                    <DialogTitle>Freeze selected objects</DialogTitle>
+                    <DialogContent>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={confirmationChecked}
+                                    onChange={(e) => setConfirmationChecked(e.target.checked)}
+                                />
+                            }
+                            label="I understand the selected services orchestration will be paused."
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setConfirmationDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => handleExecuteActionOnSelected(pendingAction)}
+                            disabled={!confirmationChecked}
+                            variant="contained"
+                            color="primary"
+                        >
+                            Confirm
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+                {/* Dialog for other actions */}
+                <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
+                    <DialogTitle>Confirm action</DialogTitle>
+                    <DialogContent>
+                        Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setSimpleConfirmDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => handleExecuteActionOnSelected(pendingAction)}
+                            variant="contained"
+                            color="primary"
+                        >
+                            OK
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </Box>
         </Box>
     );

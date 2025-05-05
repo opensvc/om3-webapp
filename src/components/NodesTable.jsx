@@ -45,7 +45,6 @@ const NodesTable = () => {
         fontSize: { xs: '0.7rem', sm: '0.8rem' },
     };
 
-
     const handleLogout = () => {
         localStorage.removeItem("authToken");
         navigate("/auth/login");
@@ -151,6 +150,15 @@ const NodesTable = () => {
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
                         <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}>Abort</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}>Clear</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}>Drain</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}>Asset</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}>Disk</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}>Patch</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}>Pkg</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}>Capabilities</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}>Sysreport</MenuItem>
                     </Menu>
                 </Box>
 

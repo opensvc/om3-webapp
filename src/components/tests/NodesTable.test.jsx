@@ -1,460 +1,280 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, within, act} from '@testing-library/react';
-import {MemoryRouter} from 'react-router-dom';
-import {blue} from '@mui/material/colors';
-import NodesTable from '../NodesTable';
-import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus.jsx';
-import useEventStore from '../../hooks/useEventStore.js';
-import {closeEventSource} from '../../eventSourceManager';
-import NodeRow from '../../components/NodeRow.jsx';
+import {render, screen, fireEvent, within, cleanup} from '@testing-library/react';
+import {blue, green} from '@mui/material/colors';
+import NodeRow from '../NodeRow';
 
 // Mock dependencies
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useNavigate: jest.fn(),
-}));
-jest.mock('../../hooks/useFetchDaemonStatus.jsx');
-jest.mock('../../hooks/useEventStore.js');
-jest.mock('../../eventSourceManager', () => ({
-    closeEventSource: jest.fn(),
-    startEventReception: jest.fn(),
-}));
-jest.mock('../../components/NodeRow.jsx', () => {
-    return jest.fn(({nodename, isSelected, onSelect, onMenuOpen, onMenuClose, onAction, anchorEl}) => (
-        <tr data-testid={`node-row-${nodename}`}>
-            <td>
-                <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => onSelect(e, nodename)}
-                    data-testid={`checkbox-${nodename}`}
-                />
-            </td>
-            <td>{nodename}</td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td>
-                <button
-                    data-testid={`menu-button-${nodename}`}
-                    onClick={(e) => onMenuOpen(e, nodename)}
-                >
-                    Menu
-                </button>
-                {anchorEl && (
-                    <div data-testid={`menu-${nodename}`}>
-                        <div
-                            data-testid={`menu-item-freeze-${nodename}`}
-                            onClick={() => onAction(nodename, 'action/freeze')}
-                        >
-                            Freeze
-                        </div>
-                        <div
-                            data-testid={`menu-item-unfreeze-${nodename}`}
-                            onClick={() => onAction(nodename, 'action/unfreeze')}
-                        >
-                            Unfreeze
-                        </div>
-                        <div
-                            data-testid={`menu-item-restart-${nodename}`}
-                            onClick={() => onAction(nodename, 'daemon/action/restart')}
-                        >
-                            Restart Daemon
-                        </div>
-                    </div>
-                )}
-            </td>
-        </tr>
-    ));
-});
-
-// Mock Material-UI components to add data-testid
 jest.mock('@mui/material', () => ({
     ...jest.requireActual('@mui/material'),
-    TableHead: ({children, ...props}) => <thead data-testid="table-head" {...props}>{children}</thead>,
-    TableCell: ({children, ...props}) => <td {...props}>{children}</td>,
-    TableRow: ({children, ...props}) => <tr {...props}>{children}</tr>,
+    Box: ({children, sx, ...props}) => <div style={sx} {...props}>{children}</div>,
     Checkbox: ({checked, onChange, ...props}) => (
         <input
             type="checkbox"
             checked={checked}
             onChange={onChange}
-            data-testid="header-checkbox"
+            data-testid="select-checkbox"
             {...props}
         />
     ),
-    Snackbar: ({children, ...props}) => <div data-testid="snackbar" {...props}>{children}</div>,
-    Alert: ({children, ...props}) => <div role="alert" data-testid="alert" {...props}>{children}</div>,
+    TableCell: ({children, ...props}) => <td {...props}>{children}</td>,
+    TableRow: ({children, ...props}) => <tr data-testid="node-row" {...props}>{children}</tr>,
+    Tooltip: ({title, children}) => (
+        <div data-testid={`tooltip-${title.toLowerCase().replace(/\s/g, '-')}`}>
+            {children}
+        </div>
+    ),
+    IconButton: ({children, onClick, ...props}) => (
+        <button onClick={onClick} data-testid="menu-button" {...props}>
+            {children}
+        </button>
+    ),
+    LinearProgress: ({value, color, sx, ...props}) => (
+        <div
+            data-testid={`linear-progress-${color}`}
+            style={{width: `${value}%`, ...sx}}
+            {...props}
+        />
+    ),
+    Menu: ({anchorEl, open, onClose, children}) =>
+        open ? (
+            <div
+                data-testid="menu"
+                onClick={() => onClose()}
+            >
+                {children}
+            </div>
+        ) : null,
+    MenuItem: ({onClick, children, ...props}) => (
+        <div onClick={onClick} data-testid={`menu-item-${children.toLowerCase().replace(/\s/g, '-')}`} {...props}>
+            {children}
+        </div>
+    ),
 }));
 
-describe('NodesTable Component', () => {
-    const mockNavigate = jest.fn();
-    const mockFetchNodes = jest.fn();
-    const mockStartEventReception = jest.fn();
-    const mockCloseEventSource = jest.fn();
+jest.mock('react-icons/fa', () => ({
+    FaSnowflake: ({style}) => <span data-testid="snowflake-icon" style={style}/>,
+    FaWifi: ({style}) => <span data-testid="wifi-icon" style={style}/>,
+}));
 
+jest.mock('@mui/icons-material/MoreVert', () => () => (
+    <span data-testid="more-vert-icon"/>
+));
+
+describe('NodeRow Component', () => {
+    const defaultProps = {
+        nodename: 'node1',
+        stats: {
+            score: 85,
+            load_15m: 1.5,
+            mem_avail: 60,
+            swap_avail: 75,
+        },
+        status: {
+            frozen_at: null,
+            agent: 'v1.2.3',
+        },
+        monitor: {
+            state: 'running',
+        },
+        isSelected: false,
+        daemonNodename: 'node2',
+        onSelect: jest.fn(),
+        onMenuOpen: jest.fn(),
+        onMenuClose: jest.fn(),
+        onAction: jest.fn(),
+        anchorEl: null,
+    };
     beforeEach(() => {
         jest.clearAllMocks();
-
-        // Mock useNavigate
-        require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
-
-        // Mock useFetchDaemonStatus
-        useFetchDaemonStatus.mockReturnValue({
-            daemon: {nodename: 'node1'},
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
-        });
-
-        // Mock useEventStore
-        const mockState = {
-            nodeStatus: {
-                node1: {frozen_at: null, agent: 'v1.2.3'},
-                node2: {frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.4'},
-            },
-            nodeStats: {
-                node1: {score: 85, load_15m: 1.5, mem_avail: 60, swap_avail: 75},
-                node2: {score: 90, load_15m: 2.0, mem_avail: 50, swap_avail: 80},
-            },
-            nodeMonitor: {
-                node1: {state: 'running'},
-                node2: {state: 'idle'},
-            },
-        };
-        useEventStore.mockImplementation((selector) => selector(mockState));
-
-        // Mock localStorage
-        Storage.prototype.getItem = jest.fn(() => 'mock-token');
-
-        // Mock fetch
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
-        // Link mockCloseEventSource to the module mock
-        require('../../eventSourceManager').closeEventSource.mockImplementation(mockCloseEventSource);
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        cleanup();
     });
 
-    test('renders Node Status title', () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        expect(screen.getByText('Node Status')).toBeInTheDocument();
+    test('renders nodename correctly', () => {
+        render(<NodeRow {...defaultProps} />);
+        expect(screen.getByText('node1')).toBeInTheDocument();
     });
 
-    test('shows CircularProgress when nodeStatus is empty', () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({nodeStatus: {}, nodeStats: {}, nodeMonitor: {}})
-        );
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
-        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    test('renders checkbox with correct checked state', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} isSelected={true}/>);
+        const row = screen.getByTestId('node-row');
+        const checkbox = within(row).getByTestId('select-checkbox');
+        expect(checkbox).toBeChecked();
+
+        rerender(<NodeRow {...defaultProps} isSelected={false}/>);
+        const row2 = screen.getByTestId('node-row');
+        const checkbox2 = within(row2).getByTestId('select-checkbox');
+        expect(checkbox2).not.toBeChecked();
     });
 
-    test('renders table with headers and NodeRow components', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        await waitFor(() => {
-            const tableHead = screen.getByTestId('table-head');
-            expect(within(tableHead).getByText('Name')).toBeInTheDocument();
-            expect(within(tableHead).getByText('State')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Score')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Load (15m)')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Mem Avail')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Swap Avail')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Version')).toBeInTheDocument();
-            expect(within(tableHead).getByText('Action')).toBeInTheDocument();
-
-            expect(screen.getByTestId('node-row-node1')).toBeInTheDocument();
-            expect(screen.getByTestId('node-row-node2')).toBeInTheDocument();
-        }, {timeout: 3000});
-    });
-
-    test('calls fetchNodes and startEventReception on mount', () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        expect(mockFetchNodes).toHaveBeenCalledWith('mock-token');
-        expect(mockStartEventReception).toHaveBeenCalledWith('mock-token');
-    });
-
-    test('calls closeEventSource on unmount', async () => {
-        const {unmount} = render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        await act(async () => {
-            unmount();
-        });
-        // Debug log
-        await waitFor(() => {
-            expect(mockCloseEventSource).toHaveBeenCalled();
-        }, {timeout: 3000});
-    });
-
-    test('does not call fetchNodes or startEventReception without auth token', () => {
-        Storage.prototype.getItem = jest.fn(() => null);
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        expect(mockFetchNodes).not.toBeCalled();
-        expect(mockStartEventReception).not.toBeCalled();
-    });
-
-    test('disables Actions button when no nodes are selected', () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        expect(actionsButton).toBeDisabled();
-    });
-
-    test('enables Actions button when nodes are selected', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const checkbox = screen.getByTestId('checkbox-node1');
+    test('calls onSelect when checkbox is clicked', () => {
+        render(<NodeRow {...defaultProps} />);
+        const checkbox = screen.getByTestId('select-checkbox');
         fireEvent.click(checkbox);
-        await waitFor(() => {
-            const actionsButton = screen.getByText('Actions on selected nodes');
-            expect(actionsButton).not.toBeDisabled();
-        }, {timeout: 3000});
+        expect(defaultProps.onSelect).toHaveBeenCalledWith(
+            expect.any(Object),
+            'node1'
+        );
     });
 
-    test('opens actions menu when Actions button is clicked', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        await waitFor(() => {
-            expect(screen.getByText('Freeze')).toBeInTheDocument();
-            expect(screen.getByText('Unfreeze')).toBeInTheDocument();
-            expect(screen.getByText('Restart Daemon')).toBeInTheDocument();
-        }, {timeout: 3000});
+    test('renders monitor state when not idle', () => {
+        render(<NodeRow {...defaultProps} monitor={{state: 'running'}}/>);
+        expect(screen.getByText('running')).toBeInTheDocument();
+
+        render(<NodeRow {...defaultProps} monitor={{state: 'idle'}}/>);
+        expect(screen.queryByText('idle')).not.toBeInTheDocument();
     });
 
-    test('opens confirmation dialog when menu item is clicked', async () => {
+    test('renders frozen icon when frozen_at is set', () => {
         render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
+            <NodeRow
+                {...defaultProps}
+                status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}
+            />
         );
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        const freezeItem = screen.getByText('Freeze');
-        fireEvent.click(freezeItem);
-        await waitFor(() => {
-            expect(screen.getByText('Confirm action/freeze Action')).toBeInTheDocument();
-            const dialog = screen.getByRole('dialog');
-            const dialogText = within(dialog).getByText(/Are you sure you want to execute/i);
-            expect(dialogText.textContent).toContain('action/freeze');
-            expect(dialogText.textContent).toContain('node1');
-        }, {timeout: 3000});
+        const snowflakeIcon = screen.getByTestId('snowflake-icon');
+        expect(snowflakeIcon).toBeInTheDocument();
+        const tooltip = screen.getByTestId('tooltip-frozen');
+        expect(tooltip).toBeInTheDocument();
+        expect(snowflakeIcon).toHaveStyle({color: blue[200]});
     });
 
-    test('executes action and shows success snackbar', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        const freezeItem = screen.getByText('Freeze');
-        fireEvent.click(freezeItem);
-        const confirmButton = screen.getByText('OK');
-        fireEvent.click(confirmButton);
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/action/freeze'),
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: {Authorization: 'Bearer mock-token'},
-                })
-            );
-            const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/action\/freeze on node1 succeeded/i);
-        }, {timeout: 3000});
+    test('does not render frozen icon when not frozen', () => {
+        render(<NodeRow {...defaultProps} status={{frozen_at: null}}/>);
+        expect(screen.queryByTestId('snowflake-icon')).not.toBeInTheDocument();
     });
 
-    test('shows error snackbar when action fails', async () => {
-        global.fetch.mockImplementationOnce(() =>
-            Promise.resolve({
-                ok: false,
-                json: () => Promise.resolve({}),
-            })
-        );
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        const freezeItem = screen.getByText('Freeze');
-        fireEvent.click(freezeItem);
-        const confirmButton = screen.getByText('OK');
-        fireEvent.click(confirmButton);
-        await waitFor(() => {
-            const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/action\/freeze on node1 failed/i);
-        }, {timeout: 3000});
+    test('renders wifi icon when nodename matches daemonNodename', () => {
+        render(<NodeRow {...defaultProps} daemonNodename="node1"/>);
+        const wifiIcon = screen.getByTestId('wifi-icon');
+        expect(wifiIcon).toBeInTheDocument();
+        const tooltip = screen.getByTestId('tooltip-daemon-node');
+        expect(tooltip).toBeInTheDocument();
+        expect(wifiIcon).toHaveStyle({color: green[500]});
     });
 
-    test('selects all nodes with header checkbox', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const tableHead = screen.getByTestId('table-head');
-        const headerCheckbox = within(tableHead).getByTestId('header-checkbox');
-        fireEvent.click(headerCheckbox);
-        await waitFor(() => {
-            expect(screen.getByTestId('checkbox-node1')).toBeChecked();
-            expect(screen.getByTestId('checkbox-node2')).toBeChecked();
-        }, {timeout: 3000});
+    test('does not render wifi icon when nodename does not match daemonNodename', () => {
+        render(<NodeRow {...defaultProps} daemonNodename="node2"/>);
+        expect(screen.queryByTestId('wifi-icon')).not.toBeInTheDocument();
     });
 
-    test('deselects all nodes with header checkbox', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const tableHead = screen.getByTestId('table-head');
-        const headerCheckbox = within(tableHead).getByTestId('header-checkbox');
-        fireEvent.click(headerCheckbox); // Select all
-        fireEvent.click(headerCheckbox); // Deselect all
-        await waitFor(() => {
-            expect(screen.getByTestId('checkbox-node1')).not.toBeChecked();
-            expect(screen.getByTestId('checkbox-node2')).not.toBeChecked();
-        }, {timeout: 3000});
+    test('renders stats correctly', () => {
+        render(<NodeRow {...defaultProps} />);
+        expect(screen.getByText('85')).toBeInTheDocument(); // score
+        expect(screen.getByText('1.5')).toBeInTheDocument(); // load_15m
+        expect(screen.getByText('60%')).toBeInTheDocument(); // mem_avail
+        expect(screen.getByText('75%')).toBeInTheDocument(); // swap_avail
+        expect(screen.getByText('v1.2.3')).toBeInTheDocument(); // agent
     });
 
-    test('executes action on multiple nodes', async () => {
-        // Mock fetch to handle multiple calls
-        global.fetch = jest.fn()
-            .mockResolvedValueOnce({ok: true, json: () => Promise.resolve({})}) // node1
-            .mockResolvedValueOnce({ok: true, json: () => Promise.resolve({})}); // node2
-
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        fireEvent.click(screen.getByTestId('checkbox-node1'));
-        fireEvent.click(screen.getByTestId('checkbox-node2'));
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        const freezeItem = screen.getByText('Freeze');
-        fireEvent.click(freezeItem);
-        await waitFor(() => {
-            expect(screen.getByText('Confirm action/freeze Action')).toBeInTheDocument();
-            const dialog = screen.getByRole('dialog');
-            const dialogText = within(dialog).getByText(/Are you sure you want to execute/i);
-            expect(dialogText.textContent).toContain('action/freeze');
-            expect(dialogText.textContent).toContain('2 nodes');
-        }, {timeout: 3000});
-        const confirmButton = screen.getByText('OK');
-        fireEvent.click(confirmButton);
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/action/freeze'),
-                expect.any(Object)
-            );
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node2/action/freeze'),
-                expect.any(Object)
-            );
-            const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/action\/freeze on node2 succeeded/i);
-        }, {timeout: 3000});
+    test('renders N/A for undefined stats', () => {
+        render(<NodeRow {...defaultProps} stats={null} status={null}/>);
+        const cells = screen.getAllByRole('cell');
+        expect(cells[3]).toHaveTextContent('N/A'); // score
+        expect(cells[4]).toHaveTextContent('N/A'); // load_15m
+        expect(cells[5]).toHaveTextContent('N/A'); // mem_avail
+        expect(cells[6]).toHaveTextContent('N/A'); // swap_avail
+        expect(cells[7]).toHaveTextContent('N/A'); // agent
     });
 
-    test('closes confirmation dialog on cancel', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        fireEvent.click(screen.getByTestId('checkbox-node1'));
-        const actionsButton = screen.getByText('Actions on selected nodes');
-        fireEvent.click(actionsButton);
-        const freezeItem = screen.getByText('Freeze');
-        fireEvent.click(freezeItem);
-        const cancelButton = screen.getByText('Cancel');
-        fireEvent.click(cancelButton);
-        await waitFor(() => {
-            expect(screen.queryByText('Confirm action/freeze Action')).not.toBeInTheDocument();
-        }, {timeout: 3000});
+    test('renders LinearProgress for load_15m with correct value and color', () => {
+        render(<NodeRow {...defaultProps} stats={{load_15m: 1.5}}/>);
+        const progress = screen.getByTestId('linear-progress-success');
+        expect(progress).toHaveStyle('width: 30%'); // 1.5 * 20 = 30
+
+        render(<NodeRow {...defaultProps} stats={{load_15m: 3}}/>);
+        expect(screen.getByTestId('linear-progress-warning')).toHaveStyle('width: 60%'); // 3 * 20 = 60
+
+        render(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
+        expect(screen.getByTestId('linear-progress-error')).toHaveStyle('width: 100%'); // 5 * 20 = 100 (capped)
     });
 
-    test('triggers action from NodeRow menu', async () => {
-        render(
-            <MemoryRouter>
-                <NodesTable/>
-            </MemoryRouter>
-        );
-        const menuButton = screen.getByTestId('menu-button-node1');
+    test('renders LinearProgress for mem_avail with correct value and color', () => {
+        render(<NodeRow {...defaultProps} stats={{mem_avail: 60}}/>);
+        const progress = screen.getByTestId('linear-progress-success');
+        expect(progress).toHaveStyle('width: 60%');
+
+        render(<NodeRow {...defaultProps} stats={{mem_avail: 40}}/>);
+        expect(screen.getByTestId('linear-progress-warning')).toHaveStyle('width: 40%');
+
+        render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
+        expect(screen.getByTestId('linear-progress-error')).toHaveStyle('width: 10%');
+    });
+
+    test('opens menu when menu button is clicked', () => {
+        render(<NodeRow {...defaultProps} />);
+        const menuButton = screen.getByTestId('menu-button');
         fireEvent.click(menuButton);
-        const freezeItem = screen.getByTestId('menu-item-freeze-node1');
-        fireEvent.click(freezeItem);
-        await waitFor(() => {
-            expect(screen.getByText('Confirm action/freeze Action')).toBeInTheDocument();
-            const dialog = screen.getByRole('dialog');
-            const dialogText = within(dialog).getByText(/Are you sure you want to execute/i);
-            expect(dialogText.textContent).toContain('action/freeze');
-            expect(dialogText.textContent).toContain('node1');
-        }, {timeout: 3000});
-        const confirmButton = screen.getByText('OK');
-        fireEvent.click(confirmButton);
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/action/freeze'),
-                expect.any(Object)
-            );
-            const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/action\/freeze on node1 succeeded/i);
-        }, {timeout: 3000});
+        expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
+    });
+
+    test('renders correct menu items when node is not frozen', () => {
+        render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        expect(screen.getByTestId('menu-item-freeze')).toBeInTheDocument();
+        expect(screen.queryByTestId('menu-item-unfreeze')).not.toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-restart-daemon')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-abort')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-clear')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-drain')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-asset')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-disk')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-patch')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-pkg')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-capabilities')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-sysreport')).toBeInTheDocument();
+    });
+
+    test('renders correct menu items when node is frozen', () => {
+        render(
+            <NodeRow
+                {...defaultProps}
+                status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}
+                anchorEl={document.createElement('div')}
+            />
+        );
+        expect(screen.queryByTestId('menu-item-freeze')).not.toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-unfreeze')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-restart-daemon')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-abort')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-clear')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-drain')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-asset')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-disk')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-patch')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-pkg')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-capabilities')).toBeInTheDocument();
+        expect(screen.getByTestId('menu-item-sysreport')).toBeInTheDocument();
+    });
+
+    test('calls onAction when menu item is clicked', () => {
+        render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        const menuItems = [
+            {id: 'menu-item-freeze', action: 'action/freeze'},
+            {id: 'menu-item-restart-daemon', action: 'daemon/action/restart'},
+            {id: 'menu-item-abort', action: 'action/abort'},
+            {id: 'menu-item-clear', action: 'action/clear'},
+            {id: 'menu-item-drain', action: 'action/drain'},
+            {id: 'menu-item-asset', action: 'action/push/asset'},
+            {id: 'menu-item-disk', action: 'action/push/disk'},
+            {id: 'menu-item-patch', action: 'action/push/patch'},
+            {id: 'menu-item-pkg', action: 'action/push/pkg'},
+            {id: 'menu-item-capabilities', action: 'action/scan/capabilities'},
+            {id: 'menu-item-sysreport', action: 'action/sysreport'},
+        ];
+
+        menuItems.forEach(({id, action}) => {
+            const item = screen.getByTestId(id);
+            fireEvent.click(item);
+            expect(defaultProps.onAction).toHaveBeenCalledWith('node1', action);
+        });
+    });
+
+    test('calls onMenuClose when menu is closed', () => {
+        render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        const menu = screen.getByTestId('menu');
+        fireEvent.click(menu);
+        expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
     });
 });

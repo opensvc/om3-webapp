@@ -245,14 +245,23 @@ const Objects = () => {
                         mb: 2,
                     }}
                 >
-                    <Button
-                        onClick={() => setShowFilters(!showFilters)}
-                        startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                        sx={{mb: 1}}
-                        data-testid="filter-toggle-button"
-                    >
-                        {showFilters ? "Hide filters" : "Show filters"}
-                    </Button>
+                    <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1}}>
+                        <Button
+                            onClick={() => setShowFilters(!showFilters)}
+                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                            data-testid="filter-toggle-button"
+                        >
+                            {showFilters ? "Hide filters" : "Show filters"}
+                        </Button>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleActionsMenuOpen}
+                            disabled={selectedObjects.length === 0}
+                        >
+                            Actions on selected objects
+                        </Button>
+                    </Box>
 
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box
@@ -285,14 +294,6 @@ const Objects = () => {
                                 sx={{minWidth: 200}}
                                 data-testid="search-name"
                             />
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={handleActionsMenuOpen}
-                                disabled={selectedObjects.length === 0}
-                            >
-                                Actions on selected objects
-                            </Button>
                         </Box>
                     </Collapse>
 
@@ -380,7 +381,6 @@ const Objects = () => {
                     </Table>
                 </TableContainer>
 
-                {/* Snackbar */}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={4000}
@@ -392,7 +392,6 @@ const Objects = () => {
                     </Alert>
                 </Snackbar>
 
-                {/* Dialog for freeze */}
                 <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
                     <DialogTitle>Freeze selected objects</DialogTitle>
                     <DialogContent>
@@ -418,7 +417,7 @@ const Objects = () => {
                         </Button>
                     </DialogActions>
                 </Dialog>
-                {/* Dialog for other actions */}
+
                 <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
                     <DialogTitle>Confirm action</DialogTitle>
                     <DialogContent>

@@ -36,7 +36,7 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {closeEventSource} from "../eventSourceManager";
 import {URL_OBJECT} from '../config/apiPath.js';
 
-const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge"];
+const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
 
 const Objects = () => {
     const location = useLocation();

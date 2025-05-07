@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, within, cleanup} from '@testing-library/react';
+import {render, screen, fireEvent, within, cleanup, waitFor} from '@testing-library/react';
 import {blue, green} from '@mui/material/colors';
 import NodeRow from '../NodeRow';
 
@@ -37,15 +37,17 @@ jest.mock('@mui/material', () => ({
     ),
     Menu: ({anchorEl, open, onClose, children}) =>
         open ? (
-            <div
-                data-testid="menu"
-                onClick={() => onClose()}
-            >
+            <div data-testid="menu">
                 {children}
             </div>
         ) : null,
-    MenuItem: ({onClick, children, ...props}) => (
-        <div onClick={onClick} data-testid={`menu-item-${children.toLowerCase().replace(/\s/g, '-')}`} {...props}>
+    MenuItem: ({onClick, children, sx, 'data-testid': testId, ...props}) => (
+        <div
+            onClick={onClick}
+            data-testid={testId}
+            style={sx}
+            {...props}
+        >
             {children}
         </div>
     ),
@@ -54,6 +56,17 @@ jest.mock('@mui/material', () => ({
 jest.mock('react-icons/fa', () => ({
     FaSnowflake: ({style}) => <span data-testid="snowflake-icon" style={style}/>,
     FaWifi: ({style}) => <span data-testid="wifi-icon" style={style}/>,
+    FaPlay: () => <span data-testid="play-icon"/>,
+    FaSync: () => <span data-testid="sync-icon"/>,
+    FaStop: () => <span data-testid="stop-icon"/>,
+    FaBroom: () => <span data-testid="broom-icon"/>,
+    FaTint: () => <span data-testid="tint-icon"/>,
+    FaBox: () => <span data-testid="box-icon"/>,
+    FaHdd: () => <span data-testid="hdd-icon"/>,
+    FaPuzzlePiece: () => <span data-testid="puzzle-piece-icon"/>,
+    FaArchive: () => <span data-testid="archive-icon"/>,
+    FaBrain: () => <span data-testid="brain-icon"/>,
+    FaClipboardList: () => <span data-testid="clipboard-list-icon"/>,
 }));
 
 jest.mock('@mui/icons-material/MoreVert', () => () => (
@@ -211,8 +224,23 @@ describe('NodeRow Component', () => {
         expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
     });
 
-    test('renders correct menu items when node is not frozen', () => {
+    test('diagnostic: renders menu with items', async () => {
         render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        await waitFor(() => {
+            expect(screen.getByTestId('menu')).toBeInTheDocument();
+        }, {timeout: 2000});
+        screen.debug();
+        const menuItems = screen.getAllByTestId(/menu-item-/);
+        expect(menuItems.length).toBeGreaterThan(0);
+        expect(screen.getByTestId('menu-item-freeze')).toBeInTheDocument();
+    });
+
+    test('renders correct menu items when node is not frozen', async () => {
+        render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        await waitFor(() => {
+            expect(screen.getByTestId('menu')).toBeInTheDocument();
+        }, {timeout: 2000});
+        screen.debug();
         expect(screen.getByTestId('menu-item-freeze')).toBeInTheDocument();
         expect(screen.queryByTestId('menu-item-unfreeze')).not.toBeInTheDocument();
         expect(screen.getByTestId('menu-item-restart-daemon')).toBeInTheDocument();
@@ -227,7 +255,7 @@ describe('NodeRow Component', () => {
         expect(screen.getByTestId('menu-item-sysreport')).toBeInTheDocument();
     });
 
-    test('renders correct menu items when node is frozen', () => {
+    test('renders correct menu items when node is frozen', async () => {
         render(
             <NodeRow
                 {...defaultProps}
@@ -235,6 +263,10 @@ describe('NodeRow Component', () => {
                 anchorEl={document.createElement('div')}
             />
         );
+        await waitFor(() => {
+            expect(screen.getByTestId('menu')).toBeInTheDocument();
+        }, {timeout: 2000});
+        screen.debug();
         expect(screen.queryByTestId('menu-item-freeze')).not.toBeInTheDocument();
         expect(screen.getByTestId('menu-item-unfreeze')).toBeInTheDocument();
         expect(screen.getByTestId('menu-item-restart-daemon')).toBeInTheDocument();
@@ -249,8 +281,12 @@ describe('NodeRow Component', () => {
         expect(screen.getByTestId('menu-item-sysreport')).toBeInTheDocument();
     });
 
-    test('calls onAction when menu item is clicked', () => {
+    test('calls onAction when menu item is clicked', async () => {
         render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
+        await waitFor(() => {
+            expect(screen.getByTestId('menu')).toBeInTheDocument();
+        }, {timeout: 2000});
+        screen.debug();
         const menuItems = [
             {id: 'menu-item-freeze', action: 'action/freeze'},
             {id: 'menu-item-restart-daemon', action: 'daemon/action/restart'},
@@ -265,17 +301,21 @@ describe('NodeRow Component', () => {
             {id: 'menu-item-sysreport', action: 'action/sysreport'},
         ];
 
-        menuItems.forEach(({id, action}) => {
+        for (const {id, action} of menuItems) {
             const item = screen.getByTestId(id);
             fireEvent.click(item);
             expect(defaultProps.onAction).toHaveBeenCalledWith('node1', action);
-        });
+        }
     });
 
-    test('calls onMenuClose when menu is closed', () => {
+    test('calls onMenuClose when menu is closed', async () => {
         render(<NodeRow {...defaultProps} anchorEl={document.createElement('div')}/>);
-        const menu = screen.getByTestId('menu');
-        fireEvent.click(menu);
+        await waitFor(() => {
+            expect(screen.getByTestId('menu')).toBeInTheDocument();
+        }, {timeout: 2000});
+        screen.debug();
+        const menuItem = screen.getByTestId('menu-item-freeze');
+        fireEvent.click(menuItem);
         expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
     });
 

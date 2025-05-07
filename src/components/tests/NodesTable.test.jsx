@@ -75,7 +75,6 @@ jest.mock('@mui/material/MenuItem', () => {
     return MockMenuItem;
 });
 
-// Mocks des autres composants MUI
 jest.mock('@mui/material/Box', () => ({children, sx, ...props}) => (
     <div style={sx} {...props}>{children}</div>
 ));

@@ -306,63 +306,52 @@ const ObjectDetail = () => {
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
                 {/* HEADER */}
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h4" fontWeight="bold">
-                        {decodedObjectName}
-                    </Typography>
-                    <Box>
-                        <IconButton
-                            onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
-                            disabled={actionInProgress}
-                            data-testid="icon-button-object"
-                        >
-                            <MoreVertIcon/>
-                        </IconButton>
-                        <Menu
-                            anchorEl={objectMenuAnchor}
-                            open={Boolean(objectMenuAnchor)}
-                            onClose={() => setObjectMenuAnchor(null)}
-                        >
-                            {OBJECT_ACTIONS.map(({name, icon}) => (
-                                <MenuItem
-                                    key={name}
-                                    data-testid={`menu-item-${name}`} // <-- Ajouté
-                                    onClick={() => {
-                                        setPendingAction({action: name});
-                                        if (name === "freeze") setConfirmDialogOpen(true);
-                                        else if (name === "unprovision") setResourceDialogOpen(true);
-                                        else setSimpleDialogOpen(true);
-                                        setObjectMenuAnchor(null);
-                                    }}
-                                >
-                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                    <ListItemText data-testid={`menu-text-${name}`}>{name}</ListItemText> {/* <-- Ajouté */}
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                    </Box>
-                </Box>
-
-                {/* GLOBAL STATUS */}
                 {globalStatus && (
-                    <Box sx={{p: 3, mb: 4}}>
-                        <Box display="flex" alignItems="center" justifyContent="space-between">
-                            <Typography variant="h6" fontWeight="medium" fontSize="1.3rem">
-                                Global Status
-                            </Typography>
-                            <Box display="flex" alignItems="center" gap={2}>
-                                <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}/>
-                                {globalStatus.avail === "warn" && (
-                                    <Tooltip title="Warning">
-                                        <WarningAmberIcon sx={{color: orange[500]}}/>
-                                    </Tooltip>
-                                )}
-                                {globalStatus.frozen === "frozen" && (
-                                    <Tooltip title="Frozen">
-                                        <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
-                                    </Tooltip>
-                                )}
-                            </Box>
+                    <Box sx={{p: 1, mb: 4, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+                        <Typography variant="h4" fontWeight="bold">
+                            {decodedObjectName}
+                        </Typography>
+                        <Box display="flex" alignItems="center" gap={2}>
+                            <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.2rem"}}/>
+                            {globalStatus.avail === "warn" && (
+                                <Tooltip title="Warning">
+                                    <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
+                                </Tooltip>
+                            )}
+                            {globalStatus.frozen === "frozen" && (
+                                <Tooltip title="Frozen">
+                                    <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
+                                </Tooltip>
+                            )}
+                            <IconButton
+                                onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
+                                disabled={actionInProgress}
+                                data-testid="icon-button-object"
+                            >
+                                <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
+                            </IconButton>
+                            <Menu
+                                anchorEl={objectMenuAnchor}
+                                open={Boolean(objectMenuAnchor)}
+                                onClose={() => setObjectMenuAnchor(null)}
+                            >
+                                {OBJECT_ACTIONS.map(({name, icon}) => (
+                                    <MenuItem
+                                        key={name}
+                                        data-testid={`menu-item-${name}`}
+                                        onClick={() => {
+                                            setPendingAction({action: name});
+                                            if (name === "freeze") setConfirmDialogOpen(true);
+                                            else if (name === "unprovision") setResourceDialogOpen(true);
+                                            else setSimpleDialogOpen(true);
+                                            setObjectMenuAnchor(null);
+                                        }}
+                                    >
+                                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                        <ListItemText data-testid={`menu-text-${name}`}>{name}</ListItemText>
+                                    </MenuItem>
+                                ))}
+                            </Menu>
                         </Box>
                     </Box>
                 )}
@@ -515,7 +504,7 @@ const ObjectDetail = () => {
                                                                 "& .MuiAccordionDetails-root": {
                                                                     border: "none",
                                                                     backgroundColor: "transparent",
-                                                                    padding: 0,
+                                                                    Planck: 0,
                                                                 },
                                                             }}
                                                         >
@@ -733,7 +722,7 @@ const ObjectDetail = () => {
                     {NODE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
-                            data-testid={`node-menu-item-${name}`}  // Préfixé pour plus de clarté
+                            data-testid={`node-menu-item-${name}`}
                             onClick={() => handleIndividualNodeActionClick(name)}
                         >
                             <ListItemIcon>{icon}</ListItemIcon>
@@ -771,11 +760,11 @@ const ObjectDetail = () => {
                     data-testid="resource-actions-menu"
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => {
-                        const IconComponent = icon.type; // Extrait le composant d'icône
+                        const IconComponent = icon.type;
                         return (
                             <MenuItem
                                 key={name}
-                                data-testid={`resource-action-${name}`} // Test ID unique
+                                data-testid={`resource-action-${name}`}
                                 onClick={() => {
                                     setPendingAction({action: name, node: resGroupNode, rid: currentResourceId});
                                     setSimpleDialogOpen(true);
@@ -783,7 +772,7 @@ const ObjectDetail = () => {
                                 }}
                             >
                                 <ListItemIcon>
-                                    <IconComponent data-testid={`resource-action-icon-${name}`} />
+                                    <IconComponent data-testid={`resource-action-icon-${name}`}/>
                                 </ListItemIcon>
                                 <ListItemText data-testid={`resource-action-text-${name}`}>
                                     {name}

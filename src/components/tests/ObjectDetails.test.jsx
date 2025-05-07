@@ -215,7 +215,6 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('Global Status')).toBeInTheDocument();
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
             expect(screen.getByText('Node: node2')).toBeInTheDocument();
             expect(screen.getByText('Resources (2)')).toBeInTheDocument();

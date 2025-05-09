@@ -4,7 +4,7 @@ import {useNavigate} from 'react-router-dom';
 import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login,} from "../context/AuthProvider.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
-import {useOidc} from "../context/OidcAuthContext.js";
+import {useOidc} from "../context/OidcAuthContext.tsx";
 
 const OidcCallback = () => {
     const {userManager, recreateUserManager} = useOidc();

@@ -1,7 +1,7 @@
 import {Link, useNavigate, useLocation} from "react-router-dom";
 import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
 import {FaSignOutAlt} from "react-icons/fa";
-import {useOidc} from "../context/OidcAuthContext.js";
+import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 
 const NavBar = () => {

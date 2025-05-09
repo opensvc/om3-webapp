@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 
-import React, {useEffect, useState} from "react";
-import {BrowserRouter as Router, Routes, Route, Navigate, useLocation} from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import AuthChoice from "./Authchoice.jsx";
 import Login from "./Login.jsx";
@@ -14,8 +14,9 @@ import NavBar from './NavBar';
 import Namespaces from "./Namespaces";
 import Heartbeats from "./Heartbeats";
 import Pools from "./Pools";
-import {OidcProvider} from "../context/OidcAuthContext.js";
-import {AuthProvider} from "../context/AuthProvider.jsx";
+import { OidcProvider } from "../context/OidcAuthContext.tsx";
+import { AuthProvider } from "../context/AuthProvider";
+
 const isTokenValid = (token) => {
     if (!token) return false;
 
@@ -29,13 +30,13 @@ const isTokenValid = (token) => {
     }
 };
 
-const ProtectedRoute = ({children}) => {
+const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem("authToken");
 
     if (!isTokenValid(token)) {
         console.log("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");
-        return <Navigate to="/auth-choice" replace/>;
+        return <Navigate to="/auth-choice" replace />;
     }
 
     return children;
@@ -44,8 +45,6 @@ const ProtectedRoute = ({children}) => {
 const App = () => {
     console.log("App init");
     const [token, setToken] = useState(localStorage.getItem("authToken") || null);
-    let pathname =  window.location.pathname
-    let basename= pathname.substring(0, pathname.lastIndexOf('/'))
 
     useEffect(() => {
         const checkTokenChange = () => {
@@ -62,26 +61,24 @@ const App = () => {
     return (
         <AuthProvider>
             <OidcProvider>
-                <Router basename={basename}>
-                    <NavBar/>
-                    <Routes>
-                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                        <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
-                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                        <Route path="/heartbeats" element={<Heartbeats/>}/>
-                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                        <Route path="/storage-pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
-                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                        <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                        <Route path="/auth-callback" element={<OidcCallback/>}/>
-                        <Route path="/auth-choice" element={<AuthChoice/>}/>
-                        <Route path="/auth/login" element={<Login/>}/>
-                        <Route path="*" element={<Navigate to="/"/>}/>
-                    </Routes>
-                </Router>
+                <NavBar />
+                <Routes>
+                    <Route path="/" element={<Navigate to="/cluster" replace />} />
+                    <Route path="/cluster" element={<ProtectedRoute><ClusterOverview /></ProtectedRoute>} />
+                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces /></ProtectedRoute>} />
+                    <Route path="/heartbeats" element={<Heartbeats />} />
+                    <Route path="/nodes" element={<ProtectedRoute><NodesTable /></ProtectedRoute>} />
+                    <Route path="/storage-pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
+                    <Route path="/objects" element={<ProtectedRoute><Objects /></ProtectedRoute>} />
+                    <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails /></ProtectedRoute>} />
+                    <Route path="/auth-callback" element={<OidcCallback />} />
+                    <Route path="/auth-choice" element={<AuthChoice />} />
+                    <Route path="/auth/login" element={<Login />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                </Routes>
             </OidcProvider>
         </AuthProvider>
-    )
+    );
 };
 
 export default App;

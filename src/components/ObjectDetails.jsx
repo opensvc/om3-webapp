@@ -4,22 +4,53 @@ import {
     Box, Typography, Tooltip, Divider, Snackbar, Alert,
     Menu, MenuItem, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, FormControlLabel, Checkbox,
-    Button, Accordion, AccordionSummary, AccordionDetails
+    Button, Accordion, AccordionSummary, AccordionDetails,
+    ListItemIcon, ListItemText
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {
+    RestartAlt, LockOpen, Delete, Settings, Block,
+    CleaningServices, SwapHoriz, Undo, Cancel,
+    PlayArrow, Stop
+} from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource} from "../eventSourceManager.jsx";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 
-const NODE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "provision", "unprovision"];
-const OBJECT_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
-const RESOURCE_ACTIONS = ["start", "stop", "restart"];
+const NODE_ACTIONS = [
+    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
+    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
+    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
+    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
+    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
+    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>}
+];
+
+const OBJECT_ACTIONS = [
+    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
+    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
+    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
+    {name: "delete", icon: <Delete sx={{fontSize: 24}}/>},
+    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
+    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
+    {name: "purge", icon: <CleaningServices sx={{fontSize: 24}}/>},
+    {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
+    {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
+    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>}
+];
+
+const RESOURCE_ACTIONS = [
+    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
+    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>}
+];
 
 let renderCount = 0;
 
@@ -275,61 +306,52 @@ const ObjectDetail = () => {
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
                 {/* HEADER */}
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h4" fontWeight="bold">
-                        {decodedObjectName}
-                    </Typography>
-                    <Box>
-                        <IconButton
-                            onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
-                            disabled={actionInProgress}
-                            data-testid="icon-button-object"
-                        >
-                            <MoreVertIcon/>
-                        </IconButton>
-                        <Menu
-                            anchorEl={objectMenuAnchor}
-                            open={Boolean(objectMenuAnchor)}
-                            onClose={() => setObjectMenuAnchor(null)}
-                        >
-                            {OBJECT_ACTIONS.map((action) => (
-                                <MenuItem
-                                    key={action}
-                                    onClick={() => {
-                                        setPendingAction({action});
-                                        if (action === "freeze") setConfirmDialogOpen(true);
-                                        else if (action === "unprovision") setResourceDialogOpen(true);
-                                        else setSimpleDialogOpen(true);
-                                        setObjectMenuAnchor(null);
-                                    }}
-                                >
-                                    {action}
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                    </Box>
-                </Box>
-
-                {/* GLOBAL STATUS */}
                 {globalStatus && (
-                    <Box sx={{p: 3, mb: 4}}>
-                        <Box display="flex" alignItems="center" justifyContent="space-between">
-                            <Typography variant="h6" fontWeight="medium" fontSize="1.3rem">
-                                Global Status
-                            </Typography>
-                            <Box display="flex" alignItems="center" gap={2}>
-                                <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.3rem"}}/>
-                                {globalStatus.avail === "warn" && (
-                                    <Tooltip title="Warning">
-                                        <WarningAmberIcon sx={{color: orange[500]}}/>
-                                    </Tooltip>
-                                )}
-                                {globalStatus.frozen === "frozen" && (
-                                    <Tooltip title="Frozen">
-                                        <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
-                                    </Tooltip>
-                                )}
-                            </Box>
+                    <Box sx={{p: 1, mb: 4, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+                        <Typography variant="h4" fontWeight="bold">
+                            {decodedObjectName}
+                        </Typography>
+                        <Box display="flex" alignItems="center" gap={2}>
+                            <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.2rem"}}/>
+                            {globalStatus.avail === "warn" && (
+                                <Tooltip title="Warning">
+                                    <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
+                                </Tooltip>
+                            )}
+                            {globalStatus.frozen === "frozen" && (
+                                <Tooltip title="Frozen">
+                                    <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
+                                </Tooltip>
+                            )}
+                            <IconButton
+                                onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
+                                disabled={actionInProgress}
+                                data-testid="icon-button-object"
+                            >
+                                <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
+                            </IconButton>
+                            <Menu
+                                anchorEl={objectMenuAnchor}
+                                open={Boolean(objectMenuAnchor)}
+                                onClose={() => setObjectMenuAnchor(null)}
+                            >
+                                {OBJECT_ACTIONS.map(({name, icon}) => (
+                                    <MenuItem
+                                        key={name}
+                                        data-testid={`menu-item-${name}`}
+                                        onClick={() => {
+                                            setPendingAction({action: name});
+                                            if (name === "freeze") setConfirmDialogOpen(true);
+                                            else if (name === "unprovision") setResourceDialogOpen(true);
+                                            else setSimpleDialogOpen(true);
+                                            setObjectMenuAnchor(null);
+                                        }}
+                                    >
+                                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                        <ListItemText data-testid={`menu-text-${name}`}>{name}</ListItemText>
+                                    </MenuItem>
+                                ))}
+                            </Menu>
                         </Box>
                     </Box>
                 )}
@@ -482,7 +504,7 @@ const ObjectDetail = () => {
                                                                 "& .MuiAccordionDetails-root": {
                                                                     border: "none",
                                                                     backgroundColor: "transparent",
-                                                                    padding: 0,
+                                                                    Planck: 0,
                                                                 },
                                                             }}
                                                         >
@@ -683,9 +705,10 @@ const ObjectDetail = () => {
                     open={Boolean(nodesActionsAnchor)}
                     onClose={handleNodesActionsClose}
                 >
-                    {NODE_ACTIONS.map((action) => (
-                        <MenuItem key={action} onClick={() => handleBatchNodeActionClick(action)}>
-                            {action}
+                    {NODE_ACTIONS.map(({name, icon}) => (
+                        <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
+                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
@@ -696,9 +719,16 @@ const ObjectDetail = () => {
                     open={Boolean(individualNodeMenuAnchor)}
                     onClose={() => setIndividualNodeMenuAnchor(null)}
                 >
-                    {NODE_ACTIONS.map((action) => (
-                        <MenuItem key={action} onClick={() => handleIndividualNodeActionClick(action)}>
-                            {action}
+                    {NODE_ACTIONS.map(({name, icon}) => (
+                        <MenuItem
+                            key={name}
+                            data-testid={`node-menu-item-${name}`}
+                            onClick={() => handleIndividualNodeActionClick(name)}
+                        >
+                            <ListItemIcon>{icon}</ListItemIcon>
+                            <ListItemText data-testid={`node-menu-text-${name}`}>
+                                {name}
+                            </ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
@@ -710,10 +740,14 @@ const ObjectDetail = () => {
                     onClose={handleResourcesActionsClose}
                     data-testid="resource-menu"
                 >
-                    {RESOURCE_ACTIONS.map((action) => (
-                        <MenuItem key={action} onClick={() => handleBatchResourceActionClick(action)}
-                                  data-testid={`menu-item-${action}`}>
-                            {action}
+                    {RESOURCE_ACTIONS.map(({name, icon}) => (
+                        <MenuItem
+                            key={name}
+                            onClick={() => handleBatchResourceActionClick(name)}
+                            data-testid={`menu-item-${name}`}
+                        >
+                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
@@ -723,18 +757,26 @@ const ObjectDetail = () => {
                     anchorEl={resourceMenuAnchor}
                     open={Boolean(resourceMenuAnchor)}
                     onClose={() => setResourceMenuAnchor(null)}
+                    data-testid="resource-actions-menu"
                 >
-                    {RESOURCE_ACTIONS.map((action) => {
-                        const handleClick = () => {
-                            setPendingAction({action, node: resGroupNode, rid: currentResourceId});
-                            setSimpleDialogOpen(true);
-                            setResourceMenuAnchor(null);
-                            setCurrentResourceId(null);
-                        };
-
+                    {RESOURCE_ACTIONS.map(({name, icon}) => {
+                        const IconComponent = icon.type;
                         return (
-                            <MenuItem key={action} onClick={handleClick}>
-                                {action}
+                            <MenuItem
+                                key={name}
+                                data-testid={`resource-action-${name}`}
+                                onClick={() => {
+                                    setPendingAction({action: name, node: resGroupNode, rid: currentResourceId});
+                                    setSimpleDialogOpen(true);
+                                    setResourceMenuAnchor(null);
+                                }}
+                            >
+                                <ListItemIcon>
+                                    <IconComponent data-testid={`resource-action-icon-${name}`}/>
+                                </ListItemIcon>
+                                <ListItemText data-testid={`resource-action-text-${name}`}>
+                                    {name}
+                                </ListItemText>
                             </MenuItem>
                         );
                     })}

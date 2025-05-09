@@ -14,30 +14,37 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import {useNavigate} from "react-router-dom";
 import {useOidc} from "../context/OidcAuthContext.tsx";
+import {authenticateWithX509} from "./X509Auth";
 
 function AuthChoice() {
     const {userManager, recreateUserManager} = useOidc();
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
 
-    const handleAuthChoice = (choice) => {
+    const handleAuthChoice = async (choice) => {
         if (choice === "openid") {
             if (!userManager) {
-                console.log("handleAuthChoice openid skipped can't create userManager")
-                return
+                console.log("handleAuthChoice openid skipped: can't create userManager");
+                return;
             }
             userManager.signinRedirect()
-                .catch((err) => console.error("handleAuthChoice signinRedirect:", err))
+                .catch((err) => console.error("handleAuthChoice signinRedirect:", err));
         } else if (choice === "basic") {
-            return navigate('/auth/login')
+            return navigate('/auth/login');
+        } else if (choice === "x509") {
+            const result = await authenticateWithX509(navigate);
+            if (!result.success) {
+                console.error("x509 authentication failed:", result.error);
+                // Optionally show an error message to the user
+            }
         }
     };
 
     useEffect(() => {
         if (authInfo?.openid?.authority && !userManager) {
-            recreateUserManager(oidcConfiguration(authInfo))
+            recreateUserManager(oidcConfiguration(authInfo));
         }
-    }, [authInfo])
+    }, [authInfo]);
 
     return (
         <Dialog open={true} maxWidth="xs" fullWidth>

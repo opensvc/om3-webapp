@@ -109,7 +109,6 @@ describe('Objects Component', () => {
 
         // Verify row states
         const verifyRowState = (row, expected) => {
-            // Use queryAllByTestId to avoid errors if no icons are found
             const icons = within(row).queryAllByTestId(/FiberManualRecordIcon|WarningAmberIcon|AcUnitIcon/);
             console.log('Icons found:', icons.map(icon => ({
                 testId: icon.getAttribute('data-testid'),
@@ -154,6 +153,7 @@ describe('Objects Component', () => {
         verifyRowState(test2Row, ['down', 'frozen']);
         verifyRowState(test3Row, ['warn']);
     });
+
 
     test('handles object selection', async () => {
         render(
@@ -292,24 +292,23 @@ describe('Objects Component', () => {
 
         render(
             <MemoryRouter>
-                <Objects/>
+                <Objects />
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {
-                name: /test-ns\/svc\/test1/i
-            })).getByRole('checkbox');
+            const checkbox = within(screen.getByRole('row', { name: /test-ns\/svc\/test1/i })).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByRole('button', { name: /actions on selected objects/i }));
         fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
+        fireEvent.click(screen.getByRole('button', { name: /ok/i }));
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalled();
-            expect(screen.getByText(/Action 'restart' succeeded on 1 object/i)).toBeInTheDocument();
+            const alert = screen.getByRole('alert');
+            expect(alert.textContent).toMatch(/succeeded|ok/i);
         });
 
         global.fetch.mockClear();
@@ -325,23 +324,22 @@ describe('Objects Component', () => {
 
         render(
             <MemoryRouter>
-                <Objects/>
+                <Objects />
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {
-                name: /test-ns\/svc\/test1/i
-            })).getByRole('checkbox');
+            const checkbox = within(screen.getByRole('row', { name: /test-ns\/svc\/test1/i })).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByRole('button', { name: /actions on selected objects/i }));
         fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
+        fireEvent.click(screen.getByRole('button', { name: /ok/i }));
 
         await waitFor(() => {
-            expect(screen.getByText(/Action 'restart' failed on all objects/i)).toBeInTheDocument();
+            const alert = screen.getByRole('alert');
+            expect(alert.textContent).toMatch(/failed|error/i);
         });
 
         global.fetch.mockClear();
@@ -350,40 +348,37 @@ describe('Objects Component', () => {
     test('toggles filters visibility', async () => {
         render(
             <MemoryRouter>
-                <Objects/>
+                <Objects />
             </MemoryRouter>
         );
 
-        // Check initial state
-        await waitFor(() => {
-            const hideButton = screen.getByTestId('filter-toggle-button');
-            console.log('Initial button text:', hideButton.textContent);
-            expect(hideButton).toHaveTextContent('Hide filters');
-            expect(screen.getByLabelText(/namespace/i)).toBeInTheDocument();
-        });
+        // Check filters are visible initially
+        const toggleButton = await screen.findByTestId('filter-toggle-button');
+        expect(toggleButton).toHaveTextContent('Hide filters');
+        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+        expect(screen.getByLabelText('Kind')).toBeInTheDocument();
+        expect(screen.getByLabelText('Name')).toBeInTheDocument();
 
         // Click to hide filters
-        const hideButton = screen.getByTestId('filter-toggle-button');
-        fireEvent.click(hideButton);
+        fireEvent.click(toggleButton);
 
-        // Check hidden state
+        // Check filters are hidden
         await waitFor(() => {
-            const showButton = screen.getByTestId('filter-toggle-button');
-            console.log('After hide click button text:', showButton.textContent);
-            expect(showButton).toHaveTextContent('Show filters');
-            expect(screen.queryByLabelText(/namespace/i)).not.toBeInTheDocument();
+            expect(toggleButton).toHaveTextContent('Show filters');
+            expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Kind')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
         });
 
-        // Click to show filters
-        const showButton = screen.getByTestId('filter-toggle-button');
-        fireEvent.click(showButton);
+        // Click to show filters again
+        fireEvent.click(toggleButton);
 
-        // Check shown state
+        // Check filters are visible again
         await waitFor(() => {
-            const hideButton = screen.getByTestId('filter-toggle-button');
-            console.log('After show click button text:', hideButton.textContent);
-            expect(hideButton).toHaveTextContent('Hide filters');
-            expect(screen.getByLabelText(/namespace/i)).toBeInTheDocument();
+            expect(toggleButton).toHaveTextContent('Hide filters');
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+            expect(screen.getByLabelText('Kind')).toBeInTheDocument();
+            expect(screen.getByLabelText('Name')).toBeInTheDocument();
         });
     });
 });

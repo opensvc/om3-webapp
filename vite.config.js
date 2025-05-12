@@ -1,21 +1,32 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
-import {viteSingleFile} from "vite-plugin-singlefile"
+import {viteSingleFile} from 'vite-plugin-singlefile';
 import tailwindcss from '@tailwindcss/vite';
 import {
     URL_AUTH_INFO,
-    URL_CLUSTER_STATUS, URL_NODE,
+    URL_CLUSTER_STATUS,
+    URL_NODE,
     URL_NODE_EVENT,
     URL_OBJECT,
     URL_POOL,
     URL_TOKEN
-} from './src/config/apiPath.js'
-
+} from './src/config/apiPath.js';
 
 const baseUrl = process.env.BASE_URL || 'https://localhost:1215/';
 
 export default defineConfig({
-    plugins: [react(), tailwindcss(), viteSingleFile()],
+    plugins: [
+        react({
+            babel: {
+                presets: ['@babel/preset-typescript'],
+                plugins: [
+                    ['@babel/plugin-transform-react-jsx', {runtime: 'automatic'}]
+                ]
+            }
+        }),
+        tailwindcss(),
+        viteSingleFile()
+    ],
     server: {
         proxy: {
             [URL_AUTH_INFO]: {
@@ -55,9 +66,14 @@ export default defineConfig({
             },
         },
     },
-    "build": {
-        assetsInlineLimit: Infinity, // ensure all assets are inlined
-        cssCodeSplit: false,         // don't split CSS
+    build: {
+        assetsInlineLimit: Infinity,
+        cssCodeSplit: false,
         target: 'esnext',
+    },
+    resolve: {
+        alias: {
+            '@': '/src'
+        }
     }
 });

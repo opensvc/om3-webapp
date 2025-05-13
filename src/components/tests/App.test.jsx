@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
 import NavBar from '../NavBar';
 import ClusterOverview from '../Cluster';
@@ -13,8 +13,8 @@ import ObjectDetails from '../ObjectDetails';
 import AuthChoice from '../Authchoice';
 import Login from '../Login';
 import OidcCallback from '../OidcCallback';
-import { AuthProvider } from '../../context/AuthProvider';
-import { OidcProvider } from '../../context/OidcAuthContext.tsx';
+import {AuthProvider} from '../../context/AuthProvider';
+import {OidcProvider} from '../../context/OidcAuthContext.tsx';
 
 // Mock CSS imports
 jest.mock('../../styles/main.css', () => ({}));
@@ -32,10 +32,10 @@ jest.mock('../Authchoice', () => () => <div data-testid="auth-choice">AuthChoice
 jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
 jest.mock('../../context/AuthProvider', () => ({
-    AuthProvider: ({ children }) => <div>{children}</div>,
+    AuthProvider: ({children}) => <div>{children}</div>,
 }));
 jest.mock('../../context/OidcAuthContext.tsx', () => ({
-    OidcProvider: ({ children }) => <div>{children}</div>,
+    OidcProvider: ({children}) => <div>{children}</div>,
 }));
 
 // Mock localStorage
@@ -44,11 +44,13 @@ const mockLocalStorage = {
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
-Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
 // Mock console.log and console.error to suppress logs
-jest.spyOn(console, 'log').mockImplementation(() => {});
-jest.spyOn(console, 'error').mockImplementation(() => {});
+jest.spyOn(console, 'log').mockImplementation(() => {
+});
+jest.spyOn(console, 'error').mockImplementation(() => {
+});
 
 describe('App Component', () => {
     beforeEach(() => {
@@ -57,137 +59,137 @@ describe('App Component', () => {
     });
 
     test('renders NavBar and redirects from / to /cluster', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
         render(
             <MemoryRouter initialEntries={['/']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('navbar')).toBeInTheDocument();
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders protected route /cluster with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('redirects from protected route /cluster to /auth-choice with invalid token', async () => {
-        const invalidToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 - 3600 })) + '.signature';
+        const invalidToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 - 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(invalidToken);
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('redirects from protected route /cluster to /auth-choice with no token', async () => {
         render(
             <MemoryRouter initialEntries={['/cluster']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders public route /auth-choice without token', async () => {
         render(
             <MemoryRouter initialEntries={['/auth-choice']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders public route /auth/login without token', async () => {
         render(
             <MemoryRouter initialEntries={['/auth/login']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('login')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders public route /auth-callback without token', async () => {
         render(
             <MemoryRouter initialEntries={['/auth-callback']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-callback')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders protected route /nodes with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
         render(
             <MemoryRouter initialEntries={['/nodes']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('nodes')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('renders protected route /objects/:objectName with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
         render(
             <MemoryRouter initialEntries={['/objects/test-object']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('object-details')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('updates token state on localStorage change', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(null);
 
         render(
             <MemoryRouter initialEntries={['/auth-choice']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
@@ -203,7 +205,7 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken');
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('handles invalid token format gracefully', async () => {
@@ -211,39 +213,39 @@ describe('App Component', () => {
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('redirects unknown routes to /', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
         render(
             <MemoryRouter initialEntries={['/unknown']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('does not render blank page', async () => {
         // Mock a valid token to access protected routes
-        const validToken = 'header.' + btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 })) + '.signature';
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockReturnValue(validToken);
 
-        const { container } = render(
+        const {container} = render(
             <MemoryRouter initialEntries={['/']}>
-                <App />
+                <App/>
             </MemoryRouter>
         );
 
@@ -263,6 +265,6 @@ describe('App Component', () => {
 
             // Specifically verify Cluster component is rendered (default route)
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 });

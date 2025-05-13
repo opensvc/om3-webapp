@@ -14,7 +14,6 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import {useNavigate} from "react-router-dom";
 import {useOidc} from "../context/OidcAuthContext.tsx";
-import {authenticateWithX509} from "./X509Auth";
 
 function AuthChoice() {
     const {userManager, recreateUserManager} = useOidc();
@@ -31,12 +30,6 @@ function AuthChoice() {
                 .catch((err) => console.error("handleAuthChoice signinRedirect:", err));
         } else if (choice === "basic") {
             return navigate('/auth/login');
-        } else if (choice === "x509") {
-            const result = await authenticateWithX509(navigate);
-            if (!result.success) {
-                console.error("x509 authentication failed:", result.error);
-                // Optionally show an error message to the user
-            }
         }
     };
 
@@ -69,15 +62,6 @@ function AuthChoice() {
                             OpenID
                         </Button>
                     )}
-                    <Button
-                        variant="contained"
-                        color="success"
-                        startIcon={<FaIdCard/>}
-                        fullWidth
-                        onClick={() => handleAuthChoice("x509")}
-                    >
-                        x509 Certificate
-                    </Button>
                     {authInfo?.methods?.includes("basic") && (
                         <Button
                             variant="contained"

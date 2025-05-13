@@ -11,6 +11,10 @@ import {blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 import {URL_NODE} from "../config/apiPath.js";
+import {
+    FaSnowflake, FaPlay, FaSync, FaStop, FaBroom, FaTint,
+    FaBox, FaHdd, FaPuzzlePiece, FaArchive, FaBrain, FaClipboardList
+} from "react-icons/fa";
 
 const NodesTable = () => {
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
@@ -147,18 +151,18 @@ const NodesTable = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}>Freeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}>Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}>Restart Daemon</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}>Abort</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}>Clear</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}>Drain</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}>Asset</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}>Disk</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}>Patch</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}>Pkg</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}>Capabilities</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}>Sysreport</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}><FaSnowflake style={{marginRight: 8}}/> Freeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}><FaPlay style={{marginRight: 8}}/> Unfreeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}><FaSync style={{marginRight: 8}}/> Restart Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}><FaStop style={{marginRight: 8}}/> Abort</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}><FaBroom style={{marginRight: 8}}/> Clear</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}><FaTint style={{marginRight: 8}}/> Drain</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}><FaBox style={{marginRight: 8}}/> Asset</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}><FaHdd style={{marginRight: 8}}/> Disk</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}><FaPuzzlePiece style={{marginRight: 8}}/> Patch</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}><FaArchive style={{marginRight: 8}}/> Pkg</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}><FaBrain style={{marginRight: 8}}/> Capabilities</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}><FaClipboardList style={{marginRight: 8}}/> Sysreport</MenuItem>
                     </Menu>
                 </Box>
 

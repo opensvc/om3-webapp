@@ -1,14 +1,14 @@
-import React, { createContext, useContext, useState } from "react";
-import { UserManager, UserManagerSettings} from "oidc-client-ts";
+import React, {createContext, useContext, useState} from "react";
+import {UserManager, UserManagerSettings} from "oidc-client-ts";
 
 export interface OidcContextType {
     userManager: UserManager;
-    recreateUserManager: (settings : UserManagerSettings) => void;
+    recreateUserManager: (settings: UserManagerSettings) => void;
 }
 
 const OidcContext = createContext<OidcContextType | null>(null);
 
-export const OidcProvider = ({ children }: { children: React.ReactNode }) => {
+export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     // Store the UserManager instance in state
     const [userManager, setUserManager] = useState(null as unknown as UserManager);
 
@@ -21,7 +21,7 @@ export const OidcProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     return (
-        <OidcContext.Provider value={{ userManager, recreateUserManager }}>
+        <OidcContext.Provider value={{userManager, recreateUserManager}}>
             {children}
         </OidcContext.Provider>
     );
@@ -39,10 +39,15 @@ export const useOidc = () => {
 // Cleanup function to dispose of UserManager events
 function cleanupUserManager(userManager: UserManager) {
     if (!userManager) return;
-    userManager.events.removeUserLoaded(() => {});
-    userManager.events.removeUserUnloaded(() => {});
-    userManager.events.removeAccessTokenExpired(() => {});
-    userManager.events.removeAccessTokenExpiring(() => {});
-    userManager.events.removeSilentRenewError(() => {});
+    userManager.events.removeUserLoaded(() => {
+    });
+    userManager.events.removeUserUnloaded(() => {
+    });
+    userManager.events.removeAccessTokenExpired(() => {
+    });
+    userManager.events.removeAccessTokenExpiring(() => {
+    });
+    userManager.events.removeSilentRenewError(() => {
+    });
     userManager.clearStaleState();
 }

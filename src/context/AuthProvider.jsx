@@ -64,7 +64,20 @@ export const AuthProvider = ({children}) => {
             </AuthDispatchContext.Provider>
         </AuthContext.Provider>
     );
-}
+};
 
-export const useAuth = () => useContext(AuthContext);
-export const useAuthDispatch = () => useContext(AuthDispatchContext);
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (context === null) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
+
+export const useAuthDispatch = () => {
+    const context = useContext(AuthDispatchContext);
+    if (context === null) {
+        throw new Error('useAuthDispatch must be used within an AuthProvider');
+    }
+    return context;
+};

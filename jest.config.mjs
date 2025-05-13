@@ -2,12 +2,20 @@ export default {
     testEnvironment: "jest-environment-jsdom",
     setupFilesAfterEnv: ['./setupTests.js'],
     transform: {
-        "^.+\\.jsx?$": "babel-jest",
+        "^.+\\.(js|jsx|ts|tsx)$": ["babel-jest", {
+            presets: [
+                ['@babel/preset-env', {targets: {node: 'current'}}],
+                '@babel/preset-typescript',
+                ['@babel/preset-react', {runtime: 'automatic'}]
+            ]
+        }],
     },
-    moduleFileExtensions: ["js", "jsx"],
     moduleNameMapper: {
         "\\.(css|less|scss|sass)$": "identity-obj-proxy",
+        "^@/(.*)$": "<rootDir>/src/$1"
     },
-    transformIgnorePatterns: ["/node_modules/(?!@mui)"],
+    transformIgnorePatterns: [
+        "/node_modules/(?!(@mui|oidc-client-ts)/)"
+    ],
     testTimeout: 20000,
 };

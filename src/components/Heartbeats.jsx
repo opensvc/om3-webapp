@@ -19,21 +19,33 @@ import ErrorIcon from "@mui/icons-material/Error";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource} from "../eventSourceManager.jsx";
 
-const getStreamStatus = (stream) => {
-    if (!stream) return {state: "Unknown", icon: <ErrorIcon color="disabled"/>};
+export const getStreamStatus = (stream) => {
+    if (!stream) return {
+        state: "Unknown",
+        icon: <ErrorIcon color="disabled" data-testid="error-icon" />
+    };
 
     const peer = Object.values(stream.peers || {})[0];
     const isBeating = peer?.is_beating;
     const state = stream.state;
 
-    if (state !== "running") return {state: "Stopped", icon: <HeartBrokenIcon color="action"/>};
-    if (isBeating) return {state: "Beating", icon: <HeartIcon color="error"/>};
-    return {state: "Idle", icon: <HourglassEmptyIcon color="disabled"/>};
+    if (state !== "running") return {
+        state: "Stopped",
+        icon: <HeartBrokenIcon color="action" data-testid="heart-broken-icon" />
+    };
+    if (isBeating) return {
+        state: "Beating",
+        icon: <HeartIcon color="error" data-testid="heart-icon" />
+    };
+    return {
+        state: "Idle",
+        icon: <HourglassEmptyIcon color="disabled" data-testid="hourglass-icon" />
+    };
 };
 
 const Heartbeats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const nodes = Object.keys(heartbeatStatus);
+    const nodes = Object.keys(heartbeatStatus || {});
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     useEffect(() => {
@@ -45,7 +57,7 @@ const Heartbeats = () => {
         return () => {
             closeEventSource();
         };
-    }, []);
+    }, [fetchNodes, startEventReception]);
 
     return (
         <Box
@@ -54,15 +66,16 @@ const Heartbeats = () => {
                 display: "flex",
                 justifyContent: "center",
             }}
+            data-testid="heartbeats-container"
         >
             <Box sx={{width: "100%", maxWidth: 1000}}>
                 <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center">
+                    <Typography variant="h4" gutterBottom align="center" data-testid="heartbeats-title">
                         Heartbeats
                     </Typography>
 
                     <TableContainer>
-                        <Table>
+                        <Table aria-label="heartbeats table">
                             <TableHead>
                                 <TableRow>
                                     <TableCell><strong>Node</strong></TableCell>
@@ -82,17 +95,31 @@ const Heartbeats = () => {
                                     const txStatus = getStreamStatus(tx);
 
                                     return (
-                                        <TableRow key={node} hover>
-                                            <TableCell>{node}</TableCell>
-                                            <TableCell align="center">
-                                                <Tooltip title={rxStatus.state} arrow>
+                                        <TableRow
+                                            key={node}
+                                            hover
+                                            data-testid={`node-row-${node}`}
+                                        >
+                                            <TableCell data-testid={`node-name-${node}`}>
+                                                {node}
+                                            </TableCell>
+                                            <TableCell
+                                                align="center"
+                                                data-testid={`rx-status-${node}`}
+                                                title={rxStatus.state}
+                                            >
+                                                <Tooltip title={rxStatus.state}>
                                                     <Box display="flex" justifyContent="center" alignItems="center">
                                                         {rxStatus.icon}
                                                     </Box>
                                                 </Tooltip>
                                             </TableCell>
-                                            <TableCell align="center">
-                                                <Tooltip title={txStatus.state} arrow>
+                                            <TableCell
+                                                align="center"
+                                                data-testid={`tx-status-${node}`}
+                                                title={txStatus.state}
+                                            >
+                                                <Tooltip title={txStatus.state}>
                                                     <Box display="flex" justifyContent="center" alignItems="center">
                                                         {txStatus.icon}
                                                     </Box>

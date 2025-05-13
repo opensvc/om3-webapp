@@ -23,11 +23,29 @@ import {
     DialogContent,
     DialogActions,
     FormControlLabel,
-    Collapse
+    Collapse,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText,
+    Divider,
+    useMediaQuery,
+    useTheme,
 } from "@mui/material";
+import {
+    RestartAlt,
+    AcUnit,
+    LockOpen,
+    Delete,
+    Settings,
+    Block,
+    CleaningServices,
+    SwapHoriz,
+    Undo,
+    Cancel,
+} from "@mui/icons-material";
 import {green, red, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -36,11 +54,23 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {closeEventSource} from "../eventSourceManager";
 import {URL_OBJECT} from '../config/apiPath.js';
 
-const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
+const AVAILABLE_ACTIONS = [
+    {name: "restart", icon: <RestartAlt/>},
+    {name: "freeze", icon: <AcUnit/>},
+    {name: "unfreeze", icon: <LockOpen/>},
+    {name: "delete", icon: <Delete/>},
+    {name: "provision", icon: <Settings/>},
+    {name: "unprovision", icon: <Block/>},
+    {name: "purge", icon: <CleaningServices/>},
+    {name: "switch", icon: <SwapHoriz/>},
+    {name: "giveback", icon: <Undo/>},
+    {name: "abort", icon: <Cancel/>},
+];
 
 const Objects = () => {
     const location = useLocation();
     const initialNamespace = location.state?.namespace || "all";
+    const navigate = useNavigate();
 
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
@@ -59,7 +89,9 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [showFilters, setShowFilters] = useState(true);
 
-    const navigate = useNavigate();
+    // Use media query to determine if screen is wide enough
+    const theme = useTheme();
+    const isWideScreen = useMediaQuery(theme.breakpoints.up('lg')); // lg = 1200px
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -101,78 +133,46 @@ const Objects = () => {
 
     const handleExecuteActionOnSelected = async (action) => {
         const token = localStorage.getItem("authToken");
-        setSnackbar({
-            open: true,
-            message: `Executing action '${action}'...`,
-            severity: "info",
-        });
-
+        setSnackbar({open: true, message: `Executing '${action}'...`, severity: "info"});
         let successCount = 0;
         let errorCount = 0;
 
         const promises = selectedObjects.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) return;
-
             const parts = objectName.split("/");
-            let namespace, kind, name;
-            if (parts.length === 3) {
-                [namespace, kind, name] = parts;
-            } else {
-                namespace = "root";
-                kind = "svc";
-                name = parts[0];
-            }
-
+            const [namespace, kind, name] = parts.length === 3 ? parts : ["root", "svc", parts[0]];
             const obj = {...rawObj, namespace, kind, name};
-            if (action === "freeze" && obj.frozen === "frozen") return;
-            if (action === "unfreeze" && obj.frozen === "unfrozen") return;
+
+            if ((action === "freeze" && obj.frozen === "frozen") || (action === "unfreeze" && obj.frozen === "unfrozen")) return;
 
             const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
             try {
                 const response = await fetch(url, {
                     method: "POST",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                    },
+                    headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                 });
                 if (!response.ok) {
                     errorCount++;
                     return;
                 }
                 successCount++;
-
-                if (action === "delete") {
-                    removeObject(objectName);
-                }
-
+                if (action === "delete") removeObject(objectName);
             } catch {
                 errorCount++;
             }
         });
 
         await Promise.all(promises);
-
-        if (successCount && !errorCount) {
-            setSnackbar({
-                open: true,
-                message: `✅ Action '${action}' succeeded on ${successCount} object(s).`,
-                severity: "success",
-            });
-        } else if (successCount && errorCount) {
-            setSnackbar({
-                open: true,
-                message: `⚠️ Action '${action}' partially succeeded: ${successCount} ok, ${errorCount} failure(s).`,
-                severity: "warning",
-            });
-        } else {
-            setSnackbar({
-                open: true,
-                message: `❌ Action '${action}' failed on all objects.`,
-                severity: "error",
-            });
-        }
+        setSnackbar({
+            open: true,
+            message: successCount && !errorCount
+                ? `✅ '${action}' succeeded on ${successCount} object(s).`
+                : successCount
+                    ? `⚠️ '${action}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
+                    : `❌ '${action}' failed on all objects.`,
+            severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
+        });
 
         setSelectedObjects([]);
         setConfirmationDialogOpen(false);
@@ -180,36 +180,38 @@ const Objects = () => {
     };
 
     const handleObjectClick = (objectName) => {
-        const objectInstance = objectInstanceStatus[objectName];
-        if (objectInstance) {
-            navigate(`/objects/${encodeURIComponent(objectName)}`);
-        }
+        if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
     };
 
-    const objects = Object.keys(objectStatus).length > 0
-        ? objectStatus
-        : daemon?.cluster?.object || {};
-
+    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-
-    const extractNamespace = (objectName) => {
-        const parts = objectName.split("/");
-        return parts.length === 3 ? parts[0] : "root";
-    };
-
-    const extractKind = (objectName) => {
-        const parts = objectName.split("/");
-        return parts.length === 3 ? parts[1] : "svc";
-    };
-
+    const extractNamespace = (name) => name.split("/")[0] || "root";
+    const extractKind = (name) => name.split("/")[1] || "svc";
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
-        const nsMatch = selectedNamespace === "all" || extractNamespace(name) === selectedNamespace;
-        const kindMatch = selectedKind === "all" || extractKind(name) === selectedKind;
-        const searchMatch = name.toLowerCase().includes(searchQuery.toLowerCase());
-        return nsMatch && kindMatch && searchMatch;
+        return (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace)
+            && (selectedKind === "all" || extractKind(name) === selectedKind)
+            && name.toLowerCase().includes(searchQuery.toLowerCase());
     });
+
+    // Get all unique nodes across all objects
+    const allNodes = Array.from(
+        new Set(
+            Object.keys(objectInstanceStatus).flatMap((objectName) =>
+                Object.keys(objectInstanceStatus[objectName] || {})
+            )
+        )
+    ).sort();
+
+    // Helper to get node state for a specific object and node
+    const getNodeState = (objectName, node) => {
+        const instanceStatus = objectInstanceStatus[objectName] || {};
+        return {
+            avail: instanceStatus[node]?.avail,
+            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
+        };
+    };
 
     return (
         <Box sx={{
@@ -218,33 +220,29 @@ const Objects = () => {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            p: 2,
+            p: 2
         }}>
             <Box sx={{
                 width: "100%",
-                maxWidth: "1000px",
+                maxWidth: isWideScreen ? "1600px" : "1000px",
                 bgcolor: "background.paper",
                 border: "2px solid",
                 borderColor: "divider",
                 borderRadius: 3,
                 boxShadow: 3,
-                p: 3,
+                p: 3
             }}>
-                <Typography variant="h4" gutterBottom align="center">
-                    Objects
-                </Typography>
+                <Typography variant="h4" gutterBottom align="center">Objects</Typography>
 
-                <Box
-                    sx={{
-                        position: "sticky",
-                        top: "64px",
-                        zIndex: 10,
-                        backgroundColor: "background.paper",
-                        pt: 2,
-                        pb: 1,
-                        mb: 2,
-                    }}
-                >
+                <Box sx={{
+                    position: "sticky",
+                    top: 64,
+                    zIndex: 10,
+                    backgroundColor: "background.paper",
+                    pt: 2,
+                    pb: 1,
+                    mb: 2
+                }}>
                     <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1}}>
                         <Button
                             onClick={() => setShowFilters(!showFilters)}
@@ -253,58 +251,30 @@ const Objects = () => {
                         >
                             {showFilters ? "Hide filters" : "Show filters"}
                         </Button>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleActionsMenuOpen}
-                            disabled={selectedObjects.length === 0}
-                        >
-                            Actions on selected objects
-                        </Button>
+                        <Button variant="contained" color="primary" onClick={handleActionsMenuOpen}
+                                disabled={!selectedObjects.length}>Actions on selected objects</Button>
                     </Box>
 
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                        <Box
-                            sx={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: 2,
-                                alignItems: "center",
-                                pb: 2
-                            }}
-                        >
-                            <Autocomplete
-                                sx={{minWidth: 200}}
-                                options={["all", ...namespaces]}
-                                value={selectedNamespace}
-                                onChange={(event, newValue) => newValue && setSelectedNamespace(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                            />
-                            <Autocomplete
-                                sx={{minWidth: 200}}
-                                options={["all", ...kinds]}
-                                value={selectedKind}
-                                onChange={(event, newValue) => newValue && setSelectedKind(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Kind"/>}
-                            />
-                            <TextField
-                                label="Name"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                sx={{minWidth: 200}}
-                                data-testid="search-name"
-                            />
+                        <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
+                            <Autocomplete sx={{minWidth: 200}} options={["all", ...namespaces]}
+                                          value={selectedNamespace}
+                                          onChange={(e, val) => val && setSelectedNamespace(val)}
+                                          renderInput={(params) => <TextField {...params} label="Namespace"/>}/>
+                            <Autocomplete sx={{minWidth: 200}} options={["all", ...kinds]} value={selectedKind}
+                                          onChange={(e, val) => val && setSelectedKind(val)}
+                                          renderInput={(params) => <TextField {...params} label="Kind"/>}/>
+                            <TextField label="Name" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                                       sx={{minWidth: 200}}/>
                         </Box>
                     </Collapse>
 
-                    <Menu
-                        anchorEl={actionsMenuAnchor}
-                        open={Boolean(actionsMenuAnchor)}
-                        onClose={handleActionsMenuClose}
-                    >
-                        {AVAILABLE_ACTIONS.map((action) => (
-                            <MenuItem key={action} onClick={() => handleActionClick(action)}>
-                                {action.charAt(0).toUpperCase() + action.slice(1)}
+                    <Menu anchorEl={actionsMenuAnchor} open={Boolean(actionsMenuAnchor)}
+                          onClose={handleActionsMenuClose}>
+                        {AVAILABLE_ACTIONS.map(({name, icon}) => (
+                            <MenuItem key={name} onClick={() => handleActionClick(name)}>
+                                <ListItemIcon>{icon}</ListItemIcon>
+                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                             </MenuItem>
                         ))}
                     </Menu>
@@ -314,18 +284,15 @@ const Objects = () => {
                     <Table>
                         <TableHead>
                             <TableRow>
-                                <TableCell>
-                                    <Checkbox
-                                        checked={selectedObjects.length === filteredObjectNames.length}
-                                        onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <strong>Object</strong>
-                                </TableCell>
-                                <TableCell align="center">
-                                    <strong>Global</strong>
-                                </TableCell>
+                                <TableCell><Checkbox checked={selectedObjects.length === filteredObjectNames.length}
+                                                     onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}/></TableCell>
+                                <TableCell><strong>Object</strong></TableCell>
+                                <TableCell align="center"><strong>Global</strong></TableCell>
+                                {isWideScreen && allNodes.map((node) => (
+                                    <TableCell key={node} align="center">
+                                        <strong>{node}</strong>
+                                    </TableCell>
+                                ))}
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -346,34 +313,31 @@ const Objects = () => {
                                         <TableCell>{objectName}</TableCell>
                                         <TableCell align="center">
                                             <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                {avail === "up" && (
-                                                    <Tooltip title="Available">
-                                                        <FiberManualRecordIcon sx={{color: green[500]}}
-                                                                               data-testid="FiberManualRecordIcon-up"
-                                                                               role="img"/>
-                                                    </Tooltip>
-                                                )}
-                                                {avail === "down" && (
-                                                    <Tooltip title="Unavailable">
-                                                        <FiberManualRecordIcon sx={{color: red[500]}}
-                                                                               data-testid="FiberManualRecordIcon-down"
-                                                                               role="img"/>
-                                                    </Tooltip>
-                                                )}
-                                                {avail === "warn" && (
-                                                    <Tooltip title="Warning">
-                                                        <WarningAmberIcon sx={{color: orange[500]}}
-                                                                          data-testid="WarningAmberIcon" role="img"/>
-                                                    </Tooltip>
-                                                )}
-                                                {frozen === "frozen" && (
-                                                    <Tooltip title="Frozen">
-                                                        <AcUnitIcon fontSize="small" sx={{color: blue[200]}}
-                                                                    data-testid="AcUnitIcon" role="img"/>
-                                                    </Tooltip>
-                                                )}
+                                                {avail === "up" && <FiberManualRecordIcon data-testid="FiberManualRecordIcon-up" sx={{color: green[500]}} />}
+                                                {avail === "down" && <FiberManualRecordIcon data-testid="FiberManualRecordIcon-down" sx={{color: red[500]}} />}
+                                                {avail === "warn" && <WarningAmberIcon data-testid="WarningAmberIcon" sx={{color: orange[500]}} />}
+                                                {frozen === "frozen" && <AcUnit data-testid="AcUnitIcon" sx={{color: blue[200]}} />}
                                             </Box>
                                         </TableCell>
+                                        {isWideScreen && allNodes.map((node) => {
+                                            const {avail: nodeAvail, frozen: nodeFrozen} = getNodeState(objectName, node);
+                                            return (
+                                                <TableCell key={node} align="center">
+                                                    <Box display="flex" justifyContent="center" alignItems="center" gap={0.5}>
+                                                        {nodeAvail ? (
+                                                            <>
+                                                                {nodeAvail === "up" && <FiberManualRecordIcon sx={{color: green[500]}} />}
+                                                                {nodeAvail === "down" && <FiberManualRecordIcon sx={{color: red[500]}} />}
+                                                                {nodeAvail === "warn" && <WarningAmberIcon sx={{color: orange[500]}} />}
+                                                                {nodeFrozen === "frozen" && <AcUnit sx={{color: blue[200]}} />}
+                                                            </>
+                                                        ) : (
+                                                            <Typography variant="caption" color="textSecondary">-</Typography>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                            );
+                                        })}
                                     </TableRow>
                                 );
                             })}

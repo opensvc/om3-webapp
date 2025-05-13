@@ -89,9 +89,8 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [showFilters, setShowFilters] = useState(true);
 
-    // Use media query to determine if screen is wide enough
     const theme = useTheme();
-    const isWideScreen = useMediaQuery(theme.breakpoints.up('lg')); // lg = 1200px
+    const isWideScreen = useMediaQuery(theme.breakpoints.up('lg'));
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -195,7 +194,6 @@ const Objects = () => {
             && name.toLowerCase().includes(searchQuery.toLowerCase());
     });
 
-    // Get all unique nodes across all objects
     const allNodes = Array.from(
         new Set(
             Object.keys(objectInstanceStatus).flatMap((objectName) =>
@@ -204,7 +202,6 @@ const Objects = () => {
         )
     ).sort();
 
-    // Helper to get node state for a specific object and node
     const getNodeState = (objectName, node) => {
         const instanceStatus = objectInstanceStatus[objectName] || {};
         return {
@@ -287,7 +284,6 @@ const Objects = () => {
                                 <TableCell><Checkbox checked={selectedObjects.length === filteredObjectNames.length}
                                                      onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}/></TableCell>
                                 <TableCell><strong>Object</strong></TableCell>
-                                <TableCell align="center"><strong>Global</strong></TableCell>
                                 {isWideScreen && allNodes.map((node) => (
                                     <TableCell key={node} align="center">
                                         <strong>{node}</strong>
@@ -310,29 +306,47 @@ const Objects = () => {
                                                 onClick={(e) => e.stopPropagation()}
                                             />
                                         </TableCell>
-                                        <TableCell>{objectName}</TableCell>
-                                        <TableCell align="center">
-                                            <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                {avail === "up" && <FiberManualRecordIcon data-testid="FiberManualRecordIcon-up" sx={{color: green[500]}} />}
-                                                {avail === "down" && <FiberManualRecordIcon data-testid="FiberManualRecordIcon-down" sx={{color: red[500]}} />}
-                                                {avail === "warn" && <WarningAmberIcon data-testid="WarningAmberIcon" sx={{color: orange[500]}} />}
-                                                {frozen === "frozen" && <AcUnit data-testid="AcUnitIcon" sx={{color: blue[200]}} />}
+                                        <TableCell>
+                                            <Box display="flex" alignItems="center" gap={1}>
+                                                <Box display="flex" alignItems="center" gap={0.5}>
+                                                    {avail === "up" &&
+                                                        <FiberManualRecordIcon data-testid="FiberManualRecordIcon-up"
+                                                                               sx={{color: green[500]}}/>}
+                                                    {avail === "down" &&
+                                                        <FiberManualRecordIcon data-testid="FiberManualRecordIcon-down"
+                                                                               sx={{color: red[500]}}/>}
+                                                    {avail === "warn" &&
+                                                        <WarningAmberIcon data-testid="WarningAmberIcon"
+                                                                          sx={{color: orange[500]}}/>}
+                                                    {frozen === "frozen" &&
+                                                        <AcUnit data-testid="AcUnitIcon" sx={{color: blue[200]}}/>}
+                                                </Box>
+                                                <Typography>{objectName}</Typography>
                                             </Box>
                                         </TableCell>
                                         {isWideScreen && allNodes.map((node) => {
-                                            const {avail: nodeAvail, frozen: nodeFrozen} = getNodeState(objectName, node);
+                                            const {
+                                                avail: nodeAvail,
+                                                frozen: nodeFrozen
+                                            } = getNodeState(objectName, node);
                                             return (
                                                 <TableCell key={node} align="center">
-                                                    <Box display="flex" justifyContent="center" alignItems="center" gap={0.5}>
+                                                    <Box display="flex" justifyContent="center" alignItems="center"
+                                                         gap={0.5}>
                                                         {nodeAvail ? (
                                                             <>
-                                                                {nodeAvail === "up" && <FiberManualRecordIcon sx={{color: green[500]}} />}
-                                                                {nodeAvail === "down" && <FiberManualRecordIcon sx={{color: red[500]}} />}
-                                                                {nodeAvail === "warn" && <WarningAmberIcon sx={{color: orange[500]}} />}
-                                                                {nodeFrozen === "frozen" && <AcUnit sx={{color: blue[200]}} />}
+                                                                {nodeAvail === "up" &&
+                                                                    <FiberManualRecordIcon sx={{color: green[500]}}/>}
+                                                                {nodeAvail === "down" &&
+                                                                    <FiberManualRecordIcon sx={{color: red[500]}}/>}
+                                                                {nodeAvail === "warn" &&
+                                                                    <WarningAmberIcon sx={{color: orange[500]}}/>}
+                                                                {nodeFrozen === "frozen" &&
+                                                                    <AcUnit sx={{color: blue[200]}}/>}
                                                             </>
                                                         ) : (
-                                                            <Typography variant="caption" color="textSecondary">-</Typography>
+                                                            <Typography variant="caption"
+                                                                        color="textSecondary">-</Typography>
                                                         )}
                                                     </Box>
                                                 </TableCell>

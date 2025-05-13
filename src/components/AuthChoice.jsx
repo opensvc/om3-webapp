@@ -9,7 +9,7 @@ import {
     Typography,
     Stack
 } from "@mui/material";
-import {FaKey, FaIdCard, FaUserShield} from "react-icons/fa";
+import {FaKey, FaUserShield} from "react-icons/fa";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import {useNavigate} from "react-router-dom";
@@ -26,8 +26,11 @@ function AuthChoice() {
                 console.log("handleAuthChoice openid skipped: can't create userManager");
                 return;
             }
-            userManager.signinRedirect()
-                .catch((err) => console.error("handleAuthChoice signinRedirect:", err));
+            try {
+                await userManager.signinRedirect();
+            } catch (err) {
+                console.error("handleAuthChoice signinRedirect:", err);
+            }
         } else if (choice === "basic") {
             return navigate('/auth/login');
         }

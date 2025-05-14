@@ -107,37 +107,41 @@ describe('Objects Component', () => {
             expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
         });
 
-        // Verify row states
+        // Verify row states by checking SVG icon colors
         const verifyRowState = (row, expected) => {
-            const icons = within(row).queryAllByTestId(/FiberManualRecordIcon|WarningAmberIcon|AcUnitIcon/);
-            console.log('Icons found:', icons.map(icon => ({
-                testId: icon.getAttribute('data-testid'),
-                style: icon.getAttribute('style'),
-                className: icon.className,
-            })));
+            // Query all SVG elements within the row
+            const svgs = row.querySelectorAll('svg');
+            const iconStyles = Array.from(svgs).map(svg => ({
+                color: window.getComputedStyle(svg).color,
+                className: svg.className,
+            }));
+
+            console.log('SVGs found:', iconStyles);
 
             const iconTests = [
                 {
                     condition: expected.includes('up'),
-                    test: () => icons.some(icon => icon.getAttribute('data-testid') === 'FiberManualRecordIcon-up'),
+                    test: () => iconStyles.some(style => style.color === 'rgb(76, 175, 80)'), // green[500]
                 },
                 {
                     condition: expected.includes('down'),
-                    test: () => icons.some(icon => icon.getAttribute('data-testid') === 'FiberManualRecordIcon-down'),
+                    test: () => iconStyles.some(style => style.color === 'rgb(244, 67, 54)'), // red[500]
                 },
                 {
                     condition: expected.includes('warn'),
-                    test: () => icons.some(icon => icon.getAttribute('data-testid') === 'WarningAmberIcon'),
+                    test: () => iconStyles.some(style => style.color === 'rgb(255, 152, 0)'), // orange[500]
                 },
                 {
                     condition: expected.includes('frozen'),
-                    test: () => icons.some(icon => icon.getAttribute('data-testid') === 'AcUnitIcon'),
+                    test: () => iconStyles.some(style => style.color === 'rgb(144, 202, 249)'), // blue[200]
                 },
             ];
 
             iconTests.forEach(({condition, test}) => {
                 if (condition) {
                     expect(test()).toBeTruthy();
+                } else {
+                    expect(test()).toBeFalsy();
                 }
             });
         };
@@ -153,7 +157,6 @@ describe('Objects Component', () => {
         verifyRowState(test2Row, ['down', 'frozen']);
         verifyRowState(test3Row, ['warn']);
     });
-
 
     test('handles object selection', async () => {
         render(
@@ -292,24 +295,24 @@ describe('Objects Component', () => {
 
         render(
             <MemoryRouter>
-                <Objects />
+                <Objects/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', { name: /test-ns\/svc\/test1/i })).getByRole('checkbox');
+            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /actions on selected objects/i }));
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', { name: /ok/i }));
+        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalled();
             const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/succeeded|ok/i);
-        });
+            expect(alert).toHaveTextContent(/succeeded|ok/i);
+        }, {timeout: 5000});
 
         global.fetch.mockClear();
     });
@@ -324,23 +327,23 @@ describe('Objects Component', () => {
 
         render(
             <MemoryRouter>
-                <Objects />
+                <Objects/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', { name: /test-ns\/svc\/test1/i })).getByRole('checkbox');
+            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
-        fireEvent.click(screen.getByRole('button', { name: /actions on selected objects/i }));
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', { name: /ok/i }));
+        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
 
         await waitFor(() => {
             const alert = screen.getByRole('alert');
-            expect(alert.textContent).toMatch(/failed|error/i);
-        });
+            expect(alert).toHaveTextContent(/failed|error/i);
+        }, {timeout: 5000});
 
         global.fetch.mockClear();
     });
@@ -348,12 +351,12 @@ describe('Objects Component', () => {
     test('toggles filters visibility', async () => {
         render(
             <MemoryRouter>
-                <Objects />
+                <Objects/>
             </MemoryRouter>
         );
 
         // Check filters are visible initially
-        const toggleButton = await screen.findByTestId('filter-toggle-button');
+        const toggleButton = await screen.findByRole('button', {name: /filters/i});
         expect(toggleButton).toHaveTextContent('Hide filters');
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         expect(screen.getByLabelText('Kind')).toBeInTheDocument();

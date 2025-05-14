@@ -9,7 +9,6 @@ import {
     TableHead,
     TableRow,
     Typography,
-    Tooltip,
     Button,
     Menu,
     MenuItem,
@@ -28,7 +27,6 @@ import {
     ListItem,
     ListItemIcon,
     ListItemText,
-    Divider,
     useMediaQuery,
     useTheme,
 } from "@mui/material";
@@ -244,30 +242,50 @@ const Objects = () => {
                         <Button
                             onClick={() => setShowFilters(!showFilters)}
                             startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            data-testid="filter-toggle-button"
+                            aria-label={showFilters ? "Hide filters" : "Show filters"}
                         >
                             {showFilters ? "Hide filters" : "Show filters"}
                         </Button>
-                        <Button variant="contained" color="primary" onClick={handleActionsMenuOpen}
-                                disabled={!selectedObjects.length}>Actions on selected objects</Button>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleActionsMenuOpen}
+                            disabled={!selectedObjects.length}
+                        >
+                            Actions on selected objects
+                        </Button>
                     </Box>
 
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
-                            <Autocomplete sx={{minWidth: 200}} options={["all", ...namespaces]}
-                                          value={selectedNamespace}
-                                          onChange={(e, val) => val && setSelectedNamespace(val)}
-                                          renderInput={(params) => <TextField {...params} label="Namespace"/>}/>
-                            <Autocomplete sx={{minWidth: 200}} options={["all", ...kinds]} value={selectedKind}
-                                          onChange={(e, val) => val && setSelectedKind(val)}
-                                          renderInput={(params) => <TextField {...params} label="Kind"/>}/>
-                            <TextField label="Name" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                                       sx={{minWidth: 200}}/>
+                            <Autocomplete
+                                sx={{minWidth: 200}}
+                                options={["all", ...namespaces]}
+                                value={selectedNamespace}
+                                onChange={(e, val) => val && setSelectedNamespace(val)}
+                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                            />
+                            <Autocomplete
+                                sx={{minWidth: 200}}
+                                options={["all", ...kinds]}
+                                value={selectedKind}
+                                onChange={(e, val) => val && setSelectedKind(val)}
+                                renderInput={(params) => <TextField {...params} label="Kind"/>}
+                            />
+                            <TextField
+                                label="Name"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                sx={{minWidth: 200}}
+                            />
                         </Box>
                     </Collapse>
 
-                    <Menu anchorEl={actionsMenuAnchor} open={Boolean(actionsMenuAnchor)}
-                          onClose={handleActionsMenuClose}>
+                    <Menu
+                        anchorEl={actionsMenuAnchor}
+                        open={Boolean(actionsMenuAnchor)}
+                        onClose={handleActionsMenuClose}
+                    >
                         {AVAILABLE_ACTIONS.map(({name, icon}) => (
                             <MenuItem key={name} onClick={() => handleActionClick(name)}>
                                 <ListItemIcon>{icon}</ListItemIcon>
@@ -281,8 +299,12 @@ const Objects = () => {
                     <Table>
                         <TableHead>
                             <TableRow>
-                                <TableCell><Checkbox checked={selectedObjects.length === filteredObjectNames.length}
-                                                     onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}/></TableCell>
+                                <TableCell>
+                                    <Checkbox
+                                        checked={selectedObjects.length === filteredObjectNames.length}
+                                        onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
+                                    />
+                                </TableCell>
                                 <TableCell><strong>Object</strong></TableCell>
                                 {isWideScreen && allNodes.map((node) => (
                                     <TableCell key={node} align="center">
@@ -297,8 +319,11 @@ const Objects = () => {
                                 const avail = obj?.avail;
                                 const frozen = obj?.frozen;
                                 return (
-                                    <TableRow key={objectName} onClick={() => handleObjectClick(objectName)}
-                                              sx={{cursor: "pointer"}}>
+                                    <TableRow
+                                        key={objectName}
+                                        onClick={() => handleObjectClick(objectName)}
+                                        sx={{cursor: "pointer"}}
+                                    >
                                         <TableCell>
                                             <Checkbox
                                                 checked={selectedObjects.includes(objectName)}
@@ -309,17 +334,30 @@ const Objects = () => {
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={1}>
                                                 <Box display="flex" alignItems="center" gap={0.5}>
-                                                    {avail === "up" &&
-                                                        <FiberManualRecordIcon data-testid="FiberManualRecordIcon-up"
-                                                                               sx={{color: green[500]}}/>}
-                                                    {avail === "down" &&
-                                                        <FiberManualRecordIcon data-testid="FiberManualRecordIcon-down"
-                                                                               sx={{color: red[500]}}/>}
-                                                    {avail === "warn" &&
-                                                        <WarningAmberIcon data-testid="WarningAmberIcon"
-                                                                          sx={{color: orange[500]}}/>}
-                                                    {frozen === "frozen" &&
-                                                        <AcUnit data-testid="AcUnitIcon" sx={{color: blue[200]}}/>}
+                                                    {avail === "up" && (
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: green[500]}}
+                                                            aria-label="Object is up"
+                                                        />
+                                                    )}
+                                                    {avail === "down" && (
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: red[500]}}
+                                                            aria-label="Object is down"
+                                                        />
+                                                    )}
+                                                    {avail === "warn" && (
+                                                        <WarningAmberIcon
+                                                            sx={{color: orange[500]}}
+                                                            aria-label="Object has warning"
+                                                        />
+                                                    )}
+                                                    {frozen === "frozen" && (
+                                                        <AcUnit
+                                                            sx={{color: blue[200]}}
+                                                            aria-label="Object is frozen"
+                                                        />
+                                                    )}
                                                 </Box>
                                                 <Typography>{objectName}</Typography>
                                             </Box>
@@ -331,22 +369,43 @@ const Objects = () => {
                                             } = getNodeState(objectName, node);
                                             return (
                                                 <TableCell key={node} align="center">
-                                                    <Box display="flex" justifyContent="center" alignItems="center"
-                                                         gap={0.5}>
+                                                    <Box
+                                                        display="flex"
+                                                        justifyContent="center"
+                                                        alignItems="center"
+                                                        gap={0.5}
+                                                    >
                                                         {nodeAvail ? (
                                                             <>
-                                                                {nodeAvail === "up" &&
-                                                                    <FiberManualRecordIcon sx={{color: green[500]}}/>}
-                                                                {nodeAvail === "down" &&
-                                                                    <FiberManualRecordIcon sx={{color: red[500]}}/>}
-                                                                {nodeAvail === "warn" &&
-                                                                    <WarningAmberIcon sx={{color: orange[500]}}/>}
-                                                                {nodeFrozen === "frozen" &&
-                                                                    <AcUnit sx={{color: blue[200]}}/>}
+                                                                {nodeAvail === "up" && (
+                                                                    <FiberManualRecordIcon
+                                                                        sx={{color: green[500]}}
+                                                                        aria-label={`Node ${node} is up`}
+                                                                    />
+                                                                )}
+                                                                {nodeAvail === "down" && (
+                                                                    <FiberManualRecordIcon
+                                                                        sx={{color: red[500]}}
+                                                                        aria-label={`Node ${node} is down`}
+                                                                    />
+                                                                )}
+                                                                {nodeAvail === "warn" && (
+                                                                    <WarningAmberIcon
+                                                                        sx={{color: orange[500]}}
+                                                                        aria-label={`Node ${node} has warning`}
+                                                                    />
+                                                                )}
+                                                                {nodeFrozen === "frozen" && (
+                                                                    <AcUnit
+                                                                        sx={{color: blue[200]}}
+                                                                        aria-label={`Node ${node} is frozen`}
+                                                                    />
+                                                                )}
                                                             </>
                                                         ) : (
-                                                            <Typography variant="caption"
-                                                                        color="textSecondary">-</Typography>
+                                                            <Typography variant="caption" color="textSecondary">
+                                                                -
+                                                            </Typography>
                                                         )}
                                                     </Box>
                                                 </TableCell>
@@ -365,12 +424,18 @@ const Objects = () => {
                     onClose={() => setSnackbar({...snackbar, open: false})}
                     anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                 >
-                    <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+                    <Alert
+                        severity={snackbar.severity}
+                        onClose={() => setSnackbar({...snackbar, open: false})}
+                    >
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
 
-                <Dialog open={confirmationDialogOpen} onClose={() => setConfirmationDialogOpen(false)}>
+                <Dialog
+                    open={confirmationDialogOpen}
+                    onClose={() => setConfirmationDialogOpen(false)}
+                >
                     <DialogTitle>Freeze selected objects</DialogTitle>
                     <DialogContent>
                         <FormControlLabel
@@ -396,7 +461,10 @@ const Objects = () => {
                     </DialogActions>
                 </Dialog>
 
-                <Dialog open={simpleConfirmDialogOpen} onClose={() => setSimpleConfirmDialogOpen(false)}>
+                <Dialog
+                    open={simpleConfirmDialogOpen}
+                    onClose={() => setSimpleConfirmDialogOpen(false)}
+                >
                     <DialogTitle>Confirm action</DialogTitle>
                     <DialogContent>
                         Are you sure you want to execute <strong>{pendingAction}</strong> on the selected objects?

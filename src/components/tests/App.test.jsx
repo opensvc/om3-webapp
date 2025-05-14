@@ -10,7 +10,7 @@ import Heartbeats from '../Heartbeats';
 import Pools from '../Pools';
 import Objects from '../Objects';
 import ObjectDetails from '../ObjectDetails';
-import AuthChoice from '../Authchoice';
+import AuthChoice from '../AuthChoice.jsx';
 import Login from '../Login';
 import OidcCallback from '../OidcCallback';
 import {AuthProvider} from '../../context/AuthProvider';
@@ -28,7 +28,7 @@ jest.mock('../Heartbeats', () => () => <div data-testid="heartbeats">Heartbeats<
 jest.mock('../Pools', () => () => <div data-testid="pools">Pools</div>);
 jest.mock('../Objects', () => () => <div data-testid="objects">Objects</div>);
 jest.mock('../ObjectDetails', () => () => <div data-testid="object-details">ObjectDetails</div>);
-jest.mock('../Authchoice', () => () => <div data-testid="auth-choice">AuthChoice</div>);
+jest.mock('../AuthChoice.jsx', () => () => <div data-testid="auth-choice">AuthChoice</div>);
 jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
 jest.mock('../../context/AuthProvider', () => ({

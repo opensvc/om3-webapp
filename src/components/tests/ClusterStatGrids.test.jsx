@@ -95,7 +95,7 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridObjects handles zero values', () => {
-        const statusCount = {up: 0, warn: 0, down: 0, unknown: 0};
+        const statusCount = {up: 0, warn: 0, down: 0};
         render(
             <GridObjects
                 objectCount={0}
@@ -106,7 +106,44 @@ describe('ClusterStatGrids', () => {
 
         expect(screen.getByText('Objects')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getByText('🟢 0 | 🟡 0 | 🔴 0')).toBeInTheDocument();
+        expect(screen.getByText('Up 0')).toBeInTheDocument();
+        expect(screen.getByText('Warn 0')).toBeInTheDocument();
+        expect(screen.getByText('Down 0')).toBeInTheDocument();
+    });
+
+    test('GridObjects renders correctly with non-zero values and handles click', () => {
+        const statusCount = { up: 5, warn: 2, down: 1 };
+        render(
+            <GridObjects
+                objectCount={8}
+                statusCount={statusCount}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.getByText('Objects')).toBeInTheDocument();
+        expect(screen.getByText('8')).toBeInTheDocument();
+        const upChipLabel = screen.getByText('Up 5');
+        const warnChipLabel = screen.getByText('Warn 2');
+        const downChipLabel = screen.getByText('Down 1');
+
+        expect(upChipLabel).toBeInTheDocument();
+        expect(warnChipLabel).toBeInTheDocument();
+        expect(downChipLabel).toBeInTheDocument();
+
+        // Find the root Chip element
+        const upChip = upChipLabel.closest('.MuiChip-root');
+        const warnChip = warnChipLabel.closest('.MuiChip-root');
+        const downChip = downChipLabel.closest('.MuiChip-root');
+
+        // Verify styles with RGB values
+        expect(upChip).toHaveStyle('background-color: green');
+        expect(warnChip).toHaveStyle('background-color: yellow');
+        expect(downChip).toHaveStyle('background-color: red');
+
+        const card = screen.getByText('Objects').closest('div');
+        fireEvent.click(card);
+        expect(mockOnClick).toHaveBeenCalled();
     });
 
     test('GridNamespaces handles empty subtitle', () => {

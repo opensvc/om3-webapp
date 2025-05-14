@@ -72,7 +72,10 @@ describe('ClusterOverview', () => {
 
         expect(screen.getByTestId('stat-card-objects')).toBeInTheDocument();
         expect(screen.getByTestId('stat-card-value-objects')).toHaveTextContent('4');
-        expect(screen.getByText('🟢 1 | 🟡 1 | 🔴 1')).toBeInTheDocument();
+        expect(screen.getByText('Up 1')).toBeInTheDocument();
+        expect(screen.getByText('Warn 1')).toBeInTheDocument();
+        expect(screen.getByText('Down 1')).toBeInTheDocument();
+
 
         expect(screen.getByTestId('stat-card-namespaces')).toBeInTheDocument();
         expect(screen.getByTestId('stat-card-value-namespaces')).toHaveTextContent('3');
@@ -159,7 +162,10 @@ describe('ClusterOverview', () => {
 
         expect(screen.getByTestId('stat-card-objects')).toBeInTheDocument();
         expect(screen.getByTestId('stat-card-value-objects')).toHaveTextContent('0');
-        expect(screen.getByText('🟢 0 | 🟡 0 | 🔴 0')).toBeInTheDocument();
+        expect(screen.getByText('Up 0')).toBeInTheDocument();
+        expect(screen.getByText('Warn 0')).toBeInTheDocument();
+        expect(screen.getByText('Down 0')).toBeInTheDocument();
+
 
         expect(screen.getByTestId('stat-card-namespaces')).toBeInTheDocument();
         expect(screen.getByTestId('stat-card-value-namespaces')).toHaveTextContent('0');

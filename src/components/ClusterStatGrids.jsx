@@ -1,9 +1,9 @@
 import React from "react";
-import {Grid2} from "@mui/material";
+import {Grid2, Chip} from "@mui/material";
 import {StatCard} from "./StatCard.jsx";
 
-export const GridNodes = ({ nodeCount, frozenCount, unfrozenCount, onClick }) => (
-    <Grid2 size={{ xs: 12, md: 4 }}>
+export const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
+    <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Nodes"
             value={nodeCount}
@@ -13,19 +13,37 @@ export const GridNodes = ({ nodeCount, frozenCount, unfrozenCount, onClick }) =>
     </Grid2>
 );
 
-export const GridObjects = ({ objectCount, statusCount, onClick }) => (
-    <Grid2 size={{ xs: 12, md: 4 }}>
+export const GridObjects = ({objectCount, statusCount, onClick}) => (
+    <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Objects"
             value={objectCount}
-            subtitle={`🟢 ${statusCount.up} | 🟡 ${statusCount.warn} | 🔴 ${statusCount.down}`}
+            subtitle={
+                <>
+                    <Chip
+                        label={`Up ${statusCount.up}`}
+                        size="small"
+                        sx={{backgroundColor: 'green', color: 'white', mr: 1}}
+                    />
+                    <Chip
+                        label={`Warn ${statusCount.warn}`}
+                        size="small"
+                        sx={{backgroundColor: 'yellow', color: 'black', mr: 1}}
+                    />
+                    <Chip
+                        label={`Down ${statusCount.down}`}
+                        size="small"
+                        sx={{backgroundColor: 'red', color: 'white'}}
+                    />
+                </>
+            }
             onClick={onClick}
         />
     </Grid2>
 );
 
-export const GridNamespaces = ({ namespaceCount, namespaceSubtitle, onClick }) => (
-    <Grid2 size={{ xs: 12, md: 4 }}>
+export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => (
+    <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Namespaces"
             value={namespaceCount}
@@ -35,8 +53,8 @@ export const GridNamespaces = ({ namespaceCount, namespaceSubtitle, onClick }) =
     </Grid2>
 );
 
-export const GridHeartbeats = ({ heartbeatCount, onClick }) => (
-    <Grid2 size={{ xs: 12, md: 4 }}>
+export const GridHeartbeats = ({heartbeatCount, onClick}) => (
+    <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Heartbeats"
             value={heartbeatCount}
@@ -45,8 +63,8 @@ export const GridHeartbeats = ({ heartbeatCount, onClick }) => (
     </Grid2>
 );
 
-export const GridPools = ({ poolCount, onClick }) => (
-    <Grid2 size={{ xs: 12, md: 4 }}>
+export const GridPools = ({poolCount, onClick}) => (
+    <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Pools"
             value={poolCount}

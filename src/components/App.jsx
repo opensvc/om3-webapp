@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import OidcCallback from "./OidcCallback";
-import AuthChoice from "./Authchoice.jsx";
+import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
 import NodesTable from "./NodesTable";

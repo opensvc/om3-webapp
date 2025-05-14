@@ -1,4 +1,4 @@
-import React, {useEffect} from "react";
+import React, { useEffect } from "react";
 import useEventStore from "../hooks/useEventStore.js";
 import {
     Box,
@@ -17,12 +17,12 @@ import HeartBrokenIcon from "@mui/icons-material/FavoriteBorder";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import ErrorIcon from "@mui/icons-material/Error";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource} from "../eventSourceManager.jsx";
+import { closeEventSource } from "../eventSourceManager.jsx";
 
 export const getStreamStatus = (stream) => {
     if (!stream) return {
         state: "Unknown",
-        icon: <ErrorIcon color="disabled" data-testid="error-icon" />
+        icon: <ErrorIcon color="disabled" aria-label="Unknown stream status" />
     };
 
     const peer = Object.values(stream.peers || {})[0];
@@ -31,22 +31,22 @@ export const getStreamStatus = (stream) => {
 
     if (state !== "running") return {
         state: "Stopped",
-        icon: <HeartBrokenIcon color="action" data-testid="heart-broken-icon" />
+        icon: <HeartBrokenIcon color="action" aria-label="Stopped stream" />
     };
     if (isBeating) return {
         state: "Beating",
-        icon: <HeartIcon color="error" data-testid="heart-icon" />
+        icon: <HeartIcon color="error" aria-label="Beating stream" />
     };
     return {
         state: "Idle",
-        icon: <HourglassEmptyIcon color="disabled" data-testid="hourglass-icon" />
+        icon: <HourglassEmptyIcon color="disabled" aria-label="Idle stream" />
     };
 };
 
 const Heartbeats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const nodes = Object.keys(heartbeatStatus || {});
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
+    const { fetchNodes, startEventReception } = useFetchDaemonStatus();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -66,11 +66,11 @@ const Heartbeats = () => {
                 display: "flex",
                 justifyContent: "center",
             }}
-            data-testid="heartbeats-container"
+            aria-label="Heartbeats container"
         >
-            <Box sx={{width: "100%", maxWidth: 1000}}>
-                <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center" data-testid="heartbeats-title">
+            <Box sx={{ width: "100%", maxWidth: 1000 }}>
+                <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+                    <Typography variant="h4" gutterBottom align="center" aria-label="Heartbeats title">
                         Heartbeats
                     </Typography>
 
@@ -98,15 +98,15 @@ const Heartbeats = () => {
                                         <TableRow
                                             key={node}
                                             hover
-                                            data-testid={`node-row-${node}`}
+                                            aria-label={`Node ${node} heartbeat row`}
                                         >
-                                            <TableCell data-testid={`node-name-${node}`}>
+                                            <TableCell aria-label={`Node ${node} name`}>
                                                 {node}
                                             </TableCell>
                                             <TableCell
                                                 align="center"
-                                                data-testid={`rx-status-${node}`}
                                                 title={rxStatus.state}
+                                                aria-label={`Node ${node} RX status: ${rxStatus.state}`}
                                             >
                                                 <Tooltip title={rxStatus.state}>
                                                     <Box display="flex" justifyContent="center" alignItems="center">
@@ -116,8 +116,8 @@ const Heartbeats = () => {
                                             </TableCell>
                                             <TableCell
                                                 align="center"
-                                                data-testid={`tx-status-${node}`}
                                                 title={txStatus.state}
+                                                aria-label={`Node ${node} TX status: ${txStatus.state}`}
                                             >
                                                 <Tooltip title={txStatus.state}>
                                                     <Box display="flex" justifyContent="center" alignItems="center">

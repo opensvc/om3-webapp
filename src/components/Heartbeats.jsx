@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, {useEffect} from "react";
 import {
     Box,
     Paper,
@@ -12,12 +12,12 @@ import {
     Tooltip,
     Badge,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
+import {styled} from "@mui/material/styles";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import { closeEventSource } from "../eventSourceManager.jsx";
+import {closeEventSource} from "../eventSourceManager.jsx";
 
-const StatusBadge = styled(Badge)(({ theme, status }) => ({
+const StatusBadge = styled(Badge)(({theme, status}) => ({
     '& .MuiBadge-badge': {
         backgroundColor: status === "Beating" ? theme.palette.success.main : theme.palette.error.main,
         top: 4,
@@ -40,10 +40,10 @@ const HeartbeatCell = styled(Box)({
 });
 
 export const getStreamStatus = (stream) => {
-    if (!stream) return { state: "Unknown" };
+    if (!stream) return {state: "Unknown"};
     const peer = Object.values(stream.peers || {})[0];
-    if (stream.state !== "running") return { state: "Stopped" };
-    return { state: peer?.is_beating ? "Beating" : "Idle" };
+    if (stream.state !== "running") return {state: "Stopped"};
+    return {state: peer?.is_beating ? "Beating" : "Idle"};
 };
 
 const extractHeartbeatIds = (streams = []) => {
@@ -53,7 +53,7 @@ const extractHeartbeatIds = (streams = []) => {
 const Heartbeats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const nodes = Object.keys(heartbeatStatus || {});
-    const { fetchNodes, startEventReception } = useFetchDaemonStatus();
+    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -62,23 +62,23 @@ const Heartbeats = () => {
             startEventReception(token);
         }
         return () => closeEventSource();
-    }, [fetchNodes, startEventReception]);
+    }, []);
 
     return (
-        <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
-            <Box sx={{ width: "100%", maxWidth: 1000 }}>
-                <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+        <Box sx={{p: 4, display: "flex", justifyContent: "center"}}>
+            <Box sx={{width: "100%", maxWidth: 1000}}>
+                <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
                     <Typography variant="h4" gutterBottom align="center">
                         Heartbeats
                     </Typography>
 
                     <TableContainer>
-                        <Table size="small" sx={{ tableLayout: 'fixed' }}>
+                        <Table size="small" sx={{tableLayout: 'fixed'}}>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>Node</TableCell>
+                                    <TableCell sx={{width: '20%', fontWeight: 'bold'}}>Node</TableCell>
                                     {nodes[0] && extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).map(hbId => (
-                                        <TableCell key={hbId} align="center" sx={{ fontWeight: 'bold' }}>
+                                        <TableCell key={hbId} align="center" sx={{fontWeight: 'bold'}}>
                                             {hbId}
                                         </TableCell>
                                     ))}
@@ -89,7 +89,7 @@ const Heartbeats = () => {
                                     const heartbeatIds = extractHeartbeatIds(heartbeatStatus[node]?.streams);
                                     return (
                                         <TableRow key={node} hover>
-                                            <TableCell sx={{ width: '20%' }}>{node}</TableCell>
+                                            <TableCell sx={{width: '20%'}}>{node}</TableCell>
                                             {heartbeatIds.map(hbId => {
                                                 const rx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.rx`);
                                                 const tx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.tx`);
@@ -98,7 +98,7 @@ const Heartbeats = () => {
                                                     <TableCell
                                                         key={`${node}-${hbId}`}
                                                         align="center"
-                                                        sx={{ padding: '6px 4px' }}
+                                                        sx={{padding: '6px 4px'}}
                                                     >
                                                         <Box sx={{
                                                             display: 'flex',

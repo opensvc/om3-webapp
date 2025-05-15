@@ -74,6 +74,15 @@ const ClusterOverview = () => {
         .map(([ns, count]) => `${ns}: ${count}`)
         .join(" | ");
 
+    const heartbeatIds = new Set();
+    Object.values(heartbeatStatus).forEach(node => {
+        (node.streams || []).forEach(stream => {
+            const baseId = stream.id.split('.')[0];
+            heartbeatIds.add(baseId);
+        });
+    });
+    const heartbeatCount = heartbeatIds.size;
+
     return (
         <Box sx={{p: 3}}>
             <Typography variant="h4" gutterBottom sx={{mb: 4}}>
@@ -98,7 +107,7 @@ const ClusterOverview = () => {
                     onClick={() => navigate("/namespaces")}
                 />
                 <GridHeartbeats
-                    heartbeatCount={Object.keys(heartbeatStatus).length}
+                    heartbeatCount={heartbeatCount}
                     onClick={() => navigate("/heartbeats")}
                 />
                 <GridPools

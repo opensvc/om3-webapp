@@ -1,5 +1,4 @@
 import React, { useEffect } from "react";
-import useEventStore from "../hooks/useEventStore.js";
 import {
     Box,
     Paper,
@@ -11,36 +10,44 @@ import {
     TableCell,
     TableBody,
     Tooltip,
+    Badge,
 } from "@mui/material";
-import HeartIcon from "@mui/icons-material/Favorite";
-import HeartBrokenIcon from "@mui/icons-material/FavoriteBorder";
-import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
-import ErrorIcon from "@mui/icons-material/Error";
+import { styled } from "@mui/material/styles";
+import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import { closeEventSource } from "../eventSourceManager.jsx";
 
+const StatusBadge = styled(Badge)(({ theme, status }) => ({
+    '& .MuiBadge-badge': {
+        backgroundColor: status === "Beating" ? theme.palette.success.main : theme.palette.error.main,
+        top: 4,
+        right: -2,
+        width: 6,
+        height: 6,
+        minWidth: 6,
+        padding: 0,
+        border: `1px solid ${theme.palette.background.paper}`,
+    },
+}));
+
+const HeartbeatCell = styled(Box)({
+    display: 'inline-flex',
+    alignItems: 'center',
+    position: 'relative',
+    margin: '0 4px',
+    fontSize: '0.75rem',
+    lineHeight: '1.2',
+});
+
 export const getStreamStatus = (stream) => {
-    if (!stream) return {
-        state: "Unknown",
-        icon: <ErrorIcon color="disabled" aria-label="Unknown stream status" />
-    };
-
+    if (!stream) return { state: "Unknown" };
     const peer = Object.values(stream.peers || {})[0];
-    const isBeating = peer?.is_beating;
-    const state = stream.state;
+    if (stream.state !== "running") return { state: "Stopped" };
+    return { state: peer?.is_beating ? "Beating" : "Idle" };
+};
 
-    if (state !== "running") return {
-        state: "Stopped",
-        icon: <HeartBrokenIcon color="action" aria-label="Stopped stream" />
-    };
-    if (isBeating) return {
-        state: "Beating",
-        icon: <HeartIcon color="error" aria-label="Beating stream" />
-    };
-    return {
-        state: "Idle",
-        icon: <HourglassEmptyIcon color="disabled" aria-label="Idle stream" />
-    };
+const extractHeartbeatIds = (streams = []) => {
+    return [...new Set(streams.map(s => s.id.split('.')[0]))].sort();
 };
 
 const Heartbeats = () => {
@@ -54,77 +61,74 @@ const Heartbeats = () => {
             fetchNodes(token);
             startEventReception(token);
         }
-        return () => {
-            closeEventSource();
-        };
+        return () => closeEventSource();
     }, [fetchNodes, startEventReception]);
 
     return (
-        <Box
-            sx={{
-                p: 4,
-                display: "flex",
-                justifyContent: "center",
-            }}
-            aria-label="Heartbeats container"
-        >
+        <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
             <Box sx={{ width: "100%", maxWidth: 1000 }}>
                 <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-                    <Typography variant="h4" gutterBottom align="center" aria-label="Heartbeats title">
+                    <Typography variant="h4" gutterBottom align="center">
                         Heartbeats
                     </Typography>
 
                     <TableContainer>
-                        <Table aria-label="heartbeats table">
+                        <Table size="small" sx={{ tableLayout: 'fixed' }}>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell><strong>Node</strong></TableCell>
-                                    <TableCell align="center"><strong>hb#1 RX</strong></TableCell>
-                                    <TableCell align="center"><strong>hb#1 TX</strong></TableCell>
+                                    <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>Node</TableCell>
+                                    {nodes[0] && extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).map(hbId => (
+                                        <TableCell key={hbId} align="center" sx={{ fontWeight: 'bold' }}>
+                                            {hbId}
+                                        </TableCell>
+                                    ))}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {nodes.map((node) => {
-                                    const heartbeat = heartbeatStatus[node];
-                                    const streams = heartbeat?.streams || [];
-
-                                    const rx = streams.find((s) => s.id === "hb#1.rx");
-                                    const tx = streams.find((s) => s.id === "hb#1.tx");
-
-                                    const rxStatus = getStreamStatus(rx);
-                                    const txStatus = getStreamStatus(tx);
-
+                                {nodes.map(node => {
+                                    const heartbeatIds = extractHeartbeatIds(heartbeatStatus[node]?.streams);
                                     return (
-                                        <TableRow
-                                            key={node}
-                                            hover
-                                            aria-label={`Node ${node} heartbeat row`}
-                                        >
-                                            <TableCell aria-label={`Node ${node} name`}>
-                                                {node}
-                                            </TableCell>
-                                            <TableCell
-                                                align="center"
-                                                title={rxStatus.state}
-                                                aria-label={`Node ${node} RX status: ${rxStatus.state}`}
-                                            >
-                                                <Tooltip title={rxStatus.state}>
-                                                    <Box display="flex" justifyContent="center" alignItems="center">
-                                                        {rxStatus.icon}
-                                                    </Box>
-                                                </Tooltip>
-                                            </TableCell>
-                                            <TableCell
-                                                align="center"
-                                                title={txStatus.state}
-                                                aria-label={`Node ${node} TX status: ${txStatus.state}`}
-                                            >
-                                                <Tooltip title={txStatus.state}>
-                                                    <Box display="flex" justifyContent="center" alignItems="center">
-                                                        {txStatus.icon}
-                                                    </Box>
-                                                </Tooltip>
-                                            </TableCell>
+                                        <TableRow key={node} hover>
+                                            <TableCell sx={{ width: '20%' }}>{node}</TableCell>
+                                            {heartbeatIds.map(hbId => {
+                                                const rx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.rx`);
+                                                const tx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.tx`);
+
+                                                return (
+                                                    <TableCell
+                                                        key={`${node}-${hbId}`}
+                                                        align="center"
+                                                        sx={{ padding: '6px 4px' }}
+                                                    >
+                                                        <Box sx={{
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            gap: '12px',
+                                                        }}>
+                                                            <Tooltip title={`rx: ${getStreamStatus(rx).state}`}>
+                                                                <HeartbeatCell>
+                                                                    <StatusBadge
+                                                                        badgeContent=" "
+                                                                        status={getStreamStatus(rx).state}
+                                                                    >
+                                                                        <span>rx</span>
+                                                                    </StatusBadge>
+                                                                </HeartbeatCell>
+                                                            </Tooltip>
+                                                            <Tooltip title={`tx: ${getStreamStatus(tx).state}`}>
+                                                                <HeartbeatCell>
+                                                                    <StatusBadge
+                                                                        badgeContent=" "
+                                                                        status={getStreamStatus(tx).state}
+                                                                    >
+                                                                        <span>tx</span>
+                                                                    </StatusBadge>
+                                                                </HeartbeatCell>
+                                                            </Tooltip>
+                                                        </Box>
+                                                    </TableCell>
+                                                );
+                                            })}
                                         </TableRow>
                                     );
                                 })}

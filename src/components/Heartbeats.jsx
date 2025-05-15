@@ -55,6 +55,10 @@ const Heartbeats = () => {
     const nodes = Object.keys(heartbeatStatus || {});
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
+    const columnCount = nodes[0] && heartbeatStatus[nodes[0]]?.streams?.length
+        ? extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).length
+        : 0;
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -65,23 +69,30 @@ const Heartbeats = () => {
     }, []);
 
     return (
-        <Box sx={{p: 4, display: "flex", justifyContent: "center"}}>
-            <Box sx={{width: "100%", maxWidth: 1000}}>
-                <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                    <Typography variant="h4" gutterBottom align="center">
-                        Heartbeats
-                    </Typography>
+        <Box sx={{p: 4}}>
+            <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
+                <Typography variant="h4" gutterBottom align="center">
+                    Heartbeats
+                </Typography>
 
+                <Box sx={{overflowX: "auto"}}>
                     <TableContainer>
-                        <Table size="small" sx={{tableLayout: 'fixed'}}>
+                        <Table
+                            size="small"
+                            sx={{
+                                tableLayout: "fixed",
+                                minWidth: 200 + columnCount * 100, // 100px per column
+                            }}
+                        >
                             <TableHead>
                                 <TableRow>
-                                    <TableCell sx={{width: '20%', fontWeight: 'bold'}}>Node</TableCell>
-                                    {nodes[0] && extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).map(hbId => (
-                                        <TableCell key={hbId} align="center" sx={{fontWeight: 'bold'}}>
-                                            {hbId}
-                                        </TableCell>
-                                    ))}
+                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
+                                    {nodes[0] &&
+                                        extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).map(hbId => (
+                                            <TableCell key={hbId} align="center" sx={{fontWeight: "bold"}}>
+                                                {hbId}
+                                            </TableCell>
+                                        ))}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -89,7 +100,7 @@ const Heartbeats = () => {
                                     const heartbeatIds = extractHeartbeatIds(heartbeatStatus[node]?.streams);
                                     return (
                                         <TableRow key={node} hover>
-                                            <TableCell sx={{width: '20%'}}>{node}</TableCell>
+                                            <TableCell>{node}</TableCell>
                                             {heartbeatIds.map(hbId => {
                                                 const rx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.rx`);
                                                 const tx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.tx`);
@@ -104,6 +115,7 @@ const Heartbeats = () => {
                                                             display: 'flex',
                                                             justifyContent: 'center',
                                                             gap: '12px',
+                                                            flexWrap: 'wrap',
                                                         }}>
                                                             <Tooltip title={`rx: ${getStreamStatus(rx).state}`}>
                                                                 <HeartbeatCell>
@@ -135,8 +147,8 @@ const Heartbeats = () => {
                             </TableBody>
                         </Table>
                     </TableContainer>
-                </Paper>
-            </Box>
+                </Box>
+            </Paper>
         </Box>
     );
 };

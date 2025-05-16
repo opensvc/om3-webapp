@@ -7,6 +7,7 @@ const useEventStore = create((set) => ({
     objectStatus: {},
     objectInstanceStatus: {},
     heartbeatStatus: {},
+    instanceMonitor: {},
 
     removeObject: (objectName) =>
         set((state) => {
@@ -58,6 +59,10 @@ const useEventStore = create((set) => ({
             heartbeatStatus: {...heartbeatStatus}
         })),
 
+    setInstanceMonitors: (instanceMonitor) =>
+        set(() => ({
+            instanceMonitor: {...instanceMonitor}
+        })),
 }));
 
 export default useEventStore;

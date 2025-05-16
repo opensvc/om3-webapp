@@ -1,10 +1,10 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import axios from 'axios';
 import ClusterOverview from '../Cluster.jsx';
 import useEventStore from '../../hooks/useEventStore.js';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
-import {URL_POOL} from '../../config/apiPath.js'
+import {URL_POOL} from '../../config/apiPath.js';
 
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -28,7 +28,20 @@ describe('ClusterOverview', () => {
         'root/svc/obj3': {avail: 'warn'},
         'ns2/svc/obj4': {avail: 'unknown'},
     };
-    const mockHeartbeatStatus = {hb1: {}, hb2: {}};
+    const mockHeartbeatStatus = {
+        node1: {
+            streams: [
+                {id: 'dev1.rx'},
+                {id: 'dev1.tx'},
+            ],
+        },
+        node2: {
+            streams: [
+                {id: 'dev2.rx'},
+                {id: 'dev2.tx'},
+            ],
+        },
+    };
     const mockToken = 'mock-token';
 
     beforeEach(() => {
@@ -61,30 +74,34 @@ describe('ClusterOverview', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByTestId('stat-card-value-pools')).toHaveTextContent('2');
+            const poolsCard = screen.getByRole('button', {name: /Pools stat card/i});
+            expect(within(poolsCard).getByText('2')).toBeInTheDocument();
         }, {timeout: 2000});
 
         expect(screen.getByText('Cluster Overview')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-nodes')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-nodes')).toHaveTextContent('2');
+        const nodesCard = screen.getByRole('button', {name: /Nodes stat card/i});
+        expect(nodesCard).toBeInTheDocument();
+        expect(within(nodesCard).getByText('2')).toBeInTheDocument();
         expect(screen.getByText('Frozen: 1 | Unfrozen: 1')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-objects')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-objects')).toHaveTextContent('4');
+        const objectsCard = screen.getByRole('button', {name: /Objects stat card/i});
+        expect(objectsCard).toBeInTheDocument();
+        expect(within(objectsCard).getByText('4')).toBeInTheDocument();
         expect(screen.getByText('Up 1')).toBeInTheDocument();
         expect(screen.getByText('Warn 1')).toBeInTheDocument();
         expect(screen.getByText('Down 1')).toBeInTheDocument();
 
-
-        expect(screen.getByTestId('stat-card-namespaces')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-namespaces')).toHaveTextContent('3');
+        const namespacesCard = screen.getByRole('button', {name: /Namespaces stat card/i});
+        expect(namespacesCard).toBeInTheDocument();
+        expect(within(namespacesCard).getByText('3')).toBeInTheDocument();
         expect(screen.getByText('ns1: 2 | root: 1 | ns2: 1')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-heartbeats')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-heartbeats')).toHaveTextContent('2');
+        const heartbeatsCard = screen.getByRole('button', {name: /Heartbeats stat card/i});
+        expect(heartbeatsCard).toBeInTheDocument();
+        expect(within(heartbeatsCard).getByText('2')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-pools')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Pools stat card/i})).toBeInTheDocument();
     });
 
     test('fetches data on mount with auth token', async () => {
@@ -102,7 +119,8 @@ describe('ClusterOverview', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByTestId('stat-card-value-pools')).toHaveTextContent('2');
+            const poolsCard = screen.getByRole('button', {name: /Pools stat card/i});
+            expect(within(poolsCard).getByText('2')).toBeInTheDocument();
         }, {timeout: 2000});
     });
 
@@ -114,27 +132,23 @@ describe('ClusterOverview', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByTestId('stat-card-value-pools')).toHaveTextContent('2');
+            const poolsCard = screen.getByRole('button', {name: /Pools stat card/i});
+            expect(within(poolsCard).getByText('2')).toBeInTheDocument();
         }, {timeout: 2000});
 
-        const nodesCard = screen.getByTestId('stat-card-nodes');
-        nodesCard.click();
+        fireEvent.click(screen.getByRole('button', {name: /Nodes stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/nodes');
 
-        const objectsCard = screen.getByTestId('stat-card-objects');
-        objectsCard.click();
+        fireEvent.click(screen.getByRole('button', {name: /Objects stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects');
 
-        const namespacesCard = screen.getByTestId('stat-card-namespaces');
-        namespacesCard.click();
+        fireEvent.click(screen.getByRole('button', {name: /Namespaces stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
 
-        const heartbeatsCard = screen.getByTestId('stat-card-heartbeats');
-        heartbeatsCard.click();
+        fireEvent.click(screen.getByRole('button', {name: /Heartbeats stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/heartbeats');
 
-        const poolsCard = screen.getByTestId('stat-card-pools');
-        poolsCard.click();
+        fireEvent.click(screen.getByRole('button', {name: /Pools stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/storage-pools');
     });
 
@@ -156,27 +170,22 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        expect(screen.getByTestId('stat-card-nodes')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-nodes')).toHaveTextContent('0');
+        expect(within(screen.getByRole('button', {name: /Nodes stat card/i})).getByText('0')).toBeInTheDocument();
         expect(screen.getByText('Frozen: 0 | Unfrozen: 0')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-objects')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-objects')).toHaveTextContent('0');
+        expect(within(screen.getByRole('button', {name: /Objects stat card/i})).getByText('0')).toBeInTheDocument();
         expect(screen.getByText('Up 0')).toBeInTheDocument();
         expect(screen.getByText('Warn 0')).toBeInTheDocument();
         expect(screen.getByText('Down 0')).toBeInTheDocument();
 
-
-        expect(screen.getByTestId('stat-card-namespaces')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-namespaces')).toHaveTextContent('0');
+        expect(within(screen.getByRole('button', {name: /Namespaces stat card/i})).getByText('0')).toBeInTheDocument();
         expect(screen.queryByText(/ns1:/)).not.toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-heartbeats')).toBeInTheDocument();
-        expect(screen.getByTestId('stat-card-value-heartbeats')).toHaveTextContent('0');
+        expect(within(screen.getByRole('button', {name: /Heartbeats stat card/i})).getByText('0')).toBeInTheDocument();
 
-        expect(screen.getByTestId('stat-card-pools')).toBeInTheDocument();
+        const poolsCard = screen.getByRole('button', {name: /Pools stat card/i});
         await waitFor(() => {
-            expect(screen.getByTestId('stat-card-value-pools')).toHaveTextContent('0');
+            expect(within(poolsCard).getByText('0')).toBeInTheDocument();
         }, {timeout: 2000});
     });
 

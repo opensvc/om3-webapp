@@ -10,34 +10,11 @@ import {
     TableCell,
     TableBody,
     Tooltip,
-    Badge,
+    Chip
 } from "@mui/material";
-import {styled} from "@mui/material/styles";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource} from "../eventSourceManager.jsx";
-
-const StatusBadge = styled(Badge)(({theme, status}) => ({
-    '& .MuiBadge-badge': {
-        backgroundColor: status === "Beating" ? theme.palette.success.main : theme.palette.error.main,
-        top: 4,
-        right: -2,
-        width: 6,
-        height: 6,
-        minWidth: 6,
-        padding: 0,
-        border: `1px solid ${theme.palette.background.paper}`,
-    },
-}));
-
-const HeartbeatCell = styled(Box)({
-    display: 'inline-flex',
-    alignItems: 'center',
-    position: 'relative',
-    margin: '0 4px',
-    fontSize: '0.75rem',
-    lineHeight: '1.2',
-});
 
 export const getStreamStatus = (stream) => {
     if (!stream) return {state: "Unknown"};
@@ -81,7 +58,7 @@ const Heartbeats = () => {
                             size="small"
                             sx={{
                                 tableLayout: "fixed",
-                                minWidth: 200 + columnCount * 100, // 100px per column
+                                minWidth: 200 + columnCount * 100,
                             }}
                         >
                             <TableHead>
@@ -114,28 +91,34 @@ const Heartbeats = () => {
                                                         <Box sx={{
                                                             display: 'flex',
                                                             justifyContent: 'center',
-                                                            gap: '12px',
+                                                            gap: '8px',
                                                             flexWrap: 'wrap',
                                                         }}>
                                                             <Tooltip title={`rx: ${getStreamStatus(rx).state}`}>
-                                                                <HeartbeatCell>
-                                                                    <StatusBadge
-                                                                        badgeContent=" "
-                                                                        status={getStreamStatus(rx).state}
-                                                                    >
-                                                                        <span>rx</span>
-                                                                    </StatusBadge>
-                                                                </HeartbeatCell>
+                                                                <Chip
+                                                                    size="small"
+                                                                    label="rx"
+                                                                    sx={{
+                                                                        backgroundColor: getStreamStatus(rx).state === 'Beating' ? 'success.main' : 'error.main',
+                                                                        color: 'white',
+                                                                        height: 24,
+                                                                        fontSize: '0.75rem',
+                                                                        px: 1.5,
+                                                                    }}
+                                                                />
                                                             </Tooltip>
                                                             <Tooltip title={`tx: ${getStreamStatus(tx).state}`}>
-                                                                <HeartbeatCell>
-                                                                    <StatusBadge
-                                                                        badgeContent=" "
-                                                                        status={getStreamStatus(tx).state}
-                                                                    >
-                                                                        <span>tx</span>
-                                                                    </StatusBadge>
-                                                                </HeartbeatCell>
+                                                                <Chip
+                                                                    size="small"
+                                                                    label="tx"
+                                                                    sx={{
+                                                                        backgroundColor: getStreamStatus(tx).state === 'Beating' ? 'success.main' : 'error.main',
+                                                                        color: 'white',
+                                                                        height: 24,
+                                                                        fontSize: '0.75rem',
+                                                                        px: 1.5,
+                                                                    }}
+                                                                />
                                                             </Tooltip>
                                                         </Box>
                                                     </TableCell>

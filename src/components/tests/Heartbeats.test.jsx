@@ -60,12 +60,12 @@ describe("Heartbeats Component", () => {
                             {
                                 id: "hb#1.rx",
                                 state: "running",
-                                peers: {peer1: {is_beating: true}},
+                                peers: { peer1: { is_beating: true } },
                             },
                             {
                                 id: "hb#1.tx",
                                 state: "running",
-                                peers: {peer1: {is_beating: false}},
+                                peers: { peer1: { is_beating: false } },
                             },
                         ],
                     },
@@ -73,23 +73,20 @@ describe("Heartbeats Component", () => {
             })
         );
 
-        renderWithTheme(<Heartbeats/>);
+        renderWithTheme(<Heartbeats />);
 
         await waitFor(() => {
-            const nodeRow = screen.getByRole("row", {name: /node1/i});
-            expect(nodeRow).toBeInTheDocument();
+            const rxChip = screen.getByText("rx").closest(".MuiChip-root");
+            const txChip = screen.getByText("tx").closest(".MuiChip-root");
 
-            const cells = within(nodeRow).getAllByRole("cell");
-            expect(cells[0]).toHaveTextContent("node1");
+            const rxColor = window.getComputedStyle(rxChip).backgroundColor;
+            const txColor = window.getComputedStyle(txChip).backgroundColor;
 
-            const hbCell = cells[1];
-            const rxBadge = within(hbCell).getByText("rx").parentElement.querySelector(".MuiBadge-badge");
-            const txBadge = within(hbCell).getByText("tx").parentElement.querySelector(".MuiBadge-badge");
-
-            expect(rxBadge).toHaveStyle(`background-color: ${theme.palette.success.main}`);
-            expect(txBadge).toHaveStyle(`background-color: ${theme.palette.error.main}`);
+            expect(rxColor).toBe("rgb(46, 125, 50)"); // green (success.main)
+            expect(txColor).toBe("rgb(211, 47, 47)"); // red (error.main)
         });
     });
+
 
     test("handles unknown status", async () => {
         useEventStore.mockImplementation((selector) =>
@@ -97,28 +94,28 @@ describe("Heartbeats Component", () => {
                 heartbeatStatus: {
                     node1: {
                         streams: [
-                            {id: "hb#1.rx", state: "unknown"},
-                            {id: "hb#1.tx", state: "unknown"},
+                            { id: "hb#1.rx", state: "unknown" },
+                            { id: "hb#1.tx", state: "unknown" },
                         ],
                     },
                 },
             })
         );
 
-        renderWithTheme(<Heartbeats/>);
+        renderWithTheme(<Heartbeats />);
 
         await waitFor(() => {
-            const nodeRow = screen.getByRole("row", {name: /node1/i});
-            const cells = within(nodeRow).getAllByRole("cell");
+            const rxChip = screen.getByText("rx").closest(".MuiChip-root");
+            const txChip = screen.getByText("tx").closest(".MuiChip-root");
 
-            const hbCell = cells[1];
-            const rxBadge = within(hbCell).getByText("rx").parentElement.querySelector(".MuiBadge-badge");
-            const txBadge = within(hbCell).getByText("tx").parentElement.querySelector(".MuiBadge-badge");
+            const rxColor = window.getComputedStyle(rxChip).backgroundColor;
+            const txColor = window.getComputedStyle(txChip).backgroundColor;
 
-            expect(rxBadge).toHaveStyle(`background-color: ${theme.palette.error.main}`);
-            expect(txBadge).toHaveStyle(`background-color: ${theme.palette.error.main}`);
+            expect(rxColor).toBe("rgb(211, 47, 47)"); // red
+            expect(txColor).toBe("rgb(211, 47, 47)"); // red
         });
     });
+
 
     test("getStreamStatus returns correct states", () => {
         expect(

@@ -22,6 +22,7 @@ export const createEventSource = (url, token) => {
         setNodeMonitors,
         setNodeStats,
         setHeartbeatStatuses,
+        setInstanceMonitors,
         removeObject,
     } = useEventStore.getState();
 
@@ -32,6 +33,7 @@ export const createEventSource = (url, token) => {
     let nodeMonitorBuffer = {};
     let nodeStatsBuffer = {};
     let heartbeatStatusBuffer = {};
+    let instanceMonitorBuffer = {};
     let flushTimeout = null;
 
     const scheduleFlush = () => {
@@ -86,6 +88,12 @@ export const createEventSource = (url, token) => {
             heartbeatStatusBuffer = {};
         }
 
+        if (Object.keys(instanceMonitorBuffer).length > 0) {
+            const merged = {...store.instanceMonitor, ...instanceMonitorBuffer};
+            setInstanceMonitors(merged);
+            instanceMonitorBuffer = {};
+        }
+
         flushTimeout = null;
     };
 
@@ -98,6 +106,7 @@ export const createEventSource = (url, token) => {
         "InstanceStatusUpdated",
         "DaemonHeartbeatUpdated",
         "ObjectDeleted",
+        "InstanceMonitorUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
 
@@ -184,7 +193,6 @@ export const createEventSource = (url, token) => {
         const status = parsed.heartbeat;
         if (!node || status === undefined) return;
 
-
         const current = useEventStore.getState().heartbeatStatus[node];
         if (!isEqual(current, status)) {
             heartbeatStatusBuffer[node] = status;
@@ -204,6 +212,19 @@ export const createEventSource = (url, token) => {
         delete instanceStatusBuffer[name];
         removeObject(name);
         scheduleFlush();
+    });
+
+    currentEventSource.addEventListener("InstanceMonitorUpdated", (event) => {
+        const parsed = JSON.parse(event.data);
+        const {node, path, instance_monitor} = parsed;
+        if (!node || !path || !instance_monitor) return;
+
+        const key = `${node}:${path}`;
+        const current = useEventStore.getState().instanceMonitor[key];
+        if (!isEqual(current, instance_monitor)) {
+            instanceMonitorBuffer[key] = instance_monitor;
+            scheduleFlush();
+        }
     });
 
     return currentEventSource;

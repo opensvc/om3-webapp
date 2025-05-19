@@ -15,24 +15,25 @@ export const StatCard = ({title, value, subtitle, onClick}) => (
             }
         }}
         onClick={onClick}
-        data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        role="button"
+        aria-label={`${title} stat card`}
     >
         <Typography
             variant="h6"
             gutterBottom
-            data-testid={`stat-card-title-${title.toLowerCase().replace(/\s+/g, '-')}`}
+            aria-label={`${title} title`}
         >
             {title}
         </Typography>
         <Typography
             variant="h3"
             color="primary"
-            data-testid={`stat-card-value-${title.toLowerCase().replace(/\s+/g, '-')}`}
+            aria-label={`${title} value`}
         >
             {value}
         </Typography>
         {subtitle && (
-            <Typography variant="body2" sx={{mt: 1}}>
+            <Typography variant="body2" sx={{mt: 1}} aria-label={`${title} subtitle`}>
                 {subtitle}
             </Typography>
         )}

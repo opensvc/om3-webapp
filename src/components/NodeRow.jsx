@@ -68,13 +68,20 @@ const NodeRow = ({
                      onAction,
                      anchorEl
                  }) => {
-    const isFrozen = status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
+    const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
+    console.log('NodeRow: isFrozen=', isFrozen, 'status=', status);
     const isDaemonNode = daemonNodename === nodename;
+    const filteredMenuItems = MENU_ITEMS.filter(({ condition }) => condition === undefined || condition(isFrozen));
+    console.log('Filtered Menu Items:', filteredMenuItems.map(item => item.label));
 
     return (
-        <TableRow hover>
+        <TableRow hover aria-label={`Node ${nodename} row`}>
             <TableCell>
-                <Checkbox checked={isSelected} onChange={(e) => onSelect(e, nodename)}/>
+                <Checkbox
+                    checked={isSelected}
+                    onChange={(e) => onSelect(e, nodename)}
+                    inputProps={{ 'aria-label': `Select node ${nodename}` }}
+                />
             </TableCell>
             <TableCell>{nodename || "-"}</TableCell>
             <TableCell>
@@ -82,12 +89,12 @@ const NodeRow = ({
                     {monitor?.state !== "idle" && monitor?.state}
                     {isFrozen && (
                         <Tooltip title="Frozen">
-                            <span><FaSnowflake style={{color: COLORS.frozen}}/></span>
+                            <span aria-label="Frozen indicator"><FaSnowflake style={{color: COLORS.frozen}}/></span>
                         </Tooltip>
                     )}
                     {isDaemonNode && (
                         <Tooltip title="Daemon Node">
-                            <span><FaWifi style={{color: COLORS.daemon}}/></span>
+                            <span aria-label="Daemon node indicator"><FaWifi style={{color: COLORS.daemon}}/></span>
                         </Tooltip>
                     )}
                 </Box>
@@ -128,27 +135,27 @@ const NodeRow = ({
             <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
             <TableCell>{status?.agent || "N/A"}</TableCell>
             <TableCell>
-                <IconButton onClick={(e) => onMenuOpen(e, nodename)}>
+                <IconButton
+                    onClick={(e) => onMenuOpen(e, nodename)}
+                    aria-label={`More actions for node ${nodename}`}
+                >
                     <MoreVertIcon/>
                 </IconButton>
                 <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => onMenuClose(nodename)}>
-                    {MENU_ITEMS.map(({label, action, icon, condition}) => {
-                        console.log(`Rendering MenuItem: ${label}, data-testid: menu-item-${label.toLowerCase().replace(/\s/g, '-')}`);
-                        return condition === undefined || condition(isFrozen) ? (
-                            <MenuItem
-                                key={action}
-                                onClick={() => {
-                                    onAction(nodename, action);
-                                    onMenuClose(nodename);
-                                }}
-                                sx={{display: "flex", alignItems: "center", gap: 1}}
-                                data-testid={`menu-item-${label.toLowerCase().replace(/\s/g, '-')}`}
-                            >
-                                {icon && <Box sx={{minWidth: 20}}>{icon}</Box>}
-                                {label}
-                            </MenuItem>
-                        ) : null;
-                    })}
+                    {filteredMenuItems.map(({label, action, icon}) => (
+                        <MenuItem
+                            key={action}
+                            onClick={() => {
+                                onAction(nodename, action);
+                                onMenuClose(nodename);
+                            }}
+                            sx={{display: "flex", alignItems: "center", gap: 1}}
+                            aria-label={`${label} action`}
+                        >
+                            {icon && <Box sx={{minWidth: 20}}>{icon}</Box>}
+                            {label}
+                        </MenuItem>
+                    ))}
                 </Menu>
             </TableCell>
         </TableRow>

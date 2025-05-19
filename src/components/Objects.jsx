@@ -40,7 +40,7 @@ import {
     CleaningServices,
     SwapHoriz,
     Undo,
-    Cancel,
+    Cancel, Stop,
 } from "@mui/icons-material";
 import {green, red, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -63,6 +63,7 @@ const AVAILABLE_ACTIONS = [
     {name: "switch", icon: <SwapHoriz/>},
     {name: "giveback", icon: <Undo/>},
     {name: "abort", icon: <Cancel/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const Objects = () => {
@@ -73,6 +74,7 @@ const Objects = () => {
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+    const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
 
     const [selectedObjects, setSelectedObjects] = useState([]);
@@ -138,7 +140,9 @@ const Objects = () => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) return;
             const parts = objectName.split("/");
-            const [namespace, kind, name] = parts.length === 3 ? parts : ["root", "svc", parts[0]];
+            const name = parts.length === 3 ? parts[2] : parts[0];
+            const kind = name === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+            const namespace = parts.length === 3 ? parts[0] : "root";
             const obj = {...rawObj, namespace, kind, name};
 
             if ((action === "freeze" && obj.frozen === "frozen") || (action === "unfreeze" && obj.frozen === "unfrozen")) return;
@@ -182,8 +186,15 @@ const Objects = () => {
 
     const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-    const extractNamespace = (name) => name.split("/")[0] || "root";
-    const extractKind = (name) => name.split("/")[1] || "svc";
+    const extractNamespace = (name) => {
+        const parts = name.split("/");
+        return parts.length === 3 ? parts[0] : "root";
+    };
+    const extractKind = (name) => {
+        const parts = name.split("/");
+        const objName = parts.length === 3 ? parts[2] : parts[0];
+        return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+    };
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
@@ -202,10 +213,30 @@ const Objects = () => {
 
     const getNodeState = (objectName, node) => {
         const instanceStatus = objectInstanceStatus[objectName] || {};
+        const monitorKey = `${node}:${objectName}`;
+        const monitor = instanceMonitor[monitorKey] || {};
         return {
             avail: instanceStatus[node]?.avail,
             frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
+            state: monitor.state !== "idle" ? monitor.state : null,
         };
+    };
+
+    const getObjectStatus = (objectName) => {
+        const obj = objects[objectName] || {};
+        const avail = obj?.avail;
+        const frozen = obj?.frozen;
+        const nodes = Object.keys(objectInstanceStatus[objectName] || {});
+        let globalExpect = null;
+        for (const node of nodes) {
+            const monitorKey = `${node}:${objectName}`;
+            const monitor = instanceMonitor[monitorKey] || {};
+            if (monitor.global_expect && monitor.global_expect !== "none") {
+                globalExpect = monitor.global_expect;
+                break;
+            }
+        }
+        return {avail, frozen, globalExpect};
     };
 
     return (
@@ -305,6 +336,7 @@ const Objects = () => {
                                         onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
                                     />
                                 </TableCell>
+                                <TableCell><strong>Status</strong></TableCell>
                                 <TableCell><strong>Object</strong></TableCell>
                                 {isWideScreen && allNodes.map((node) => (
                                     <TableCell key={node} align="center">
@@ -315,9 +347,7 @@ const Objects = () => {
                         </TableHead>
                         <TableBody>
                             {filteredObjectNames.map((objectName) => {
-                                const obj = objects[objectName] || {};
-                                const avail = obj?.avail;
-                                const frozen = obj?.frozen;
+                                const {avail, frozen, globalExpect} = getObjectStatus(objectName);
                                 return (
                                     <TableRow
                                         key={objectName}
@@ -332,40 +362,46 @@ const Objects = () => {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            <Box display="flex" alignItems="center" gap={1}>
-                                                <Box display="flex" alignItems="center" gap={0.5}>
-                                                    {avail === "up" && (
-                                                        <FiberManualRecordIcon
-                                                            sx={{color: green[500]}}
-                                                            aria-label="Object is up"
-                                                        />
-                                                    )}
-                                                    {avail === "down" && (
-                                                        <FiberManualRecordIcon
-                                                            sx={{color: red[500]}}
-                                                            aria-label="Object is down"
-                                                        />
-                                                    )}
-                                                    {avail === "warn" && (
-                                                        <WarningAmberIcon
-                                                            sx={{color: orange[500]}}
-                                                            aria-label="Object has warning"
-                                                        />
-                                                    )}
-                                                    {frozen === "frozen" && (
-                                                        <AcUnit
-                                                            sx={{color: blue[200]}}
-                                                            aria-label="Object is frozen"
-                                                        />
-                                                    )}
-                                                </Box>
-                                                <Typography>{objectName}</Typography>
+                                            <Box display="flex" alignItems="center" gap={0.5}>
+                                                {avail === "up" && (
+                                                    <FiberManualRecordIcon
+                                                        sx={{color: green[500]}}
+                                                        aria-label="Object is up"
+                                                    />
+                                                )}
+                                                {avail === "down" && (
+                                                    <FiberManualRecordIcon
+                                                        sx={{color: red[500]}}
+                                                        aria-label="Object is down"
+                                                    />
+                                                )}
+                                                {avail === "warn" && (
+                                                    <WarningAmberIcon
+                                                        sx={{color: orange[500]}}
+                                                        aria-label="Object has warning"
+                                                    />
+                                                )}
+                                                {frozen === "frozen" && (
+                                                    <AcUnit
+                                                        sx={{color: blue[200]}}
+                                                        aria-label="Object is frozen"
+                                                    />
+                                                )}
+                                                {globalExpect && (
+                                                    <Typography variant="caption">
+                                                        {globalExpect}
+                                                    </Typography>
+                                                )}
                                             </Box>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography>{objectName}</Typography>
                                         </TableCell>
                                         {isWideScreen && allNodes.map((node) => {
                                             const {
                                                 avail: nodeAvail,
-                                                frozen: nodeFrozen
+                                                frozen: nodeFrozen,
+                                                state: nodeState
                                             } = getNodeState(objectName, node);
                                             return (
                                                 <TableCell key={node} align="center">
@@ -400,6 +436,11 @@ const Objects = () => {
                                                                         sx={{color: blue[200]}}
                                                                         aria-label={`Node ${node} is frozen`}
                                                                     />
+                                                                )}
+                                                                {nodeState && (
+                                                                    <Typography variant="caption">
+                                                                        {nodeState}
+                                                                    </Typography>
                                                                 )}
                                                             </>
                                                         ) : (

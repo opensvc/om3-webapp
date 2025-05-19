@@ -49,7 +49,7 @@ describe('createEventSource', () => {
         const eventSource = createEventSource(URL_NODE_EVENT, 'fake-token');
 
         expect(EventSourcePolyfill).toHaveBeenCalled();
-        expect(eventSource.addEventListener).toHaveBeenCalledTimes(7);
+        expect(eventSource.addEventListener).toHaveBeenCalledTimes(8);
     });
 
     it('should process NodeStatusUpdated events correctly', () => {

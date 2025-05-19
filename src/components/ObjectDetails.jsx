@@ -43,7 +43,8 @@ const OBJECT_ACTIONS = [
     {name: "purge", icon: <CleaningServices sx={{fontSize: 24}}/>},
     {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
     {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
-    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>}
+    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const RESOURCE_ACTIONS = [
@@ -62,6 +63,7 @@ const ObjectDetail = () => {
 
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
+    const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
@@ -117,10 +119,10 @@ const ObjectDetail = () => {
             return {namespace: "root", kind: "svc", name: ""};
         }
         const parts = objName.split("/");
-        if (parts.length === 3) {
-            return {namespace: parts[0], kind: parts[1], name: parts[2]};
-        }
-        return {namespace: "root", kind: "svc", name: objName};
+        const name = parts.length === 3 ? parts[2] : parts[0];
+        const kind = name === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+        const namespace = parts.length === 3 ? parts[0] : "root";
+        return {namespace, kind, name};
     };
 
     const postObjectAction = async ({action}) => {
@@ -189,6 +191,36 @@ const ObjectDetail = () => {
         if (status === "down" || status === false) return red[500];
         if (status === "warn") return orange[500];
         return grey[500];
+    };
+
+    // Node state helper
+    const getNodeState = (node) => {
+        const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
+        const monitorKey = `${node}:${decodedObjectName}`;
+        const monitor = instanceMonitor[monitorKey] || {};
+        return {
+            avail: instanceStatus[node]?.avail,
+            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
+            state: monitor.state !== "idle" ? monitor.state : null,
+        };
+    };
+
+    // Object status helper
+    const getObjectStatus = () => {
+        const obj = objectStatus[decodedObjectName] || {};
+        const avail = obj?.avail;
+        const frozen = obj?.frozen;
+        const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+        let globalExpect = null;
+        for (const node of nodes) {
+            const monitorKey = `${node}:${decodedObjectName}`;
+            const monitor = instanceMonitor[monitorKey] || {};
+            if (monitor.global_expect && monitor.global_expect !== "none") {
+                globalExpect = monitor.global_expect;
+                break;
+            }
+        }
+        return {avail, frozen, globalExpect};
     };
 
     // Batch node actions handlers
@@ -312,21 +344,25 @@ const ObjectDetail = () => {
                             {decodedObjectName}
                         </Typography>
                         <Box display="flex" alignItems="center" gap={2}>
-                            <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.2rem"}}/>
-                            {globalStatus.avail === "warn" && (
+                            <FiberManualRecordIcon sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}/>
+                            {getObjectStatus().avail === "warn" && (
                                 <Tooltip title="Warning">
                                     <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
-                            {globalStatus.frozen === "frozen" && (
+                            {getObjectStatus().frozen === "frozen" && (
                                 <Tooltip title="Frozen">
                                     <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
+                            {getObjectStatus().globalExpect && (
+                                <Typography variant="caption">
+                                    {getObjectStatus().globalExpect}
+                                </Typography>
+                            )}
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
                                 disabled={actionInProgress}
-                                data-testid="icon-button-object"
                             >
                                 <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
                             </IconButton>
@@ -338,7 +374,6 @@ const ObjectDetail = () => {
                                 {OBJECT_ACTIONS.map(({name, icon}) => (
                                     <MenuItem
                                         key={name}
-                                        data-testid={`menu-item-${name}`}
                                         onClick={() => {
                                             setPendingAction({action: name});
                                             if (name === "freeze") setConfirmDialogOpen(true);
@@ -348,7 +383,7 @@ const ObjectDetail = () => {
                                         }}
                                     >
                                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                        <ListItemText data-testid={`menu-text-${name}`}>{name}</ListItemText>
+                                        <ListItemText>{name}</ListItemText>
                                     </MenuItem>
                                 ))}
                             </Menu>
@@ -369,8 +404,8 @@ const ObjectDetail = () => {
 
                 {/* LIST OF NODES WITH THEIR RESOURCES */}
                 {memoizedNodes.map((node) => {
-                    const {avail, frozen_at, resources = {}} = memoizedObjectData[node] || {};
-                    const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
+                    const {resources = {}} = memoizedObjectData[node] || {};
+                    const {avail, frozen, state} = getNodeState(node);
                     const resIds = Object.keys(resources);
 
                     return (
@@ -394,16 +429,25 @@ const ObjectDetail = () => {
                                         <Checkbox
                                             checked={selectedNodes.includes(node)}
                                             onChange={() => toggleNode(node)}
-                                            data-testid={`checkbox-${node}`}
                                         />
                                         <Typography variant="h6">Node: {node}</Typography>
                                     </Box>
                                     <Box display="flex" alignItems="center" gap={2}>
                                         <FiberManualRecordIcon sx={{color: getColor(avail), fontSize: "1.2rem"}}/>
-                                        {isFrozen && (
+                                        {avail === "warn" && (
+                                            <Tooltip title="Warning">
+                                                <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
+                                            </Tooltip>
+                                        )}
+                                        {frozen === "frozen" && (
                                             <Tooltip title="Frozen">
                                                 <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
                                             </Tooltip>
+                                        )}
+                                        {state && (
+                                            <Typography variant="caption">
+                                                {state}
+                                            </Typography>
                                         )}
                                         <IconButton
                                             onClick={(e) => {
@@ -411,7 +455,6 @@ const ObjectDetail = () => {
                                                 setIndividualNodeMenuAnchor(e.currentTarget);
                                             }}
                                             disabled={actionInProgress}
-                                            data-testid={`icon-button-${node}`}
                                         >
                                             <MoreVertIcon/>
                                         </IconButton>
@@ -459,7 +502,6 @@ const ObjectDetail = () => {
                                                     setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
                                                 }}
                                                 disabled={resIds.length === 0}
-                                                data-testid={`checkbox-resources-${node}`}
                                             />
                                             <IconButton
                                                 onClick={(e) => {
@@ -467,7 +509,6 @@ const ObjectDetail = () => {
                                                     e.stopPropagation();
                                                 }}
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
-                                                data-testid={`icon-button-resources-${node}`}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
@@ -504,7 +545,7 @@ const ObjectDetail = () => {
                                                                 "& .MuiAccordionDetails-root": {
                                                                     border: "none",
                                                                     backgroundColor: "transparent",
-                                                                    Planck: 0,
+                                                                    padding: 0,
                                                                 },
                                                             }}
                                                         >
@@ -518,7 +559,6 @@ const ObjectDetail = () => {
                                                                     <Checkbox
                                                                         checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                                         onChange={() => toggleResource(node, rid)}
-                                                                        data-testid={`checkbox-${rid}`}
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
@@ -536,7 +576,6 @@ const ObjectDetail = () => {
                                                                             e.stopPropagation();
                                                                         }}
                                                                         disabled={actionInProgress}
-                                                                        data-testid={`icon-button-${rid}`}
                                                                     >
                                                                         <MoreVertIcon/>
                                                                     </IconButton>
@@ -592,7 +631,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={checkboxes.failover}
                                     onChange={(e) => setCheckboxes({failover: e.target.checked})}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that the selected service orchestration will be paused."
@@ -619,7 +657,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={stopCheckbox}
                                     onChange={(e) => setStopCheckbox(e.target.checked)}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that this may interrupt services."
@@ -646,7 +683,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={resourceConfirmChecked}
                                     onChange={(e) => setResourceConfirmChecked(e.target.checked)}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that data will be lost."
@@ -665,10 +701,9 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
-                <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth
-                        data-testid="dialog">
-                    <DialogTitle data-testid="dialog-title">Confirm {pendingAction?.action}</DialogTitle>
-                    <DialogContent data-testid="dialog-content">
+                <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Confirm {pendingAction?.action}</DialogTitle>
+                    <DialogContent>
                         <Typography>
                             {console.log('Rendering simpleDialogOpen:', {pendingAction, selectedResourcesByNode})}
                             Are you sure you want to <strong>{pendingAction?.action}</strong> on{" "}
@@ -684,7 +719,7 @@ const ObjectDetail = () => {
                             ?
                         </Typography>
                     </DialogContent>
-                    <DialogActions data-testid="dialog-actions">
+                    <DialogActions>
                         <Button onClick={() => setSimpleDialogOpen(false)}>Cancel</Button>
                         <Button variant="contained" onClick={handleDialogConfirm}>
                             Confirm
@@ -722,11 +757,10 @@ const ObjectDetail = () => {
                     {NODE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
-                            data-testid={`node-menu-item-${name}`}
                             onClick={() => handleIndividualNodeActionClick(name)}
                         >
                             <ListItemIcon>{icon}</ListItemIcon>
-                            <ListItemText data-testid={`node-menu-text-${name}`}>
+                            <ListItemText>
                                 {name}
                             </ListItemText>
                         </MenuItem>
@@ -738,13 +772,11 @@ const ObjectDetail = () => {
                     anchorEl={resourcesActionsAnchor}
                     open={Boolean(resourcesActionsAnchor)}
                     onClose={handleResourcesActionsClose}
-                    data-testid="resource-menu"
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
                             onClick={() => handleBatchResourceActionClick(name)}
-                            data-testid={`menu-item-${name}`}
                         >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -757,14 +789,12 @@ const ObjectDetail = () => {
                     anchorEl={resourceMenuAnchor}
                     open={Boolean(resourceMenuAnchor)}
                     onClose={() => setResourceMenuAnchor(null)}
-                    data-testid="resource-actions-menu"
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => {
                         const IconComponent = icon.type;
                         return (
                             <MenuItem
                                 key={name}
-                                data-testid={`resource-action-${name}`}
                                 onClick={() => {
                                     setPendingAction({action: name, node: resGroupNode, rid: currentResourceId});
                                     setSimpleDialogOpen(true);
@@ -772,9 +802,9 @@ const ObjectDetail = () => {
                                 }}
                             >
                                 <ListItemIcon>
-                                    <IconComponent data-testid={`resource-action-icon-${name}`}/>
+                                    <IconComponent/>
                                 </ListItemIcon>
-                                <ListItemText data-testid={`resource-action-text-${name}`}>
+                                <ListItemText>
                                     {name}
                                 </ListItemText>
                             </MenuItem>

@@ -326,7 +326,6 @@ const ObjectDetail = () => {
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
                                 disabled={actionInProgress}
-                                data-testid="icon-button-object"
                             >
                                 <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
                             </IconButton>
@@ -338,7 +337,6 @@ const ObjectDetail = () => {
                                 {OBJECT_ACTIONS.map(({name, icon}) => (
                                     <MenuItem
                                         key={name}
-                                        data-testid={`menu-item-${name}`}
                                         onClick={() => {
                                             setPendingAction({action: name});
                                             if (name === "freeze") setConfirmDialogOpen(true);
@@ -348,7 +346,7 @@ const ObjectDetail = () => {
                                         }}
                                     >
                                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                        <ListItemText data-testid={`menu-text-${name}`}>{name}</ListItemText>
+                                        <ListItemText>{name}</ListItemText>
                                     </MenuItem>
                                 ))}
                             </Menu>
@@ -394,7 +392,6 @@ const ObjectDetail = () => {
                                         <Checkbox
                                             checked={selectedNodes.includes(node)}
                                             onChange={() => toggleNode(node)}
-                                            data-testid={`checkbox-${node}`}
                                         />
                                         <Typography variant="h6">Node: {node}</Typography>
                                     </Box>
@@ -411,7 +408,6 @@ const ObjectDetail = () => {
                                                 setIndividualNodeMenuAnchor(e.currentTarget);
                                             }}
                                             disabled={actionInProgress}
-                                            data-testid={`icon-button-${node}`}
                                         >
                                             <MoreVertIcon/>
                                         </IconButton>
@@ -459,7 +455,6 @@ const ObjectDetail = () => {
                                                     setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
                                                 }}
                                                 disabled={resIds.length === 0}
-                                                data-testid={`checkbox-resources-${node}`}
                                             />
                                             <IconButton
                                                 onClick={(e) => {
@@ -467,7 +462,6 @@ const ObjectDetail = () => {
                                                     e.stopPropagation();
                                                 }}
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
-                                                data-testid={`icon-button-resources-${node}`}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
@@ -518,7 +512,6 @@ const ObjectDetail = () => {
                                                                     <Checkbox
                                                                         checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                                         onChange={() => toggleResource(node, rid)}
-                                                                        data-testid={`checkbox-${rid}`}
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
@@ -536,7 +529,6 @@ const ObjectDetail = () => {
                                                                             e.stopPropagation();
                                                                         }}
                                                                         disabled={actionInProgress}
-                                                                        data-testid={`icon-button-${rid}`}
                                                                     >
                                                                         <MoreVertIcon/>
                                                                     </IconButton>
@@ -592,7 +584,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={checkboxes.failover}
                                     onChange={(e) => setCheckboxes({failover: e.target.checked})}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that the selected service orchestration will be paused."
@@ -619,7 +610,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={stopCheckbox}
                                     onChange={(e) => setStopCheckbox(e.target.checked)}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that this may interrupt services."
@@ -646,7 +636,6 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={resourceConfirmChecked}
                                     onChange={(e) => setResourceConfirmChecked(e.target.checked)}
-                                    data-testid="checkbox"
                                 />
                             }
                             label="I understand that data will be lost."
@@ -665,10 +654,9 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
-                <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth
-                        data-testid="dialog">
-                    <DialogTitle data-testid="dialog-title">Confirm {pendingAction?.action}</DialogTitle>
-                    <DialogContent data-testid="dialog-content">
+                <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Confirm {pendingAction?.action}</DialogTitle>
+                    <DialogContent>
                         <Typography>
                             {console.log('Rendering simpleDialogOpen:', {pendingAction, selectedResourcesByNode})}
                             Are you sure you want to <strong>{pendingAction?.action}</strong> on{" "}
@@ -684,7 +672,7 @@ const ObjectDetail = () => {
                             ?
                         </Typography>
                     </DialogContent>
-                    <DialogActions data-testid="dialog-actions">
+                    <DialogActions>
                         <Button onClick={() => setSimpleDialogOpen(false)}>Cancel</Button>
                         <Button variant="contained" onClick={handleDialogConfirm}>
                             Confirm
@@ -722,11 +710,10 @@ const ObjectDetail = () => {
                     {NODE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
-                            data-testid={`node-menu-item-${name}`}
                             onClick={() => handleIndividualNodeActionClick(name)}
                         >
                             <ListItemIcon>{icon}</ListItemIcon>
-                            <ListItemText data-testid={`node-menu-text-${name}`}>
+                            <ListItemText>
                                 {name}
                             </ListItemText>
                         </MenuItem>
@@ -738,13 +725,11 @@ const ObjectDetail = () => {
                     anchorEl={resourcesActionsAnchor}
                     open={Boolean(resourcesActionsAnchor)}
                     onClose={handleResourcesActionsClose}
-                    data-testid="resource-menu"
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
                             onClick={() => handleBatchResourceActionClick(name)}
-                            data-testid={`menu-item-${name}`}
                         >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -757,14 +742,12 @@ const ObjectDetail = () => {
                     anchorEl={resourceMenuAnchor}
                     open={Boolean(resourceMenuAnchor)}
                     onClose={() => setResourceMenuAnchor(null)}
-                    data-testid="resource-actions-menu"
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => {
                         const IconComponent = icon.type;
                         return (
                             <MenuItem
                                 key={name}
-                                data-testid={`resource-action-${name}`}
                                 onClick={() => {
                                     setPendingAction({action: name, node: resGroupNode, rid: currentResourceId});
                                     setSimpleDialogOpen(true);
@@ -772,9 +755,9 @@ const ObjectDetail = () => {
                                 }}
                             >
                                 <ListItemIcon>
-                                    <IconComponent data-testid={`resource-action-icon-${name}`}/>
+                                    <IconComponent/>
                                 </ListItemIcon>
-                                <ListItemText data-testid={`resource-action-text-${name}`}>
+                                <ListItemText>
                                     {name}
                                 </ListItemText>
                             </MenuItem>

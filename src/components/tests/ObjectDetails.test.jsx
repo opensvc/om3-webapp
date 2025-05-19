@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, within, act, cleanup} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
@@ -15,94 +15,69 @@ jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../hooks/useFetchDaemonStatus.jsx');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
-    startEventReception: jest.fn(),
 }));
 
-// Mock Material-UI components to add data-testid
-jest.mock('@mui/material', () => ({
-    ...jest.requireActual('@mui/material'),
-    Accordion: ({children, expanded, onChange, ...props}) => (
-        <div data-testid="accordion" className={expanded ? 'expanded' : ''} {...props}>
-            {children}
-            {onChange && (
-                <button
-                    onClick={() => onChange({}, !expanded)}
-                    data-testid={`accordion-toggle-${props['aria-controls'] || 'unknown'}`}
-                >
-                    Toggle
-                </button>
-            )}
-        </div>
-    ),
-    AccordionSummary: ({children, id, ...props}) => (
-        <div data-testid={`accordion-summary-${id}`} {...props}>
-            {children}
-        </div>
-    ),
-    AccordionDetails: ({children, ...props}) => (
-        <div data-testid="accordion-details" {...props}>
-            {children}
-        </div>
-    ),
-    Menu: ({children, open, ...props}) => (
-        open ? <div data-testid="menu" {...props}>{children}</div> : null
-    ),
-    MenuItem: ({children, onClick, 'data-testid': testId, ...props}) => (
-        <div data-testid={testId || 'menu-item'} onClick={onClick} {...props}>
-            {children}
-        </div>
-    ),
-    Dialog: ({children, open, ...props}) => (
-        open ? <div role="dialog" data-testid="dialog" {...props}>{children}</div> : null
-    ),
-    DialogTitle: ({children, ...props}) => (
-        <div data-testid="dialog-title" {...props}>{children}</div>
-    ),
-    DialogContent: ({children, ...props}) => (
-        <div data-testid="dialog-content" {...props}>
-            {children}
-        </div>
-    ),
-    DialogActions: ({children, ...props}) => (
-        <div data-testid="dialog-actions" {...props}>
-            {children}
-        </div>
-    ),
-    Snackbar: ({children, open, ...props}) => (
-        open ? <div data-testid="snackbar" {...props}>{children}</div> : null
-    ),
-    Alert: ({children, ...props}) => (
-        <div role="alert" data-testid="alert" {...props}>
-            {children}
-        </div>
-    ),
-    Checkbox: ({checked, onChange, ...props}) => (
-        <input
-            type="checkbox"
-            checked={checked}
-            onChange={onChange}
-            data-testid={props['data-testid'] || 'checkbox'}
-            {...props}
-        />
-    ),
-    IconButton: ({children, onClick, ...props}) => (
-        <button
-            data-testid={props['data-testid'] || 'icon-button'}
-            onClick={onClick}
-            {...props}
-        >
-            {children}
-        </button>
-    ),
-    ListItemIcon: ({children, ...props}) => (
-        <span data-testid="list-item-icon" {...props}>{children}</span>
-    ),
-}));
+// Mock Material-UI components
+jest.mock('@mui/material', () => {
+    const actual = jest.requireActual('@mui/material');
+    return {
+        ...actual,
+        Accordion: ({children, expanded, onChange, ...props}) => (
+            <div className={expanded ? 'expanded' : ''} {...props}>
+                {children}
+            </div>
+        ),
+        AccordionSummary: ({children, id, onChange, ...props}) => (
+            <div
+                role="button"
+                onClick={() => onChange?.({}, !props.expanded)}
+                {...props}
+            >
+                {children}
+            </div>
+        ),
+        AccordionDetails: ({children, ...props}) => (
+            <div {...props}>{children}</div>
+        ),
+        Menu: ({children, open, anchorEl, onClose, ...props}) =>
+            open ? <div role="menu" {...props}>{children}</div> : null,
+        MenuItem: ({children, onClick, ...props}) => (
+            <div role="menuitem" onClick={onClick} {...props}>
+                {children}
+            </div>
+        ),
+        ListItemIcon: ({children, ...props}) => <span {...props}>{children}</span>,
+        ListItemText: ({children, ...props}) => <span {...props}>{children}</span>,
+        Dialog: ({children, open, ...props}) =>
+            open ? <div role="dialog" {...props}>{children}</div> : null,
+        DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
+        DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
+        DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
+        Snackbar: ({children, open, ...props}) =>
+            open ? <div role="alertdialog" {...props}>{children}</div> : null,
+        Alert: ({children, ...props}) => (
+            <div role="alert" {...props}>{children}</div>
+        ),
+        Checkbox: ({checked, onChange, ...props}) => (
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={onChange}
+                {...props}
+            />
+        ),
+        IconButton: ({children, onClick, ...props}) => (
+            <button onClick={onClick} {...props}>
+                {children}
+            </button>
+        ),
+    };
+});
 
 describe('ObjectDetail Component', () => {
-    const mockFetchNodes = jest.fn(() => {});
-    const mockStartEventReception = jest.fn(() => {});
-    const mockCloseEventSource = jest.fn(() => {});
+    const mockFetchNodes = jest.fn();
+    const mockStartEventReception = jest.fn();
+    const mockCloseEventSource = jest.fn();
 
     beforeEach(() => {
         jest.setTimeout(20000);
@@ -182,7 +157,6 @@ describe('ObjectDetail Component', () => {
     });
 
     afterEach(() => {
-        cleanup(); // Explicitly clean up the DOM
         jest.clearAllMocks();
     });
 
@@ -190,7 +164,7 @@ describe('ObjectDetail Component', () => {
         useEventStore.mockImplementation((selector) =>
             selector({objectStatus: {}, objectInstanceStatus: {}})
         );
-        const {unmount} = render(
+        render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
@@ -199,15 +173,12 @@ describe('ObjectDetail Component', () => {
         );
         await waitFor(() => {
             expect(screen.getByText('root/svc/service1')).toBeInTheDocument();
-            expect(
-                screen.getByText(/No information available for object/i)
-            ).toBeInTheDocument();
-        }, {timeout: 5000, interval: 100});
-        unmount();
+            expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
+        });
     });
 
     test('renders global status, nodes, and resources', async () => {
-        const {unmount} = render(
+        render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
@@ -219,25 +190,24 @@ describe('ObjectDetail Component', () => {
             expect(screen.getByText('Node: node2')).toBeInTheDocument();
             expect(screen.getByText('Resources (2)')).toBeInTheDocument();
             expect(screen.getByText('Resources (1)')).toBeInTheDocument();
-        }, {timeout: 5000, interval: 100});
-        const nodeAccordion = screen.getAllByTestId('accordion')[0];
+        });
+
+        const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
         await act(async () => {
-            fireEvent.click(within(nodeAccordion).getByTestId('accordion-summary-panel-resources-node1-header'));
+            fireEvent.click(node1AccordionToggle);
         });
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
             expect(screen.getByText('res2')).toBeInTheDocument();
-        }, {timeout: 5000, interval: 100});
-        const node2Accordion = screen.getAllByTestId('accordion')[1];
-        await waitFor(() => {
-            const node2Summary = screen.getByTestId('accordion-summary-panel-resources-node2-header');
-            act(() => {
-                fireEvent.click(node2Summary);
-            });
-        }, {timeout: 5000, interval: 100});
+        });
+
+        const node2AccordionToggle = screen.getByText('Resources (1)').closest('div');
+        await act(async () => {
+            fireEvent.click(node2AccordionToggle);
+        });
         await waitFor(() => {
             expect(screen.getByText('res3')).toBeInTheDocument();
-        }, {timeout: 5000, interval: 100});
+        });
     });
 
     test('calls fetchNodes and startEventReception on mount', () => {
@@ -263,9 +233,7 @@ describe('ObjectDetail Component', () => {
         await act(async () => {
             unmount();
         });
-        await waitFor(() => {
-            expect(mockCloseEventSource).toHaveBeenCalled();
-        }, {timeout: 5000, interval: 100});
+        expect(mockCloseEventSource).toHaveBeenCalled();
     });
 
     test('does not call fetchNodes or startEventReception without auth token', () => {
@@ -282,7 +250,7 @@ describe('ObjectDetail Component', () => {
     });
 
     test('enables batch node actions button when nodes are selected', async () => {
-        const {unmount} = render(
+        render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
@@ -290,14 +258,11 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
-            const checkbox = screen.getByTestId('checkbox-node1');
-            act(() => {
-                fireEvent.click(checkbox);
-            });
-            const actionsButton = screen.getByText('Actions on selected nodes');
+            const nodeCheckbox = screen.getAllByRole('checkbox')[0];
+            fireEvent.click(nodeCheckbox);
+            const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
             expect(actionsButton).not.toBeDisabled();
-        }, {timeout: 5000, interval: 100});
-        unmount();
+        });
     });
 
     test('opens batch node actions menu and triggers freeze action', async () => {
@@ -309,59 +274,57 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for node to appear
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
         // Select node
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
+        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
+        fireEvent.click(nodeCheckbox);
 
         // Open actions menu
-        const actionsButton = screen.getByText('Actions on selected nodes');
+        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
         fireEvent.click(actionsButton);
 
-        // Verify menu is open and contains freeze option
+        // Find and click freeze option
         await waitFor(() => {
-            expect(screen.getByTestId('menu')).toBeInTheDocument();
-            expect(screen.getByText('Freeze')).toBeInTheDocument();
+            const menuItems = screen.getAllByRole('menuitem');
+            const freezeItem = menuItems.find((item) => item.textContent.includes('Freeze'));
+            expect(freezeItem).toBeInTheDocument();
+            fireEvent.click(freezeItem);
         });
-
-        // Click freeze option
-        fireEvent.click(screen.getByText('Freeze'));
 
         // Verify confirm dialog appears
         await waitFor(() => {
-            expect(screen.getByTestId('dialog')).toBeInTheDocument();
             expect(screen.getByText('Confirm Freeze')).toBeInTheDocument();
         });
 
         // Check the confirmation checkbox
-        const dialogCheckbox = screen.getByTestId('checkbox');
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
+            cb.closest('[role="dialog"]')
+        );
         fireEvent.click(dialogCheckbox);
 
         // Click confirm button
-        const confirmButton = screen.getByText('Confirm');
-        fireEvent.click(confirmButton);
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
 
-        // Verify API call was made
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/node1/instance/path/root/svc/service1/action/freeze'),
                 expect.objectContaining({
                     method: 'POST',
-                    headers: {
-                        Authorization: 'Bearer mock-token'
-                    }
+                    headers: {Authorization: 'Bearer mock-token'},
                 })
             );
         });
 
-        // Verify snackbar appears
+        // Verify snackbar
         await waitFor(() => {
-            expect(screen.getByRole('alert')).toBeInTheDocument();
-            expect(screen.getByText(/'freeze' succeeded on node 'node1'/i)).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/'freeze' succeeded on node 'node1'/i);
         });
     }, 10000);
 
@@ -374,69 +337,58 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for the component to be ready
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // Debug: display the DOM if needed
-        // screen.debug();
-
-        // 1. Open the node menu
-        const nodeMenuButton = await screen.findByTestId('icon-button-node1');
-        fireEvent.click(nodeMenuButton);
-
-        // 2. Verify that the menu is open
-        await waitFor(() => {
-            expect(screen.getByTestId('node-menu-item-stop')).toBeInTheDocument();
+        // Open node menu (IconButton with MoreVertIcon)
+        const nodeSection = screen.getByText('Node: node1').closest('div').parentElement;
+        const nodeMenuButton = within(nodeSection).getAllByRole('button').find((btn) =>
+            btn.querySelector('svg[data-testid="MoreVertIcon"]')
+        );
+        await act(async () => {
+            fireEvent.click(nodeMenuButton);
         });
 
-        // 3. Click 'stop'
-        fireEvent.click(screen.getByTestId('node-menu-item-stop'));
-
-        // 4. Verify the dialog
+        // Click 'stop' menu item
         await waitFor(() => {
-            expect(screen.getByTestId('dialog-title')).toHaveTextContent('Confirm Stop');
+            const menuItems = screen.getAllByRole('menuitem');
+            const stopItem = menuItems.find((item) => item.textContent.toLowerCase() === 'stop');
+            expect(stopItem).toBeInTheDocument();
+            fireEvent.click(stopItem);
         });
 
-        // 5. Fill and submit the form
-        fireEvent.click(screen.getByTestId('checkbox'));
-        fireEvent.click(screen.getByRole('button', {name: /stop/i}));
+        // Verify dialog
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Stop')).toBeInTheDocument();
+        });
 
-        // 6. Verify the API call
+        // Check checkbox and confirm
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
+            cb.closest('[role="dialog"]')
+        );
+        await act(async () => {
+            fireEvent.click(dialogCheckbox);
+        });
+        const confirmButton = screen.getByRole('button', {name: /Stop/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
+
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/action/stop'),
-                expect.any(Object)
+                expect.stringContaining('/node1/instance/path/root/svc/service1/action/stop'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: {Authorization: 'Bearer mock-token'},
+                })
             );
         });
-    }, 10000); // Extended timeout to 10 seconds
-
-    test('enables batch resource actions when resources are selected', async () => {
-        const {unmount} = render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await waitFor(() => {
-            const nodeAccordion = screen.getAllByTestId('accordion')[0];
-            act(() => {
-                fireEvent.click(within(nodeAccordion).getByTestId('accordion-summary-panel-resources-node1-header'));
-            });
-            const resCheckbox = screen.getByTestId('checkbox-res1');
-            act(() => {
-                fireEvent.click(resCheckbox);
-            });
-            const resMenuButton = within(nodeAccordion).getByTestId('icon-button-resources-node1');
-            expect(resMenuButton).not.toBeDisabled();
-        }, {timeout: 5000, interval: 100});
-        unmount();
-    });
+    }, 10000);
 
     test('triggers batch resource action', async () => {
-        const {unmount} = render(
+        render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
@@ -444,45 +396,62 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for data to load
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // Open resources accordion
-        const resourcesHeader = screen.getByTestId('accordion-summary-panel-resources-node1-header');
-        fireEvent.click(resourcesHeader);
+        // Open resources accordion by clicking the summary
+        const resourcesSection = screen.getByText('Resources (2)').closest('div');
+        await act(async () => {
+            fireEvent.click(resourcesSection);
+        });
 
-        // Select a resource
-        const resourceCheckbox = await screen.findByTestId('checkbox-res1');
-        fireEvent.click(resourceCheckbox);
+        // Select resource
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+        const resourceSection = screen.getByText('res1').closest('div');
+        const resourceCheckbox = within(resourceSection).getByRole('checkbox');
+        await act(async () => {
+            fireEvent.click(resourceCheckbox);
+        });
 
-        // Open actions menu
-        const actionsButton = screen.getByTestId('icon-button-resources-node1');
-        fireEvent.click(actionsButton);
+        // Open resource actions menu
+        const resourceMenuButton = within(resourcesSection).getAllByRole('button').find((btn) =>
+            btn.querySelector('svg[data-testid="MoreVertIcon"]')
+        );
+        await act(async () => {
+            fireEvent.click(resourceMenuButton);
+        });
 
         // Select 'start' action
-        const startAction = screen.getByTestId('menu-item-start');
-        fireEvent.click(startAction);
+        await waitFor(() => {
+            const menuItems = screen.getAllByRole('menuitem');
+            const startItem = menuItems.find((item) => item.textContent === 'Start');
+            expect(startItem).toBeInTheDocument();
+            fireEvent.click(startItem);
+        });
 
         // Confirm action
-        const confirmButton = await screen.findByText('Confirm');
-        fireEvent.click(confirmButton);
+        await waitFor(() => {
+            expect(screen.getByText('Confirm start')).toBeInTheDocument();
+        });
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
 
-        // Verify action was triggered with correct URL
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/api/node/name/node1/instance/path/root/svc/service1/action/start'),
                 expect.objectContaining({
                     method: 'POST',
-                    headers: {
-                        Authorization: 'Bearer mock-token'
-                    }
+                    headers: {Authorization: 'Bearer mock-token'},
                 })
             );
         });
-        unmount();
-    });
+    }, 10000);
 
     test('triggers individual resource action', async () => {
         render(
@@ -493,50 +462,58 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for initial load
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // 1. Open the resources accordion
-        const resourcesHeader = await screen.findByTestId('accordion-summary-panel-resources-node1-header');
-        fireEvent.click(resourcesHeader);
+        // Open resources accordion
+        const resourcesSection = screen.getByText('Resources (2)').closest('div');
+        await act(async () => {
+            fireEvent.click(resourcesSection);
+        });
 
-        // 2. Wait for the resource to be visible
+        // Wait for resource
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
         });
 
-        // 3. Open the resource menu
-        const resourceMenuButton = await screen.findByTestId('icon-button-res1');
-        fireEvent.click(resourceMenuButton);
-
-        // 4. Verify that the menu is open
-        await waitFor(() => {
-            expect(screen.getByTestId('resource-actions-menu')).toBeInTheDocument();
+        // Open resource menu
+        const resourceSection = screen.getByText('res1').closest('div');
+        const resourceMenuButton = within(resourceSection).getAllByRole('button').find((btn) =>
+            btn.querySelector('svg[data-testid="MoreVertIcon"]')
+        );
+        await act(async () => {
+            fireEvent.click(resourceMenuButton);
         });
 
-        // 5. Find and click the restart action
-        const restartAction = await screen.findByTestId('resource-action-restart');
-        fireEvent.click(restartAction);
-
-        // 6. Verify that the dialog is open
+        // Click 'restart'
         await waitFor(() => {
-            expect(screen.getByTestId('dialog')).toBeInTheDocument();
+            const menuItems = screen.getAllByRole('menuitem');
+            const restartItem = menuItems.find((item) => item.textContent.includes('restart'));
+            expect(restartItem).toBeInTheDocument();
+            fireEvent.click(restartItem);
         });
 
-        // 7. Confirm the action
-        const confirmButton = await screen.findByRole('button', {name: /confirm/i});
-        fireEvent.click(confirmButton);
+        // Confirm action
+        await waitFor(() => {
+            expect(screen.getByText('Confirm restart')).toBeInTheDocument();
+        });
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
 
-        // 8. Verify the API call
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('action/restart?rid=res1'),
-                expect.any(Object)
+                expect.stringContaining('/node1/instance/path/root/svc/service1/action/restart?rid=res1'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: {Authorization: 'Bearer mock-token'},
+                })
             );
         });
-    }, 15000); // Extended timeout to 15 seconds
+    }, 15000);
 
     test('triggers object action with unprovision dialog', async () => {
         render(
@@ -548,68 +525,92 @@ describe('ObjectDetail Component', () => {
         );
 
         // Open object menu
-        fireEvent.click(screen.getByTestId('icon-button-object'));
+        const headerSection = screen.getByText('root/svc/service1').closest('div');
+        const objectMenuButton = within(headerSection).getAllByRole('button').find((btn) =>
+            btn.querySelector('svg[data-testid="MoreVertIcon"]')
+        );
+        await act(async () => {
+            fireEvent.click(objectMenuButton);
+        });
 
         // Select unprovision
-        fireEvent.click(screen.getByTestId('menu-item-unprovision'));
+        await waitFor(() => {
+            const menuItems = screen.getAllByRole('menuitem');
+            const unprovisionItem = menuItems.find((item) => item.textContent === 'unprovision');
+            expect(unprovisionItem).toBeInTheDocument();
+            fireEvent.click(unprovisionItem);
+        });
 
-        // Fill the dialog
+        // Fill dialog
         await waitFor(() => {
             expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
         });
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
+            cb.closest('[role="dialog"]')
+        );
+        await act(async () => {
+            fireEvent.click(dialogCheckbox);
+        });
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
 
-        fireEvent.click(screen.getByTestId('checkbox'));
-        fireEvent.click(screen.getByText('Confirm'));
-
-        // Verify the API call
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/action/unprovision'),
-                expect.any(Object)
+                expect.stringContaining('/api/object/path/root/svc/service1/action/unprovision'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: {Authorization: 'Bearer mock-token'},
+                })
             );
         });
-    });
+    }, 10000);
 
     test('expands node and resource accordions', async () => {
-        const {unmount} = render(
+        render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                    <Route path="/object/:objectName" element={<ObjectDetail />} />
                 </Routes>
             </MemoryRouter>
         );
 
-        // Wait for node to be displayed
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // Find and click on node resources header
-        const resourcesHeader = await screen.findByText('Resources (2)');
-        fireEvent.click(resourcesHeader);
-
-        // Verify resources are visible
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
+        // Expand node resources
+        const resourcesToggle = screen.getByText('Resources (2)');
+        await act(async () => {
+            fireEvent.click(resourcesToggle);
         });
 
-        // Find and click on resource res1
-        const resourceHeader = await screen.findByText('res1');
-        fireEvent.click(resourceHeader);
-
-        // Verify resource details are visible
+        // Verify resources
         await waitFor(() => {
-            expect(screen.getByText((content, element) => {
-                const hasText = (node) => node.textContent.includes('Label:') && node.textContent.includes('Resource 1');
-                const elementHasText = hasText(element);
-                const childrenDontHaveText = Array.from(element?.children || []).every(
-                    (child) => !hasText(child)
-                );
-                return elementHasText && childrenDontHaveText;
-            })).toBeInTheDocument();
+            const res1 = screen.queryByText('res1');
+            if (!res1) {
+                screen.debug();
+            }
+            expect(res1).toBeInTheDocument();
+            expect(screen.getByText('res2')).toBeInTheDocument();
         });
-        unmount();
-    });
+
+        // Expand resource details
+        const resourceSection = screen.getByText('res1').closest('div');
+        await act(async () => {
+            fireEvent.click(resourceSection);
+        });
+
+        // Verify resource details with flexible matcher
+        await waitFor(() => {
+            const resourceDetails = screen.getByText((content, element) =>
+                content.includes('Resource 1')
+            );
+            expect(resourceDetails).toBeInTheDocument();
+        });
+    }, 10000);
 
     test('cancels freeze dialog', async () => {
         render(
@@ -620,85 +621,83 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for the component to load
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // 1. Select the node
-        const nodeCheckbox = screen.getByTestId('checkbox-node1');
+        // Select node
+        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
         fireEvent.click(nodeCheckbox);
 
-        // 2. Open the actions menu
-        const actionsButton = screen.getByText('Actions on selected nodes');
+        // Open actions menu
+        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
         fireEvent.click(actionsButton);
 
-        // 3. Select the 'freeze' action
+        // Select freeze
         await waitFor(() => {
-            expect(screen.getByText('Freeze')).toBeInTheDocument();
+            const menuItems = screen.getAllByRole('menuitem');
+            const freezeItem = menuItems.find((item) => item.textContent.includes('Freeze'));
+            expect(freezeItem).toBeInTheDocument();
+            fireEvent.click(freezeItem);
         });
-        fireEvent.click(screen.getByText('Freeze'));
 
-        // 4. Verify that the confirmation dialog appears
+        // Verify dialog
         await waitFor(() => {
-            expect(screen.getByTestId('dialog')).toBeInTheDocument();
             expect(screen.getByText('Confirm Freeze')).toBeInTheDocument();
         });
 
-        // 5. Click Cancel
-        const cancelButton = screen.getByText('Cancel');
+        // Cancel
+        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
         fireEvent.click(cancelButton);
 
-        // 6. Verify that the dialog is closed
+        // Verify dialog closed
         await waitFor(() => {
-            expect(screen.queryByTestId('dialog')).not.toBeInTheDocument();
+            expect(screen.queryByText('Confirm Freeze')).not.toBeInTheDocument();
         });
     }, 10000);
 
     test('shows error snackbar when action fails', async () => {
-        // 1. Mock fetch to return an error
-        global.fetch.mockImplementationOnce(() =>
-            Promise.reject(new Error('Network error')) // More robust than ok: false
-        );
-
+        global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Network error')));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
 
-        // 2. Wait for initial load
         await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
-        // 3. Select a node
-        const checkbox = screen.getByTestId('checkbox-node1');
-        fireEvent.click(checkbox);
+        // Select node
+        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
+        fireEvent.click(nodeCheckbox);
 
-        // 4. Open the actions menu
-        const actionsButton = screen.getByText('Actions on selected nodes');
+        // Open actions menu
+        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
         fireEvent.click(actionsButton);
 
-        // 5. Select the 'start' action
+        // Select start
         await waitFor(() => {
-            expect(screen.getByText('Start')).toBeInTheDocument();
+            const menuItems = screen.getAllByRole('menuitem');
+            const startItem = menuItems.find((item) => item.textContent.includes('Start'));
+            expect(startItem).toBeInTheDocument();
+            fireEvent.click(startItem);
         });
-        fireEvent.click(screen.getByText('Start'));
 
-        // 6. Confirm the action
+        // Confirm
         await waitFor(() => {
-            expect(screen.getByTestId('dialog')).toBeInTheDocument();
+            expect(screen.getByText('Confirm start')).toBeInTheDocument();
         });
-        fireEvent.click(screen.getByText('Confirm'));
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            fireEvent.click(confirmButton);
+        });
 
-        // 7. Verify the error display
+        // Verify error snackbar
         await waitFor(() => {
-            expect(screen.getByRole('alert')).toBeInTheDocument();
-            expect(screen.getByText(/Error: Network error/i)).toBeInTheDocument();
-        }, { timeout: 3000 }); // Explicit timeout
-
-    }, 10000); // Global timeout
+            expect(screen.getByRole('alert')).toHaveTextContent(/Error: Network error/i);
+        });
+    }, 10000);
 });

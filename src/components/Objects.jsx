@@ -40,7 +40,7 @@ import {
     CleaningServices,
     SwapHoriz,
     Undo,
-    Cancel,
+    Cancel, Stop,
 } from "@mui/icons-material";
 import {green, red, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -63,6 +63,7 @@ const AVAILABLE_ACTIONS = [
     {name: "switch", icon: <SwapHoriz/>},
     {name: "giveback", icon: <Undo/>},
     {name: "abort", icon: <Cancel/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const Objects = () => {

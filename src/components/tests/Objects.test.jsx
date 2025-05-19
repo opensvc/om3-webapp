@@ -23,7 +23,7 @@ jest.mock('@mui/material/Collapse', () => {
     return ({in: inProp, children}) => (inProp ? children : null);
 });
 
-const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
+const AVAILABLE_ACTIONS = ["restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort", "stop"];
 
 describe('Objects Component', () => {
     const mockNavigate = jest.fn();

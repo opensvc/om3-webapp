@@ -141,6 +141,16 @@ describe('ObjectDetail Component', () => {
                     },
                 },
             },
+            instanceMonitor: {
+                'node1:root/svc/service1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                },
+                'node2:root/svc/service1': {
+                    state: 'idle',
+                    global_expect: 'none',
+                },
+            },
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
 
@@ -162,7 +172,7 @@ describe('ObjectDetail Component', () => {
 
     test('renders object name and no information message when no data', async () => {
         useEventStore.mockImplementation((selector) =>
-            selector({objectStatus: {}, objectInstanceStatus: {}})
+            selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
         );
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
@@ -186,10 +196,13 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
+            expect(screen.getByText('root/svc/service1')).toBeInTheDocument();
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
             expect(screen.getByText('Node: node2')).toBeInTheDocument();
             expect(screen.getByText('Resources (2)')).toBeInTheDocument();
             expect(screen.getByText('Resources (1)')).toBeInTheDocument();
+            expect(screen.getByText('running')).toBeInTheDocument(); // node1 state
+            expect(screen.getByText('placed@node1')).toBeInTheDocument(); // global_expect
         });
 
         const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
@@ -337,7 +350,7 @@ describe('ObjectDetail Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
+    await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
@@ -559,7 +572,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/object/path/root/svc/service1/action/unprovision'),
+                expect.stringContaining('/object/path/root/svc/service1/action/unprovision'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -572,7 +585,7 @@ describe('ObjectDetail Component', () => {
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
@@ -700,4 +713,32 @@ describe('ObjectDetail Component', () => {
             expect(screen.getByRole('alert')).toHaveTextContent(/Error: Network error/i);
         });
     }, 10000);
+
+    test('displays node state from instanceMonitor', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('running')).toBeInTheDocument(); // node1 state
+            expect(screen.queryByText('idle')).not.toBeInTheDocument(); // node2 state is idle, not displayed
+        });
+    });
+
+    test('displays global_expect from instanceMonitor', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('placed@node1')).toBeInTheDocument(); // global_expect
+            expect(screen.queryByText('none')).not.toBeInTheDocument(); // node2 global_expect is none, not displayed
+        });
+    });
 });

@@ -43,7 +43,8 @@ const OBJECT_ACTIONS = [
     {name: "purge", icon: <CleaningServices sx={{fontSize: 24}}/>},
     {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
     {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
-    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>}
+    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const RESOURCE_ACTIONS = [
@@ -62,6 +63,7 @@ const ObjectDetail = () => {
 
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
+    const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
@@ -117,10 +119,10 @@ const ObjectDetail = () => {
             return {namespace: "root", kind: "svc", name: ""};
         }
         const parts = objName.split("/");
-        if (parts.length === 3) {
-            return {namespace: parts[0], kind: parts[1], name: parts[2]};
-        }
-        return {namespace: "root", kind: "svc", name: objName};
+        const name = parts.length === 3 ? parts[2] : parts[0];
+        const kind = name === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+        const namespace = parts.length === 3 ? parts[0] : "root";
+        return {namespace, kind, name};
     };
 
     const postObjectAction = async ({action}) => {
@@ -189,6 +191,36 @@ const ObjectDetail = () => {
         if (status === "down" || status === false) return red[500];
         if (status === "warn") return orange[500];
         return grey[500];
+    };
+
+    // Node state helper
+    const getNodeState = (node) => {
+        const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
+        const monitorKey = `${node}:${decodedObjectName}`;
+        const monitor = instanceMonitor[monitorKey] || {};
+        return {
+            avail: instanceStatus[node]?.avail,
+            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
+            state: monitor.state !== "idle" ? monitor.state : null,
+        };
+    };
+
+    // Object status helper
+    const getObjectStatus = () => {
+        const obj = objectStatus[decodedObjectName] || {};
+        const avail = obj?.avail;
+        const frozen = obj?.frozen;
+        const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+        let globalExpect = null;
+        for (const node of nodes) {
+            const monitorKey = `${node}:${decodedObjectName}`;
+            const monitor = instanceMonitor[monitorKey] || {};
+            if (monitor.global_expect && monitor.global_expect !== "none") {
+                globalExpect = monitor.global_expect;
+                break;
+            }
+        }
+        return {avail, frozen, globalExpect};
     };
 
     // Batch node actions handlers
@@ -312,16 +344,21 @@ const ObjectDetail = () => {
                             {decodedObjectName}
                         </Typography>
                         <Box display="flex" alignItems="center" gap={2}>
-                            <FiberManualRecordIcon sx={{color: getColor(globalStatus.avail), fontSize: "1.2rem"}}/>
-                            {globalStatus.avail === "warn" && (
+                            <FiberManualRecordIcon sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}/>
+                            {getObjectStatus().avail === "warn" && (
                                 <Tooltip title="Warning">
                                     <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
-                            {globalStatus.frozen === "frozen" && (
+                            {getObjectStatus().frozen === "frozen" && (
                                 <Tooltip title="Frozen">
                                     <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
                                 </Tooltip>
+                            )}
+                            {getObjectStatus().globalExpect && (
+                                <Typography variant="caption">
+                                    {getObjectStatus().globalExpect}
+                                </Typography>
                             )}
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
@@ -367,8 +404,8 @@ const ObjectDetail = () => {
 
                 {/* LIST OF NODES WITH THEIR RESOURCES */}
                 {memoizedNodes.map((node) => {
-                    const {avail, frozen_at, resources = {}} = memoizedObjectData[node] || {};
-                    const isFrozen = frozen_at && frozen_at !== "0001-01-01T00:00:00Z";
+                    const {resources = {}} = memoizedObjectData[node] || {};
+                    const {avail, frozen, state} = getNodeState(node);
                     const resIds = Object.keys(resources);
 
                     return (
@@ -397,10 +434,20 @@ const ObjectDetail = () => {
                                     </Box>
                                     <Box display="flex" alignItems="center" gap={2}>
                                         <FiberManualRecordIcon sx={{color: getColor(avail), fontSize: "1.2rem"}}/>
-                                        {isFrozen && (
+                                        {avail === "warn" && (
+                                            <Tooltip title="Warning">
+                                                <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
+                                            </Tooltip>
+                                        )}
+                                        {frozen === "frozen" && (
                                             <Tooltip title="Frozen">
                                                 <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
                                             </Tooltip>
+                                        )}
+                                        {state && (
+                                            <Typography variant="caption">
+                                                {state}
+                                            </Typography>
                                         )}
                                         <IconButton
                                             onClick={(e) => {
@@ -498,7 +545,7 @@ const ObjectDetail = () => {
                                                                 "& .MuiAccordionDetails-root": {
                                                                     border: "none",
                                                                     backgroundColor: "transparent",
-                                                                    Planck: 0,
+                                                                    padding: 0,
                                                                 },
                                                             }}
                                                         >

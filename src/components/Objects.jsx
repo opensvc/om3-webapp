@@ -40,7 +40,7 @@ import {
     CleaningServices,
     SwapHoriz,
     Undo,
-    Cancel, Stop,
+    Cancel, Stop, PlayArrow,
 } from "@mui/icons-material";
 import {green, red, blue, orange} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -53,6 +53,8 @@ import {closeEventSource} from "../eventSourceManager";
 import {URL_OBJECT} from '../config/apiPath.js';
 
 const AVAILABLE_ACTIONS = [
+    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart", icon: <RestartAlt/>},
     {name: "freeze", icon: <AcUnit/>},
     {name: "unfreeze", icon: <LockOpen/>},
@@ -63,7 +65,6 @@ const AVAILABLE_ACTIONS = [
     {name: "switch", icon: <SwapHoriz/>},
     {name: "giveback", icon: <Undo/>},
     {name: "abort", icon: <Cancel/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const Objects = () => {

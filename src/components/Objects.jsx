@@ -139,7 +139,9 @@ const Objects = () => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) return;
             const parts = objectName.split("/");
-            const [namespace, kind, name] = parts.length === 3 ? parts : ["root", "svc", parts[0]];
+            const name = parts.length === 3 ? parts[2] : parts[0];
+            const kind = name === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+            const namespace = parts.length === 3 ? parts[0] : "root";
             const obj = {...rawObj, namespace, kind, name};
 
             if ((action === "freeze" && obj.frozen === "frozen") || (action === "unfreeze" && obj.frozen === "unfrozen")) return;
@@ -184,7 +186,11 @@ const Objects = () => {
     const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
     const extractNamespace = (name) => name.split("/")[0] || "root";
-    const extractKind = (name) => name.split("/")[1] || "svc";
+    const extractKind = (name) => {
+        const parts = name.split("/");
+        const objName = parts.length === 3 ? parts[2] : parts[0];
+        return objName === "cluster" ? "ccfg" : (parts[1] || "svc");
+    };
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {

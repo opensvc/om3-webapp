@@ -185,11 +185,14 @@ const Objects = () => {
 
     const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-    const extractNamespace = (name) => name.split("/")[0] || "root";
+    const extractNamespace = (name) => {
+        const parts = name.split("/");
+        return parts.length === 3 ? parts[0] : "root";
+    };
     const extractKind = (name) => {
         const parts = name.split("/");
         const objName = parts.length === 3 ? parts[2] : parts[0];
-        return objName === "cluster" ? "ccfg" : (parts[1] || "svc");
+        return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
     };
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();

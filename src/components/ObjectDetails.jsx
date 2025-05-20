@@ -531,6 +531,7 @@ const ObjectDetail = () => {
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
                                 disabled={actionInProgress}
+                                aria-label="Object actions"
                             >
                                 <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
                             </IconButton>
@@ -599,6 +600,7 @@ const ObjectDetail = () => {
                                         color="primary"
                                         onClick={() => setCreateDialogOpen(true)}
                                         disabled={actionLoading}
+                                        aria-label="Add new key"
                                     >
                                         <AddIcon/>
                                     </IconButton>
@@ -639,6 +641,7 @@ const ObjectDetail = () => {
                                                                     setUpdateDialogOpen(true);
                                                                 }}
                                                                 disabled={actionLoading}
+                                                                aria-label={`Edit key ${key.name}`}
                                                             >
                                                                 <EditIcon/>
                                                             </IconButton>
@@ -648,6 +651,7 @@ const ObjectDetail = () => {
                                                                     setDeleteDialogOpen(true);
                                                                 }}
                                                                 disabled={actionLoading}
+                                                                aria-label={`Delete key ${key.name}`}
                                                             >
                                                                 <DeleteIcon/>
                                                             </IconButton>
@@ -700,7 +704,9 @@ const ObjectDetail = () => {
                             onChange={(e) => setNewKeyName(e.target.value)}
                             disabled={actionLoading}
                         />
+                        <label htmlFor="create-key-file-upload">File</label>
                         <Input
+                            id="create-key-file-upload"
                             type="file"
                             onChange={(e) => setNewKeyFile(e.target.files[0])}
                             sx={{mt: 2}}
@@ -735,7 +741,9 @@ const ObjectDetail = () => {
                             onChange={(e) => setUpdateKeyName(e.target.value)}
                             disabled={actionLoading}
                         />
+                        <label htmlFor="update-key-file-upload">File</label>
                         <Input
+                            id="update-key-file-upload"
                             type="file"
                             onChange={(e) => setUpdateKeyFile(e.target.files[0])}
                             sx={{mt: 2}}
@@ -820,6 +828,7 @@ const ObjectDetail = () => {
                                                 setIndividualNodeMenuAnchor(e.currentTarget);
                                             }}
                                             disabled={actionInProgress}
+                                            aria-label={`Node ${node} actions`}
                                         >
                                             <MoreVertIcon/>
                                         </IconButton>
@@ -874,6 +883,7 @@ const ObjectDetail = () => {
                                                     e.stopPropagation();
                                                 }}
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
+                                                aria-label={`Resources actions for node ${node}`}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
@@ -941,6 +951,7 @@ const ObjectDetail = () => {
                                                                             e.stopPropagation();
                                                                         }}
                                                                         disabled={actionInProgress}
+                                                                        aria-label={`Resource ${rid} actions`}
                                                                     >
                                                                         <MoreVertIcon/>
                                                                     </IconButton>

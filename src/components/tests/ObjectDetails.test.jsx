@@ -23,13 +23,14 @@ jest.mock('@mui/material', () => {
     return {
         ...actual,
         Accordion: ({children, expanded, onChange, ...props}) => (
-            <div className={expanded ? 'expanded' : ''} {...props}>
+            <div data-testid="accordion" className={expanded ? 'expanded' : ''} {...props}>
                 {children}
             </div>
         ),
         AccordionSummary: ({children, id, onChange, ...props}) => (
             <div
                 role="button"
+                data-testid="accordion-summary"
                 onClick={() => onChange?.({}, !props.expanded)}
                 {...props}
             >
@@ -37,7 +38,9 @@ jest.mock('@mui/material', () => {
             </div>
         ),
         AccordionDetails: ({children, ...props}) => (
-            <div {...props}>{children}</div>
+            <div data-testid="accordion-details" {...props}>
+                {children}
+            </div>
         ),
         Menu: ({children, open, anchorEl, onClose, ...props}) =>
             open ? <div role="menu" {...props}>{children}</div> : null,
@@ -71,13 +74,31 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
+        TextField: ({label, value, onChange, disabled, ...props}) => (
+            <input
+                type="text"
+                placeholder={label}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+                {...props}
+            />
+        ),
+        Input: ({type, onChange, disabled, ...props}) => (
+            <input
+                type={type}
+                onChange={onChange}
+                disabled={disabled}
+                {...props}
+            />
+        ),
+        CircularProgress: () => <div role="progressbar">Loading...</div>,
     };
 });
 
 describe('ObjectDetail Component', () => {
     const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
-    const mockCloseEventSource = jest.fn();
 
     beforeEach(() => {
         jest.setTimeout(20000);
@@ -90,7 +111,7 @@ describe('ObjectDetail Component', () => {
 
         // Mock useParams
         require('react-router-dom').useParams.mockReturnValue({
-            objectName: encodeURIComponent('root/svc/service1'),
+            objectName: encodeURIComponent('root/cfg/cfg1'),
         });
 
         // Mock useFetchDaemonStatus
@@ -102,13 +123,13 @@ describe('ObjectDetail Component', () => {
         // Mock useEventStore
         const mockState = {
             objectStatus: {
-                'root/svc/service1': {
+                'root/cfg/cfg1': {
                     avail: 'up',
                     frozen: 'frozen',
                 },
             },
             objectInstanceStatus: {
-                'root/svc/service1': {
+                'root/cfg/cfg1': {
                     node1: {
                         avail: 'up',
                         frozen_at: '2023-01-01T12:00:00Z',
@@ -142,11 +163,11 @@ describe('ObjectDetail Component', () => {
                 },
             },
             instanceMonitor: {
-                'node1:root/svc/service1': {
+                'node1:root/cfg/cfg1': {
                     state: 'running',
                     global_expect: 'placed@node1',
                 },
-                'node2:root/svc/service1': {
+                'node2:root/cfg/cfg1': {
                     state: 'idle',
                     global_expect: 'none',
                 },
@@ -155,15 +176,29 @@ describe('ObjectDetail Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         // Mock fetch
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
+        global.fetch = jest.fn((url) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                            {name: 'key2', node: 'node1', size: 6946},
+                        ],
+                    }),
+                });
+            }
+            if (url.includes('/api/object/path/root/cfg/cfg1/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({}),
+                });
+            }
+            return Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({}),
-            })
-        );
-
-        // Link mockCloseEventSource
-        require('../../eventSourceManager.jsx').closeEventSource.mockImplementation(mockCloseEventSource);
+            });
+        });
     });
 
     afterEach(() => {
@@ -175,34 +210,34 @@ describe('ObjectDetail Component', () => {
             selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
         );
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('root/svc/service1')).toBeInTheDocument();
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
             expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
         });
     });
 
     test('renders global status, nodes, and resources', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('root/svc/service1')).toBeInTheDocument();
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
             expect(screen.getByText('Node: node2')).toBeInTheDocument();
             expect(screen.getByText('Resources (2)')).toBeInTheDocument();
             expect(screen.getByText('Resources (1)')).toBeInTheDocument();
-            expect(screen.getByText('running')).toBeInTheDocument(); // node1 state
-            expect(screen.getByText('placed@node1')).toBeInTheDocument(); // global_expect
+            expect(screen.getByText('running')).toBeInTheDocument();
+            expect(screen.getByText('placed@node1')).toBeInTheDocument();
         });
 
         const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
@@ -225,7 +260,7 @@ describe('ObjectDetail Component', () => {
 
     test('calls fetchNodes and startEventReception on mount', () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -237,7 +272,7 @@ describe('ObjectDetail Component', () => {
 
     test('calls closeEventSource on unmount', async () => {
         const {unmount} = render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -246,13 +281,13 @@ describe('ObjectDetail Component', () => {
         await act(async () => {
             unmount();
         });
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(closeEventSource).toHaveBeenCalled();
     });
 
     test('does not call fetchNodes or startEventReception without auth token', () => {
         Storage.prototype.getItem = jest.fn(() => null);
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -264,7 +299,7 @@ describe('ObjectDetail Component', () => {
 
     test('enables batch node actions button when nodes are selected', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -280,7 +315,7 @@ describe('ObjectDetail Component', () => {
 
     test('opens batch node actions menu and triggers freeze action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -327,7 +362,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/instance/path/root/svc/service1/action/freeze'),
+                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/freeze'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -343,14 +378,14 @@ describe('ObjectDetail Component', () => {
 
     test('triggers individual node stop action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
 
-    await waitFor(() => {
+        await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
@@ -391,7 +426,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/instance/path/root/svc/service1/action/stop'),
+                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -402,7 +437,7 @@ describe('ObjectDetail Component', () => {
 
     test('triggers batch resource action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -429,7 +464,8 @@ describe('ObjectDetail Component', () => {
             fireEvent.click(resourceCheckbox);
         });
 
-        // Open resource actions menu
+        global.fetch.mockClear();
+
         const resourceMenuButton = within(resourcesSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
@@ -457,7 +493,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/service1/action/start'),
+                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/start'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -468,7 +504,7 @@ describe('ObjectDetail Component', () => {
 
     test('triggers individual resource action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -490,7 +526,8 @@ describe('ObjectDetail Component', () => {
             expect(screen.getByText('res1')).toBeInTheDocument();
         });
 
-        // Open resource menu
+        global.fetch.mockClear();
+
         const resourceSection = screen.getByText('res1').closest('div');
         const resourceMenuButton = within(resourceSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
@@ -519,7 +556,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/node1/instance/path/root/svc/service1/action/restart?rid=res1'),
+                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/restart?rid=res1'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -530,15 +567,20 @@ describe('ObjectDetail Component', () => {
 
     test('triggers object action with unprovision dialog', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
 
-        // Open object menu
-        const headerSection = screen.getByText('root/svc/service1').closest('div');
+        await waitFor(() => {
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+        });
+
+        global.fetch.mockClear();
+
+        const headerSection = screen.getByText('root/cfg/cfg1').closest('div');
         const objectMenuButton = within(headerSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
@@ -572,7 +614,7 @@ describe('ObjectDetail Component', () => {
         // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/object/path/root/svc/service1/action/unprovision'),
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/action/unprovision'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -583,7 +625,7 @@ describe('ObjectDetail Component', () => {
 
     test('expands node and resource accordions', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -627,7 +669,7 @@ describe('ObjectDetail Component', () => {
 
     test('cancels freeze dialog', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -670,9 +712,10 @@ describe('ObjectDetail Component', () => {
     }, 10000);
 
     test('shows error snackbar when action fails', async () => {
-        global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Network error')));
+        global.fetch.mockImplementation(() => Promise.reject(new Error('Network error')));
+
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -710,35 +753,461 @@ describe('ObjectDetail Component', () => {
 
         // Verify error snackbar
         await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/Error: Network error/i);
+            const errorAlert = screen.getByText(/Error: Network error/i);
+            expect(errorAlert).toBeInTheDocument();
+            expect(errorAlert.closest('[role="alert"]')).toHaveAttribute('severity', 'error');
         });
     }, 10000);
 
     test('displays node state from instanceMonitor', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('running')).toBeInTheDocument(); // node1 state
-            expect(screen.queryByText('idle')).not.toBeInTheDocument(); // node2 state is idle, not displayed
+            expect(screen.getByText('running')).toBeInTheDocument();
+            expect(screen.queryByText('idle')).not.toBeInTheDocument();
         });
     });
 
     test('displays global_expect from instanceMonitor', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fservice1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('placed@node1')).toBeInTheDocument(); // global_expect
-            expect(screen.queryByText('none')).not.toBeInTheDocument(); // node2 global_expect is none, not displayed
+            expect(screen.getByText('placed@node1')).toBeInTheDocument();
+            expect(screen.queryByText('none')).not.toBeInTheDocument();
+        });
+    });
+
+    test('displays keys in table for cfg object', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            const keysAccordion = screen.getByText(/Object Keys \(2\)/i);
+            expect(keysAccordion).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('key1')).toBeInTheDocument();
+            expect(screen.getByText('key2')).toBeInTheDocument();
+            expect(screen.getByText('2626 bytes')).toBeInTheDocument();
+            expect(screen.getByText('6946 bytes')).toBeInTheDocument();
+            const node1Elements = screen.getAllByText('node1');
+            expect(node1Elements).toHaveLength(2);
+            node1Elements.forEach((element) => {
+                expect(element).toBeInTheDocument();
+            });
+        });
+    });
+
+    test('expands keys accordion', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('key1')).toBeInTheDocument();
+        });
+    });
+
+    test('creates a new key', async () => {
+        global.fetch.mockClear();
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        const addButton = screen.getByRole('button', {name: /add/i});
+        await act(async () => {
+            fireEvent.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Create New Key')).toBeInTheDocument();
+        });
+
+        const nameInput = screen.getByPlaceholderText('Key Name');
+        const fileInput = screen.getByLabelText(/file/i);
+        await act(async () => {
+            fireEvent.change(nameInput, {target: {value: 'newKey'}});
+            fireEvent.change(fileInput, {target: {files: [new File(['content'], 'key.txt')]}});
+        });
+
+        const createButton = screen.getByRole('button', {name: /Create/i});
+        await act(async () => {
+            fireEvent.click(createButton);
+        });
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=newKey'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: expect.any(File),
+                })
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Key 'newKey' created successfully/i)).toBeInTheDocument();
+        });
+    });
+
+    test('updates a key', async () => {
+        global.fetch.mockClear();
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        const keyRow = screen.getByText('key1').closest('tr');
+        const editButton = within(keyRow).getByRole('button', {name: /edit/i});
+        await act(async () => {
+            fireEvent.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Update Key')).toBeInTheDocument();
+        });
+        const nameInput = screen.getByPlaceholderText('Key Name');
+        const fileInput = screen.getByLabelText(/file/i);
+        await act(async () => {
+            fireEvent.change(nameInput, {target: {value: 'updatedKey'}});
+            fireEvent.change(fileInput, {target: {files: [new File(['new content'], 'updated.txt')]}});
+        });
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            fireEvent.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=updatedKey'),
+                expect.objectContaining({
+                    method: 'PUT',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: expect.any(File),
+                })
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Key 'updatedKey' updated successfully/i)).toBeInTheDocument();
+        });
+    });
+
+    test('deletes a key', async () => {
+        global.fetch.mockClear();
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        const keyRow = screen.getByText('key1').closest('tr');
+        const deleteButton = within(keyRow).getByRole('button', {name: /delete/i});
+        await act(async () => {
+            fireEvent.click(deleteButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Delete Key')).toBeInTheDocument();
+        });
+
+        const deleteConfirmButton = screen.getByRole('dialog').querySelector('button.MuiButton-containedError');
+        await act(async () => {
+            fireEvent.click(deleteConfirmButton);
+        });
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=key1'),
+                expect.objectContaining({
+                    method: 'DELETE',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Key 'key1' deleted successfully/i)).toBeInTheDocument();
+        });
+    });
+
+    test('displays error when fetching keys fails', async () => {
+        global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Failed to fetch keys')));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Failed to fetch keys/i)).toBeInTheDocument();
+        });
+    });
+
+    test('displays no keys message when keys array is empty', async () => {
+        global.fetch.mockImplementationOnce(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({items: []}),
+            })
+        );
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('No keys available.')).toBeInTheDocument();
+        });
+    });
+
+    test('displays loading indicator while fetching keys', async () => {
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        });
+    });
+
+    test('disables buttons during key creation', async () => {
+        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
+
+        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        const addButton = screen.getByRole('button', {name: /add/i});
+        await act(async () => {
+            fireEvent.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Create New Key')).toBeInTheDocument();
+        });
+
+        const nameInput = screen.getByPlaceholderText('Key Name');
+        const fileInput = screen.getByLabelText(/file/i);
+        await act(async () => {
+            fireEvent.change(nameInput, {target: {value: 'newKey'}});
+            fireEvent.change(fileInput, {target: {files: [new File(['content'], 'key.txt')]}});
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const createButton = within(dialog).getByRole('button', {name: /create/i});
+        const cancelButton = within(dialog).getByRole('button', {name: /cancel/i});
+
+        await act(async () => {
+            fireEvent.click(createButton);
+        });
+
+        await waitFor(() => {
+            expect(createButton).toBeDisabled();
+            expect(cancelButton).toBeDisabled();
+        });
+    });
+
+    test('renders object name and no information message when no data', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
+        );
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+            expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
+        });
+    });
+
+    test('renders global status, nodes, and resources', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+            expect(screen.getByText('Node: node1')).toBeInTheDocument();
+            expect(screen.getByText('Node: node2')).toBeInTheDocument();
+            expect(screen.getByText('Resources (2)')).toBeInTheDocument();
+            expect(screen.getByText('Resources (1)')).toBeInTheDocument();
+            expect(screen.getByText('running')).toBeInTheDocument();
+            expect(screen.getByText('placed@node1')).toBeInTheDocument();
+        });
+
+        const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
+        await act(async () => {
+            fireEvent.click(node1AccordionToggle);
+        });
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+            expect(screen.getByText('res2')).toBeInTheDocument();
+        });
+
+        const node2AccordionToggle = screen.getByText('Resources (1)').closest('div');
+        await act(async () => {
+            fireEvent.click(node2AccordionToggle);
+        });
+        await waitFor(() => {
+            expect(screen.getByText('res3')).toBeInTheDocument();
+        });
+    });
+
+    test('displays error when fetching keys fails', async () => {
+        global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Failed to fetch keys')));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const keysAccordion = screen.getByText('Object Keys (0)').closest('div');
+        await act(async () => {
+            fireEvent.click(keysAccordion);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Failed to fetch keys/i)).toBeInTheDocument();
         });
     });
 });

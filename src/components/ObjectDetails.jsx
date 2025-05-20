@@ -5,13 +5,18 @@ import {
     Menu, MenuItem, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, FormControlLabel, Checkbox,
     Button, Accordion, AccordionSummary, AccordionDetails,
-    ListItemIcon, ListItemText
+    ListItemIcon, ListItemText, CircularProgress, Table,
+    TableBody, TableCell, TableContainer, TableHead, TableRow,
+    Paper, TextField, Input
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import AddIcon from "@mui/icons-material/Add";
 import {
     RestartAlt, LockOpen, Delete, Settings, Block,
     CleaningServices, SwapHoriz, Undo, Cancel,
@@ -68,6 +73,24 @@ const ObjectDetail = () => {
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
+    // State for keys
+    const [keys, setKeys] = useState([]);
+    const [keysLoading, setKeysLoading] = useState(false);
+    const [keysError, setKeysError] = useState(null);
+    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(false);
+
+    // State for key actions
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+    const [keyToDelete, setKeyToDelete] = useState(null);
+    const [keyToUpdate, setKeyToUpdate] = useState(null);
+    const [newKeyName, setNewKeyName] = useState("");
+    const [updateKeyName, setUpdateKeyName] = useState("");
+    const [newKeyFile, setNewKeyFile] = useState(null);
+    const [updateKeyFile, setUpdateKeyFile] = useState(null);
+    const [actionLoading, setActionLoading] = useState(false);
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -78,6 +101,143 @@ const ObjectDetail = () => {
             closeEventSource();
         };
     }, []);
+
+    // Fetch keys for cfg or sec objects
+    const fetchKeys = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        if (!['cfg', 'sec'].includes(kind)) return;
+
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setKeysError("Auth token not found.");
+            return;
+        }
+
+        setKeysLoading(true);
+        setKeysError(null);
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
+            const data = await response.json();
+            setKeys(data.items || []);
+        } catch (err) {
+            setKeysError(err.message);
+        } finally {
+            setKeysLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchKeys();
+    }, [decodedObjectName]);
+
+    // Key action handlers
+    const handleDeleteKey = async () => {
+        if (!keyToDelete) return;
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Deleting key ${keyToDelete}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyToDelete)}`;
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to delete key: ${response.status}`);
+            openSnackbar(`Key '${keyToDelete}' deleted successfully`);
+            await fetchKeys(); // Refresh keys
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setDeleteDialogOpen(false);
+            setKeyToDelete(null);
+        }
+    };
+
+    const handleCreateKey = async () => {
+        if (!newKeyName || !newKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Creating key ${newKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(newKeyName)}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: newKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to create key: ${response.status}`);
+            openSnackbar(`Key '${newKeyName}' created successfully`);
+            await fetchKeys(); // Refresh keys
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setCreateDialogOpen(false);
+            setNewKeyName("");
+            setNewKeyFile(null);
+        }
+    };
+
+    const handleUpdateKey = async () => {
+        if (!updateKeyName || !updateKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Updating key ${updateKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(updateKeyName)}`;
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: updateKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to update key: ${response.status}`);
+            openSnackbar(`Key '${updateKeyName}' updated successfully`);
+            await fetchKeys(); // Refresh keys
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setUpdateDialogOpen(false);
+            setKeyToUpdate(null);
+            setUpdateKeyName("");
+            setUpdateKeyFile(null);
+        }
+    };
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -276,6 +436,10 @@ const ObjectDetail = () => {
         }));
     };
 
+    const handleKeysAccordionChange = (event, isExpanded) => {
+        setKeysAccordionExpanded(isExpanded);
+    };
+
     // Dialog confirm handler
     const handleDialogConfirm = () => {
         console.log('handleDialogConfirm:', {pendingAction, selectedResourcesByNode});
@@ -335,6 +499,9 @@ const ObjectDetail = () => {
         );
     }
 
+    const {kind} = parseObjectPath(decodedObjectName);
+    const showKeys = ['cfg', 'sec'].includes(kind);
+
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
@@ -391,6 +558,203 @@ const ObjectDetail = () => {
                         </Box>
                     </Box>
                 )}
+
+                {/* KEYS SECTION */}
+                {showKeys && (
+                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                        <Accordion
+                            expanded={keysAccordionExpanded}
+                            onChange={handleKeysAccordionChange}
+                            sx={{
+                                border: "none",
+                                boxShadow: "none",
+                                backgroundColor: "transparent",
+                                "&:before": {display: "none"},
+                                "& .MuiAccordionSummary-root": {
+                                    border: "none",
+                                    backgroundColor: "transparent",
+                                    minHeight: "auto",
+                                    "&.Mui-expanded": {minHeight: "auto"},
+                                    padding: 0,
+                                },
+                                "& .MuiAccordionDetails-root": {
+                                    border: "none",
+                                    backgroundColor: "transparent",
+                                    padding: 0,
+                                },
+                            }}
+                        >
+                            <AccordionSummary
+                                expandIcon={<ExpandMoreIcon/>}
+                                aria-controls="panel-keys-content"
+                                id="panel-keys-header"
+                            >
+                                <Typography variant="h6" fontWeight="medium">
+                                    Object Keys ({keys.length})
+                                </Typography>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                                <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setCreateDialogOpen(true)}
+                                        disabled={actionLoading}
+                                    >
+                                        <AddIcon/>
+                                    </IconButton>
+                                </Box>
+                                {keysLoading && <CircularProgress size={24}/>}
+                                {keysError && (
+                                    <Alert severity="error" sx={{mb: 2}}>
+                                        {keysError}
+                                    </Alert>
+                                )}
+                                {!keysLoading && !keysError && keys.length === 0 && (
+                                    <Typography color="textSecondary">No keys available.</Typography>
+                                )}
+                                {!keysLoading && !keysError && keys.length > 0 && (
+                                    <TableContainer component={Paper} sx={{boxShadow: "none"}}>
+                                        <Table sx={{minWidth: 650}} aria-label="keys table">
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {keys.map((key) => (
+                                                    <TableRow key={key.name}>
+                                                        <TableCell component="th" scope="row">
+                                                            {key.name}
+                                                        </TableCell>
+                                                        <TableCell>{key.node}</TableCell>
+                                                        <TableCell>{key.size} bytes</TableCell>
+                                                        <TableCell>
+                                                            <IconButton
+                                                                onClick={() => {
+                                                                    setKeyToUpdate(key.name);
+                                                                    setUpdateKeyName(key.name);
+                                                                    setUpdateDialogOpen(true);
+                                                                }}
+                                                                disabled={actionLoading}
+                                                            >
+                                                                <EditIcon/>
+                                                            </IconButton>
+                                                            <IconButton
+                                                                onClick={() => {
+                                                                    setKeyToDelete(key.name);
+                                                                    setDeleteDialogOpen(true);
+                                                                }}
+                                                                disabled={actionLoading}
+                                                            >
+                                                                <DeleteIcon/>
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                )}
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
+                )}
+
+                {/* DELETE KEY DIALOG */}
+                <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Confirm Delete Key</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            color="error"
+                            onClick={handleDeleteKey}
+                            disabled={actionLoading}
+                        >
+                            Delete
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* CREATE KEY DIALOG */}
+                <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Create New Key</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Key Name"
+                            fullWidth
+                            variant="outlined"
+                            value={newKeyName}
+                            onChange={(e) => setNewKeyName(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <Input
+                            type="file"
+                            onChange={(e) => setNewKeyFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleCreateKey}
+                            disabled={actionLoading || !newKeyName || !newKeyFile}
+                        >
+                            Create
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* UPDATE KEY DIALOG */}
+                <Dialog open={updateDialogOpen} onClose={() => setUpdateDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Update Key</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Key Name"
+                            fullWidth
+                            variant="outlined"
+                            value={updateKeyName}
+                            onChange={(e) => setUpdateKeyName(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <Input
+                            type="file"
+                            onChange={(e) => setUpdateKeyFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleUpdateKey}
+                            disabled={actionLoading || !updateKeyName || !updateKeyFile}
+                        >
+                            Update
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 {/* BATCH NODE ACTIONS */}
                 <Box display="flex" alignItems="center" gap={1} mb={2}>

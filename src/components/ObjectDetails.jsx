@@ -34,6 +34,8 @@ const NODE_ACTIONS = [
 ];
 
 const OBJECT_ACTIONS = [
+    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
     {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
     {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
@@ -44,7 +46,6 @@ const OBJECT_ACTIONS = [
     {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
     {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
     {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>}
 ];
 
 const RESOURCE_ACTIONS = [

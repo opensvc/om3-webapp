@@ -1,15 +1,15 @@
 import {Link, useNavigate, useLocation} from "react-router-dom";
 import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
-import {FaSignOutAlt} from "react-icons/fa";
+import {FaSignOutAlt, FaUser} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 
 const NavBar = () => {
     const {userManager} = useOidc();
     const navigate = useNavigate();
-    const auth = useAuth()
+    const auth = useAuth();
     const location = useLocation();
-    const authDispatch = useAuthDispatch()
+    const authDispatch = useAuthDispatch();
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {
@@ -17,9 +17,9 @@ const NavBar = () => {
             userManager.removeUser();
         }
         localStorage.removeItem("authToken");
-        authDispatch({type: Logout})
+        authDispatch({type: Logout});
         navigate("/auth-choice");
-    };{}
+    };
 
     const getBreadcrumbItems = () => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -51,42 +51,58 @@ const NavBar = () => {
         <AppBar position="sticky">
             <Toolbar sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                 <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5}}>
-                    {breadcrumb.length > 0 && breadcrumb.map((item, index) => (
-                        <Box key={index} sx={{display: "flex", alignItems: "center"}}>
-                            <Typography
-                                component={Link}
-                                to={item.path}
-                                sx={{
-                                    color: "inherit",
-                                    textDecoration: "none",
-                                    fontWeight: 500,
-                                    fontSize: "1.1rem",
-                                    textTransform: "none",
-                                    '&:hover': {
-                                        textDecoration: "underline"
-                                    }
-                                }}
-                            >
-                                {decodeURIComponent(item.name)}
-                            </Typography>
-                            {index < breadcrumb.length - 1 && (
-                                <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
-                            )}
-                        </Box>
-                    ))}
+                    {breadcrumb.length > 0 &&
+                        breadcrumb.map((item, index) => (
+                            <Box key={index} sx={{display: "flex", alignItems: "center"}}>
+                                <Typography
+                                    component={Link}
+                                    to={item.path}
+                                    sx={{
+                                        color: "inherit",
+                                        textDecoration: "none",
+                                        fontWeight: 500,
+                                        fontSize: "1.1rem",
+                                        textTransform: "none",
+                                        "&:hover": {
+                                            textDecoration: "underline",
+                                        },
+                                    }}
+                                >
+                                    {decodeURIComponent(item.name)}
+                                </Typography>
+                                {index < breadcrumb.length - 1 && (
+                                    <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
+                                )}
+                            </Box>
+                        ))}
                 </Box>
 
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                    <Button
+                        component={Link}
+                        to="/whoami"
+                        startIcon={<FaUser/>}
+                        sx={{
+                            backgroundColor: "primary.main",
+                            color: "white",
+                            boxShadow: 3,
+                            "&:hover": {
+                                backgroundColor: "primary.dark",
+                            },
+                        }}
+                    >
+                        Who Am I
+                    </Button>
                     <Button
                         startIcon={<FaSignOutAlt/>}
                         onClick={handleLogout}
                         sx={{
-                            backgroundColor: 'red',
-                            color: 'white',
+                            backgroundColor: "red",
+                            color: "white",
                             boxShadow: 3,
-                            '&:hover': {
-                                backgroundColor: 'darkred',
-                            }
+                            "&:hover": {
+                                backgroundColor: "darkred",
+                            },
                         }}
                     >
                         Logout
@@ -95,6 +111,6 @@ const NavBar = () => {
             </Toolbar>
         </AppBar>
     );
-}
+};
 
 export default NavBar;

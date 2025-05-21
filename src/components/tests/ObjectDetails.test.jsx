@@ -58,16 +58,13 @@ jest.mock('@mui/material', () => {
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
         Snackbar: ({children, open, ...props}) =>
             open ? <div role="alertdialog" {...props}>{children}</div> : null,
-        Alert: ({children, ...props}) => (
-            <div role="alert" {...props}>{children}</div>
+        Alert: ({children, severity, ...props}) => (
+            <div role="alert" data-severity={severity} {...props}>
+                {children}
+            </div>
         ),
         Checkbox: ({checked, onChange, ...props}) => (
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={onChange}
-                {...props}
-            />
+            <input type="checkbox" checked={checked} onChange={onChange} {...props} />
         ),
         IconButton: ({children, onClick, ...props}) => (
             <button onClick={onClick} {...props}>
@@ -85,14 +82,15 @@ jest.mock('@mui/material', () => {
             />
         ),
         Input: ({type, onChange, disabled, ...props}) => (
-            <input
-                type={type}
-                onChange={onChange}
-                disabled={disabled}
-                {...props}
-            />
+            <input type={type} onChange={onChange} disabled={disabled} {...props} />
         ),
         CircularProgress: () => <div role="progressbar">Loading...</div>,
+        Box: ({children, sx, ...props}) => (
+            <div style={{...sx, minWidth: sx?.minWidth || 'auto'}} {...props}>
+                {children}
+            </div>
+        ),
+        Typography: ({children, ...props}) => <span {...props}>{children}</span>,
     };
 });
 
@@ -180,12 +178,29 @@ describe('ObjectDetail Component', () => {
             if (url.includes('/api/object/path/root/cfg/cfg1/data/keys')) {
                 return Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({
-                        items: [
-                            {name: 'key1', node: 'node1', size: 2626},
-                            {name: 'key2', node: 'node1', size: 6946},
-                        ],
-                    }),
+                    json: () =>
+                        Promise.resolve({
+                            items: [
+                                {name: 'key1', node: 'node1', size: 2626},
+                                {name: 'key2', node: 'node1', size: 6946},
+                            ],
+                        }),
+                });
+            }
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () =>
+                        Promise.resolve(`
+[DEFAULT]
+nodes = *
+orchestrate = ha
+id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
+long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
+
+[fs#1]
+type = flag
+            `),
                 });
             }
             if (url.includes('/api/object/path/root/cfg/cfg1/data/key')) {
@@ -205,6 +220,143 @@ describe('ObjectDetail Component', () => {
         jest.clearAllMocks();
     });
 
+    test('displays configuration with horizontal scrolling', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Wait for Configuration to be loaded
+        await screen.findByText(/Configuration/i);
+
+        // Find and click the accordion
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        fireEvent.click(accordionSummary);
+
+        // Verify basic content
+        await screen.findByText(/nodes = \*/i);
+        expect(screen.getByText(/orchestrate = ha/i)).toBeInTheDocument();
+        expect(screen.getByText(/type = flag/i)).toBeInTheDocument();
+
+        // Verify the presence of the scrollable container
+        const accordionDetails = within(configAccordion).getByTestId('accordion-details');
+        const scrollableBox = accordionDetails.querySelector('div[style*="overflow-x: auto"]') ||
+            accordionDetails.querySelector('pre')?.parentElement;
+
+        expect(scrollableBox).toBeInTheDocument();
+        expect(scrollableBox).toHaveStyle({'overflow-x': 'auto'});
+
+        // Verify the long line
+        const preElement = within(scrollableBox).getByText(
+            /long_line = this_is_a_very_long_unbroken_string/
+        );
+        expect(preElement).toBeInTheDocument();
+    }, 15000); // Increased timeout to 15s
+
+    test('displays error when fetching configuration fails', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+                return Promise.reject(new Error('Failed to fetch configuration'));
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        await waitFor(() => {
+            // Use a flexible matcher for the error message
+            const errorElement = screen.getByText((content) => /failed to fetch.*config/i.test(content));
+            expect(errorElement).toBeInTheDocument();
+            expect(errorElement.closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
+        });
+    }, 10000);
+
+    test('displays no configuration message when no config data', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+                return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        await waitFor(() => {
+            const noConfigElement = screen.getByText((content) => /no.*configuration.*available/i.test(content));
+            expect(noConfigElement).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('displays loading indicator while fetching configuration', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+                return new Promise(() => {
+                }); // Never resolves to simulate loading
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        await waitFor(() => {
+            const progressBar = within(configAccordion).getByRole('progressbar');
+            expect(progressBar).toBeInTheDocument();
+        });
+    }, 10000);
+
+    // Existing tests (unchanged, included for completeness)
     test('renders object name and no information message when no data', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
@@ -348,9 +500,7 @@ describe('ObjectDetail Component', () => {
         });
 
         // Check the confirmation checkbox
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
-            cb.closest('[role="dialog"]')
-        );
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
         fireEvent.click(dialogCheckbox);
 
         // Click confirm button
@@ -412,9 +562,7 @@ describe('ObjectDetail Component', () => {
         });
 
         // Check checkbox and confirm
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
-            cb.closest('[role="dialog"]')
-        );
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
         await act(async () => {
             fireEvent.click(dialogCheckbox);
         });
@@ -600,9 +748,7 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => {
             expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
         });
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) =>
-            cb.closest('[role="dialog"]')
-        );
+        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
         await act(async () => {
             fireEvent.click(dialogCheckbox);
         });
@@ -660,9 +806,7 @@ describe('ObjectDetail Component', () => {
 
         // Verify resource details with flexible matcher
         await waitFor(() => {
-            const resourceDetails = screen.getByText((content, element) =>
-                content.includes('Resource 1')
-            );
+            const resourceDetails = screen.getByText((content, element) => content.includes('Resource 1'));
             expect(resourceDetails).toBeInTheDocument();
         });
     }, 10000);
@@ -755,7 +899,7 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => {
             const errorAlert = screen.getByText(/Error: Network error/i);
             expect(errorAlert).toBeInTheDocument();
-            expect(errorAlert.closest('[role="alert"]')).toHaveAttribute('severity', 'error');
+            expect(errorAlert.closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
         });
     }, 10000);
 
@@ -1090,7 +1234,8 @@ describe('ObjectDetail Component', () => {
     });
 
     test('disables buttons during key creation', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1135,79 +1280,6 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => {
             expect(createButton).toBeDisabled();
             expect(cancelButton).toBeDisabled();
-        });
-    });
-
-    test('renders object name and no information message when no data', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
-        );
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
-        });
-    });
-
-    test('renders global status, nodes, and resources', async () => {
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-            expect(screen.getByText('Node: node2')).toBeInTheDocument();
-            expect(screen.getByText('Resources (2)')).toBeInTheDocument();
-            expect(screen.getByText('Resources (1)')).toBeInTheDocument();
-            expect(screen.getByText('running')).toBeInTheDocument();
-            expect(screen.getByText('placed@node1')).toBeInTheDocument();
-        });
-
-        const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
-        await act(async () => {
-            fireEvent.click(node1AccordionToggle);
-        });
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-            expect(screen.getByText('res2')).toBeInTheDocument();
-        });
-
-        const node2AccordionToggle = screen.getByText('Resources (1)').closest('div');
-        await act(async () => {
-            fireEvent.click(node2AccordionToggle);
-        });
-        await waitFor(() => {
-            expect(screen.getByText('res3')).toBeInTheDocument();
-        });
-    });
-
-    test('displays error when fetching keys fails', async () => {
-        global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Failed to fetch keys')));
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        const keysAccordion = screen.getByText('Object Keys (0)').closest('div');
-        await act(async () => {
-            fireEvent.click(keysAccordion);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Failed to fetch keys/i)).toBeInTheDocument();
         });
     });
 });

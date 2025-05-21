@@ -20,7 +20,7 @@ import AddIcon from "@mui/icons-material/Add";
 import {
     RestartAlt, LockOpen, Delete, Settings, Block,
     CleaningServices, SwapHoriz, Undo, Cancel,
-    PlayArrow, Stop
+    PlayArrow, Stop, PlayCircleFilled
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
@@ -35,7 +35,8 @@ const NODE_ACTIONS = [
     {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
     {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
     {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>}
+    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
+    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
 ];
 
 const OBJECT_ACTIONS = [
@@ -56,7 +57,8 @@ const OBJECT_ACTIONS = [
 const RESOURCE_ACTIONS = [
     {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>}
+    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
+    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>}
 ];
 
 let renderCount = 0;

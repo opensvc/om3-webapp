@@ -93,153 +93,11 @@ const ObjectDetail = () => {
     const [updateKeyFile, setUpdateKeyFile] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchNodes(token);
-            startEventReception(token);
-        }
-        return () => {
-            closeEventSource();
-        };
-    }, []);
-
-    // Fetch keys for cfg or sec objects
-    const fetchKeys = async () => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        if (!['cfg', 'sec'].includes(kind)) return;
-
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            setKeysError("Auth token not found.");
-            return;
-        }
-
-        setKeysLoading(true);
-        setKeysError(null);
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
-            const response = await fetch(url, {
-                headers: {Authorization: `Bearer ${token}`}
-            });
-            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
-            const data = await response.json();
-            setKeys(data.items || []);
-        } catch (err) {
-            setKeysError(err.message);
-        } finally {
-            setKeysLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchKeys();
-    }, [decodedObjectName]);
-
-    // Key action handlers
-    const handleDeleteKey = async () => {
-        if (!keyToDelete) return;
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Deleting key ${keyToDelete}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyToDelete)}`;
-            const response = await fetch(url, {
-                method: "DELETE",
-                headers: {Authorization: `Bearer ${token}`}
-            });
-            if (!response.ok) throw new Error(`Failed to delete key: ${response.status}`);
-            openSnackbar(`Key '${keyToDelete}' deleted successfully`);
-            await fetchKeys(); // Refresh keys
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setDeleteDialogOpen(false);
-            setKeyToDelete(null);
-        }
-    };
-
-    const handleCreateKey = async () => {
-        if (!newKeyName || !newKeyFile) {
-            openSnackbar("Key name and file are required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Creating key ${newKeyName}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(newKeyName)}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream"
-                },
-                body: newKeyFile
-            });
-            if (!response.ok) throw new Error(`Failed to create key: ${response.status}`);
-            openSnackbar(`Key '${newKeyName}' created successfully`);
-            await fetchKeys(); // Refresh keys
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setCreateDialogOpen(false);
-            setNewKeyName("");
-            setNewKeyFile(null);
-        }
-    };
-
-    const handleUpdateKey = async () => {
-        if (!updateKeyName || !updateKeyFile) {
-            openSnackbar("Key name and file are required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Updating key ${updateKeyName}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(updateKeyName)}`;
-            const response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream"
-                },
-                body: updateKeyFile
-            });
-            if (!response.ok) throw new Error(`Failed to update key: ${response.status}`);
-            openSnackbar(`Key '${updateKeyName}' updated successfully`);
-            await fetchKeys(); // Refresh keys
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setUpdateDialogOpen(false);
-            setKeyToUpdate(null);
-            setUpdateKeyName("");
-            setUpdateKeyFile(null);
-        }
-    };
+    // State for configuration
+    const [configData, setConfigData] = useState(null);
+    const [configLoading, setConfigLoading] = useState(false);
+    const [configError, setConfigError] = useState(null);
+    const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -348,6 +206,178 @@ const ObjectDetail = () => {
         }
     };
 
+    // Fetch keys for cfg or sec objects
+    const fetchKeys = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        if (!['cfg', 'sec'].includes(kind)) return;
+
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setKeysError("Auth token not found.");
+            return;
+        }
+
+        setKeysLoading(true);
+        setKeysError(null);
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
+            const data = await response.json();
+            setKeys(data.items || []);
+        } catch (err) {
+            setKeysError(err.message);
+        } finally {
+            setKeysLoading(false);
+        }
+    };
+
+    // Fetch configuration for the object
+    const fetchConfig = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setConfigError("Auth token not found.");
+            return;
+        }
+
+        setConfigLoading(true);
+        setConfigError(null);
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`},
+            });
+            if (!response.ok) throw new Error(`Failed to fetch config: ${response.status}`);
+            const text = await response.text();
+            setConfigData(text);
+        } catch (err) {
+            setConfigError(err.message);
+        } finally {
+            setConfigLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+            fetchKeys();
+            fetchConfig();
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, [decodedObjectName]);
+
+    // Key action handlers
+    const handleDeleteKey = async () => {
+        if (!keyToDelete) return;
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Deleting key ${keyToDelete}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyToDelete)}`;
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to delete key: ${response.status}`);
+            openSnackbar(`Key '${keyToDelete}' deleted successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setDeleteDialogOpen(false);
+            setKeyToDelete(null);
+        }
+    };
+
+    const handleCreateKey = async () => {
+        if (!newKeyName || !newKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Creating key ${newKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(newKeyName)}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: newKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to create key: ${response.status}`);
+            openSnackbar(`Key '${newKeyName}' created successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setCreateDialogOpen(false);
+            setNewKeyName("");
+            setNewKeyFile(null);
+        }
+    };
+
+    const handleUpdateKey = async () => {
+        if (!updateKeyName || !updateKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Updating key ${updateKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(updateKeyName)}`;
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: updateKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to update key: ${response.status}`);
+            openSnackbar(`Key '${updateKeyName}' updated successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setUpdateDialogOpen(false);
+            setKeyToUpdate(null);
+            setUpdateKeyName("");
+            setUpdateKeyFile(null);
+        }
+    };
+
     // Color helper
     const getColor = (status) => {
         if (status === "up" || status === true) return green[500];
@@ -440,6 +470,10 @@ const ObjectDetail = () => {
 
     const handleKeysAccordionChange = (event, isExpanded) => {
         setKeysAccordionExpanded(isExpanded);
+    };
+
+    const handleConfigAccordionChange = (event, isExpanded) => {
+        setConfigAccordionExpanded(isExpanded);
     };
 
     // Dialog confirm handler
@@ -668,6 +702,88 @@ const ObjectDetail = () => {
                         </Accordion>
                     </Box>
                 )}
+
+                {/* CONFIGURATION SECTION */}
+                <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                    <Accordion
+                        expanded={configAccordionExpanded}
+                        onChange={handleConfigAccordionChange}
+                        sx={{
+                            border: "none",
+                            boxShadow: "none",
+                            backgroundColor: "transparent",
+                            "&:before": {display: "none"},
+                            "& .MuiAccordionSummary-root": {
+                                border: "none",
+                                backgroundColor: "transparent",
+                                minHeight: "auto",
+                                "&.Mui-expanded": {minHeight: "auto"},
+                                padding: 0,
+                            },
+                            "& .MuiAccordionDetails-root": {
+                                border: "none",
+                                backgroundColor: "transparent",
+                                padding: 0,
+                            },
+                        }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon/>}
+                            aria-controls="panel-config-content"
+                            id="panel-config-header"
+                        >
+                            <Typography variant="h6" fontWeight="medium">
+                                Configuration
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            {configLoading && <CircularProgress size={24}/>}
+                            {configError && (
+                                <Alert severity="error" sx={{mb: 2}}>
+                                    {configError}
+                                </Alert>
+                            )}
+                            {!configLoading && !configError && !configData && (
+                                <Typography color="textSecondary">No configuration available.</Typography>
+                            )}
+                            {!configLoading && !configError && configData && (
+                                <Box
+                                    sx={{
+                                        p: 2,
+                                        bgcolor: "grey.100",
+                                        borderRadius: 1,
+                                        maxWidth: "100%",
+                                        overflowX: "auto",
+                                        boxSizing: "border-box",
+                                        scrollbarWidth: "thin",
+                                        "&::-webkit-scrollbar": {
+                                            height: "8px",
+                                        },
+                                        "&::-webkit-scrollbar-thumb": {
+                                            backgroundColor: "grey.400",
+                                            borderRadius: "4px",
+                                        },
+                                    }}
+                                >
+                                    <Box
+                                        component="pre"
+                                        sx={{
+                                            whiteSpace: "pre",
+                                            fontFamily: "Monospace",
+                                            bgcolor: "inherit",
+                                            p: 1,
+                                            m: 0,
+                                            minWidth: "max-content",
+                                            maxWidth: "none",
+                                        }}
+                                    >
+                                        {configData}
+                                    </Box>
+                                </Box>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
+                </Box>
 
                 {/* DELETE KEY DIALOG */}
                 <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>

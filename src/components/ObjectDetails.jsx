@@ -98,6 +98,8 @@ const ObjectDetail = () => {
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
+    const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
+    const [newConfigFile, setNewConfigFile] = useState(null);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -257,6 +259,43 @@ const ObjectDetail = () => {
             setConfigError(err.message);
         } finally {
             setConfigLoading(false);
+        }
+    };
+
+    // Update configuration for the object
+    const handleUpdateConfig = async () => {
+        if (!newConfigFile) {
+            openSnackbar("Configuration file is required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar("Updating configuration…", "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: newConfigFile
+            });
+            if (!response.ok) throw new Error(`Failed to update config: ${response.status}`);
+            openSnackbar("Configuration updated successfully");
+            await fetchConfig(); // Refresh configuration
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setUpdateConfigDialogOpen(false);
+            setNewConfigFile(null);
         }
     };
 
@@ -737,6 +776,16 @@ const ObjectDetail = () => {
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails>
+                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
+                                <IconButton
+                                    color="primary"
+                                    onClick={() => setUpdateConfigDialogOpen(true)}
+                                    disabled={actionLoading}
+                                    aria-label="Edit configuration"
+                                >
+                                    <EditIcon/>
+                                </IconButton>
+                            </Box>
                             {configLoading && <CircularProgress size={24}/>}
                             {configError && (
                                 <Alert severity="error" sx={{mb: 2}}>
@@ -882,12 +931,55 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
+                {/* UPDATE CONFIG DIALOG */}
+                <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Update Configuration</DialogTitle>
+                    <DialogContent>
+                        <Typography component="label" htmlFor="update-config-file-upload" sx={{ display: 'inline-block', mb: 1 }}>
+                            Configuration File
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Button
+                                variant="contained"
+                                component="label"
+                                sx={{ textTransform: 'none' }}
+                                disabled={actionLoading}
+                            >
+                                Choose File
+                                <input
+                                    id="update-config-file-upload"
+                                    type="file"
+                                    hidden
+                                    onChange={(e) => setNewConfigFile(e.target.files[0])}
+                                    disabled={actionLoading}
+                                />
+                            </Button>
+                            <Typography variant="body2" color="textSecondary">
+                                {newConfigFile ? newConfigFile.name : 'No file selected'}
+                            </Typography>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setUpdateConfigDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleUpdateConfig}
+                            disabled={actionLoading || !newConfigFile}
+                        >
+                            Update
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
                 {/* BATCH NODE ACTIONS */}
                 <Box display="flex" alignItems="center" gap={1} mb={2}>
                     <Button
                         variant="outlined"
                         onClick={handleNodesActionsOpen}
                         disabled={selectedNodes.length === 0}
+                        aria-label="Batch actions on selected nodes"
                     >
                         Actions on selected nodes
                     </Button>
@@ -920,6 +1012,7 @@ const ObjectDetail = () => {
                                         <Checkbox
                                             checked={selectedNodes.includes(node)}
                                             onChange={() => toggleNode(node)}
+                                            aria-label={`Select node ${node}`}
                                         />
                                         <Typography variant="h6">Node: {node}</Typography>
                                     </Box>
@@ -994,6 +1087,7 @@ const ObjectDetail = () => {
                                                     setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
                                                 }}
                                                 disabled={resIds.length === 0}
+                                                aria-label={`Select all resources for node ${node}`}
                                             />
                                             <IconButton
                                                 onClick={(e) => {
@@ -1052,6 +1146,7 @@ const ObjectDetail = () => {
                                                                     <Checkbox
                                                                         checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                                         onChange={() => toggleResource(node, rid)}
+                                                                        aria-label={`Select resource ${rid}`}
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
@@ -1125,6 +1220,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={checkboxes.failover}
                                     onChange={(e) => setCheckboxes({failover: e.target.checked})}
+                                    aria-label="Confirm failover pause"
                                 />
                             }
                             label="I understand that the selected service orchestration will be paused."
@@ -1137,6 +1233,7 @@ const ObjectDetail = () => {
                             color="primary"
                             disabled={!checkboxes.failover}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm freeze action"
                         >
                             Confirm
                         </Button>
@@ -1151,6 +1248,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={stopCheckbox}
                                     onChange={(e) => setStopCheckbox(e.target.checked)}
+                                    aria-label="Confirm service interruption"
                                 />
                             }
                             label="I understand that this may interrupt services."
@@ -1163,6 +1261,7 @@ const ObjectDetail = () => {
                             color="error"
                             disabled={!stopCheckbox}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm stop action"
                         >
                             Stop
                         </Button>
@@ -1177,6 +1276,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={resourceConfirmChecked}
                                     onChange={(e) => setResourceConfirmChecked(e.target.checked)}
+                                    aria-label="Confirm data loss"
                                 />
                             }
                             label="I understand that data will be lost."
@@ -1189,6 +1289,7 @@ const ObjectDetail = () => {
                             color="error"
                             disabled={!resourceConfirmChecked}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm unprovision action"
                         >
                             Confirm
                         </Button>

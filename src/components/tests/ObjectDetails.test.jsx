@@ -51,12 +51,12 @@ jest.mock('@mui/material', () => {
         ),
         ListItemIcon: ({children, ...props}) => <span {...props}>{children}</span>,
         ListItemText: ({children, ...props}) => <span {...props}>{children}</span>,
-        Dialog: ({children, open, ...props}) =>
+        Dialog: ({children, open, maxWidth, fullWidth, ...props}) =>
             open ? <div role="dialog" {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
-        Snackbar: ({children, open, ...props}) =>
+        Snackbar: ({children, open, autoHideDuration, ...props}) =>
             open ? <div role="alertdialog" {...props}>{children}</div> : null,
         Alert: ({children, severity, ...props}) => (
             <div role="alert" data-severity={severity} {...props}>
@@ -109,7 +109,7 @@ describe('ObjectDetail Component', () => {
 
         // Mock useParams
         require('react-router-dom').useParams.mockReturnValue({
-            objectName: encodeURIComponent('root/cfg/cfg1'),
+            objectName: 'root/cfg/cfg1',
         });
 
         // Mock useFetchDaemonStatus
@@ -173,8 +173,9 @@ describe('ObjectDetail Component', () => {
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
 
-        // Mock fetch
-        global.fetch = jest.fn((url) => {
+        // Mock fetch with logging
+        global.fetch = jest.fn((url, options) => {
+            console.log(`Fetch called with URL: ${url}, Options:`, options);
             if (url.includes('/api/object/path/root/cfg/cfg1/data/keys')) {
                 return Promise.resolve({
                     ok: true,
@@ -185,6 +186,12 @@ describe('ObjectDetail Component', () => {
                                 {name: 'key2', node: 'node1', size: 6946},
                             ],
                         }),
+                });
+            }
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options?.method === 'PUT') {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({}),
                 });
             }
             if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
@@ -255,7 +262,7 @@ type = flag
             /long_line = this_is_a_very_long_unbroken_string/
         );
         expect(preElement).toBeInTheDocument();
-    }, 15000); // Increased timeout to 15s
+    }, 15000);
 
     test('displays error when fetching configuration fails', async () => {
         global.fetch.mockImplementation((url) => {
@@ -284,7 +291,6 @@ type = flag
         });
 
         await waitFor(() => {
-            // Use a flexible matcher for the error message
             const errorElement = screen.getByText((content) => /failed to fetch.*config/i.test(content));
             expect(errorElement).toBeInTheDocument();
             expect(errorElement.closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
@@ -326,8 +332,7 @@ type = flag
     test('displays loading indicator while fetching configuration', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
-                return new Promise(() => {
-                }); // Never resolves to simulate loading
+                return new Promise(() => {}); // Never resolves to simulate loading
             }
             return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
@@ -356,7 +361,264 @@ type = flag
         });
     }, 10000);
 
-    // Existing tests (unchanged, included for completeness)
+    test('opens update configuration dialog and updates configuration', async () => {
+        // Ensure fetch mock returns success for PUT request
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Wait for the Configuration accordion to appear
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        // Expand the Configuration accordion
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        // Wait for configuration content to be visible
+        await waitFor(() => {
+            expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
+        });
+
+        // Find and click the edit button
+        const editButton = screen.getByRole('button', { name: /edit configuration/i });
+        await act(async () => {
+            fireEvent.click(editButton);
+        });
+
+        // Wait for the update configuration dialog to open
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+        });
+
+        // Simulate file selection
+        const fileInput = screen.getByLabelText(/Configuration File/i);
+        const testFile = new File(['test content'], 'config.ini', { type: 'text/plain' });
+        await act(async () => {
+            fireEvent.change(fileInput, { target: { files: [testFile] } });
+        });
+
+        // Verify file is selected
+        expect(fileInput.files[0]).toBe(testFile);
+
+        // Clear fetch mock calls to track only the update request
+        global.fetch.mockClear();
+
+        // Click the update button
+        const updateButton = screen.getByRole('button', { name: /Update/i });
+        await act(async () => {
+            fireEvent.click(updateButton);
+        });
+
+        // Wait for the API call to be made
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
+                expect.objectContaining({
+                    method: 'PUT',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: expect.any(File),
+                })
+            );
+        });
+
+        // Wait for the success snackbar
+        await waitFor(() => {
+            const successAlert = screen.getByText(/Configuration updated successfully/i);
+            expect(successAlert).toBeInTheDocument();
+            expect(successAlert.closest('[role="alert"]')).toHaveAttribute('data-severity', 'success');
+        });
+
+        // Verify dialog is closed
+        await waitFor(() => {
+            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+        });
+    }, 15000);
+
+
+    test('displays error when configuration update fails', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+                return Promise.reject(new Error('Failed to update configuration'));
+            }
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        const editButton = screen.getByRole('button', {name: /edit configuration/i});
+        await act(async () => {
+            fireEvent.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+        });
+
+        const fileInput = screen.getByLabelText(/configuration file/i);
+        await act(async () => {
+            fireEvent.change(fileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+        });
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            fireEvent.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Error: Failed to update configuration/i)).toBeInTheDocument();
+            expect(screen.getByText(/Error: Failed to update configuration/i).closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
+        });
+    }, 10000);
+
+    test('disables buttons during configuration update', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+                return new Promise(() => {}); // Never resolves to simulate ongoing request
+            }
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        const editButton = screen.getByRole('button', {name: /edit configuration/i});
+        await act(async () => {
+            fireEvent.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+        });
+
+        const fileInput = screen.getByLabelText(/configuration file/i);
+        await act(async () => {
+            fireEvent.change(fileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
+        const fileInputInDialog = within(dialog).getByLabelText(/configuration file/i);
+
+        await act(async () => {
+            fireEvent.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(updateButton).toBeDisabled();
+            expect(cancelButton).toBeDisabled();
+            expect(fileInputInDialog).toBeDisabled();
+        });
+    }, 10000);
+
+    test('cancels update configuration dialog', async () => {
+        global.fetch.mockClear();
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+        });
+
+        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
+        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => {
+            fireEvent.click(accordionSummary);
+        });
+
+        const editButton = screen.getByRole('button', {name: /edit configuration/i});
+        await act(async () => {
+            fireEvent.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+        });
+
+        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
+        await act(async () => {
+            fireEvent.click(cancelButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+        });
+
+        // Verify no API call was made
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
+            expect.objectContaining({method: 'PUT'})
+        );
+    }, 10000);
+
     test('renders object name and no information message when no data', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
@@ -659,7 +921,7 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
+    await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 
@@ -1209,8 +1471,7 @@ type = flag
     });
 
     test('displays loading indicator while fetching keys', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {
-        }));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1234,8 +1495,7 @@ type = flag
     });
 
     test('disables buttons during key creation', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {
-        }));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>

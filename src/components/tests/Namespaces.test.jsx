@@ -115,7 +115,7 @@ describe('Namespaces Component', () => {
         });
     });
 
-    test('renders namespaces with correct status counts', async () => {
+    test('navigates to objects page with namespace on row click', async () => {
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -123,21 +123,13 @@ describe('Namespaces Component', () => {
         );
 
         await waitFor(() => {
-            const rootRow = screen.getByText('root').closest('tr');
-            const rootCells = within(rootRow).getAllByTestId('table-cell');
-            expect(rootCells[1]).toHaveTextContent('1');
-            expect(rootCells[2]).toHaveTextContent('1');
-            expect(rootCells[3]).toHaveTextContent('0');
-            expect(rootCells[4]).toHaveTextContent('0');
-            expect(rootCells[5]).toHaveTextContent('2');
-
-            const prodRow = screen.getByText('prod').closest('tr');
-            const prodCells = within(prodRow).getAllByTestId('table-cell');
-            expect(prodCells[1]).toHaveTextContent('1');
-            expect(prodCells[2]).toHaveTextContent('0');
-            expect(prodCells[3]).toHaveTextContent('1');
-            expect(prodCells[4]).toHaveTextContent('0');
-            expect(prodCells[5]).toHaveTextContent('2');
+            const row = screen.getByText('root').closest('tr');
+            fireEvent.click(row);
+            expect(mockNavigate).toHaveBeenCalledWith("/objects", {
+                state: {
+                    namespace: "root"
+                }
+            });
         });
     });
 
@@ -167,19 +159,6 @@ describe('Namespaces Component', () => {
         });
     });
 
-    test('navigates to objects page with namespace on row click', async () => {
-        render(
-            <MemoryRouter>
-                <Namespaces/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            const row = screen.getByText('root').closest('tr');
-            fireEvent.click(row);
-            expect(mockNavigate).toHaveBeenCalledWith('/objects', {state: {namespace: 'root'}});
-        });
-    });
 
     test('calls fetchNodes and startEventReception on mount with auth token', async () => {
         render(

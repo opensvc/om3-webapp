@@ -8,7 +8,6 @@ import {
     TableHead,
     TableRow,
     Typography,
-    Paper
 } from "@mui/material";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -115,7 +114,13 @@ const Namespaces = () => {
                                     <TableRow
                                         key={namespace}
                                         hover
-                                        onClick={() => navigate("/objects", {state: {namespace}})}
+                                        onClick={() => {
+                                            navigate("/objects", {
+                                                state: {
+                                                    namespace: namespace
+                                                }
+                                            });
+                                        }}
                                         sx={{cursor: "pointer"}}
                                     >
                                         <TableCell sx={{fontWeight: 500}}>

@@ -71,7 +71,7 @@ const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Read globalState from query parameters
+    // Read query parameters
     const queryParams = new URLSearchParams(location.search);
     const globalStates = ["all", "up", "down", "warn"];
     const initialGlobalState = globalStates.includes(queryParams.get('globalState')) ? queryParams.get('globalState') : "all";
@@ -98,14 +98,6 @@ const Objects = () => {
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up('lg'));
 
-    // Debug query parameters and state
-    useEffect(() => {
-        console.log('[Objects] Query params:', Object.fromEntries(queryParams));
-        console.log('[Objects] Initial global state:', initialGlobalState);
-        console.log('[Objects] Setting selected global state to:', initialGlobalState);
-        setSelectedGlobalState(initialGlobalState);
-    }, [location.search, initialGlobalState]);
-
     // Helper functions
     const extractNamespace = (name) => {
         const parts = name.split("/");
@@ -117,6 +109,25 @@ const Objects = () => {
         const objName = parts.length === 3 ? parts[2] : parts[0];
         return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
     };
+
+    // Objects and namespaces
+    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
+    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+
+    // Validate and set initial namespace
+    const initialNamespace = namespaces.includes(queryParams.get('namespace')) ? queryParams.get('namespace') : "all";
+
+    // Debug query parameters and state
+    useEffect(() => {
+        console.log('[Objects] Query params:', Object.fromEntries(queryParams));
+        console.log('[Objects] Initial global state:', initialGlobalState);
+        console.log('[Objects] Setting selected global state to:', initialGlobalState);
+        console.log('[Objects] Initial namespace:', initialNamespace);
+        console.log('[Objects] Setting selected namespace to:', initialNamespace);
+        setSelectedGlobalState(initialGlobalState);
+        setSelectedNamespace(initialNamespace);
+    }, [location.search, initialGlobalState, initialNamespace]);
 
     const getObjectStatus = (objectName) => {
         const obj = objects[objectName] || {};
@@ -146,10 +157,7 @@ const Objects = () => {
         };
     };
 
-    // Objects and filtering logic
-    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
-    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+    // Filtering logic
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
         const { avail } = getObjectStatus(name);
@@ -318,6 +326,7 @@ const Objects = () => {
                                 renderInput={(params) => <TextField {...params} label="Global State"/>}
                             />
                             <Autocomplete
+                                key={`namespace-${selectedNamespace}`}
                                 sx={{minWidth: 200}}
                                 options={["all", ...namespaces]}
                                 value={selectedNamespace}

@@ -935,29 +935,14 @@ const ObjectDetail = () => {
                 <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm" fullWidth>
                     <DialogTitle>Update Configuration</DialogTitle>
                     <DialogContent>
-                        <Typography component="label" htmlFor="update-config-file-upload" sx={{ display: 'inline-block', mb: 1 }}>
-                            Configuration File
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Button
-                                variant="contained"
-                                component="label"
-                                sx={{ textTransform: 'none' }}
-                                disabled={actionLoading}
-                            >
-                                Choose File
-                                <input
-                                    id="update-config-file-upload"
-                                    type="file"
-                                    hidden
-                                    onChange={(e) => setNewConfigFile(e.target.files[0])}
-                                    disabled={actionLoading}
-                                />
-                            </Button>
-                            <Typography variant="body2" color="textSecondary">
-                                {newConfigFile ? newConfigFile.name : 'No file selected'}
-                            </Typography>
-                        </Box>
+                        <label htmlFor="update-config-file-upload">Configuration File</label>
+                        <Input
+                            id="update-config-file-upload"
+                            type="file"
+                            onChange={(e) => setNewConfigFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setUpdateConfigDialogOpen(false)} disabled={actionLoading}>

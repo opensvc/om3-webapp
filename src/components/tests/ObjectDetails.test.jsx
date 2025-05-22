@@ -921,7 +921,7 @@ type = flag
             </MemoryRouter>
         );
 
-    await waitFor(() => {
+        await waitFor(() => {
             expect(screen.getByText('Node: node1')).toBeInTheDocument();
         });
 

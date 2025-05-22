@@ -82,6 +82,7 @@ const Objects = () => {
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(initialNamespace);
     const [selectedKind, setSelectedKind] = useState("all");
+    const [selectedGlobalState, setSelectedGlobalState] = useState("all");
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
@@ -92,6 +93,68 @@ const Objects = () => {
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up('lg'));
+
+    // Helper functions defined before their usage
+    const extractNamespace = (name) => {
+        const parts = name.split("/");
+        return parts.length === 3 ? parts[0] : "root";
+    };
+
+    const extractKind = (name) => {
+        const parts = name.split("/");
+        const objName = parts.length === 3 ? parts[2] : parts[0];
+        return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
+    };
+
+    const getObjectStatus = (objectName) => {
+        const obj = objects[objectName] || {};
+        const avail = obj?.avail;
+        const frozen = obj?.frozen;
+        const nodes = Object.keys(objectInstanceStatus[objectName] || {});
+        let globalExpect = null;
+        for (const node of nodes) {
+            const monitorKey = `${node}:${objectName}`;
+            const monitor = instanceMonitor[monitorKey] || {};
+            if (monitor.global_expect && monitor.global_expect !== "none") {
+                globalExpect = monitor.global_expect;
+                break;
+            }
+        }
+        return {avail, frozen, globalExpect};
+    };
+
+    const getNodeState = (objectName, node) => {
+        const instanceStatus = objectInstanceStatus[objectName] || {};
+        const monitorKey = `${node}:${objectName}`;
+        const monitor = instanceMonitor[monitorKey] || {};
+        return {
+            avail: instanceStatus[node]?.avail,
+            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
+            state: monitor.state !== "idle" ? monitor.state : null,
+        };
+    };
+
+    // Objects and filtering logic
+    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
+    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+    const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
+    const globalStates = ["all", "up", "down", "warn"];
+    const filteredObjectNames = allObjectNames.filter((name) => {
+        const { avail } = getObjectStatus(name);
+        return (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace)
+            && (selectedKind === "all" || extractKind(name) === selectedKind)
+            && (selectedGlobalState === "all" || avail === selectedGlobalState)
+            && name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    const allNodes = Array.from(
+        new Set(
+            Object.keys(objectInstanceStatus).flatMap((objectName) =>
+                Object.keys(objectInstanceStatus[objectName] || {})
+            )
+        )
+    ).sort();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -185,61 +248,6 @@ const Objects = () => {
         if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
     };
 
-    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
-    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-    const extractNamespace = (name) => {
-        const parts = name.split("/");
-        return parts.length === 3 ? parts[0] : "root";
-    };
-    const extractKind = (name) => {
-        const parts = name.split("/");
-        const objName = parts.length === 3 ? parts[2] : parts[0];
-        return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
-    };
-    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
-    const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
-    const filteredObjectNames = allObjectNames.filter((name) => {
-        return (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace)
-            && (selectedKind === "all" || extractKind(name) === selectedKind)
-            && name.toLowerCase().includes(searchQuery.toLowerCase());
-    });
-
-    const allNodes = Array.from(
-        new Set(
-            Object.keys(objectInstanceStatus).flatMap((objectName) =>
-                Object.keys(objectInstanceStatus[objectName] || {})
-            )
-        )
-    ).sort();
-
-    const getNodeState = (objectName, node) => {
-        const instanceStatus = objectInstanceStatus[objectName] || {};
-        const monitorKey = `${node}:${objectName}`;
-        const monitor = instanceMonitor[monitorKey] || {};
-        return {
-            avail: instanceStatus[node]?.avail,
-            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
-            state: monitor.state !== "idle" ? monitor.state : null,
-        };
-    };
-
-    const getObjectStatus = (objectName) => {
-        const obj = objects[objectName] || {};
-        const avail = obj?.avail;
-        const frozen = obj?.frozen;
-        const nodes = Object.keys(objectInstanceStatus[objectName] || {});
-        let globalExpect = null;
-        for (const node of nodes) {
-            const monitorKey = `${node}:${objectName}`;
-            const monitor = instanceMonitor[monitorKey] || {};
-            if (monitor.global_expect && monitor.global_expect !== "none") {
-                globalExpect = monitor.global_expect;
-                break;
-            }
-        }
-        return {avail, frozen, globalExpect};
-    };
-
     return (
         <Box sx={{
             minHeight: "100vh",
@@ -290,6 +298,13 @@ const Objects = () => {
 
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
+                            <Autocomplete
+                                sx={{minWidth: 200}}
+                                options={globalStates}
+                                value={selectedGlobalState}
+                                onChange={(e, val) => val && setSelectedGlobalState(val)}
+                                renderInput={(params) => <TextField {...params} label="Global State"/>}
+                            />
                             <Autocomplete
                                 sx={{minWidth: 200}}
                                 options={["all", ...namespaces]}

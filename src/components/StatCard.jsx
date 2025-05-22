@@ -33,9 +33,17 @@ export const StatCard = ({title, value, subtitle, onClick}) => (
             {value}
         </Typography>
         {subtitle && (
-            <Typography variant="body2" sx={{mt: 1}} aria-label={`${title} subtitle`}>
-                {subtitle}
-            </Typography>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                style={{ marginTop: 8 }}
+            >
+                <Typography
+                    variant="body2"
+                    aria-label={`${title} subtitle`}
+                >
+                    {subtitle}
+                </Typography>
+            </div>
         )}
     </Paper>
 );

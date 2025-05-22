@@ -99,7 +99,11 @@ const ClusterOverview = () => {
                 <GridObjects
                     objectCount={Object.keys(objectStatus).length}
                     statusCount={statusCount}
-                    onClick={() => navigate("/objects")}
+                    onClick={(globalState) => {
+                        const url = globalState ? `/objects?globalState=${globalState}` : '/objects';
+                        console.log('[ClusterOverview] Navigating to:', url);
+                        navigate(url);
+                    }}
                 />
                 <GridNamespaces
                     namespaceCount={namespaceCount}

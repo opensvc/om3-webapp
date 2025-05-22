@@ -69,8 +69,12 @@ const AVAILABLE_ACTIONS = [
 
 const Objects = () => {
     const location = useLocation();
-    const initialNamespace = location.state?.namespace || "all";
     const navigate = useNavigate();
+
+    // Read globalState from query parameters
+    const queryParams = new URLSearchParams(location.search);
+    const globalStates = ["all", "up", "down", "warn"];
+    const initialGlobalState = globalStates.includes(queryParams.get('globalState')) ? queryParams.get('globalState') : "all";
 
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
@@ -80,9 +84,9 @@ const Objects = () => {
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [selectedNamespace, setSelectedNamespace] = useState(initialNamespace);
+    const [selectedNamespace, setSelectedNamespace] = useState("all");
     const [selectedKind, setSelectedKind] = useState("all");
-    const [selectedGlobalState, setSelectedGlobalState] = useState("all");
+    const [selectedGlobalState, setSelectedGlobalState] = useState(initialGlobalState);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
@@ -94,7 +98,15 @@ const Objects = () => {
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up('lg'));
 
-    // Helper functions defined before their usage
+    // Debug query parameters and state
+    useEffect(() => {
+        console.log('[Objects] Query params:', Object.fromEntries(queryParams));
+        console.log('[Objects] Initial global state:', initialGlobalState);
+        console.log('[Objects] Setting selected global state to:', initialGlobalState);
+        setSelectedGlobalState(initialGlobalState);
+    }, [location.search, initialGlobalState]);
+
+    // Helper functions
     const extractNamespace = (name) => {
         const parts = name.split("/");
         return parts.length === 3 ? parts[0] : "root";
@@ -139,7 +151,6 @@ const Objects = () => {
     const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
     const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
-    const globalStates = ["all", "up", "down", "warn"];
     const filteredObjectNames = allObjectNames.filter((name) => {
         const { avail } = getObjectStatus(name);
         return (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace)
@@ -299,6 +310,7 @@ const Objects = () => {
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
                             <Autocomplete
+                                key={`global-state-${selectedGlobalState}`}
                                 sx={{minWidth: 200}}
                                 options={globalStates}
                                 value={selectedGlobalState}

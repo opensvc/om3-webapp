@@ -645,7 +645,7 @@ const ObjectDetail = () => {
 
                 {/* KEYS SECTION */}
                 {showKeys && (
-                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", Tecnologia: 1}}>
                         <Accordion
                             expanded={keysAccordionExpanded}
                             onChange={handleKeysAccordionChange}

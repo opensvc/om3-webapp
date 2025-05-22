@@ -40,9 +40,11 @@ import {
     CleaningServices,
     SwapHoriz,
     Undo,
-    Cancel, Stop, PlayArrow,
+    Cancel,
+    Stop,
+    PlayArrow,
 } from "@mui/icons-material";
-import {green, red, blue, orange} from "@mui/material/colors";
+import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -71,10 +73,11 @@ const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Read globalState from query parameters
+    // Read query parameters
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn"];
-    const initialGlobalState = globalStates.includes(queryParams.get('globalState')) ? queryParams.get('globalState') : "all";
+    const globalStates = ["all", "up", "down", "warn", "unknown"];
+    const rawGlobalState = queryParams.get('globalState');
+    const initialGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
 
     const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
@@ -98,13 +101,18 @@ const Objects = () => {
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up('lg'));
 
-    // Debug query parameters and state
+    // Debug objectStatus and state
     useEffect(() => {
+        console.log('[Objects] objectStatus:', JSON.stringify(objectStatus, null, 2));
         console.log('[Objects] Query params:', Object.fromEntries(queryParams));
+        console.log('[Objects] Raw globalState:', rawGlobalState);
         console.log('[Objects] Initial global state:', initialGlobalState);
-        console.log('[Objects] Setting selected global state to:', initialGlobalState);
+        console.log('[Objects] selectedGlobalState:', selectedGlobalState);
+        console.log('[Objects] Initial namespace:', queryParams.get('namespace'));
+        console.log('[Objects] selectedNamespace:', selectedNamespace);
         setSelectedGlobalState(initialGlobalState);
-    }, [location.search, initialGlobalState]);
+        setSelectedNamespace(namespaces.includes(queryParams.get('namespace')) ? queryParams.get('namespace') : "all");
+    }, [location.search, objectStatus]);
 
     // Helper functions
     const extractNamespace = (name) => {
@@ -118,9 +126,16 @@ const Objects = () => {
         return objName === "cluster" ? "ccfg" : (parts.length === 3 ? parts[1] : "svc");
     };
 
+    // Objects and namespaces
+    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
+    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
+    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+
     const getObjectStatus = (objectName) => {
         const obj = objects[objectName] || {};
-        const avail = obj?.avail;
+        const rawAvail = obj?.avail;
+        const validStatuses = ["up", "down", "warn"];
+        const avail = validStatuses.includes(rawAvail) ? rawAvail : "unknown";
         const frozen = obj?.frozen;
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
@@ -132,6 +147,7 @@ const Objects = () => {
                 break;
             }
         }
+        console.log(`[Objects] getObjectStatus for ${objectName}: rawAvail=${JSON.stringify(rawAvail)}, normalized avail=${avail}, typeof rawAvail=${typeof rawAvail}`);
         return {avail, frozen, globalExpect};
     };
 
@@ -146,17 +162,18 @@ const Objects = () => {
         };
     };
 
-    // Objects and filtering logic
-    const objects = Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {};
-    const allObjectNames = Object.keys(objects).filter((key) => key && typeof objects[key] === "object");
-    const namespaces = Array.from(new Set(allObjectNames.map(extractNamespace))).sort();
+    // Filtering logic
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
-        const { avail } = getObjectStatus(name);
-        return (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace)
-            && (selectedKind === "all" || extractKind(name) === selectedKind)
-            && (selectedGlobalState === "all" || avail === selectedGlobalState)
-            && name.toLowerCase().includes(searchQuery.toLowerCase());
+        const {avail} = getObjectStatus(name);
+        const matchesGlobalState = selectedGlobalState === "all" || avail === selectedGlobalState;
+        console.log(`[Objects] Filtering ${name}: avail=${avail}, selectedGlobalState=${selectedGlobalState}, matchesGlobalState=${matchesGlobalState}`);
+        return (
+            (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
+            (selectedKind === "all" || extractKind(name) === selectedKind) &&
+            matchesGlobalState &&
+            name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
     });
 
     const allNodes = Array.from(
@@ -310,14 +327,30 @@ const Objects = () => {
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
                             <Autocomplete
-                                key={`global-state-${selectedGlobalState}`}
+                                key={`global-state-${selectedGlobalState}-${initialGlobalState}`}
                                 sx={{minWidth: 200}}
                                 options={globalStates}
                                 value={selectedGlobalState}
                                 onChange={(e, val) => val && setSelectedGlobalState(val)}
                                 renderInput={(params) => <TextField {...params} label="Global State"/>}
+                                renderOption={(props, option) => (
+                                    <li {...props}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            {option === "up" &&
+                                                <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
+                                            {option === "down" &&
+                                                <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
+                                            {option === "warn" &&
+                                                <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>}
+                                            {option === "unknown" &&
+                                                <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
+                                            {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
+                                        </Box>
+                                    </li>
+                                )}
                             />
                             <Autocomplete
+                                key={`namespace-${selectedNamespace}`}
                                 sx={{minWidth: 200}}
                                 options={["all", ...namespaces]}
                                 value={selectedNamespace}
@@ -407,6 +440,12 @@ const Objects = () => {
                                                     <WarningAmberIcon
                                                         sx={{color: orange[500]}}
                                                         aria-label="Object has warning"
+                                                    />
+                                                )}
+                                                {avail === "unknown" && (
+                                                    <FiberManualRecordIcon
+                                                        sx={{color: grey[500]}}
+                                                        aria-label="Object status is unknown"
                                                     />
                                                 )}
                                                 {frozen === "frozen" && (

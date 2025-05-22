@@ -125,19 +125,19 @@ describe('Namespaces Component', () => {
         await waitFor(() => {
             const rootRow = screen.getByText('root').closest('tr');
             const rootCells = within(rootRow).getAllByTestId('table-cell');
-            expect(rootCells[1]).toHaveTextContent('1');
-            expect(rootCells[2]).toHaveTextContent('1');
-            expect(rootCells[3]).toHaveTextContent('0');
-            expect(rootCells[4]).toHaveTextContent('0');
-            expect(rootCells[5]).toHaveTextContent('2');
+            expect(rootCells[1]).toHaveTextContent('1'); // Up
+            expect(rootCells[2]).toHaveTextContent('1'); // Down
+            expect(rootCells[3]).toHaveTextContent('0'); // Warn
+            expect(rootCells[4]).toHaveTextContent('0'); // Unknown
+            expect(rootCells[5]).toHaveTextContent('2'); // Total
 
             const prodRow = screen.getByText('prod').closest('tr');
             const prodCells = within(prodRow).getAllByTestId('table-cell');
-            expect(prodCells[1]).toHaveTextContent('1');
-            expect(prodCells[2]).toHaveTextContent('0');
-            expect(prodCells[3]).toHaveTextContent('1');
-            expect(prodCells[4]).toHaveTextContent('0');
-            expect(prodCells[5]).toHaveTextContent('2');
+            expect(prodCells[1]).toHaveTextContent('1'); // Up
+            expect(prodCells[2]).toHaveTextContent('0'); // Down
+            expect(prodCells[3]).toHaveTextContent('1'); // Warn
+            expect(prodCells[4]).toHaveTextContent('0'); // Unknown
+            expect(prodCells[5]).toHaveTextContent('2'); // Total
         });
     });
 
@@ -152,18 +152,18 @@ describe('Namespaces Component', () => {
             const rootRow = screen.getByText('root').closest('tr');
             const rootIcons = within(rootRow).getAllByTestId('status-icon');
             expect(rootIcons).toHaveLength(4);
-            expect(rootIcons[0]).toHaveStyle({color: '#4caf50'});
-            expect(rootIcons[1]).toHaveStyle({color: '#f44336'});
-            expect(rootIcons[2]).toHaveStyle({color: '#ff9800'});
-            expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'});
+            expect(rootIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
+            expect(rootIcons[1]).toHaveStyle({color: '#f44336'}); // Down
+            expect(rootIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
+            expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
 
             const prodRow = screen.getByText('prod').closest('tr');
             const prodIcons = within(prodRow).getAllByTestId('status-icon');
             expect(prodIcons).toHaveLength(4);
-            expect(prodIcons[0]).toHaveStyle({color: '#4caf50'});
-            expect(prodIcons[1]).toHaveStyle({color: '#f44336'});
-            expect(prodIcons[2]).toHaveStyle({color: '#ff9800'});
-            expect(prodIcons[3]).toHaveStyle({color: '#9e9e9e'});
+            expect(prodIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
+            expect(prodIcons[1]).toHaveStyle({color: '#f44336'}); // Down
+            expect(prodIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
+            expect(prodIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
         });
     });
 
@@ -177,7 +177,23 @@ describe('Namespaces Component', () => {
         await waitFor(() => {
             const row = screen.getByText('root').closest('tr');
             fireEvent.click(row);
-            expect(mockNavigate).toHaveBeenCalledWith('/objects', {state: {namespace: 'root'}});
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
+        });
+    });
+
+    test('navigates to objects page with namespace and status on status cell click', async () => {
+        render(
+            <MemoryRouter>
+                <Namespaces/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            const rootRow = screen.getByText('root').closest('tr');
+            const statusCells = within(rootRow).getAllByTestId('table-cell');
+            const unknownCell = statusCells[4]; // Unknown status cell
+            fireEvent.click(unknownCell);
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=unknown');
         });
     });
 

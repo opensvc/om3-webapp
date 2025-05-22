@@ -5,17 +5,22 @@ import {
     Menu, MenuItem, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, FormControlLabel, Checkbox,
     Button, Accordion, AccordionSummary, AccordionDetails,
-    ListItemIcon, ListItemText
+    ListItemIcon, ListItemText, CircularProgress, Table,
+    TableBody, TableCell, TableContainer, TableHead, TableRow,
+    Paper, TextField, Input
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import AddIcon from "@mui/icons-material/Add";
 import {
     RestartAlt, LockOpen, Delete, Settings, Block,
     CleaningServices, SwapHoriz, Undo, Cancel,
-    PlayArrow, Stop
+    PlayArrow, Stop, PlayCircleFilled
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
@@ -30,7 +35,8 @@ const NODE_ACTIONS = [
     {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
     {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
     {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>}
+    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
+    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
 ];
 
 const OBJECT_ACTIONS = [
@@ -51,7 +57,8 @@ const OBJECT_ACTIONS = [
 const RESOURCE_ACTIONS = [
     {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>}
+    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
+    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>}
 ];
 
 let renderCount = 0;
@@ -68,16 +75,31 @@ const ObjectDetail = () => {
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchNodes(token);
-            startEventReception(token);
-        }
-        return () => {
-            closeEventSource();
-        };
-    }, []);
+    // State for keys
+    const [keys, setKeys] = useState([]);
+    const [keysLoading, setKeysLoading] = useState(false);
+    const [keysError, setKeysError] = useState(null);
+    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(false);
+
+    // State for key actions
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+    const [keyToDelete, setKeyToDelete] = useState(null);
+    const [keyToUpdate, setKeyToUpdate] = useState(null);
+    const [newKeyName, setNewKeyName] = useState("");
+    const [updateKeyName, setUpdateKeyName] = useState("");
+    const [newKeyFile, setNewKeyFile] = useState(null);
+    const [updateKeyFile, setUpdateKeyFile] = useState(null);
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // State for configuration
+    const [configData, setConfigData] = useState(null);
+    const [configLoading, setConfigLoading] = useState(false);
+    const [configError, setConfigError] = useState(null);
+    const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
+    const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
+    const [newConfigFile, setNewConfigFile] = useState(null);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -186,6 +208,215 @@ const ObjectDetail = () => {
         }
     };
 
+    // Fetch keys for cfg or sec objects
+    const fetchKeys = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        if (!['cfg', 'sec'].includes(kind)) return;
+
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setKeysError("Auth token not found.");
+            return;
+        }
+
+        setKeysLoading(true);
+        setKeysError(null);
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
+            const data = await response.json();
+            setKeys(data.items || []);
+        } catch (err) {
+            setKeysError(err.message);
+        } finally {
+            setKeysLoading(false);
+        }
+    };
+
+    // Fetch configuration for the object
+    const fetchConfig = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setConfigError("Auth token not found.");
+            return;
+        }
+
+        setConfigLoading(true);
+        setConfigError(null);
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`},
+            });
+            if (!response.ok) throw new Error(`Failed to fetch config: ${response.status}`);
+            const text = await response.text();
+            setConfigData(text);
+        } catch (err) {
+            setConfigError(err.message);
+        } finally {
+            setConfigLoading(false);
+        }
+    };
+
+    // Update configuration for the object
+    const handleUpdateConfig = async () => {
+        if (!newConfigFile) {
+            openSnackbar("Configuration file is required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar("Updating configuration…", "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: newConfigFile
+            });
+            if (!response.ok) throw new Error(`Failed to update config: ${response.status}`);
+            openSnackbar("Configuration updated successfully");
+            await fetchConfig(); // Refresh configuration
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setUpdateConfigDialogOpen(false);
+            setNewConfigFile(null);
+        }
+    };
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+            fetchKeys();
+            fetchConfig();
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, [decodedObjectName]);
+
+    // Key action handlers
+    const handleDeleteKey = async () => {
+        if (!keyToDelete) return;
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Deleting key ${keyToDelete}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyToDelete)}`;
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: {Authorization: `Bearer ${token}`}
+            });
+            if (!response.ok) throw new Error(`Failed to delete key: ${response.status}`);
+            openSnackbar(`Key '${keyToDelete}' deleted successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setDeleteDialogOpen(false);
+            setKeyToDelete(null);
+        }
+    };
+
+    const handleCreateKey = async () => {
+        if (!newKeyName || !newKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Creating key ${newKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(newKeyName)}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: newKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to create key: ${response.status}`);
+            openSnackbar(`Key '${newKeyName}' created successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setCreateDialogOpen(false);
+            setNewKeyName("");
+            setNewKeyFile(null);
+        }
+    };
+
+    const handleUpdateKey = async () => {
+        if (!updateKeyName || !updateKeyFile) {
+            openSnackbar("Key name and file are required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Updating key ${updateKeyName}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(updateKeyName)}`;
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/octet-stream"
+                },
+                body: updateKeyFile
+            });
+            if (!response.ok) throw new Error(`Failed to update key: ${response.status}`);
+            openSnackbar(`Key '${updateKeyName}' updated successfully`);
+            await fetchKeys();
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setUpdateDialogOpen(false);
+            setKeyToUpdate(null);
+            setUpdateKeyName("");
+            setUpdateKeyFile(null);
+        }
+    };
+
     // Color helper
     const getColor = (status) => {
         if (status === "up" || status === true) return green[500];
@@ -276,6 +507,14 @@ const ObjectDetail = () => {
         }));
     };
 
+    const handleKeysAccordionChange = (event, isExpanded) => {
+        setKeysAccordionExpanded(isExpanded);
+    };
+
+    const handleConfigAccordionChange = (event, isExpanded) => {
+        setConfigAccordionExpanded(isExpanded);
+    };
+
     // Dialog confirm handler
     const handleDialogConfirm = () => {
         console.log('handleDialogConfirm:', {pendingAction, selectedResourcesByNode});
@@ -335,6 +574,9 @@ const ObjectDetail = () => {
         );
     }
 
+    const {kind} = parseObjectPath(decodedObjectName);
+    const showKeys = ['cfg', 'sec'].includes(kind);
+
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
@@ -364,6 +606,7 @@ const ObjectDetail = () => {
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
                                 disabled={actionInProgress}
+                                aria-label="Object actions"
                             >
                                 <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
                             </IconButton>
@@ -392,12 +635,336 @@ const ObjectDetail = () => {
                     </Box>
                 )}
 
+                {/* KEYS SECTION */}
+                {showKeys && (
+                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                        <Accordion
+                            expanded={keysAccordionExpanded}
+                            onChange={handleKeysAccordionChange}
+                            sx={{
+                                border: "none",
+                                boxShadow: "none",
+                                backgroundColor: "transparent",
+                                "&:before": {display: "none"},
+                                "& .MuiAccordionSummary-root": {
+                                    border: "none",
+                                    backgroundColor: "transparent",
+                                    minHeight: "auto",
+                                    "&.Mui-expanded": {minHeight: "auto"},
+                                    padding: 0,
+                                },
+                                "& .MuiAccordionDetails-root": {
+                                    border: "none",
+                                    backgroundColor: "transparent",
+                                    padding: 0,
+                                },
+                            }}
+                        >
+                            <AccordionSummary
+                                expandIcon={<ExpandMoreIcon/>}
+                                aria-controls="panel-keys-content"
+                                id="panel-keys-header"
+                            >
+                                <Typography variant="h6" fontWeight="medium">
+                                    Object Keys ({keys.length})
+                                </Typography>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                                <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setCreateDialogOpen(true)}
+                                        disabled={actionLoading}
+                                        aria-label="Add new key"
+                                    >
+                                        <AddIcon/>
+                                    </IconButton>
+                                </Box>
+                                {keysLoading && <CircularProgress size={24}/>}
+                                {keysError && (
+                                    <Alert severity="error" sx={{mb: 2}}>
+                                        {keysError}
+                                    </Alert>
+                                )}
+                                {!keysLoading && !keysError && keys.length === 0 && (
+                                    <Typography color="textSecondary">No keys available.</Typography>
+                                )}
+                                {!keysLoading && !keysError && keys.length > 0 && (
+                                    <TableContainer component={Paper} sx={{boxShadow: "none"}}>
+                                        <Table sx={{minWidth: 650}} aria-label="keys table">
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {keys.map((key) => (
+                                                    <TableRow key={key.name}>
+                                                        <TableCell component="th" scope="row">
+                                                            {key.name}
+                                                        </TableCell>
+                                                        <TableCell>{key.node}</TableCell>
+                                                        <TableCell>{key.size} bytes</TableCell>
+                                                        <TableCell>
+                                                            <IconButton
+                                                                onClick={() => {
+                                                                    setKeyToUpdate(key.name);
+                                                                    setUpdateKeyName(key.name);
+                                                                    setUpdateDialogOpen(true);
+                                                                }}
+                                                                disabled={actionLoading}
+                                                                aria-label={`Edit key ${key.name}`}
+                                                            >
+                                                                <EditIcon/>
+                                                            </IconButton>
+                                                            <IconButton
+                                                                onClick={() => {
+                                                                    setKeyToDelete(key.name);
+                                                                    setDeleteDialogOpen(true);
+                                                                }}
+                                                                disabled={actionLoading}
+                                                                aria-label={`Delete key ${key.name}`}
+                                                            >
+                                                                <DeleteIcon/>
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                )}
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
+                )}
+
+                {/* CONFIGURATION SECTION */}
+                <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                    <Accordion
+                        expanded={configAccordionExpanded}
+                        onChange={handleConfigAccordionChange}
+                        sx={{
+                            border: "none",
+                            boxShadow: "none",
+                            backgroundColor: "transparent",
+                            "&:before": {display: "none"},
+                            "& .MuiAccordionSummary-root": {
+                                border: "none",
+                                backgroundColor: "transparent",
+                                minHeight: "auto",
+                                "&.Mui-expanded": {minHeight: "auto"},
+                                padding: 0,
+                            },
+                            "& .MuiAccordionDetails-root": {
+                                border: "none",
+                                backgroundColor: "transparent",
+                                padding: 0,
+                            },
+                        }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon/>}
+                            aria-controls="panel-config-content"
+                            id="panel-config-header"
+                        >
+                            <Typography variant="h6" fontWeight="medium">
+                                Configuration
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
+                                <IconButton
+                                    color="primary"
+                                    onClick={() => setUpdateConfigDialogOpen(true)}
+                                    disabled={actionLoading}
+                                    aria-label="Edit configuration"
+                                >
+                                    <EditIcon/>
+                                </IconButton>
+                            </Box>
+                            {configLoading && <CircularProgress size={24}/>}
+                            {configError && (
+                                <Alert severity="error" sx={{mb: 2}}>
+                                    {configError}
+                                </Alert>
+                            )}
+                            {!configLoading && !configError && !configData && (
+                                <Typography color="textSecondary">No configuration available.</Typography>
+                            )}
+                            {!configLoading && !configError && configData && (
+                                <Box
+                                    sx={{
+                                        p: 2,
+                                        bgcolor: "grey.100",
+                                        borderRadius: 1,
+                                        maxWidth: "100%",
+                                        overflowX: "auto",
+                                        boxSizing: "border-box",
+                                        scrollbarWidth: "thin",
+                                        "&::-webkit-scrollbar": {
+                                            height: "8px",
+                                        },
+                                        "&::-webkit-scrollbar-thumb": {
+                                            backgroundColor: "grey.400",
+                                            borderRadius: "4px",
+                                        },
+                                    }}
+                                >
+                                    <Box
+                                        component="pre"
+                                        sx={{
+                                            whiteSpace: "pre",
+                                            fontFamily: "Monospace",
+                                            bgcolor: "inherit",
+                                            p: 1,
+                                            m: 0,
+                                            minWidth: "max-content",
+                                            maxWidth: "none",
+                                        }}
+                                    >
+                                        {configData}
+                                    </Box>
+                                </Box>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
+                </Box>
+
+                {/* DELETE KEY DIALOG */}
+                <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Confirm Delete Key</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            color="error"
+                            onClick={handleDeleteKey}
+                            disabled={actionLoading}
+                        >
+                            Delete
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* CREATE KEY DIALOG */}
+                <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Create New Key</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Key Name"
+                            fullWidth
+                            variant="outlined"
+                            value={newKeyName}
+                            onChange={(e) => setNewKeyName(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <label htmlFor="create-key-file-upload">File</label>
+                        <Input
+                            id="create-key-file-upload"
+                            type="file"
+                            onChange={(e) => setNewKeyFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleCreateKey}
+                            disabled={actionLoading || !newKeyName || !newKeyFile}
+                        >
+                            Create
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* UPDATE KEY DIALOG */}
+                <Dialog open={updateDialogOpen} onClose={() => setUpdateDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Update Key</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Key Name"
+                            fullWidth
+                            variant="outlined"
+                            value={updateKeyName}
+                            onChange={(e) => setUpdateKeyName(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <label htmlFor="update-key-file-upload">File</label>
+                        <Input
+                            id="update-key-file-upload"
+                            type="file"
+                            onChange={(e) => setUpdateKeyFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleUpdateKey}
+                            disabled={actionLoading || !updateKeyName || !updateKeyFile}
+                        >
+                            Update
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* UPDATE CONFIG DIALOG */}
+                <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Update Configuration</DialogTitle>
+                    <DialogContent>
+                        <label htmlFor="update-config-file-upload">Configuration File</label>
+                        <Input
+                            id="update-config-file-upload"
+                            type="file"
+                            onChange={(e) => setNewConfigFile(e.target.files[0])}
+                            sx={{mt: 2}}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setUpdateConfigDialogOpen(false)} disabled={actionLoading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleUpdateConfig}
+                            disabled={actionLoading || !newConfigFile}
+                        >
+                            Update
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
                 {/* BATCH NODE ACTIONS */}
                 <Box display="flex" alignItems="center" gap={1} mb={2}>
                     <Button
                         variant="outlined"
                         onClick={handleNodesActionsOpen}
                         disabled={selectedNodes.length === 0}
+                        aria-label="Batch actions on selected nodes"
                     >
                         Actions on selected nodes
                     </Button>
@@ -430,6 +997,7 @@ const ObjectDetail = () => {
                                         <Checkbox
                                             checked={selectedNodes.includes(node)}
                                             onChange={() => toggleNode(node)}
+                                            aria-label={`Select node ${node}`}
                                         />
                                         <Typography variant="h6">Node: {node}</Typography>
                                     </Box>
@@ -456,6 +1024,7 @@ const ObjectDetail = () => {
                                                 setIndividualNodeMenuAnchor(e.currentTarget);
                                             }}
                                             disabled={actionInProgress}
+                                            aria-label={`Node ${node} actions`}
                                         >
                                             <MoreVertIcon/>
                                         </IconButton>
@@ -503,6 +1072,7 @@ const ObjectDetail = () => {
                                                     setSelectedResourcesByNode((prev) => ({...prev, [node]: next}));
                                                 }}
                                                 disabled={resIds.length === 0}
+                                                aria-label={`Select all resources for node ${node}`}
                                             />
                                             <IconButton
                                                 onClick={(e) => {
@@ -510,6 +1080,7 @@ const ObjectDetail = () => {
                                                     e.stopPropagation();
                                                 }}
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
+                                                aria-label={`Resources actions for node ${node}`}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
@@ -560,6 +1131,7 @@ const ObjectDetail = () => {
                                                                     <Checkbox
                                                                         checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                                         onChange={() => toggleResource(node, rid)}
+                                                                        aria-label={`Select resource ${rid}`}
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
@@ -577,6 +1149,7 @@ const ObjectDetail = () => {
                                                                             e.stopPropagation();
                                                                         }}
                                                                         disabled={actionInProgress}
+                                                                        aria-label={`Resource ${rid} actions`}
                                                                     >
                                                                         <MoreVertIcon/>
                                                                     </IconButton>
@@ -632,6 +1205,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={checkboxes.failover}
                                     onChange={(e) => setCheckboxes({failover: e.target.checked})}
+                                    aria-label="Confirm failover pause"
                                 />
                             }
                             label="I understand that the selected service orchestration will be paused."
@@ -644,6 +1218,7 @@ const ObjectDetail = () => {
                             color="primary"
                             disabled={!checkboxes.failover}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm freeze action"
                         >
                             Confirm
                         </Button>
@@ -658,6 +1233,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={stopCheckbox}
                                     onChange={(e) => setStopCheckbox(e.target.checked)}
+                                    aria-label="Confirm service interruption"
                                 />
                             }
                             label="I understand that this may interrupt services."
@@ -670,6 +1246,7 @@ const ObjectDetail = () => {
                             color="error"
                             disabled={!stopCheckbox}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm stop action"
                         >
                             Stop
                         </Button>
@@ -684,6 +1261,7 @@ const ObjectDetail = () => {
                                 <Checkbox
                                     checked={resourceConfirmChecked}
                                     onChange={(e) => setResourceConfirmChecked(e.target.checked)}
+                                    aria-label="Confirm data loss"
                                 />
                             }
                             label="I understand that data will be lost."
@@ -696,6 +1274,7 @@ const ObjectDetail = () => {
                             color="error"
                             disabled={!resourceConfirmChecked}
                             onClick={handleDialogConfirm}
+                            aria-label="Confirm unprovision action"
                         >
                             Confirm
                         </Button>

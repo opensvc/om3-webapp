@@ -23,21 +23,36 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
                     <Chip
                         label={`Up ${statusCount.up}`}
                         size="small"
-                        sx={{backgroundColor: 'green', color: 'white', mr: 1}}
+                        sx={{backgroundColor: 'green', color: 'white', mr: 1, cursor: 'pointer'}}
+                        onClick={() => {
+                            console.log('[ClusterStatGrids] Clicked Up chip');
+                            onClick('up');
+                        }}
                     />
                     <Chip
                         label={`Warn ${statusCount.warn}`}
                         size="small"
-                        sx={{backgroundColor: 'yellow', color: 'black', mr: 1}}
+                        sx={{backgroundColor: 'yellow', color: 'black', mr: 1, cursor: 'pointer'}}
+                        onClick={() => {
+                            console.log('[ClusterStatGrids] Clicked Warn chip');
+                            onClick('warn');
+                        }}
                     />
                     <Chip
                         label={`Down ${statusCount.down}`}
                         size="small"
-                        sx={{backgroundColor: 'red', color: 'white'}}
+                        sx={{backgroundColor: 'red', color: 'white', cursor: 'pointer'}}
+                        onClick={() => {
+                            console.log('[ClusterStatGrids] Clicked Down chip');
+                            onClick('down');
+                        }}
                     />
                 </>
             }
-            onClick={onClick}
+            onClick={() => {
+                console.log('[ClusterStatGrids] Clicked Objects card');
+                onClick();
+            }}
         />
     </Grid2>
 );

@@ -7,7 +7,7 @@ import {
     Button, Accordion, AccordionSummary, AccordionDetails,
     ListItemIcon, ListItemText, CircularProgress, Table,
     TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, TextField, Input
+    Paper, TextField
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -637,7 +637,7 @@ const ObjectDetail = () => {
 
                 {/* KEYS SECTION */}
                 {showKeys && (
-                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
+                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", Tecnologia: 1}}>
                         <Accordion
                             expanded={keysAccordionExpanded}
                             onChange={handleKeysAccordionChange}
@@ -871,14 +871,28 @@ const ObjectDetail = () => {
                             onChange={(e) => setNewKeyName(e.target.value)}
                             disabled={actionLoading}
                         />
-                        <label htmlFor="create-key-file-upload">File</label>
-                        <Input
-                            id="create-key-file-upload"
-                            type="file"
-                            onChange={(e) => setNewKeyFile(e.target.files[0])}
-                            sx={{mt: 2}}
-                            disabled={actionLoading}
-                        />
+                        <Box sx={{mt: 2}}>
+                            <input
+                                id="create-key-file-upload"
+                                type="file"
+                                hidden
+                                onChange={(e) => setNewKeyFile(e.target.files[0])}
+                                disabled={actionLoading}
+                            />
+                            <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                                <Button
+                                    variant="outlined"
+                                    component="label"
+                                    htmlFor="create-key-file-upload"
+                                    disabled={actionLoading}
+                                >
+                                    Choose File
+                                </Button>
+                                <Typography variant="body2" color={newKeyFile ? 'textPrimary' : 'textSecondary'}>
+                                    {newKeyFile ? newKeyFile.name : 'No file chosen'}
+                                </Typography>
+                            </Box>
+                        </Box>
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
@@ -908,14 +922,28 @@ const ObjectDetail = () => {
                             onChange={(e) => setUpdateKeyName(e.target.value)}
                             disabled={actionLoading}
                         />
-                        <label htmlFor="update-key-file-upload">File</label>
-                        <Input
-                            id="update-key-file-upload"
-                            type="file"
-                            onChange={(e) => setUpdateKeyFile(e.target.files[0])}
-                            sx={{mt: 2}}
-                            disabled={actionLoading}
-                        />
+                        <Box sx={{mt: 2}}>
+                            <input
+                                id="update-key-file-upload"
+                                type="file"
+                                hidden
+                                onChange={(e) => setUpdateKeyFile(e.target.files[0])}
+                                disabled={actionLoading}
+                            />
+                            <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                                <Button
+                                    variant="outlined"
+                                    component="label"
+                                    htmlFor="update-key-file-upload"
+                                    disabled={actionLoading}
+                                >
+                                    Choose File
+                                </Button>
+                                <Typography variant="body2" color={updateKeyFile ? 'textPrimary' : 'textSecondary'}>
+                                    {updateKeyFile ? updateKeyFile.name : 'No file chosen'}
+                                </Typography>
+                            </Box>
+                        </Box>
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
@@ -935,14 +963,28 @@ const ObjectDetail = () => {
                 <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm" fullWidth>
                     <DialogTitle>Update Configuration</DialogTitle>
                     <DialogContent>
-                        <label htmlFor="update-config-file-upload">Configuration File</label>
-                        <Input
-                            id="update-config-file-upload"
-                            type="file"
-                            onChange={(e) => setNewConfigFile(e.target.files[0])}
-                            sx={{mt: 2}}
-                            disabled={actionLoading}
-                        />
+                        <Box sx={{mt: 2}}>
+                            <input
+                                id="update-config-file-upload"
+                                type="file"
+                                hidden
+                                onChange={(e) => setNewConfigFile(e.target.files[0])}
+                                disabled={actionLoading}
+                            />
+                            <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                                <Button
+                                    variant="outlined"
+                                    component="label"
+                                    htmlFor="update-config-file-upload"
+                                    disabled={actionLoading}
+                                >
+                                    Choose File
+                                </Button>
+                                <Typography variant="body2" color={newConfigFile ? 'textPrimary' : 'textSecondary'}>
+                                    {newConfigFile ? newConfigFile.name : 'No file chosen'}
+                                </Typography>
+                            </Box>
+                        </Box>
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={() => setUpdateConfigDialogOpen(false)} disabled={actionLoading}>

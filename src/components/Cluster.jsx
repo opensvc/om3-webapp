@@ -31,10 +31,15 @@ const ClusterOverview = () => {
 
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
-            }).then((res) => {
-                const items = res.data?.items || [];
-                setPoolCount(items.length);
-            });
+            })
+                .then((res) => {
+                    const items = res.data?.items || [];
+                    setPoolCount(items.length);
+                })
+                .catch((error) => {
+                    console.error('Failed to fetch pools:', error.message);
+                    setPoolCount(0);
+                });
         }
     }, []);
 

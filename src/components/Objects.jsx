@@ -282,7 +282,7 @@ const Objects = () => {
             bgcolor: "background.default",
             display: "flex",
             justifyContent: "center",
-            alignItems: "center",
+            alignItems: "flex-start",
             p: 2
         }}>
             <Box sx={{

@@ -108,49 +108,57 @@ const Namespaces = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {Object.entries(statusByNamespace).map(([namespace, counts]) => {
-                                const total = counts.up + counts.down + counts.warn + counts.unknown;
-                                return (
-                                    <TableRow
-                                        key={namespace}
-                                        hover
-                                        onClick={() => {
-                                            console.log('[Namespaces] Row clicked, navigating to:', `/objects?namespace=${namespace}`);
-                                            navigate(`/objects?namespace=${namespace}`);
-                                        }}
-                                        sx={{cursor: "pointer"}}
-                                    >
-                                        <TableCell sx={{fontWeight: 500}}>
-                                            {namespace}
-                                        </TableCell>
-                                        {["up", "down", "warn", "unknown"].map((status) => (
-                                            <TableCell
-                                                key={status}
-                                                align="center"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const url = `/objects?namespace=${namespace}&globalState=${status}`;
-                                                    console.log('[Namespaces] Status clicked, navigating to:', url);
-                                                    navigate(url);
-                                                }}
-                                                sx={{cursor: "pointer"}}
-                                            >
-                                                <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-                                                    <FiberManualRecordIcon
-                                                        sx={{fontSize: 18, color: getColorByStatus(status)}}
-                                                    />
-                                                    <Typography variant="body1">{counts[status]}</Typography>
-                                                </Box>
+                            {Object.entries(statusByNamespace).length > 0 ? (
+                                Object.entries(statusByNamespace).map(([namespace, counts]) => {
+                                    const total = counts.up + counts.down + counts.warn + counts.unknown;
+                                    return (
+                                        <TableRow
+                                            key={namespace}
+                                            hover
+                                            onClick={() => {
+                                                console.log('[Namespaces] Row clicked, navigating to:', `/objects?namespace=${namespace}`);
+                                                navigate(`/objects?namespace=${namespace}`);
+                                            }}
+                                            sx={{ cursor: "pointer" }}
+                                        >
+                                            <TableCell sx={{ fontWeight: 500 }}>
+                                                {namespace}
                                             </TableCell>
-                                        ))}
-                                        <TableCell align="center">
-                                            <Typography variant="body1" fontWeight={600}>
-                                                {total}
-                                            </Typography>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                                            {["up", "down", "warn", "unknown"].map((status) => (
+                                                <TableCell
+                                                    key={status}
+                                                    align="center"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const url = `/objects?namespace=${namespace}&globalState=${status}`;
+                                                        console.log('[Namespaces] Status clicked, navigating to:', url);
+                                                        navigate(url);
+                                                    }}
+                                                    sx={{ cursor: "pointer" }}
+                                                >
+                                                    <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+                                                        <FiberManualRecordIcon
+                                                            sx={{ fontSize: 18, color: getColorByStatus(status) }}
+                                                        />
+                                                        <Typography variant="body1">{counts[status]}</Typography>
+                                                    </Box>
+                                                </TableCell>
+                                            ))}
+                                            <TableCell align="center">
+                                                <Typography variant="body1" fontWeight={600}>
+                                                    {total}
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} align="center">
+                                        <Typography data-testid="no-namespaces-message">No namespaces available</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>

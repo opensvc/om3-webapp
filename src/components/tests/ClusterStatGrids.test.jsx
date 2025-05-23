@@ -158,4 +158,23 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Namespaces')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
     });
+    test('GridObjects chips call onClick with correct status', () => {
+        const statusCount = { up: 5, warn: 2, down: 1 };
+        render(
+            <GridObjects
+                objectCount={8}
+                statusCount={statusCount}
+                onClick={mockOnClick}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Up 5'));
+        expect(mockOnClick).toHaveBeenCalledWith('up');
+
+        fireEvent.click(screen.getByText('Warn 2'));
+        expect(mockOnClick).toHaveBeenCalledWith('warn');
+
+        fireEvent.click(screen.getByText('Down 1'));
+        expect(mockOnClick).toHaveBeenCalledWith('down');
+    });
 });

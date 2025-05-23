@@ -136,6 +136,14 @@ const ObjectDetail = () => {
     const openSnackbar = (msg, sev = "success") => setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
 
+    // Helper function to parse provisioned state
+    const parseProvisionedState = (state) => {
+        if (typeof state === "string") {
+            return state.toLowerCase() === "true";
+        }
+        return !!state;
+    };
+
     // Helper functions
     const parseObjectPath = (objName) => {
         if (!objName || typeof objName !== "string") {
@@ -637,7 +645,7 @@ const ObjectDetail = () => {
 
                 {/* KEYS SECTION */}
                 {showKeys && (
-                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", Tecnologia: 1}}>
+                    <Box sx={{mb: 4, p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1}}>
                         <Accordion
                             expanded={keysAccordionExpanded}
                             onChange={handleKeysAccordionChange}
@@ -960,7 +968,8 @@ const ObjectDetail = () => {
                 </Dialog>
 
                 {/* UPDATE CONFIG DIALOG */}
-                <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm" fullWidth>
+                <Dialog open={updateConfigDialogOpen} onClose={() => setUpdateConfigDialogOpen(false)} maxWidth="sm"
+                        fullWidth>
                     <DialogTitle>Update Configuration</DialogTitle>
                     <DialogContent>
                         <Box sx={{mt: 2}}>
@@ -1213,7 +1222,7 @@ const ObjectDetail = () => {
                                                                         <strong>Provisioned:</strong>
                                                                         <FiberManualRecordIcon
                                                                             sx={{
-                                                                                color: res.provisioned?.state ? green[500] : red[500],
+                                                                                color: parseProvisionedState(res.provisioned?.state) ? green[500] : red[500],
                                                                                 fontSize: "1rem",
                                                                                 ml: 1,
                                                                                 verticalAlign: "middle",

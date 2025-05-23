@@ -2,6 +2,7 @@ import React, {act} from 'react';
 import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {green, red, orange, blue} from '@mui/material/colors';
+import {axe, toHaveNoViolations} from 'jest-axe';
 import Objects from '../Objects';
 import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
@@ -25,6 +26,8 @@ jest.mock('@mui/material/Collapse', () => {
 
 const AVAILABLE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
 
+expect.extend(toHaveNoViolations);
+
 describe('Objects Component', () => {
     const mockNavigate = jest.fn();
     const mockFetchNodes = jest.fn();
@@ -37,7 +40,8 @@ describe('Objects Component', () => {
 
         // Mock location and navigation
         require('react-router-dom').useLocation.mockReturnValue({
-            state: {namespace: 'all'}
+            search: '',
+            state: {namespace: 'all'},
         });
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
@@ -499,5 +503,108 @@ describe('Objects Component', () => {
             expect(screen.getByLabelText('Kind')).toBeInTheDocument();
             expect(screen.getByLabelText('Name')).toBeInTheDocument();
         });
+    });
+
+    test('filters objects by global state', async () => {
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
+            const listbox = screen.getByRole('listbox');
+            fireEvent.click(within(listbox).getByText(/up/i));
+
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
+        });
+    });
+
+    test('filters objects by kind', async () => {
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            fireEvent.mouseDown(screen.getByLabelText(/Kind/i));
+            const listbox = screen.getByRole('listbox');
+            fireEvent.click(within(listbox).getByText(/svc/i));
+
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
+        });
+    });
+
+    // New test: Empty objectStatus
+    test('displays no objects when objectStatus is empty', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {},
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getAllByRole('row')).toHaveLength(1); // Only header row
+        });
+    });
+
+    // New test: Delete action
+    test('executes delete action and removes object', async () => {
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
+            fireEvent.click(checkbox);
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText(/delete/i));
+        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/delete'),
+                expect.any(Object)
+            );
+            expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+        });
+
+        global.fetch.mockClear();
     });
 });

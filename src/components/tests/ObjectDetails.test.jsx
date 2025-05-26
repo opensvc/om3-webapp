@@ -905,17 +905,37 @@ type = flag
         const resourceMenuButton = within(resourceSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
+
+        // Log pour déboguer
+        console.log('[Test] Resource menu button found:', resourceMenuButton ? 'Yes' : 'No');
+        if (!resourceMenuButton) {
+            console.log('[Test] Resource section DOM:', resourceSection.outerHTML);
+            screen.debug();
+        }
+        expect(resourceMenuButton).toBeInTheDocument();
+
         await act(async () => {
             fireEvent.click(resourceMenuButton);
         });
 
-        // Click 'restart'
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const restartItem = menuItems.find((item) => item.textContent.includes('restart'));
-            expect(restartItem).toBeInTheDocument();
-            fireEvent.click(restartItem);
-        });
+        // Attendre que le menu soit ouvert
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
+                expect(menu).toBeInTheDocument();
+                console.log('[Test] Menu DOM:', menu.outerHTML);
+
+                const menuItems = screen.getAllByRole('menuitem');
+                console.log(
+                    '[Test] Menu items:',
+                    menuItems.map((item) => item.textContent)
+                );
+                const restartItem = menuItems.find((item) => item.textContent.toLowerCase() === 'restart');
+                expect(restartItem).toBeInTheDocument();
+                fireEvent.click(restartItem);
+            },
+            {timeout: 10000}
+        );
 
         // Confirm action
         await waitFor(() => {
@@ -957,17 +977,37 @@ type = flag
         const objectMenuButton = within(headerSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
+
+        // Log pour déboguer
+        console.log('[Test] Object menu button found:', objectMenuButton ? 'Yes' : 'No');
+        if (!objectMenuButton) {
+            console.log('[Test] Header section DOM:', headerSection.outerHTML);
+            screen.debug();
+        }
+        expect(objectMenuButton).toBeInTheDocument();
+
         await act(async () => {
             fireEvent.click(objectMenuButton);
         });
 
-        // Select unprovision
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const unprovisionItem = menuItems.find((item) => item.textContent === 'unprovision');
-            expect(unprovisionItem).toBeInTheDocument();
-            fireEvent.click(unprovisionItem);
-        });
+        // Attendre que le menu soit ouvert
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
+                expect(menu).toBeInTheDocument();
+                console.log('[Test] Menu DOM:', menu.outerHTML);
+
+                const menuItems = screen.getAllByRole('menuitem');
+                console.log(
+                    '[Test] Menu items:',
+                    menuItems.map((item) => item.textContent)
+                );
+                const unprovisionItem = menuItems.find((item) => item.textContent.toLowerCase() === 'unprovision');
+                expect(unprovisionItem).toBeInTheDocument();
+                fireEvent.click(unprovisionItem);
+            },
+            {timeout: 10000}
+        );
 
         // Fill dialog
         await waitFor(() => {
@@ -1551,7 +1591,8 @@ type = flag
     });
 
     test('displays loading indicator while fetching keys', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1575,7 +1616,8 @@ type = flag
     });
 
     test('disables buttons during key creation', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>

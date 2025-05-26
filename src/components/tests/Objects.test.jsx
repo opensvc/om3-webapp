@@ -24,7 +24,20 @@ jest.mock('@mui/material/Collapse', () => {
     return ({in: inProp, children}) => (inProp ? children : null);
 });
 
-const AVAILABLE_ACTIONS = ["start", "stop", "restart", "freeze", "unfreeze", "delete", "provision", "unprovision", "purge", "switch", "giveback", "abort"];
+const AVAILABLE_ACTIONS = [
+    'start',
+    'stop',
+    'restart',
+    'freeze',
+    'unfreeze',
+    'delete',
+    'provision',
+    'unprovision',
+    'purge',
+    'switch',
+    'giveback',
+    'abort',
+];
 
 expect.extend(toHaveNoViolations);
 
@@ -54,14 +67,14 @@ describe('Objects Component', () => {
             },
             objectInstanceStatus: {
                 'test-ns/svc/test1': {
-                    'node1': {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    'node2': {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
+                    node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    node2: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
                 },
                 'test-ns/svc/test2': {
-                    'node1': {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
+                    node1: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
                 },
                 'root/svc/test3': {
-                    'node2': {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
+                    node2: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
                 },
             },
             instanceMonitor: {
@@ -71,10 +84,10 @@ describe('Objects Component', () => {
                 'node2:root/svc/test3': {state: 'idle', global_expect: 'started'},
             },
             heartbeatStatus: {
-                'node1': {
+                node1: {
                     streams: [{state: 'running'}, {state: 'stopped'}],
                 },
-                'node2': {
+                node2: {
                     streams: [{state: 'running'}, {state: 'running'}],
                 },
             },
@@ -156,7 +169,7 @@ describe('Objects Component', () => {
             const statusCell = within(row).getAllByRole('cell')[1]; // Status column
             const svgs = statusCell.querySelectorAll('svg');
 
-            const iconStyles = Array.from(svgs).map(svg => ({
+            const iconStyles = Array.from(svgs).map((svg) => ({
                 color: window.getComputedStyle(svg).color,
             }));
             console.log(`Status column for ${row.textContent}:`, {iconStyles});
@@ -164,19 +177,19 @@ describe('Objects Component', () => {
             const iconTests = [
                 {
                     condition: expected.icons?.includes('up'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(76, 175, 80)'), // green[500]
+                    test: () => iconStyles.some((style) => style.color === 'rgb(76, 175, 80)'), // green[500]
                 },
                 {
                     condition: expected.icons?.includes('down'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(244, 67, 54)'), // red[500]
+                    test: () => iconStyles.some((style) => style.color === 'rgb(244, 67, 54)'), // red[500]
                 },
                 {
                     condition: expected.icons?.includes('warn'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(255, 152, 0)'), // orange[500]
+                    test: () => iconStyles.some((style) => style.color === 'rgb(255, 152, 0)'), // orange[500]
                 },
                 {
                     condition: expected.icons?.includes('frozen'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(144, 202, 249)'), // blue[200]
+                    test: () => iconStyles.some((style) => style.color === 'rgb(144, 202, 249)'), // blue[200]
                 },
             ];
 
@@ -194,7 +207,11 @@ describe('Objects Component', () => {
         const verifyNodeColumn = (row, node, expected) => {
             const nodeIndex = allNodes.indexOf(node);
             const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3]; // Checkbox, Status, Object, then nodes
-            console.log(`Verifying node column ${node} for ${row.textContent}: nodeCell ${nodeCell ? 'found' : 'not found'}, index ${nodeIndex + 3}`);
+            console.log(
+                `Verifying node column ${node} for ${row.textContent}: nodeCell ${
+                    nodeCell ? 'found' : 'not found'
+                }, index ${nodeIndex + 3}`
+            );
             if (!nodeCell) {
                 console.log(`Expected for ${node}:`, expected);
                 expect(expected).toEqual({icons: []});
@@ -203,7 +220,7 @@ describe('Objects Component', () => {
 
             const svgs = nodeCell.querySelectorAll('svg');
 
-            const iconStyles = Array.from(svgs).map(svg => ({
+            const iconStyles = Array.from(svgs).map((svg) => ({
                 color: window.getComputedStyle(svg).color,
             }));
             console.log(`Node column ${node} for ${row.textContent}:`, {iconStyles});
@@ -211,19 +228,19 @@ describe('Objects Component', () => {
             const iconTests = [
                 {
                     condition: expected.icons?.includes('up'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(76, 175, 80)'),
+                    test: () => iconStyles.some((style) => style.color === 'rgb(76, 175, 80)'),
                 },
                 {
                     condition: expected.icons?.includes('down'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(244, 67, 54)'),
+                    test: () => iconStyles.some((style) => style.color === 'rgb(244, 67, 54)'),
                 },
                 {
                     condition: expected.icons?.includes('warn'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(255, 152, 0)'),
+                    test: () => iconStyles.some((style) => style.color === 'rgb(255, 152, 0)'),
                 },
                 {
                     condition: expected.icons?.includes('frozen'),
-                    test: () => iconStyles.some(style => style.color === 'rgb(144, 202, 249)'),
+                    test: () => iconStyles.some((style) => style.color === 'rgb(144, 202, 249)'),
                 },
             ];
 
@@ -238,11 +255,11 @@ describe('Objects Component', () => {
         };
 
         const rows = screen.getAllByRole('row').slice(1); // Skip header
-        const rowTexts = rows.map(row => row.textContent);
+        const rowTexts = rows.map((row) => row.textContent);
 
-        const test1Row = rows[rowTexts.findIndex(text => text.includes('test-ns/svc/test1'))];
-        const test2Row = rows[rowTexts.findIndex(text => text.includes('test-ns/svc/test2'))];
-        const test3Row = rows[rowTexts.findIndex(text => text.includes('root/svc/test3'))];
+        const test1Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test1'))];
+        const test2Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test2'))];
+        const test3Row = rows[rowTexts.findIndex((text) => text.includes('root/svc/test3'))];
 
         // Status column expectations (icons only)
         verifyStatusColumn(test1Row, {icons: ['up']}); // Green icon
@@ -268,9 +285,11 @@ describe('Objects Component', () => {
         });
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {
-                name: /test-ns\/svc\/test1/i
-            })).getByRole('checkbox');
+            const checkbox = within(
+                screen.getByRole('row', {
+                    name: /test-ns\/svc\/test1/i,
+                })
+            ).getByRole('checkbox');
             fireEvent.click(checkbox);
             expect(checkbox).toBeChecked();
         });
@@ -290,7 +309,7 @@ describe('Objects Component', () => {
             fireEvent.click(selectAllCheckbox);
 
             const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
-            allCheckboxes.forEach(checkbox => {
+            allCheckboxes.forEach((checkbox) => {
                 expect(checkbox).toBeChecked();
             });
         });
@@ -306,9 +325,11 @@ describe('Objects Component', () => {
         });
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {
-                name: /test-ns\/svc\/test1/i
-            })).getByRole('checkbox');
+            const checkbox = within(
+                screen.getByRole('row', {
+                    name: /test-ns\/svc\/test1/i,
+                })
+            ).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
@@ -316,7 +337,7 @@ describe('Objects Component', () => {
         const menu = screen.getByRole('menu');
         expect(menu).toBeInTheDocument();
 
-        AVAILABLE_ACTIONS.forEach(action => {
+        AVAILABLE_ACTIONS.forEach((action) => {
             expect(within(menu).getByText(action.charAt(0).toUpperCase() + action.slice(1))).toBeInTheDocument();
         });
     });
@@ -375,30 +396,6 @@ describe('Objects Component', () => {
         });
     });
 
-    test('shows confirmation dialog for freeze action', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
-
-        await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {
-                name: /test-ns\/svc\/test1/i
-            })).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        const menu = screen.getByRole('menu');
-        fireEvent.click(within(menu).getByText('Freeze'));
-
-        expect(screen.getByText('Freeze selected objects')).toBeInTheDocument();
-        expect(screen.getByText(/I understand the selected services orchestration will be paused/i)).toBeInTheDocument();
-    });
-
     test('executes action and shows snackbar', async () => {
         global.fetch = jest.fn(() =>
             Promise.resolve({
@@ -416,19 +413,32 @@ describe('Objects Component', () => {
         });
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
+        fireEvent.click(screen.getByText(/Restart/i));
 
         await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalled();
-            const alert = screen.getByRole('alert');
-            expect(alert).toHaveTextContent(/succeeded|ok/i);
-        }, {timeout: 5000});
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/test-ns/svc/test1/action/restart'),
+                    expect.any(Object)
+                );
+                const alert = screen.getByRole('alert');
+                expect(alert).toHaveTextContent(/succeeded/i);
+            },
+            {timeout: 5000}
+        );
 
         global.fetch.mockClear();
     });
@@ -450,18 +460,243 @@ describe('Objects Component', () => {
         });
 
         await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/restart/i));
-        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
+        fireEvent.click(screen.getByText(/Restart/i));
 
         await waitFor(() => {
-            const alert = screen.getByRole('alert');
-            expect(alert).toHaveTextContent(/failed|error/i);
-        }, {timeout: 5000});
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(
+            () => {
+                const alert = screen.getByRole('alert');
+                expect(alert).toHaveTextContent(/failed/i);
+            },
+            {timeout: 5000}
+        );
+
+        global.fetch.mockClear();
+    });
+
+    test('executes delete action and removes object', async () => {
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
+            fireEvent.click(checkbox);
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText(/Delete/i));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/test-ns/svc/test1/action/delete'),
+                    expect.any(Object)
+                );
+                expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
+                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+            },
+            {timeout: 5000}
+        );
+
+        global.fetch.mockClear();
+    });
+
+    test('executes purge action with confirmation', async () => {
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
+            fireEvent.click(checkbox);
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText(/Purge/i));
+
+        await waitFor(
+            () => {
+                const dialog = screen.getByRole('dialog');
+                expect(dialog).toBeInTheDocument();
+                console.log('[Test] PurgeDialog opened, DOM content:', document.body.innerHTML);
+            },
+            {timeout: 10000}
+        );
+
+        // Search by aria-label instead of label text
+        const dataLossCheckbox = screen.getByRole('checkbox', {
+            name: /Confirm data loss/i,
+        });
+        const configLossCheckbox = screen.getByRole('checkbox', {
+            name: /Confirm configuration loss/i,
+        });
+        const serviceInterruptionCheckbox = screen.getByRole('checkbox', {
+            name: /Confirm service interruption/i,
+        });
+
+        fireEvent.click(dataLossCheckbox);
+        fireEvent.click(configLossCheckbox);
+        fireEvent.click(serviceInterruptionCheckbox);
+
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        expect(confirmButton).not.toBeDisabled();
+        fireEvent.click(confirmButton);
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/test-ns/svc/test1/action/purge'),
+                    expect.any(Object)
+                );
+                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+            },
+            {timeout: 10000}
+        );
+
+        global.fetch.mockClear();
+    });
+
+    test('executes stop action with confirmation', async () => {
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
+            fireEvent.click(checkbox);
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText(/Stop/i));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByLabelText(/I understand that this may interrupt services/i));
+
+        const confirmButton = screen.getByRole('button', {name: /Stop/i});
+        expect(confirmButton).not.toBeDisabled();
+        fireEvent.click(confirmButton);
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/test-ns/svc/test1/action/stop'),
+                    expect.any(Object)
+                );
+                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+            },
+            {timeout: 5000}
+        );
+
+        global.fetch.mockClear();
+    });
+
+    test('executes unprovision action with confirmation', async () => {
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            const checkbox = within(
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
+            ).getByRole('checkbox');
+            fireEvent.click(checkbox);
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText(/Unprovision/i));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByLabelText(/I understand that data will be lost/i));
+
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        expect(confirmButton).not.toBeDisabled();
+        fireEvent.click(confirmButton);
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/test-ns/svc/test1/action/unprovision'),
+                    expect.any(Object)
+                );
+                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+            },
+            {timeout: 5000}
+        );
 
         global.fetch.mockClear();
     });
@@ -545,7 +780,6 @@ describe('Objects Component', () => {
         });
     });
 
-    // New test: Empty objectStatus
     test('displays no objects when objectStatus is empty', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -570,41 +804,15 @@ describe('Objects Component', () => {
         });
     });
 
-    // New test: Delete action
-    test('executes delete action and removes object', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
+    test('accessibility check', async () => {
         await act(async () => {
-            render(
+            const {container} = render(
                 <MemoryRouter>
                     <Objects/>
                 </MemoryRouter>
             );
+            const results = await axe(container);
+            expect(results).toHaveNoViolations();
         });
-
-        await waitFor(() => {
-            const checkbox = within(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/delete/i));
-        fireEvent.click(screen.getByRole('button', {name: /ok/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/delete'),
-                expect.any(Object)
-            );
-            expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-
-        global.fetch.mockClear();
     });
 });

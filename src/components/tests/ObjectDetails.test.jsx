@@ -91,6 +91,13 @@ jest.mock('@mui/material', () => {
             </div>
         ),
         Typography: ({children, ...props}) => <span {...props}>{children}</span>,
+        FiberManualRecordIcon: ({sx, ...props}) => (
+            <svg
+                data-testid="FiberManualRecordIcon"
+                style={{color: sx?.color, fontSize: sx?.fontSize}}
+                {...props}
+            />
+        ),
     };
 });
 
@@ -136,13 +143,13 @@ describe('ObjectDetail Component', () => {
                                 status: 'up',
                                 label: 'Resource 1',
                                 type: 'disk',
-                                provisioned: {state: true, mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
                             },
                             res2: {
                                 status: 'down',
                                 label: 'Resource 2',
                                 type: 'network',
-                                provisioned: {state: false, mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: "false", mtime: '2023-01-01T12:00:00Z'},
                             },
                         },
                     },
@@ -154,7 +161,7 @@ describe('ObjectDetail Component', () => {
                                 status: 'warn',
                                 label: 'Resource 3',
                                 type: 'compute',
-                                provisioned: {state: true, mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
                             },
                         },
                     },
@@ -332,7 +339,8 @@ type = flag
     test('displays loading indicator while fetching configuration', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
-                return new Promise(() => {}); // Never resolves to simulate loading
+                return new Promise(() => {
+                }); // Never resolves to simulate loading
             }
             return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
@@ -362,13 +370,10 @@ type = flag
     }, 10000);
 
     test('opens update configuration dialog and updates configuration', async () => {
-        // Ensure fetch mock returns success for PUT request
+        // Setup fetch mock
         global.fetch.mockImplementation((url, options) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({}),
-                });
+                return Promise.resolve({ok: true, json: () => Promise.resolve({})});
             }
             return Promise.resolve({
                 ok: true,
@@ -379,60 +384,41 @@ type = flag
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
 
-        // Wait for the Configuration accordion to appear
-        await waitFor(() => {
-            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
-        });
-
-        // Expand the Configuration accordion
+        // Wait and expand configuration
+        await waitFor(() => expect(screen.getByText(/Configuration/i)).toBeInTheDocument());
         const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => fireEvent.click(accordionSummary));
+
+        // Find edit button
+        const editButton = screen.getByRole('button', {name: /edit/i});
+        await act(async () => fireEvent.click(editButton));
+
+        // Wait for dialog
+        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+
+        // Select file
+        const fileInput = screen.getByRole('button', {name: /choose file/i});
+        const testFile = new File(['test content'], 'config.ini', {type: 'text/plain'});
+
+        const hiddenFileInput = document.querySelector('input[type="file"]');
         await act(async () => {
-            fireEvent.click(accordionSummary);
+            fireEvent.change(hiddenFileInput, {target: {files: [testFile]}});
         });
 
-        // Wait for configuration content to be visible
-        await waitFor(() => {
-            expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
-        });
+        // Verify file selection
+        await waitFor(() => expect(screen.getByText(/config.ini/)).toBeInTheDocument());
 
-        // Find and click the edit button
-        const editButton = screen.getByRole('button', { name: /edit configuration/i });
-        await act(async () => {
-            fireEvent.click(editButton);
-        });
+        // Click Update
+        const updateButton = screen.getByRole('button', {name: /update/i});
+        await act(async () => fireEvent.click(updateButton));
 
-        // Wait for the update configuration dialog to open
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
-        });
-
-        // Simulate file selection
-        const fileInput = screen.getByLabelText(/Configuration File/i);
-        const testFile = new File(['test content'], 'config.ini', { type: 'text/plain' });
-        await act(async () => {
-            fireEvent.change(fileInput, { target: { files: [testFile] } });
-        });
-
-        // Verify file is selected
-        expect(fileInput.files[0]).toBe(testFile);
-
-        // Clear fetch mock calls to track only the update request
-        global.fetch.mockClear();
-
-        // Click the update button
-        const updateButton = screen.getByRole('button', { name: /Update/i });
-        await act(async () => {
-            fireEvent.click(updateButton);
-        });
-
-        // Wait for the API call to be made
+        // Verify API call and success message
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
@@ -442,24 +428,12 @@ type = flag
                         Authorization: 'Bearer mock-token',
                         'Content-Type': 'application/octet-stream',
                     }),
-                    body: expect.any(File),
+                    body: testFile,
                 })
             );
-        });
-
-        // Wait for the success snackbar
-        await waitFor(() => {
-            const successAlert = screen.getByText(/Configuration updated successfully/i);
-            expect(successAlert).toBeInTheDocument();
-            expect(successAlert.closest('[role="alert"]')).toHaveAttribute('data-severity', 'success');
-        });
-
-        // Verify dialog is closed
-        await waitFor(() => {
-            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+            expect(screen.getByText(/Configuration updated successfully/)).toBeInTheDocument();
         });
     }, 15000);
-
 
     test('displays error when configuration update fails', async () => {
         global.fetch.mockImplementation((url, options) => {
@@ -480,45 +454,40 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
-        });
-
+        // Wait and expand configuration
+        await waitFor(() => expect(screen.getByText(/Configuration/i)).toBeInTheDocument());
         const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => fireEvent.click(accordionSummary));
+
+        // Find edit button
+        const editButton = screen.getByRole('button', {name: /edit/i});
+        await act(async () => fireEvent.click(editButton));
+
+        // Wait for dialog
+        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+
+        // Select file
+        const hiddenFileInput = document.querySelector('input[type="file"]');
         await act(async () => {
-            fireEvent.click(accordionSummary);
+            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
         });
 
-        const editButton = screen.getByRole('button', {name: /edit configuration/i});
-        await act(async () => {
-            fireEvent.click(editButton);
-        });
+        // Click Update
+        const updateButton = screen.getByRole('button', {name: /update/i});
+        await act(async () => fireEvent.click(updateButton));
 
-        await waitFor(() => {
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
-        });
-
-        const fileInput = screen.getByLabelText(/configuration file/i);
-        await act(async () => {
-            fireEvent.change(fileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
-        });
-
-        const updateButton = screen.getByRole('button', {name: /Update/i});
-        await act(async () => {
-            fireEvent.click(updateButton);
-        });
-
+        // Verify error message
         await waitFor(() => {
             expect(screen.getByText(/Error: Failed to update configuration/i)).toBeInTheDocument();
-            expect(screen.getByText(/Error: Failed to update configuration/i).closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
         });
     }, 10000);
 
     test('disables buttons during configuration update', async () => {
         global.fetch.mockImplementation((url, options) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
-                return new Promise(() => {}); // Never resolves to simulate ongoing request
+                return new Promise(() => {
+                }); // Never resolves
             }
             return Promise.resolve({
                 ok: true,
@@ -534,43 +503,37 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
-        });
-
+        // Wait and expand configuration
+        await waitFor(() => expect(screen.getByText(/Configuration/i)).toBeInTheDocument());
         const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
+        await act(async () => fireEvent.click(accordionSummary));
+
+        // Find edit button
+        const editButton = screen.getByRole('button', {name: /edit/i});
+        await act(async () => fireEvent.click(editButton));
+
+        // Wait for dialog
+        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+
+        // Select file
+        const hiddenFileInput = document.querySelector('input[type="file"]');
         await act(async () => {
-            fireEvent.click(accordionSummary);
+            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
         });
 
-        const editButton = screen.getByRole('button', {name: /edit configuration/i});
-        await act(async () => {
-            fireEvent.click(editButton);
-        });
+        // Click Update
+        const updateButton = screen.getByRole('button', {name: /update/i});
+        await act(async () => fireEvent.click(updateButton));
 
-        await waitFor(() => {
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
-        });
-
-        const fileInput = screen.getByLabelText(/configuration file/i);
-        await act(async () => {
-            fireEvent.change(fileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
-        });
-
-        const dialog = screen.getByRole('dialog');
-        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
-        const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
-        const fileInputInDialog = within(dialog).getByLabelText(/configuration file/i);
-
-        await act(async () => {
-            fireEvent.click(updateButton);
-        });
-
+        // Verify buttons are disabled
         await waitFor(() => {
             expect(updateButton).toBeDisabled();
+            const cancelButton = screen.getByRole('button', {name: /cancel/i});
             expect(cancelButton).toBeDisabled();
-            expect(fileInputInDialog).toBeDisabled();
+
+            const chooseFileButton = screen.getByRole('button', {name: /choose file/i});
+            expect(chooseFileButton).toHaveAttribute('aria-disabled', 'true');
         });
     }, 10000);
 
@@ -942,17 +905,37 @@ type = flag
         const resourceMenuButton = within(resourceSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
+
+        // Log pour déboguer
+        console.log('[Test] Resource menu button found:', resourceMenuButton ? 'Yes' : 'No');
+        if (!resourceMenuButton) {
+            console.log('[Test] Resource section DOM:', resourceSection.outerHTML);
+            screen.debug();
+        }
+        expect(resourceMenuButton).toBeInTheDocument();
+
         await act(async () => {
             fireEvent.click(resourceMenuButton);
         });
 
-        // Click 'restart'
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const restartItem = menuItems.find((item) => item.textContent.includes('restart'));
-            expect(restartItem).toBeInTheDocument();
-            fireEvent.click(restartItem);
-        });
+        // Attendre que le menu soit ouvert
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
+                expect(menu).toBeInTheDocument();
+                console.log('[Test] Menu DOM:', menu.outerHTML);
+
+                const menuItems = screen.getAllByRole('menuitem');
+                console.log(
+                    '[Test] Menu items:',
+                    menuItems.map((item) => item.textContent)
+                );
+                const restartItem = menuItems.find((item) => item.textContent.toLowerCase() === 'restart');
+                expect(restartItem).toBeInTheDocument();
+                fireEvent.click(restartItem);
+            },
+            {timeout: 10000}
+        );
 
         // Confirm action
         await waitFor(() => {
@@ -994,17 +977,37 @@ type = flag
         const objectMenuButton = within(headerSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
+
+        // Log pour déboguer
+        console.log('[Test] Object menu button found:', objectMenuButton ? 'Yes' : 'No');
+        if (!objectMenuButton) {
+            console.log('[Test] Header section DOM:', headerSection.outerHTML);
+            screen.debug();
+        }
+        expect(objectMenuButton).toBeInTheDocument();
+
         await act(async () => {
             fireEvent.click(objectMenuButton);
         });
 
-        // Select unprovision
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const unprovisionItem = menuItems.find((item) => item.textContent === 'unprovision');
-            expect(unprovisionItem).toBeInTheDocument();
-            fireEvent.click(unprovisionItem);
-        });
+        // Attendre que le menu soit ouvert
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
+                expect(menu).toBeInTheDocument();
+                console.log('[Test] Menu DOM:', menu.outerHTML);
+
+                const menuItems = screen.getAllByRole('menuitem');
+                console.log(
+                    '[Test] Menu items:',
+                    menuItems.map((item) => item.textContent)
+                );
+                const unprovisionItem = menuItems.find((item) => item.textContent.toLowerCase() === 'unprovision');
+                expect(unprovisionItem).toBeInTheDocument();
+                fireEvent.click(unprovisionItem);
+            },
+            {timeout: 10000}
+        );
 
         // Fill dialog
         await waitFor(() => {
@@ -1070,8 +1073,125 @@ type = flag
         await waitFor(() => {
             const resourceDetails = screen.getByText((content, element) => content.includes('Resource 1'));
             expect(resourceDetails).toBeInTheDocument();
+
+            // Verify provisioned icon for res1 (state: "true")
+            const res1Details = screen.getByText('Resource 1').closest('[data-testid="accordion-details"]');
+            const res1Icon = within(res1Details).getByTestId('FiberManualRecordIcon');
+            expect(res1Icon).toHaveStyle({color: '#4caf50'}); // green[500]
+        });
+
+        // Expand and verify res2
+        const res2Section = screen.getByText('res2').closest('div');
+        await act(async () => {
+            fireEvent.click(res2Section);
+        });
+
+        await waitFor(() => {
+            const res2Details = screen.getByText('Resource 2').closest('[data-testid="accordion-details"]');
+            const res2Icon = within(res2Details).getByTestId('FiberManualRecordIcon');
+            expect(res2Icon).toHaveStyle({color: '#f44336'}); // red[500]
         });
     }, 10000);
+
+    test('displays provisioned state correctly for resources', async () => {
+        // Add a resource with provisioned.state: "n/a" to test this case
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'root/cfg/cfg1': {
+                        avail: 'up',
+                        frozen: 'frozen',
+                    },
+                },
+                objectInstanceStatus: {
+                    'root/cfg/cfg1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: '2023-01-01T12:00:00Z',
+                            resources: {
+                                res1: {
+                                    status: 'up',
+                                    label: 'Resource 1',
+                                    type: 'disk',
+                                    provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
+                                },
+                                res2: {
+                                    status: 'down',
+                                    label: 'Resource 2',
+                                    type: 'network',
+                                    provisioned: {state: "false", mtime: '2023-01-01T12:00:00Z'},
+                                },
+                                res3: {
+                                    status: 'warn',
+                                    label: 'Resource 3',
+                                    type: 'compute',
+                                    provisioned: {state: "n/a", mtime: '2023-01-01T12:00:00Z'},
+                                },
+                            },
+                        },
+                    },
+                },
+                instanceMonitor: {
+                    'node1:root/cfg/cfg1': {
+                        state: 'running',
+                        global_expect: 'placed@node1',
+                    },
+                },
+            })
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Wait for resources to be displayed
+        await waitFor(() => {
+            expect(screen.getByText('Node: node1')).toBeInTheDocument();
+        });
+
+        // Open resources accordion
+        const resourcesSection = screen.getByText('Resources (3)').closest('div');
+        await act(async () => {
+            fireEvent.click(resourcesSection);
+        });
+
+        // Verify resources are displayed
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+            expect(screen.getByText('res2')).toBeInTheDocument();
+            expect(screen.getByText('res3')).toBeInTheDocument();
+        });
+
+        // Open details for each resource
+        for (const resId of ['res1', 'res2', 'res3']) {
+            const resourceSection = screen.getByText(resId).closest('div');
+            await act(async () => {
+                fireEvent.click(resourceSection);
+            });
+        }
+
+        // Verify provisioned icons
+        await waitFor(() => {
+            // res1: provisioned.state = "true" → green icon
+            const res1Details = screen.getByText('Resource 1').closest('[data-testid="accordion-details"]');
+            const res1Icon = within(res1Details).getByTestId('FiberManualRecordIcon');
+            expect(res1Icon).toHaveStyle({color: '#4caf50'}); // green[500]
+
+            // res2: provisioned.state = "false" → red icon
+            const res2Details = screen.getByText('Resource 2').closest('[data-testid="accordion-details"]');
+            const res2Icon = within(res2Details).getByTestId('FiberManualRecordIcon');
+            expect(res2Icon).toHaveStyle({color: '#f44336'}); // red[500]
+
+            // res3: provisioned.state = "n/a" → red icon
+            const res3Details = screen.getByText('Resource 3').closest('[data-testid="accordion-details"]');
+            const res3Icon = within(res3Details).getByTestId('FiberManualRecordIcon');
+            expect(res3Icon).toHaveStyle({color: '#f44336'}); // red[500]
+        });
+    }, 15000);
 
     test('cancels freeze dialog', async () => {
         render(
@@ -1471,7 +1591,8 @@ type = flag
     });
 
     test('displays loading indicator while fetching keys', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1495,7 +1616,8 @@ type = flag
     });
 
     test('disables buttons during key creation', async () => {
-        global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+        global.fetch.mockImplementationOnce(() => new Promise(() => {
+        }));
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>

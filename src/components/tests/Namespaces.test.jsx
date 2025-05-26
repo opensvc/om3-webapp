@@ -241,7 +241,7 @@ describe('Namespaces Component', () => {
         });
     });
 
-    test('renders empty table when no data is available', async () => {
+    test('displays no namespaces message when no data is available', async () => {
         useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
 
         render(
@@ -252,7 +252,45 @@ describe('Namespaces Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('Namespaces Status Overview')).toBeInTheDocument();
-            expect(screen.getByTestId('table-body').children).toHaveLength(0);
+            expect(screen.getByText(/No namespaces available/i)).toBeInTheDocument();
+            expect(screen.getByTestId('table-body').children).toHaveLength(1);
+        });
+    });
+
+    test('handles malformed objectStatus data', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'invalid': { avail: 'error' }, // Invalid key, assigned to 'root' with 'unknown'
+                    'prod/svc/valid': { avail: 'up' },
+                },
+            })
+        );
+
+        render(
+            <MemoryRouter>
+                <Namespaces />
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            // Vérifier le namespace 'prod'
+            const prodRow = screen.getByText('prod').closest('tr');
+            const prodCells = within(prodRow).getAllByTestId('table-cell');
+            expect(prodCells[1]).toHaveTextContent('1'); // Up
+            expect(prodCells[2]).toHaveTextContent('0'); // Down
+            expect(prodCells[3]).toHaveTextContent('0'); // Warn
+            expect(prodCells[4]).toHaveTextContent('0'); // Unknown
+            expect(prodCells[5]).toHaveTextContent('1'); // Total
+
+            // Vérifier le namespace 'root' pour la clé 'invalid'
+            const rootRow = screen.getByText('root').closest('tr');
+            const rootCells = within(rootRow).getAllByTestId('table-cell');
+            expect(rootCells[1]).toHaveTextContent('0'); // Up
+            expect(rootCells[2]).toHaveTextContent('0'); // Down
+            expect(rootCells[3]).toHaveTextContent('0'); // Warn
+            expect(rootCells[4]).toHaveTextContent('1'); // Unknown (from 'error')
+            expect(rootCells[5]).toHaveTextContent('1'); // Total
         });
     });
 });

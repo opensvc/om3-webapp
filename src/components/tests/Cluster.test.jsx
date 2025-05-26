@@ -1,10 +1,13 @@
 import {render, screen, waitFor, fireEvent, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import axios from 'axios';
+import {toHaveNoViolations} from 'jest-axe';
 import ClusterOverview from '../Cluster.jsx';
 import useEventStore from '../../hooks/useEventStore.js';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {URL_POOL} from '../../config/apiPath.js';
+
+expect.extend(toHaveNoViolations);
 
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -202,4 +205,22 @@ describe('ClusterOverview', () => {
         expect(mockStartEventReception).not.toHaveBeenCalled();
         expect(axios.get).not.toHaveBeenCalled();
     });
+
+
+    test('handles API error for pools', async () => {
+        jest.spyOn(axios, 'get').mockRejectedValue(new Error('Network error'));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            const poolsCard = screen.getByRole('button', {name: /Pools stat card/i});
+            expect(within(poolsCard).getByText('0')).toBeInTheDocument();
+        }, {timeout: 2000});
+    });
+
+
 });

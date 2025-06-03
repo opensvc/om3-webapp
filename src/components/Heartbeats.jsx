@@ -1,4 +1,5 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useState, useMemo} from "react";
+import {useLocation} from "react-router-dom";
 import {
     Box,
     Paper,
@@ -9,32 +10,34 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    Tooltip,
-    Chip
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Button,
+    Collapse,
 } from "@mui/material";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource} from "../eventSourceManager.jsx";
 
-export const getStreamStatus = (stream) => {
-    if (!stream) return {state: "Unknown"};
-    const peer = Object.values(stream.peers || {})[0];
-    if (stream.state !== "running") return {state: "Stopped"};
-    return {state: peer?.is_beating ? "Beating" : "Idle"};
-};
-
-const extractHeartbeatIds = (streams = []) => {
-    return [...new Set(streams.map(s => s.id.split('.')[0]))].sort();
-};
-
 const Heartbeats = () => {
+    const location = useLocation();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const nodes = Object.keys(heartbeatStatus || {});
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
-    const columnCount = nodes[0] && heartbeatStatus[nodes[0]]?.streams?.length
-        ? extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).length
-        : 0;
+    // Get initial status from URL
+    const initialStatus = useMemo(() => {
+        const params = new URLSearchParams(location.search);
+        const status = params.get("status");
+        return ["all", "beating", "non-beating"].includes(status) ? status : "all";
+    }, [location.search]);
+
+    const [filterBeating, setFilterBeating] = useState(initialStatus);
+    const [filterNode, setFilterNode] = useState("all");
+    const [showFilters, setShowFilters] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -45,6 +48,34 @@ const Heartbeats = () => {
         return () => closeEventSource();
     }, []);
 
+    const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
+
+    const streamRows = [];
+    Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
+        (nodeData.streams || []).forEach((stream) => {
+            const peerKey = Object.keys(stream.peers || {})[0];
+            const peerData = stream.peers?.[peerKey];
+            streamRows.push({
+                id: stream.id,
+                node: node,
+                peer: peerKey || "N/A",
+                type: stream.type || "N/A",
+                desc: peerData?.desc || "N/A",
+                isBeating: peerData?.is_beating || false,
+                lastAt: peerData?.last_at || "N/A",
+            });
+        });
+    });
+
+    const filteredRows = streamRows.filter((row) => {
+        const matchesBeating =
+            filterBeating === "all" ||
+            (filterBeating === "beating" && row.isBeating === true) ||
+            (filterBeating === "non-beating" && row.isBeating === false);
+        const matchesNode = filterNode === "all" || row.node === filterNode;
+        return matchesBeating && matchesNode;
+    });
+
     return (
         <Box sx={{p: 4}}>
             <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
@@ -52,85 +83,105 @@ const Heartbeats = () => {
                     Heartbeats
                 </Typography>
 
-                <Box sx={{overflowX: "auto"}}>
-                    <TableContainer>
-                        <Table
-                            size="small"
+                <Box
+                    sx={{
+                        position: "sticky",
+                        top: 64,
+                        zIndex: 10,
+                        backgroundColor: "background.paper",
+                        pt: 2,
+                        pb: 1,
+                        mb: 2,
+                    }}
+                >
+                    <Box
+                        sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 1,
+                        }}
+                    >
+                        <Button
+                            onClick={() => setShowFilters(!showFilters)}
+                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                            aria-label={showFilters ? "Hide filters" : "Show filters"}
+                        >
+                            {showFilters ? "Hide filters" : "Show filters"}
+                        </Button>
+                    </Box>
+
+                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                        <Box
                             sx={{
-                                tableLayout: "fixed",
-                                minWidth: 200 + columnCount * 100,
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 2,
+                                alignItems: "center",
+                                pb: 2,
                             }}
                         >
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
-                                    {nodes[0] &&
-                                        extractHeartbeatIds(heartbeatStatus[nodes[0]].streams).map(hbId => (
-                                            <TableCell key={hbId} align="center" sx={{fontWeight: "bold"}}>
-                                                {hbId}
-                                            </TableCell>
-                                        ))}
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {nodes.map(node => {
-                                    const heartbeatIds = extractHeartbeatIds(heartbeatStatus[node]?.streams);
-                                    return (
-                                        <TableRow key={node} hover>
-                                            <TableCell>{node}</TableCell>
-                                            {heartbeatIds.map(hbId => {
-                                                const rx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.rx`);
-                                                const tx = heartbeatStatus[node].streams.find(s => s.id === `${hbId}.tx`);
-
-                                                return (
-                                                    <TableCell
-                                                        key={`${node}-${hbId}`}
-                                                        align="center"
-                                                        sx={{padding: '6px 4px'}}
-                                                    >
-                                                        <Box sx={{
-                                                            display: 'flex',
-                                                            justifyContent: 'center',
-                                                            gap: '8px',
-                                                            flexWrap: 'wrap',
-                                                        }}>
-                                                            <Tooltip title={`rx: ${getStreamStatus(rx).state}`}>
-                                                                <Chip
-                                                                    size="small"
-                                                                    label="rx"
-                                                                    sx={{
-                                                                        backgroundColor: getStreamStatus(rx).state === 'Beating' ? 'success.main' : 'error.main',
-                                                                        color: 'white',
-                                                                        height: 24,
-                                                                        fontSize: '0.75rem',
-                                                                        px: 1.5,
-                                                                    }}
-                                                                />
-                                                            </Tooltip>
-                                                            <Tooltip title={`tx: ${getStreamStatus(tx).state}`}>
-                                                                <Chip
-                                                                    size="small"
-                                                                    label="tx"
-                                                                    sx={{
-                                                                        backgroundColor: getStreamStatus(tx).state === 'Beating' ? 'success.main' : 'error.main',
-                                                                        color: 'white',
-                                                                        height: 24,
-                                                                        fontSize: '0.75rem',
-                                                                        px: 1.5,
-                                                                    }}
-                                                                />
-                                                            </Tooltip>
-                                                        </Box>
-                                                    </TableCell>
-                                                );
-                                            })}
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                            <FormControl sx={{minWidth: 200}} id="filter-beating-control">
+                                <InputLabel id="filter-beating-label">Filter by Status</InputLabel>
+                                <Select
+                                    labelId="filter-beating-label"
+                                    value={filterBeating}
+                                    label="Filter by Status"
+                                    onChange={(e) => setFilterBeating(e.target.value)}
+                                >
+                                    <MenuItem value="all">All</MenuItem>
+                                    <MenuItem value="beating">Beating</MenuItem>
+                                    <MenuItem value="non-beating">Non-Beating</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControl sx={{minWidth: 200}}>
+                                <InputLabel id="filter-node-label">Filter by Node</InputLabel>
+                                <Select
+                                    labelId="filter-node-label"
+                                    value={filterNode}
+                                    label="Filter by Node"
+                                    onChange={(e) => setFilterNode(e.target.value)}
+                                >
+                                    <MenuItem value="all">All</MenuItem>
+                                    {nodes.map((node) => (
+                                        <MenuItem key={node} value={node}>
+                                            {node}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
+                    </Collapse>
                 </Box>
+
+                <TableContainer>
+                    <Table size="small" sx={{minWidth: 650}}>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell sx={{fontWeight: "bold"}}>STATUS</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>ID</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>NODE</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>PEER</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>TYPE</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>DESC</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>LAST_AT</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredRows.map((row, index) => (
+                                <TableRow key={index} hover>
+                                    <TableCell>{row.isBeating ? "✅" : "❌"}</TableCell>
+                                    <TableCell>{row.id}</TableCell>
+                                    <TableCell>{row.node}</TableCell>
+                                    <TableCell>{row.peer}</TableCell>
+                                    <TableCell>{row.type}</TableCell>
+                                    <TableCell>{row.desc}</TableCell>
+                                    <TableCell>{row.lastAt}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
             </Paper>
         </Box>
     );

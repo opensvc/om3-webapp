@@ -132,7 +132,11 @@ const ClusterOverview = () => {
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
                     nonBeatingCount={nonBeatingCount}
-                    onClick={() => navigate("/heartbeats")}
+                    onClick={(status) => {
+                        const url = status ? `/heartbeats?status=${status}` : '/heartbeats';
+                        console.log('[ClusterOverview] Navigating to:', url);
+                        navigate(url);
+                    }}
                 />
                 <GridPools
                     poolCount={poolCount}

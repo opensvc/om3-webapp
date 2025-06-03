@@ -73,8 +73,32 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, o
         <StatCard
             title="Heartbeats"
             value={heartbeatCount}
-            subtitle={`Beating: ${beatingCount} | Non-Beating: ${nonBeatingCount}`}
-            onClick={onClick}
+            subtitle={
+                <>
+                    <Chip
+                        label={`Beating ${beatingCount}`}
+                        size="small"
+                        sx={{backgroundColor: 'green', color: 'white', mr: 1, cursor: 'pointer'}}
+                        onClick={() => {
+                            console.log('[ClusterStatGrids] Clicked Beating chip');
+                            onClick('beating');
+                        }}
+                    />
+                    <Chip
+                        label={`Non-Beating ${nonBeatingCount}`}
+                        size="small"
+                        sx={{backgroundColor: 'red', color: 'white', cursor: 'pointer'}}
+                        onClick={() => {
+                            console.log('[ClusterStatGrids] Clicked Non-Beating chip');
+                            onClick('non-beating');
+                        }}
+                    />
+                </>
+            }
+            onClick={() => {
+                console.log('[ClusterStatGrids] Clicked Heartbeats card');
+                onClick();
+            }}
         />
     </Grid2>
 );

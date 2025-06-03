@@ -1,7 +1,8 @@
 import React from "react";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
-import Heartbeats, {getStreamStatus} from "../Heartbeats";
+import {BrowserRouter} from "react-router-dom";
+import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource} from "../../eventSourceManager.jsx";
@@ -20,8 +21,13 @@ const mockLocalStorage = {
 Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
 
 const theme = createTheme();
-const renderWithTheme = (ui) =>
-    render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const renderWithTheme = (ui, {initialPath = "/"} = {}) => {
+    return render(
+        <BrowserRouter initialEntries={[initialPath]}>
+            <ThemeProvider theme={theme}>{ui}</ThemeProvider>
+        </BrowserRouter>
+    );
+};
 
 describe("Heartbeats Component", () => {
     const mockFetchNodes = jest.fn();
@@ -48,7 +54,7 @@ describe("Heartbeats Component", () => {
 
         expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
         expect(screen.getByRole("table")).toBeInTheDocument();
-        expect(screen.getByText("Node")).toBeInTheDocument();
+        expect(screen.getByText("NODE")).toBeInTheDocument();
     });
 
     test("renders node with heartbeat statuses", async () => {
@@ -60,12 +66,26 @@ describe("Heartbeats Component", () => {
                             {
                                 id: "hb#1.rx",
                                 state: "running",
-                                peers: { peer1: { is_beating: true } },
+                                peers: {
+                                    peer1: {
+                                        is_beating: true,
+                                        desc: ":10011 ← peer1",
+                                        last_at: "2025-06-03T04:25:31+00:00",
+                                    },
+                                },
+                                type: "unicast",
                             },
                             {
                                 id: "hb#1.tx",
                                 state: "running",
-                                peers: { peer1: { is_beating: false } },
+                                peers: {
+                                    peer1: {
+                                        is_beating: false,
+                                        desc: "→ peer1:10011",
+                                        last_at: "2025-06-03T04:25:31+00:00",
+                                    },
+                                },
+                                type: "unicast",
                             },
                         ],
                     },
@@ -73,68 +93,72 @@ describe("Heartbeats Component", () => {
             })
         );
 
-        renderWithTheme(<Heartbeats />);
+        renderWithTheme(<Heartbeats/>);
 
         await waitFor(() => {
-            const rxChip = screen.getByText("rx").closest(".MuiChip-root");
-            const txChip = screen.getByText("tx").closest(".MuiChip-root");
+            const rows = screen.getAllByRole("row");
+            const dataRows = rows.slice(1);
+            expect(dataRows).toHaveLength(2);
 
-            const rxColor = window.getComputedStyle(rxChip).backgroundColor;
-            const txColor = window.getComputedStyle(txChip).backgroundColor;
+            const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+            expect(firstRowCells[0]).toHaveTextContent("✅");
+            expect(firstRowCells[1]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[2]).toHaveTextContent("node1");
+            expect(firstRowCells[3]).toHaveTextContent("peer1");
 
-            expect(rxColor).toBe("rgb(46, 125, 50)"); // green (success.main)
-            expect(txColor).toBe("rgb(211, 47, 47)"); // red (error.main)
+            const secondRowCells = within(dataRows[1]).getAllByRole("cell");
+            expect(secondRowCells[0]).toHaveTextContent("❌");
+            expect(secondRowCells[1]).toHaveTextContent("hb#1.tx");
+            expect(secondRowCells[2]).toHaveTextContent("node1");
+            expect(firstRowCells[3]).toHaveTextContent("peer1");
         });
     });
 
-
-    test("handles unknown status", async () => {
+    test("handles missing peer data", async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
                 heartbeatStatus: {
                     node1: {
                         streams: [
-                            { id: "hb#1.rx", state: "unknown" },
-                            { id: "hb#1.tx", state: "unknown" },
+                            {
+                                id: "hb#1.rx",
+                                state: "running",
+                                peers: {},
+                                type: "unicast",
+                            },
+                            {
+                                id: "hb#1.tx",
+                                state: "running",
+                                peers: {},
+                                type: "unicast",
+                            },
                         ],
                     },
                 },
             })
         );
 
-        renderWithTheme(<Heartbeats />);
+        renderWithTheme(<Heartbeats/>);
 
         await waitFor(() => {
-            const rxChip = screen.getByText("rx").closest(".MuiChip-root");
-            const txChip = screen.getByText("tx").closest(".MuiChip-root");
+            const rows = screen.getAllByRole("row");
+            const dataRows = rows.slice(1);
+            expect(dataRows).toHaveLength(2);
 
-            const rxColor = window.getComputedStyle(rxChip).backgroundColor;
-            const txColor = window.getComputedStyle(txChip).backgroundColor;
+            const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+            expect(firstRowCells[0]).toHaveTextContent("❌");
+            expect(firstRowCells[1]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[2]).toHaveTextContent("node1");
+            expect(firstRowCells[3]).toHaveTextContent("N/A");
+            expect(firstRowCells[5]).toHaveTextContent("N/A");
+            expect(firstRowCells[6]).toHaveTextContent("N/A");
 
-            expect(rxColor).toBe("rgb(211, 47, 47)"); // red
-            expect(txColor).toBe("rgb(211, 47, 47)"); // red
+            const secondRowCells = within(dataRows[1]).getAllByRole("cell");
+            expect(secondRowCells[0]).toHaveTextContent("❌");
+            expect(secondRowCells[1]).toHaveTextContent("hb#1.tx");
+            expect(secondRowCells[2]).toHaveTextContent("node1");
+            expect(secondRowCells[3]).toHaveTextContent("N/A");
         });
-    });
-
-
-    test("getStreamStatus returns correct states", () => {
-        expect(
-            getStreamStatus({
-                state: "running",
-                peers: {peer1: {is_beating: true}},
-            })
-        ).toEqual({state: "Beating"});
-
-        expect(
-            getStreamStatus({
-                state: "running",
-                peers: {peer1: {is_beating: false}},
-            })
-        ).toEqual({state: "Idle"});
-
-        expect(getStreamStatus({state: "stopped"})).toEqual({state: "Stopped"});
-
-        expect(getStreamStatus(null)).toEqual({state: "Unknown"});
     });
 
     test("initializes with auth token", async () => {
@@ -148,10 +172,12 @@ describe("Heartbeats Component", () => {
         });
     });
 
-    test("cleans up on unmount", () => {
+    test("cleans up on unmount", async () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
         const {unmount} = renderWithTheme(<Heartbeats/>);
         unmount();
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockCloseEventSource).toHaveBeenCalled();
+        });
     });
 });

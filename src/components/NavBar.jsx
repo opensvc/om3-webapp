@@ -3,8 +3,8 @@ import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
 import {FaSignOutAlt, FaUser} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
-import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
 import {useEffect, useState} from "react";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 
 const NavBar = () => {
     const {userManager} = useOidc();
@@ -12,30 +12,35 @@ const NavBar = () => {
     const auth = useAuth();
     const location = useLocation();
     const authDispatch = useAuthDispatch();
-    const [clusterName, setClusterName] = useState("");
+    const {clusterName, fetchNodes} = useFetchDaemonStatus();
+    const [breadcrumb, setBreadcrumb] = useState([]);
 
     useEffect(() => {
-        const fetchClusterName = async () => {
-            const token = localStorage.getItem("authToken");
-            if (!token) return;
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+        }
+    }, [fetchNodes]);
 
-            try {
-                const response = await fetch(URL_CLUSTER_STATUS, {
-                    headers: {Authorization: `Bearer ${token}`},
+    useEffect(() => {
+        const pathParts = location.pathname.split("/").filter(Boolean);
+        const breadcrumbItems = [];
+
+        if (pathParts[0] !== "login") {
+            breadcrumbItems.push({name: clusterName || "Cluster", path: "/cluster"});
+
+            if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
+                pathParts.forEach((part, index) => {
+                    const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                    if (part !== "cluster") {
+                        breadcrumbItems.push({name: part, path: fullPath});
+                    }
                 });
-
-                if (!response.ok) throw new Error("Failed to fetch cluster status");
-
-                const data = await response.json();
-                setClusterName(data.cluster.config.name);
-            } catch (error) {
-                console.error("Error fetching cluster name:", error);
-                setClusterName("Cluster");
             }
-        };
+        }
 
-        fetchClusterName();
-    }, []);
+        setBreadcrumb(breadcrumbItems);
+    }, [location.pathname, clusterName]);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {
@@ -46,34 +51,6 @@ const NavBar = () => {
         authDispatch({type: Logout});
         navigate("/auth-choice");
     };
-
-    const getBreadcrumbItems = () => {
-        const pathParts = location.pathname.split("/").filter(Boolean);
-        const breadcrumbItems = [];
-
-        if (pathParts[0] === "login") {
-            return breadcrumbItems;
-        }
-
-        if (clusterName) {
-            breadcrumbItems.push({name: clusterName, path: "/cluster"});
-        } else {
-            breadcrumbItems.push({name: "Cluster", path: "/cluster"});
-        }
-
-        if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
-            pathParts.forEach((part, index) => {
-                const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-                if (part !== "cluster") {
-                    breadcrumbItems.push({name: part, path: fullPath});
-                }
-            });
-        }
-
-        return breadcrumbItems;
-    };
-
-    const breadcrumb = getBreadcrumbItems();
 
     return (
         <AppBar position="sticky">

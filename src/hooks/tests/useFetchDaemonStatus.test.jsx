@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import React, {useEffect} from 'react';
+import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import useFetchDaemonStatus from '../useFetchDaemonStatus';
-import { fetchDaemonStatus } from '../../services/api';
-import { createEventSource, closeEventSource } from '../../eventSourceManager';
-import { URL_NODE_EVENT } from '../../config/apiPath.js';
+import {fetchDaemonStatus} from '../../services/api';
+import {createEventSource, closeEventSource} from '../../eventSourceManager';
+import {URL_NODE_EVENT} from '../../config/apiPath.js';
 
 // Mock dependencies
 jest.mock('../../services/api');
@@ -13,7 +13,7 @@ jest.mock('../../config/apiPath.js', () => ({
 }));
 
 // Test component to use the hook
-const TestComponent = ({ token, autoFetch = false }) => {
+const TestComponent = ({token, autoFetch = false}) => {
     const {
         nodes,
         daemon,
@@ -51,11 +51,12 @@ const TestComponent = ({ token, autoFetch = false }) => {
 describe('useFetchDaemonStatus Hook', () => {
     const mockToken = 'mock-token';
     const mockDaemonStatus = {
-        daemon: { status: 'running' },
+        daemon: {status: 'running'},
         cluster: {
+            config: {name: 'test-cluster'}, // ✅ Ajout nécessaire pour éviter l'erreur
             node: {
-                node1: { status: 'active' },
-                node2: { status: 'inactive' },
+                node1: {status: 'active'},
+                node2: {status: 'inactive'},
             },
         },
     };
@@ -65,11 +66,11 @@ describe('useFetchDaemonStatus Hook', () => {
         fetchDaemonStatus.mockReset();
         createEventSource.mockReset();
         closeEventSource.mockReset();
-        console.error = jest.fn(); // Mock console.error to capture errors
+        console.error = jest.fn(); // Pour capturer les erreurs dans les tests
     });
 
     test('initializes with correct default states', () => {
-        render(<TestComponent token={mockToken} />);
+        render(<TestComponent token={mockToken}/>);
 
         expect(screen.getByTestId('nodes').textContent).toBe('[]');
         expect(screen.getByTestId('daemon').textContent).toBe('{}');
@@ -83,21 +84,21 @@ describe('useFetchDaemonStatus Hook', () => {
     test('fetchNodes updates states on successful API call', async () => {
         fetchDaemonStatus.mockResolvedValue(mockDaemonStatus);
 
-        render(<TestComponent token={mockToken} />);
+        render(<TestComponent token={mockToken}/>);
 
         fireEvent.click(screen.getByTestId('fetchNodes'));
 
         await waitFor(() => {
             expect(screen.getByTestId('loading').textContent).toBe('false');
             expect(screen.getByTestId('error').textContent).toBe('');
-            expect(screen.getByTestId('daemon').textContent).toBe(JSON.stringify({ status: 'running' }));
+            expect(screen.getByTestId('daemon').textContent).toBe(JSON.stringify({status: 'running'}));
             expect(screen.getByTestId('nodes').textContent).toBe(
                 JSON.stringify([
-                    { nodename: 'node1', status: 'active' },
-                    { nodename: 'node2', status: 'inactive' },
+                    {nodename: 'node1', status: 'active'},
+                    {nodename: 'node2', status: 'inactive'},
                 ])
             );
-            expect(screen.getByTestId('clusterStats').textContent).toBe(JSON.stringify({ nodeCount: 2 }));
+            expect(screen.getByTestId('clusterStats').textContent).toBe(JSON.stringify({nodeCount: 2}));
         });
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
@@ -107,7 +108,7 @@ describe('useFetchDaemonStatus Hook', () => {
         const errorMessage = 'Network error';
         fetchDaemonStatus.mockRejectedValue(new Error(errorMessage));
 
-        render(<TestComponent token={mockToken} />);
+        render(<TestComponent token={mockToken}/>);
 
         fireEvent.click(screen.getByTestId('fetchNodes'));
 
@@ -124,37 +125,38 @@ describe('useFetchDaemonStatus Hook', () => {
     });
 
     test('startEventReception creates SSE connection with valid token', () => {
-        const mockEventSource = { id: 'mock-event-source' };
+        const mockEventSource = {id: 'mock-event-source'};
         createEventSource.mockReturnValue(mockEventSource);
 
-        render(<TestComponent token={mockToken} />);
+        render(<TestComponent token={mockToken}/>);
 
         fireEvent.click(screen.getByTestId('startEventReception'));
 
-        expect(createEventSource).toHaveBeenCalledWith(URL_NODE_EVENT, mockToken);
+        expect(createEventSource).toHaveBeenCalledWith('/mock-node-event', mockToken);
         expect(closeEventSource).not.toHaveBeenCalled();
         expect(console.error).not.toHaveBeenCalled();
     });
 
     test('startEventReception closes previous SSE connection before creating new one', () => {
-        const mockEventSource1 = { id: 'mock-event-source-1' };
-        const mockEventSource2 = { id: 'mock-event-source-2' };
+        const mockEventSource1 = {id: 'mock-event-source-1'};
+        const mockEventSource2 = {id: 'mock-event-source-2'};
+
         createEventSource
             .mockReturnValueOnce(mockEventSource1)
             .mockReturnValueOnce(mockEventSource2);
 
-        render(<TestComponent token={mockToken} />);
+        render(<TestComponent token={mockToken}/>);
 
         fireEvent.click(screen.getByTestId('startEventReception'));
         fireEvent.click(screen.getByTestId('startEventReception'));
 
         expect(closeEventSource).toHaveBeenCalledWith(mockEventSource1);
         expect(createEventSource).toHaveBeenCalledTimes(2);
-        expect(createEventSource).toHaveBeenCalledWith(URL_NODE_EVENT, mockToken);
+        expect(createEventSource).toHaveBeenCalledWith('/mock-node-event', mockToken);
     });
 
     test('startEventReception handles missing token', () => {
-        render(<TestComponent token={null} />);
+        render(<TestComponent token={null}/>);
 
         fireEvent.click(screen.getByTestId('startEventReception'));
 
@@ -166,16 +168,16 @@ describe('useFetchDaemonStatus Hook', () => {
     test('fetchNodes caches nodes correctly', async () => {
         fetchDaemonStatus.mockResolvedValue(mockDaemonStatus);
 
-        render(<TestComponent token={mockToken} autoFetch={true} />);
+        render(<TestComponent token={mockToken} autoFetch={true}/>);
 
         await waitFor(() => {
             expect(screen.getByTestId('nodes').textContent).toBe(
                 JSON.stringify([
-                    { nodename: 'node1', status: 'active' },
-                    { nodename: 'node2', status: 'inactive' },
+                    {nodename: 'node1', status: 'active'},
+                    {nodename: 'node2', status: 'inactive'},
                 ])
             );
-            expect(screen.getByTestId('clusterStats').textContent).toBe(JSON.stringify({ nodeCount: 2 }));
+            expect(screen.getByTestId('clusterStats').textContent).toBe(JSON.stringify({nodeCount: 2}));
         });
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);

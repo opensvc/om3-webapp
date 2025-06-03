@@ -80,11 +80,24 @@ const ClusterOverview = () => {
         .join(" | ");
 
     const heartbeatIds = new Set();
+    let beatingCount = 0;
+    let nonBeatingCount = 0;
+
     Object.values(heartbeatStatus).forEach(node => {
+        let isBeating = false;
         (node.streams || []).forEach(stream => {
+            const peer = Object.values(stream.peers || {})[0];
+            if (peer?.is_beating) {
+                isBeating = true;
+            }
             const baseId = stream.id.split('.')[0];
             heartbeatIds.add(baseId);
         });
+        if (isBeating) {
+            beatingCount++;
+        } else {
+            nonBeatingCount++;
+        }
     });
     const heartbeatCount = heartbeatIds.size;
 
@@ -117,6 +130,8 @@ const ClusterOverview = () => {
                 />
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
+                    beatingCount={beatingCount}
+                    nonBeatingCount={nonBeatingCount}
                     onClick={() => navigate("/heartbeats")}
                 />
                 <GridPools

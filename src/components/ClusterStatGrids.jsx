@@ -68,11 +68,12 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
     </Grid2>
 );
 
-export const GridHeartbeats = ({heartbeatCount, onClick}) => (
+export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, onClick}) => (
     <Grid2 size={{xs: 12, md: 4}}>
         <StatCard
             title="Heartbeats"
             value={heartbeatCount}
+            subtitle={`Beating: ${beatingCount} | Non-Beating: ${nonBeatingCount}`}
             onClick={onClick}
         />
     </Grid2>

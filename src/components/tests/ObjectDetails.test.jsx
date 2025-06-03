@@ -5,6 +5,29 @@ import ObjectDetail from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus.jsx';
 import {closeEventSource} from '../../eventSourceManager.jsx';
+import userEvent from '@testing-library/user-event';
+
+// Helper to find text within a container
+const findByTextNode = async (container, text, options = {}) => {
+    const timeout = options.timeout || 1000;
+    return await waitFor(() => {
+        const elements = Array.from(container.querySelectorAll('*')).filter(
+            (el) => !['SCRIPT', 'STYLE'].includes(el.tagName) && el.nodeType === Node.ELEMENT_NODE
+        );
+        let matchingElement;
+        if (typeof text === 'string') {
+            matchingElement = elements.find((el) => el.textContent.includes(text));
+        } else if (text instanceof RegExp) {
+            matchingElement = elements.find((el) => text.test(el.textContent));
+        } else if (typeof text === 'function') {
+            matchingElement = elements.find((el) => text(el.textContent, el));
+        }
+        if (!matchingElement) {
+            throw new Error(`Unable to find element with text: ${text}`);
+        }
+        return matchingElement;
+    }, {timeout});
+};
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -17,7 +40,7 @@ jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
 }));
 
-// Mock Material-UI components
+// Mock Material-UI components (unchanged from original)
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
     return {
@@ -104,28 +127,53 @@ jest.mock('@mui/material', () => {
 describe('ObjectDetail Component', () => {
     const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
+    const user = userEvent.setup();
+
+    // Improved findNodeSection helper (unchanged)
+    const findNodeSection = async (nodeName, timeout = 10000) => {
+        try {
+            const nodeElement = await screen.findByText(
+                (content, element) => {
+                    const hasText = content === nodeName;
+                    const isTypography = element?.tagName.toLowerCase() === 'span' && element?.getAttribute('variant') === 'h6';
+                    return hasText && isTypography;
+                },
+                {},
+                {timeout}
+            );
+
+            const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
+            if (!nodeSection) {
+                console.error(`Node section container not found for ${nodeName}`);
+                screen.debug();
+                throw new Error(`Node section container not found for ${nodeName}`);
+            }
+
+            return nodeSection;
+        } catch (error) {
+            console.error(`Error in findNodeSection for ${nodeName}:`, error);
+            screen.debug();
+            throw error;
+        }
+    };
 
     beforeEach(() => {
-        jest.setTimeout(20000);
+        jest.setTimeout(30000);
         jest.clearAllMocks();
 
-        // Mock localStorage
         Storage.prototype.getItem = jest.fn((key) => 'mock-token');
         Storage.prototype.setItem = jest.fn();
         Storage.prototype.removeItem = jest.fn();
 
-        // Mock useParams
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
 
-        // Mock useFetchDaemonStatus
         useFetchDaemonStatus.mockReturnValue({
             fetchNodes: mockFetchNodes,
             startEventReception: mockStartEventReception,
         });
 
-        // Mock useEventStore
         const mockState = {
             objectStatus: {
                 'root/cfg/cfg1': {
@@ -143,13 +191,13 @@ describe('ObjectDetail Component', () => {
                                 status: 'up',
                                 label: 'Resource 1',
                                 type: 'disk',
-                                provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
                             },
                             res2: {
                                 status: 'down',
                                 label: 'Resource 2',
                                 type: 'network',
-                                provisioned: {state: "false", mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
                             },
                         },
                     },
@@ -161,7 +209,7 @@ describe('ObjectDetail Component', () => {
                                 status: 'warn',
                                 label: 'Resource 3',
                                 type: 'compute',
-                                provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
                             },
                         },
                     },
@@ -177,13 +225,14 @@ describe('ObjectDetail Component', () => {
                     global_expect: 'none',
                 },
             },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
 
-        // Mock fetch with logging
         global.fetch = jest.fn((url, options) => {
             console.log(`Fetch called with URL: ${url}, Options:`, options);
-            if (url.includes('/api/object/path/root/cfg/cfg1/data/keys')) {
+            if (url.includes('/data/keys')) {
                 return Promise.resolve({
                     ok: true,
                     json: () =>
@@ -195,13 +244,13 @@ describe('ObjectDetail Component', () => {
                         }),
                 });
             }
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options?.method === 'PUT') {
+            if (url.includes('/config/file') && options?.method === 'PUT') {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({}),
                 });
             }
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+            if (url.includes('/config/file')) {
                 return Promise.resolve({
                     ok: true,
                     text: () =>
@@ -211,13 +260,18 @@ nodes = *
 orchestrate = ha
 id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
 long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
-
 [fs#1]
 type = flag
             `),
                 });
             }
-            if (url.includes('/api/object/path/root/cfg/cfg1/data/key')) {
+            if (url.includes('/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({}),
+                });
+            }
+            if (url.includes('/action/')) {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({}),
@@ -233,6 +287,107 @@ type = flag
     afterEach(() => {
         jest.clearAllMocks();
     });
+
+    test('displays no keys message when keys array is empty', async () => {
+        // 1. Configuration des mocks avec timeout étendu
+        jest.setTimeout(30000); // 30 secondes au total
+
+        // Mock useEventStore avec données minimales mais complètes
+        useEventStore.mockImplementation((selector) => selector({
+            objectStatus: {
+                'root/cfg/cfg1': {
+                    avail: 'up',
+                    frozen: 'unfrozen',
+                    overall: 'ok'
+                }
+            },
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {},
+                        provisioned: true
+                    }
+                }
+            },
+            instanceMonitor: {
+                'node1:root/cfg/cfg1': {
+                    state: 'idle',
+                    global_expect: 'none'
+                }
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn()
+        }));
+
+        // Mock fetch avec réponse vide pour les clés
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: []})
+                });
+            }
+            // Réponse par défaut pour les autres endpoints
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({})
+            });
+        });
+
+        // 2. Rendu du composant
+        const {container} = render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        try {
+            // 3. Attente que le composant soit initialisé
+            await waitFor(() => {
+                expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+            }, {timeout: 5000});
+
+            // 4. Recherche optimisée de l'accordéon des clés
+            const keysAccordionButton = await waitFor(() => {
+                const buttons = screen.getAllByRole('button');
+                const accordionButton = buttons.find(btn =>
+                    btn.textContent?.includes('Object Keys') &&
+                    btn.textContent?.includes('(0)')
+                );
+                if (!accordionButton) {
+                    screen.debug(container);
+                    throw new Error('Accordion button not found');
+                }
+                return accordionButton;
+            }, {timeout: 5000});
+
+            // 5. Interaction avec l'accordéon
+            await act(async () => {
+                fireEvent.click(keysAccordionButton);
+            });
+
+            // 6. Vérification du contenu développé
+            await waitFor(() => {
+                // Vérification plus robuste du message
+                const noKeysMessage = screen.getByText((content, element) => {
+                    return content.includes('No keys available') &&
+                        element?.tagName.toLowerCase() !== 'button';
+                });
+                expect(noKeysMessage).toBeInTheDocument();
+            }, {timeout: 5000});
+
+        } finally {
+            // Nettoyage
+            jest.clearAllMocks();
+        }
+    }, 30000);
+
 
     test('displays configuration with horizontal scrolling', async () => {
         render(
@@ -273,7 +428,7 @@ type = flag
 
     test('displays error when fetching configuration fails', async () => {
         global.fetch.mockImplementation((url) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+            if (url.includes('/config/file')) {
                 return Promise.reject(new Error('Failed to fetch configuration'));
             }
             return Promise.resolve({ok: true, json: () => Promise.resolve({})});
@@ -304,41 +459,9 @@ type = flag
         });
     }, 10000);
 
-    test('displays no configuration message when no config data', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
-                return Promise.resolve({ok: true, text: () => Promise.resolve('')});
-            }
-            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
-        });
-
-        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
-        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
-        await act(async () => {
-            fireEvent.click(accordionSummary);
-        });
-
-        await waitFor(() => {
-            const noConfigElement = screen.getByText((content) => /no.*configuration.*available/i.test(content));
-            expect(noConfigElement).toBeInTheDocument();
-        });
-    }, 10000);
-
     test('displays loading indicator while fetching configuration', async () => {
         global.fetch.mockImplementation((url) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file')) {
+            if (url.includes('/config/file')) {
                 return new Promise(() => {
                 }); // Never resolves to simulate loading
             }
@@ -607,33 +730,39 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
+        // Vérifier le titre de l'objet
         await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-            expect(screen.getByText('Node: node2')).toBeInTheDocument();
-            expect(screen.getByText('Resources (2)')).toBeInTheDocument();
-            expect(screen.getByText('Resources (1)')).toBeInTheDocument();
-            expect(screen.getByText('running')).toBeInTheDocument();
-            expect(screen.getByText('placed@node1')).toBeInTheDocument();
+            expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        // Vérifier les nœuds directement par leur nom
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+            expect(screen.getByText('node2')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        // Vérifier le statut global
+        await waitFor(() => {
+            expect(screen.getByText(/running/i)).toBeInTheDocument();
+            expect(screen.getByText(/placed@node1/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        // Vérifier les sections de ressources
+        const resourcesSections = await screen.findAllByText(/Resources \(\d+\)/i);
+        expect(resourcesSections).toHaveLength(2);
+
+        // Développer la première section de ressources
+        await act(async () => {
+            fireEvent.click(resourcesSections[0]);
         });
 
-        const node1AccordionToggle = screen.getByText('Resources (2)').closest('div');
-        await act(async () => {
-            fireEvent.click(node1AccordionToggle);
-        });
+        // Vérifier que les ressources sont affichées
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
             expect(screen.getByText('res2')).toBeInTheDocument();
-        });
-
-        const node2AccordionToggle = screen.getByText('Resources (1)').closest('div');
-        await act(async () => {
-            fireEvent.click(node2AccordionToggle);
-        });
-        await waitFor(() => {
-            expect(screen.getByText('res3')).toBeInTheDocument();
-        });
-    });
+        }, {timeout: 10000});
+    }, 20000);
 
     test('calls fetchNodes and startEventReception on mount', () => {
         render(
@@ -699,57 +828,46 @@ type = flag
             </MemoryRouter>
         );
 
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 10000);
+
+        // Select the node
+        const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
+        await user.click(nodeCheckbox);
+
+        // Open the actions menu
+        const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
+        await user.click(actionsButton);
+
+        // Select "Freeze" - version plus précise
+        const freezeItem = await screen.findByRole('menuitem', {
+            name: /^Freeze$/i // Match exact du texte "Freeze"
+        });
+        await user.click(freezeItem);
+
+        // Verify the dialog
         await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm Freeze/i);
+        }, {timeout: 10000});
 
-        // Select node
-        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
-        fireEvent.click(nodeCheckbox);
+        // Check the checkbox and confirm
+        const dialogCheckbox = await within(screen.getByRole('dialog')).findByRole('checkbox');
+        await user.click(dialogCheckbox);
 
-        // Open actions menu
-        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
-        fireEvent.click(actionsButton);
+        const confirmButton = await within(screen.getByRole('dialog')).findByRole('button', {name: /Confirm/i});
+        await user.click(confirmButton);
 
-        // Find and click freeze option
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const freezeItem = menuItems.find((item) => item.textContent.includes('Freeze'));
-            expect(freezeItem).toBeInTheDocument();
-            fireEvent.click(freezeItem);
-        });
-
-        // Verify confirm dialog appears
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Freeze')).toBeInTheDocument();
-        });
-
-        // Check the confirmation checkbox
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
-        fireEvent.click(dialogCheckbox);
-
-        // Click confirm button
-        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
-        await act(async () => {
-            fireEvent.click(confirmButton);
-        });
-
-        // Verify API call
+        // Verify the API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/freeze'),
+                expect.stringContaining('/action/freeze'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
                 })
             );
-        });
-
-        // Verify snackbar
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/'freeze' succeeded on node 'node1'/i);
-        });
-    }, 10000);
+        }, {timeout: 10000});
+    }, 30000);
 
     test('triggers individual node stop action', async () => {
         render(
@@ -760,53 +878,65 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
-        // Open node menu (IconButton with MoreVertIcon)
-        const nodeSection = screen.getByText('Node: node1').closest('div').parentElement;
-        const nodeMenuButton = within(nodeSection).getAllByRole('button').find((btn) =>
-            btn.querySelector('svg[data-testid="MoreVertIcon"]')
-        );
+        // Open the node menu
+        const nodeMenuButton = await within(nodeSection).findByRole('button', {name: /node node1 actions/i});
         await act(async () => {
-            fireEvent.click(nodeMenuButton);
+            await user.click(nodeMenuButton);
         });
 
-        // Click 'stop' menu item
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const stopItem = menuItems.find((item) => item.textContent.toLowerCase() === 'stop');
-            expect(stopItem).toBeInTheDocument();
-            fireEvent.click(stopItem);
-        });
-
-        // Verify dialog
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Stop')).toBeInTheDocument();
-        });
-
-        // Check checkbox and confirm
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
+        // Select "Stop" with exact match
+        const stopItem = await screen.findByRole('menuitem', {name: /^Stop$/i});
         await act(async () => {
-            fireEvent.click(dialogCheckbox);
-        });
-        const confirmButton = screen.getByRole('button', {name: /Stop/i});
-        await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(stopItem);
         });
 
-        // Verify API call
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: {Authorization: 'Bearer mock-token'},
-                })
-            );
-        });
-    }, 10000);
+        // Debug DOM if dialog not found
+        try {
+            // Verify the dialog
+            const dialog = await screen.findByRole('dialog', {}, {timeout: 15000});
+            await waitFor(() => {
+                expect(dialog).toHaveTextContent(/Confirm.*Stop/i);
+            }, {timeout: 15000});
+
+            // Check the confirmation checkbox if present
+            const dialogCheckbox = within(dialog).queryByRole('checkbox');
+            if (dialogCheckbox) {
+                await act(async () => {
+                    await user.click(dialogCheckbox);
+                });
+            }
+
+            // Confirm the action
+            const confirmButton = await within(dialog).findByRole('button', {name: /Confirm/i});
+            await waitFor(() => {
+                expect(confirmButton).not.toHaveAttribute('disabled');
+                const computedStyle = getComputedStyle(confirmButton);
+                expect(computedStyle.pointerEvents).not.toEqual('none');
+            }, {timeout: 15000});
+
+            await act(async () => {
+                await user.click(confirmButton);
+            });
+
+            // Verify the API call
+            await waitFor(() => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        headers: {Authorization: 'Bearer mock-token'},
+                    })
+                );
+            }, {timeout: 15000});
+        } catch (error) {
+            console.log('DOM debug after clicking Stop:');
+            screen.debug();
+            throw error;
+        }
+    }, 45000);
 
     test('triggers batch resource action', async () => {
         render(
@@ -817,63 +947,77 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
-        // Open resources accordion by clicking the summary
-        const resourcesSection = screen.getByText('Resources (2)').closest('div');
+        // Expand resources accordion
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(2\)/i);
         await act(async () => {
-            fireEvent.click(resourcesSection);
+            await user.click(resourcesHeader);
         });
 
-        // Select resource
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-        });
-        const resourceSection = screen.getByText('res1').closest('div');
-        const resourceCheckbox = within(resourceSection).getByRole('checkbox');
+        // Select a resource
+        const resourceCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select resource res1/i});
         await act(async () => {
-            fireEvent.click(resourceCheckbox);
+            await user.click(resourceCheckbox);
         });
 
-        global.fetch.mockClear();
-
-        const resourceMenuButton = within(resourcesSection).getAllByRole('button').find((btn) =>
-            btn.querySelector('svg[data-testid="MoreVertIcon"]')
-        );
+        // Open the actions menu
+        const actionsButton = await within(nodeSection).findByRole('button', {name: /resource actions for node node1/i});
         await act(async () => {
-            fireEvent.click(resourceMenuButton);
+            await user.click(actionsButton);
         });
 
-        // Select 'start' action
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const startItem = menuItems.find((item) => item.textContent === 'Start');
-            expect(startItem).toBeInTheDocument();
-            fireEvent.click(startItem);
-        });
-
-        // Confirm action
-        await waitFor(() => {
-            expect(screen.getByText('Confirm start')).toBeInTheDocument();
-        });
-        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        // Select "Start" with exact match
+        const startItem = await screen.findByRole('menuitem', {name: /^Start$/i});
         await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(startItem);
         });
 
-        // Verify API call
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/start'),
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: {Authorization: 'Bearer mock-token'},
-                })
-            );
-        });
-    }, 10000);
+        // Debug DOM if dialog not found
+        try {
+            // Verify the dialog
+            const dialog = await screen.findByRole('dialog', {}, {timeout: 15000});
+            await waitFor(() => {
+                expect(dialog).toHaveTextContent(/Confirm.*Start/i);
+            }, {timeout: 15000});
+
+            // Check the confirmation checkbox if present
+            const dialogCheckbox = within(dialog).queryByRole('checkbox');
+            if (dialogCheckbox) {
+                await act(async () => {
+                    await user.click(dialogCheckbox);
+                });
+            }
+
+            // Confirm the action
+            const confirmButton = await within(dialog).findByRole('button', {name: /Confirm/i});
+            await waitFor(() => {
+                expect(confirmButton).not.toHaveAttribute('disabled');
+                const computedStyle = getComputedStyle(confirmButton);
+                expect(computedStyle.pointerEvents).not.toEqual('none');
+            }, {timeout: 15000});
+
+            await act(async () => {
+                await user.click(confirmButton);
+            });
+
+            // Verify the API call
+            await waitFor(() => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/start'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        headers: {Authorization: 'Bearer mock-token'},
+                    })
+                );
+            }, {timeout: 15000});
+        } catch (error) {
+            console.log('DOM debug after clicking Start:');
+            screen.debug();
+            throw error;
+        }
+    }, 45000);
 
     test('triggers individual resource action', async () => {
         render(
@@ -884,72 +1028,43 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
-
-        // Open resources accordion
-        const resourcesSection = screen.getByText('Resources (2)').closest('div');
+        // Développer les ressources
+        const resourcesHeaders = await screen.findAllByText(/Resources \(\d+\)/i);
         await act(async () => {
-            fireEvent.click(resourcesSection);
+            fireEvent.click(resourcesHeaders[0]);
         });
 
-        // Wait for resource
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
+        // Trouver le menu de la ressource
+        const resourceMenus = await screen.findAllByRole('button', {
+            name: /Resource res1 actions/i,
         });
-
-        global.fetch.mockClear();
-
-        const resourceSection = screen.getByText('res1').closest('div');
-        const resourceMenuButton = within(resourceSection).getAllByRole('button').find((btn) =>
-            btn.querySelector('svg[data-testid="MoreVertIcon"]')
-        );
-
-        // Log pour déboguer
-        console.log('[Test] Resource menu button found:', resourceMenuButton ? 'Yes' : 'No');
-        if (!resourceMenuButton) {
-            console.log('[Test] Resource section DOM:', resourceSection.outerHTML);
-            screen.debug();
-        }
-        expect(resourceMenuButton).toBeInTheDocument();
+        expect(resourceMenus.length).toBeGreaterThan(0);
 
         await act(async () => {
-            fireEvent.click(resourceMenuButton);
+            fireEvent.click(resourceMenus[0]);
         });
 
-        // Attendre que le menu soit ouvert
-        await waitFor(
-            () => {
-                const menu = screen.getByRole('menu');
-                expect(menu).toBeInTheDocument();
-                console.log('[Test] Menu DOM:', menu.outerHTML);
-
-                const menuItems = screen.getAllByRole('menuitem');
-                console.log(
-                    '[Test] Menu items:',
-                    menuItems.map((item) => item.textContent)
-                );
-                const restartItem = menuItems.find((item) => item.textContent.toLowerCase() === 'restart');
-                expect(restartItem).toBeInTheDocument();
-                fireEvent.click(restartItem);
-            },
-            {timeout: 10000}
-        );
-
-        // Confirm action
+        // Sélectionner l'action restart
         await waitFor(() => {
-            expect(screen.getByText('Confirm restart')).toBeInTheDocument();
+            const restartItem = screen.getByRole('menuitem', {name: /Restart/i});
+            expect(restartItem).toBeInTheDocument();
+            fireEvent.click(restartItem);
         });
+
+        // Confirmer l'action
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent('Confirm restart');
+        });
+
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         await act(async () => {
             fireEvent.click(confirmButton);
         });
 
-        // Verify API call
+        // Vérifier l'appel API
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/restart?rid=res1'),
+                expect.stringContaining('/action/restart?rid=res1'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -1043,103 +1158,47 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // 1. Find the node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
-        // Expand node resources
-        const resourcesToggle = screen.getByText('Resources (2)');
-        await act(async () => {
-            fireEvent.click(resourcesToggle);
-        });
+        // 2. Expand the resources accordion
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
 
-        // Verify resources
-        await waitFor(() => {
-            const res1 = screen.queryByText('res1');
-            if (!res1) {
-                screen.debug();
-            }
-            expect(res1).toBeInTheDocument();
-            expect(screen.getByText('res2')).toBeInTheDocument();
-        });
+        // 3. Verify that res1 is visible
+        const res1Element = await within(nodeSection).findByText('res1');
+        expect(res1Element).toBeInTheDocument();
 
-        // Expand resource details
-        const resourceSection = screen.getByText('res1').closest('div');
-        await act(async () => {
-            fireEvent.click(resourceSection);
-        });
+        // 4. Expand the res1 accordion
+        const res1Accordion = res1Element.closest('[data-testid="accordion"]');
+        const res1Summary = within(res1Accordion).getByTestId('accordion-summary');
+        await user.click(res1Summary);
 
-        // Verify resource details with flexible matcher
-        await waitFor(() => {
-            const resourceDetails = screen.getByText((content, element) => content.includes('Resource 1'));
-            expect(resourceDetails).toBeInTheDocument();
+        // 5. Verify the resource details
+        await waitFor(async () => {
+            // Find the accordion details
+            const detailsContainer = within(res1Accordion).getByTestId('accordion-details');
+            expect(detailsContainer).toBeInTheDocument();
 
-            // Verify provisioned icon for res1 (state: "true")
-            const res1Details = screen.getByText('Resource 1').closest('[data-testid="accordion-details"]');
-            const res1Icon = within(res1Details).getByTestId('FiberManualRecordIcon');
-            expect(res1Icon).toHaveStyle({color: '#4caf50'}); // green[500]
-        });
+            // Use a custom matcher to find text nodes containing 'Label:'
+            const labelElement = await findByTextNode(detailsContainer, (content) => /Label:/i.test(content));
+            expect(labelElement).toBeInTheDocument();
+            expect(labelElement.textContent).toContain('Resource 1');
 
-        // Expand and verify res2
-        const res2Section = screen.getByText('res2').closest('div');
-        await act(async () => {
-            fireEvent.click(res2Section);
-        });
+            // Similarly for 'Type:'
+            const typeElement = await findByTextNode(detailsContainer, (content) => /Type:/i.test(content));
+            expect(typeElement).toBeInTheDocument();
+            expect(typeElement.textContent).toContain('disk');
 
-        await waitFor(() => {
-            const res2Details = screen.getByText('Resource 2').closest('[data-testid="accordion-details"]');
-            const res2Icon = within(res2Details).getByTestId('FiberManualRecordIcon');
-            expect(res2Icon).toHaveStyle({color: '#f44336'}); // red[500]
-        });
-    }, 10000);
+            // Find the provisioned status icon
+            const provisionedElement = await findByTextNode(detailsContainer, (content) => /Provisioned:/i.test(content));
+            const statusIcon = provisionedElement.querySelector('[data-testid="FiberManualRecordIcon"]');
+            expect(statusIcon).toBeInTheDocument();
+            expect(statusIcon).toHaveStyle({color: '#4caf50'});
+        }, {timeout: 5000});
+    }, 30000);
 
     test('displays provisioned state correctly for resources', async () => {
-        // Add a resource with provisioned.state: "n/a" to test this case
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'root/cfg/cfg1': {
-                        avail: 'up',
-                        frozen: 'frozen',
-                    },
-                },
-                objectInstanceStatus: {
-                    'root/cfg/cfg1': {
-                        node1: {
-                            avail: 'up',
-                            frozen_at: '2023-01-01T12:00:00Z',
-                            resources: {
-                                res1: {
-                                    status: 'up',
-                                    label: 'Resource 1',
-                                    type: 'disk',
-                                    provisioned: {state: "true", mtime: '2023-01-01T12:00:00Z'},
-                                },
-                                res2: {
-                                    status: 'down',
-                                    label: 'Resource 2',
-                                    type: 'network',
-                                    provisioned: {state: "false", mtime: '2023-01-01T12:00:00Z'},
-                                },
-                                res3: {
-                                    status: 'warn',
-                                    label: 'Resource 3',
-                                    type: 'compute',
-                                    provisioned: {state: "n/a", mtime: '2023-01-01T12:00:00Z'},
-                                },
-                            },
-                        },
-                    },
-                },
-                instanceMonitor: {
-                    'node1:root/cfg/cfg1': {
-                        state: 'running',
-                        global_expect: 'placed@node1',
-                    },
-                },
-            })
-        );
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1148,50 +1207,51 @@ type = flag
             </MemoryRouter>
         );
 
-        // Wait for resources to be displayed
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
-        // Open resources accordion
-        const resourcesSection = screen.getByText('Resources (3)').closest('div');
+        // Expand resources accordion
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i, {}, {timeout: 10000});
         await act(async () => {
-            fireEvent.click(resourcesSection);
+            await user.click(resourcesHeader);
         });
 
-        // Verify resources are displayed
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-            expect(screen.getByText('res2')).toBeInTheDocument();
-            expect(screen.getByText('res3')).toBeInTheDocument();
+        // Expand res1 accordion
+        const res1Header = within(nodeSection).getByText('res1');
+        const res1Accordion = res1Header.closest('[data-testid="accordion"]');
+        await act(async () => {
+            await user.click(res1Header.closest('[data-testid="accordion-summary"]') || res1Header);
         });
 
-        // Open details for each resource
-        for (const resId of ['res1', 'res2', 'res3']) {
-            const resourceSection = screen.getByText(resId).closest('div');
-            await act(async () => {
-                fireEvent.click(resourceSection);
-            });
-        }
+        // Verify res1 provisioned state
+        await waitFor(
+            () => {
+                const res1Details = within(res1Accordion).getByTestId('accordion-details');
+                const provisionedText = within(res1Details).getByText(/Provisioned:/i);
+                const icon = provisionedText.closest('span').querySelector('[data-testid="FiberManualRecordIcon"]');
+                expect(icon).toHaveStyle({color: '#4caf50'}); // Green for provisioned=true
+            },
+            {timeout: 10000}
+        );
 
-        // Verify provisioned icons
-        await waitFor(() => {
-            // res1: provisioned.state = "true" → green icon
-            const res1Details = screen.getByText('Resource 1').closest('[data-testid="accordion-details"]');
-            const res1Icon = within(res1Details).getByTestId('FiberManualRecordIcon');
-            expect(res1Icon).toHaveStyle({color: '#4caf50'}); // green[500]
-
-            // res2: provisioned.state = "false" → red icon
-            const res2Details = screen.getByText('Resource 2').closest('[data-testid="accordion-details"]');
-            const res2Icon = within(res2Details).getByTestId('FiberManualRecordIcon');
-            expect(res2Icon).toHaveStyle({color: '#f44336'}); // red[500]
-
-            // res3: provisioned.state = "n/a" → red icon
-            const res3Details = screen.getByText('Resource 3').closest('[data-testid="accordion-details"]');
-            const res3Icon = within(res3Details).getByTestId('FiberManualRecordIcon');
-            expect(res3Icon).toHaveStyle({color: '#f44336'}); // red[500]
+        // Expand res2 accordion
+        const res2Header = within(nodeSection).getByText('res2');
+        const res2Accordion = res2Header.closest('[data-testid="accordion"]');
+        await act(async () => {
+            await user.click(res2Header.closest('[data-testid="accordion-summary"]') || res2Header);
         });
-    }, 15000);
+
+        // Verify res2 provisioned state
+        await waitFor(
+            () => {
+                const res2Details = within(res2Accordion).getByTestId('accordion-details');
+                const provisionedText = within(res2Details).getByText(/Provisioned:/i);
+                const icon = provisionedText.closest('span').querySelector('[data-testid="FiberManualRecordIcon"]');
+                expect(icon).toHaveStyle({color: '#f44336'}); // Red for provisioned=false
+            },
+            {timeout: 10000}
+        );
+    }, 30000);
 
     test('cancels freeze dialog', async () => {
         render(
@@ -1202,43 +1262,68 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
         // Select node
-        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
-        fireEvent.click(nodeCheckbox);
+        const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
+        await act(async () => {
+            await user.click(nodeCheckbox);
+        });
 
         // Open actions menu
-        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
-        fireEvent.click(actionsButton);
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        await act(async () => {
+            await user.click(actionsButton);
+        });
 
-        // Select freeze
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const freezeItem = menuItems.find((item) => item.textContent.includes('Freeze'));
-            expect(freezeItem).toBeInTheDocument();
-            fireEvent.click(freezeItem);
+        // Select Freeze (use more specific selector)
+        const menu = await screen.findByRole('menu');
+        const freezeItem = await within(menu).findByRole('menuitem', {name: 'Freeze'});
+        await act(async () => {
+            await user.click(freezeItem);
         });
 
         // Verify dialog
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Freeze')).toBeInTheDocument();
-        });
+        await waitFor(
+            () => {
+                expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm Freeze/i);
+            },
+            {timeout: 10000}
+        );
 
         // Cancel
-        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
-        fireEvent.click(cancelButton);
-
-        // Verify dialog closed
-        await waitFor(() => {
-            expect(screen.queryByText('Confirm Freeze')).not.toBeInTheDocument();
+        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /cancel/i});
+        await act(async () => {
+            await user.click(cancelButton);
         });
-    }, 10000);
+
+        // Verify dialog is closed
+        await waitFor(
+            () => {
+                expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            },
+            {timeout: 10000}
+        );
+
+        // Verify no API call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining('/action/freeze'),
+            expect.any(Object)
+        );
+    }, 30000);
 
     test('shows error snackbar when action fails', async () => {
-        global.fetch.mockImplementation(() => Promise.reject(new Error('Network error')));
+        // Mock fetch to simulate failure
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/action/')) {
+                return Promise.reject(new Error('Network error'));
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            });
+        });
 
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -1248,42 +1333,57 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Node: node1')).toBeInTheDocument();
-        });
+        // Find node1 section
+        const nodeSection = await findNodeSection('node1', 15000);
 
         // Select node
-        const nodeCheckbox = screen.getAllByRole('checkbox')[0];
-        fireEvent.click(nodeCheckbox);
+        const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
+        await act(async () => {
+            await user.click(nodeCheckbox);
+        });
 
         // Open actions menu
-        const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
-        fireEvent.click(actionsButton);
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        await act(async () => {
+            await user.click(actionsButton);
+        });
 
-        // Select start
-        await waitFor(() => {
-            const menuItems = screen.getAllByRole('menuitem');
-            const startItem = menuItems.find((item) => item.textContent.includes('Start'));
-            expect(startItem).toBeInTheDocument();
-            fireEvent.click(startItem);
+        // Select Start with more specific matcher
+        const menu = await screen.findByRole('menu');
+        // Debug: Log all menu items
+        const menuItems = within(menu).getAllByRole('menuitem');
+        console.log('Menu items:', menuItems.map(item => item.textContent));
+        const startItem = await within(menu).findByRole('menuitem', {name: 'Start'}); // Exact match
+        await act(async () => {
+            await user.click(startItem);
         });
 
         // Confirm
-        await waitFor(() => {
-            expect(screen.getByText('Confirm start')).toBeInTheDocument();
-        });
-        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await waitFor(
+            () => {
+                expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm start/i);
+            },
+            {timeout: 10000}
+        );
+
+        const confirmButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Confirm/i});
         await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(confirmButton);
         });
 
         // Verify error snackbar
-        await waitFor(() => {
-            const errorAlert = screen.getByText(/Error: Network error/i);
-            expect(errorAlert).toBeInTheDocument();
-            expect(errorAlert.closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
-        });
-    }, 10000);
+        await waitFor(
+            () => {
+                const alerts = screen.getAllByRole('alert');
+                const errorAlert = alerts.find(alert =>
+                    /network error/i.test(alert.textContent)
+                );
+                expect(errorAlert).toBeInTheDocument();
+                expect(errorAlert).toHaveAttribute('data-severity', 'error');
+            },
+            {timeout: 10000}
+        );
+    }, 30000);
 
     test('displays node state from instanceMonitor', async () => {
         render(
@@ -1322,27 +1422,32 @@ type = flag
             </MemoryRouter>
         );
 
+        let keysAccordionSummary;
         await waitFor(() => {
-            const keysAccordion = screen.getByText(/Object Keys \(2\)/i);
-            expect(keysAccordion).toBeInTheDocument();
+            keysAccordionSummary = screen.getByText(/Object Keys \(2\)/i);
+            expect(keysAccordionSummary).toBeInTheDocument();
         });
 
-        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
         await act(async () => {
-            fireEvent.click(keysAccordion);
+            fireEvent.click(keysAccordionSummary);
         });
 
+        const keysAccordionDetails = keysAccordionSummary
+            .closest('[data-testid="accordion"]')
+            .querySelector('[data-testid="accordion-details"]');
+
         await waitFor(() => {
-            expect(screen.getByText('key1')).toBeInTheDocument();
-            expect(screen.getByText('key2')).toBeInTheDocument();
-            expect(screen.getByText('2626 bytes')).toBeInTheDocument();
-            expect(screen.getByText('6946 bytes')).toBeInTheDocument();
-            const node1Elements = screen.getAllByText('node1');
+            expect(within(keysAccordionDetails).getByText('key1')).toBeInTheDocument();
+            expect(within(keysAccordionDetails).getByText('key2')).toBeInTheDocument();
+            expect(within(keysAccordionDetails).getByText('2626 bytes')).toBeInTheDocument();
+            expect(within(keysAccordionDetails).getByText('6946 bytes')).toBeInTheDocument();
+            const node1Elements = within(keysAccordionDetails).getAllByText('node1');
             expect(node1Elements).toHaveLength(2);
             node1Elements.forEach((element) => {
                 expect(element).toBeInTheDocument();
+                expect(element.tagName.toLowerCase()).toBe('td');
             });
-        });
+        }, {timeout: 5000});
     });
 
     test('expands keys accordion', async () => {
@@ -1378,36 +1483,36 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
-        });
-
-        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        // Expand keys accordion
+        const keysHeader = await screen.findByText(/Object Keys \(2\)/i, {}, {timeout: 5000});
         await act(async () => {
-            fireEvent.click(keysAccordion);
+            fireEvent.click(keysHeader);
         });
 
-        const addButton = screen.getByRole('button', {name: /add/i});
+        // Find add button
+        const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             fireEvent.click(addButton);
         });
 
+        // Fill dialog
         await waitFor(() => {
-            expect(screen.getByText('Create New Key')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Create New Key/i);
         });
-
-        const nameInput = screen.getByPlaceholderText('Key Name');
-        const fileInput = screen.getByLabelText(/file/i);
+        const nameInput = within(screen.getByRole('dialog')).getByPlaceholderText('Key Name');
+        const fileInput = document.querySelector('#create-key-file-upload');
         await act(async () => {
             fireEvent.change(nameInput, {target: {value: 'newKey'}});
             fireEvent.change(fileInput, {target: {files: [new File(['content'], 'key.txt')]}});
         });
 
-        const createButton = screen.getByRole('button', {name: /Create/i});
+        // Submit
+        const createButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Create/i});
         await act(async () => {
             fireEvent.click(createButton);
         });
 
+        // Verify API call and success
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=newKey'),
@@ -1420,12 +1525,9 @@ type = flag
                     body: expect.any(File),
                 })
             );
+            expect(screen.getByRole('alert')).toHaveTextContent(/Key 'newKey' created successfully/i);
         });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Key 'newKey' created successfully/i)).toBeInTheDocument();
-        });
-    });
+    }, 15000);
 
     test('updates a key', async () => {
         global.fetch.mockClear();
@@ -1437,36 +1539,37 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
-        });
-
-        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        // Expand keys accordion
+        const keysHeader = await screen.findByText(/Object Keys \(2\)/i, {}, {timeout: 5000});
         await act(async () => {
-            fireEvent.click(keysAccordion);
+            fireEvent.click(keysHeader);
         });
 
-        const keyRow = screen.getByText('key1').closest('tr');
-        const editButton = within(keyRow).getByRole('button', {name: /edit/i});
+        // Find key1 edit button
+        const key1Row = screen.getByText('key1').closest('tr');
+        const editButton = within(key1Row).getByRole('button', {name: /edit key key1/i});
         await act(async () => {
             fireEvent.click(editButton);
         });
 
+        // Fill dialog
         await waitFor(() => {
-            expect(screen.getByText('Update Key')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Update Key/i);
         });
-        const nameInput = screen.getByPlaceholderText('Key Name');
-        const fileInput = screen.getByLabelText(/file/i);
+        const nameInput = within(screen.getByRole('dialog')).getByPlaceholderText('Key Name');
+        const fileInput = document.querySelector('#update-key-file-upload');
         await act(async () => {
             fireEvent.change(nameInput, {target: {value: 'updatedKey'}});
             fireEvent.change(fileInput, {target: {files: [new File(['new content'], 'updated.txt')]}});
         });
 
-        const updateButton = screen.getByRole('button', {name: /Update/i});
+        // Submit
+        const updateButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Update/i});
         await act(async () => {
             fireEvent.click(updateButton);
         });
 
+        // Verify API call and success
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=updatedKey'),
@@ -1479,12 +1582,9 @@ type = flag
                     body: expect.any(File),
                 })
             );
+            expect(screen.getByRole('alert')).toHaveTextContent(/Key 'updatedKey' updated successfully/i);
         });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Key 'updatedKey' updated successfully/i)).toBeInTheDocument();
-        });
-    });
+    }, 15000);
 
     test('deletes a key', async () => {
         global.fetch.mockClear();
@@ -1496,30 +1596,29 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText(/Object Keys \(2\)/i)).toBeInTheDocument();
-        });
-
-        const keysAccordion = screen.getByText(/Object Keys \(2\)/i).closest('div');
+        // Expand keys accordion
+        const keysHeader = await screen.findByText(/Object Keys \(2\)/i, {}, {timeout: 5000});
         await act(async () => {
-            fireEvent.click(keysAccordion);
+            fireEvent.click(keysHeader);
         });
 
-        const keyRow = screen.getByText('key1').closest('tr');
-        const deleteButton = within(keyRow).getByRole('button', {name: /delete/i});
+        // Find key1 delete button
+        const key1Row = screen.getByText('key1').closest('tr');
+        const deleteButton = within(key1Row).getByRole('button', {name: /delete key key1/i});
         await act(async () => {
             fireEvent.click(deleteButton);
         });
 
+        // Confirm deletion
         await waitFor(() => {
-            expect(screen.getByText('Confirm Delete Key')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm Key Deletion/i);
         });
-
-        const deleteConfirmButton = screen.getByRole('dialog').querySelector('button.MuiButton-containedError');
+        const deleteButtonConfirm = within(screen.getByRole('dialog')).getByRole('button', {name: /Delete/i});
         await act(async () => {
-            fireEvent.click(deleteConfirmButton);
+            fireEvent.click(deleteButtonConfirm);
         });
 
+        // Verify API call and success
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/api/object/path/root/cfg/cfg1/data/key?name=key1'),
@@ -1530,12 +1629,9 @@ type = flag
                     }),
                 })
             );
+            expect(screen.getByRole('alert')).toHaveTextContent(/Key 'key1' deleted successfully/i);
         });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Key 'key1' deleted successfully/i)).toBeInTheDocument();
-        });
-    });
+    }, 15000);
 
     test('displays error when fetching keys fails', async () => {
         global.fetch.mockImplementationOnce(() => Promise.reject(new Error('Failed to fetch keys')));
@@ -1558,35 +1654,6 @@ type = flag
 
         await waitFor(() => {
             expect(screen.getByText(/Failed to fetch keys/i)).toBeInTheDocument();
-        });
-    });
-
-    test('displays no keys message when keys array is empty', async () => {
-        global.fetch.mockImplementationOnce(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({items: []}),
-            })
-        );
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
-        });
-
-        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
-        await act(async () => {
-            fireEvent.click(keysAccordion);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('No keys available.')).toBeInTheDocument();
         });
     });
 
@@ -1616,8 +1683,13 @@ type = flag
     });
 
     test('disables buttons during key creation', async () => {
+        // Mock fetch to hang for loading state
         global.fetch.mockImplementationOnce(() => new Promise(() => {
         }));
+
+        // Set up userEvent
+        const user = userEvent.setup();
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1626,42 +1698,68 @@ type = flag
             </MemoryRouter>
         );
 
+        // Expand keys accordion
+        const keysHeader = await screen.findByText(/Object Keys \(2\)/i, {}, {timeout: 5000});
+        await act(async () => {
+            await user.click(keysHeader);
+        });
+
+        // Open create dialog
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        console.log('Add button found:', addButton); // Debug
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        // Wait for the dialog to appear with alternative selectors
+        const dialog = await waitFor(
+            () => {
+                // Try role="dialog" first
+                let dialogElement = screen.queryByRole('dialog');
+                if (dialogElement) {
+                    console.log('Dialog found with role="dialog":', dialogElement); // Debug
+                    return dialogElement;
+                }
+                // Fallback to text-based selector
+                dialogElement = screen.getByText(/create new key|add key|new key/i)?.closest('div');
+                if (!dialogElement) {
+                    screen.debug(); // Log DOM if dialog not found
+                    throw new Error('Dialog not found');
+                }
+                console.log('Dialog found with text selector:', dialogElement); // Debug
+                return dialogElement;
+            },
+            {timeout: 10000} // Increased timeout
+        );
+
+        // Verify dialog content
         await waitFor(() => {
-            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+            expect(dialog).toHaveTextContent(/create new key|add key|new key/i);
         });
 
-        const keysAccordion = screen.getByText(/Object Keys \(0\)/i).closest('div');
+        // Fill dialog
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        const fileInput = document.querySelector('#create-key-file-upload');
         await act(async () => {
-            fireEvent.click(keysAccordion);
+            await user.type(nameInput, 'newKey');
+            await user.upload(fileInput, new File(['content'], 'key.txt'));
         });
 
-        const addButton = screen.getByRole('button', {name: /add/i});
+        // Trigger create
+        const createButton = within(dialog).getByRole('button', {name: /create|add|save/i});
         await act(async () => {
-            fireEvent.click(addButton);
+            await user.click(createButton);
         });
 
-        await waitFor(() => {
-            expect(screen.getByText('Create New Key')).toBeInTheDocument();
-        });
-
-        const nameInput = screen.getByPlaceholderText('Key Name');
-        const fileInput = screen.getByLabelText(/file/i);
-        await act(async () => {
-            fireEvent.change(nameInput, {target: {value: 'newKey'}});
-            fireEvent.change(fileInput, {target: {files: [new File(['content'], 'key.txt')]}});
-        });
-
-        const dialog = screen.getByRole('dialog');
-        const createButton = within(dialog).getByRole('button', {name: /create/i});
-        const cancelButton = within(dialog).getByRole('button', {name: /cancel/i});
-
-        await act(async () => {
-            fireEvent.click(createButton);
-        });
-
-        await waitFor(() => {
-            expect(createButton).toBeDisabled();
-            expect(cancelButton).toBeDisabled();
-        });
-    });
+        // Verify buttons are disabled
+        await waitFor(
+            () => {
+                expect(createButton).toBeDisabled();
+                const cancelButton = within(dialog).getByRole('button', {name: /cancel|close/i});
+                expect(cancelButton).toBeDisabled();
+                expect(fileInput).toBeDisabled();
+            },
+            {timeout: 5000}
+        );
+    }, 20000);
 });

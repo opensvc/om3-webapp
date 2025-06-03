@@ -57,7 +57,6 @@ const useEventStore = create((set) => ({
         })),
 
     setConfigUpdated: (updates) => {
-        console.log("🔄 [Store] Received config updates:", JSON.stringify(updates, null, 2));
         const normalizedUpdates = updates.map((update) => {
             // Handle direct format {name, node}
             if (update.name && update.node) {

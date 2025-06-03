@@ -127,13 +127,6 @@ const Objects = () => {
 
     // Debug objectStatus and state
     useEffect(() => {
-        console.log("[Objects] objectStatus:", JSON.stringify(objectStatus, null, 2));
-        console.log("[Objects] Query params:", Object.fromEntries(queryParams));
-        console.log("[Objects] Raw globalState:", rawGlobalState);
-        console.log("[Objects] Initial global state:", initialGlobalState);
-        console.log("[Objects] selectedGlobalState:", selectedGlobalState);
-        console.log("[Objects] Initial namespace:", queryParams.get("namespace"));
-        console.log("[Objects] selectedNamespace:", selectedNamespace);
         setSelectedGlobalState(initialGlobalState);
         setSelectedNamespace(
             namespaces.includes(queryParams.get("namespace"))

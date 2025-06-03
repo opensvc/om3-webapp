@@ -234,7 +234,6 @@ export const createEventSource = (url, token) => {
     });
 
     currentEventSource.addEventListener("InstanceConfigUpdated", (event) => {
-        console.log("📩 [SSE] Received InstanceConfigUpdated event:", event.data);
         const parsed = JSON.parse(event.data);
         const name = parsed.path || parsed.labels?.path;
         const node = parsed.node;
@@ -242,7 +241,6 @@ export const createEventSource = (url, token) => {
             console.warn("⚠️ InstanceConfigUpdated event missing name or node:", parsed);
             return;
         }
-        console.log(`⚡ [SSE] Triggering config update for: ${name}, node: ${node}`);
         setConfigUpdated([{name, node}]);
         scheduleFlush();
     });

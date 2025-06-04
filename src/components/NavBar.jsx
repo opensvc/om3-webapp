@@ -20,7 +20,7 @@ const NavBar = () => {
         if (token) {
             fetchNodes(token);
         }
-    }, [fetchNodes]);
+    }, []);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);

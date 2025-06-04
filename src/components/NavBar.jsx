@@ -12,22 +12,67 @@ const NavBar = () => {
     const auth = useAuth();
     const location = useLocation();
     const authDispatch = useAuthDispatch();
-    const {clusterName, fetchNodes} = useFetchDaemonStatus();
+    const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
     const [breadcrumb, setBreadcrumb] = useState([]);
 
     useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchNodes(token);
-        }
-    }, []);
+        const fetchClusterData = async () => {
+            let retryCount = 0;
+            const maxRetries = 3;
+            const retryInterval = 1000;
+
+            const tryFetch = async () => {
+                const token = auth?.authToken || localStorage.getItem("authToken");
+
+                if (!token) {
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        setTimeout(tryFetch, retryInterval);
+                        return;
+                    }
+                    setBreadcrumb([
+                        {name: "Cluster", path: "/cluster"},
+                        ...getPathBreadcrumbs(),
+                    ]);
+                    return;
+                }
+
+                try {
+                    await fetchNodes(token);
+                } catch (error) {
+                    console.error("Error while calling fetchNodes:", error.message);
+                }
+            };
+
+            const getPathBreadcrumbs = () => {
+                const pathParts = location.pathname.split("/").filter(Boolean);
+                const breadcrumbItems = [];
+                if (pathParts[0] !== "login" && pathParts.length > 1) {
+                    pathParts.forEach((part, index) => {
+                        const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                        if (part !== "cluster") {
+                            breadcrumbItems.push({name: part, path: fullPath});
+                        }
+                    });
+                }
+                return breadcrumbItems;
+            };
+
+            tryFetch();
+        };
+
+        fetchClusterData();
+    }, [auth?.authToken, location.pathname]);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
         const breadcrumbItems = [];
 
         if (pathParts[0] !== "login") {
-            breadcrumbItems.push({name: clusterName || "Cluster", path: "/cluster"});
+            breadcrumbItems.push({
+                name: loading ? "Loading..." : (clusterName || "Cluster"),
+                path: "/cluster",
+            });
 
             if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
                 pathParts.forEach((part, index) => {
@@ -40,7 +85,7 @@ const NavBar = () => {
         }
 
         setBreadcrumb(breadcrumbItems);
-    }, [location.pathname, clusterName]);
+    }, [location.pathname, clusterName, loading]);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {

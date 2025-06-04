@@ -19,14 +19,12 @@ import {
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import WarningIcon from "@mui/icons-material/Warning";
 import HelpIcon from "@mui/icons-material/Help";
-
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
@@ -56,7 +54,6 @@ const getStatusIcon = (isBeating) => {
     );
 };
 
-// Style constant pour les cellules du tableau
 const tableCellStyle = {
     padding: '8px 16px',
     textAlign: 'center',
@@ -73,16 +70,20 @@ const Heartbeats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
-    // Get initial status from URL
-    const initialStatus = useMemo(() => {
+    // Get initial status and state from URL
+    const initialFilters = useMemo(() => {
         const params = new URLSearchParams(location.search);
         const status = params.get("status");
-        return ["all", "beating", "non-beating"].includes(status) ? status : "all";
+        const state = params.get("state");
+        return {
+            status: ["all", "beating", "non-beating"].includes(status) ? status : "all",
+            state: state || "all" // Fallback to "all" if state is not provided
+        };
     }, [location.search]);
 
-    const [filterBeating, setFilterBeating] = useState(initialStatus);
+    const [filterBeating, setFilterBeating] = useState(initialFilters.status);
     const [filterNode, setFilterNode] = useState("all");
-    const [filterState, setFilterState] = useState("all");
+    const [filterState, setFilterState] = useState(initialFilters.state);
     const [showFilters, setShowFilters] = useState(true);
 
     useEffect(() => {
@@ -96,9 +97,8 @@ const Heartbeats = () => {
 
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
 
-    // Extraction dynamique des états disponibles
     const availableStates = useMemo(() => {
-        const states = new Set(["all"]); // 'all' est toujours présent
+        const states = new Set(["all"]);
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
                 if (stream.state) {

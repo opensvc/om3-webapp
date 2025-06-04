@@ -48,16 +48,74 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridHeartbeats renders correctly and handles click', () => {
+        const stateCount = {running: 3, stopped: 2, failed: 1, warning: 0, unknown: 2};
         render(
             <GridHeartbeats
                 heartbeatCount={8}
+                beatingCount={4}
+                nonBeatingCount={4}
+                stateCount={stateCount}
                 onClick={mockOnClick}
             />
         );
 
+        // Check the title and total heartbeat count
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
         expect(screen.getByText('8')).toBeInTheDocument();
 
+        // Check the chips for beating and non-beating
+        const beatingChipLabel = screen.getByText('Beating 4');
+        const nonBeatingChipLabel = screen.getByText('Non-Beating 4');
+        expect(beatingChipLabel).toBeInTheDocument();
+        expect(nonBeatingChipLabel).toBeInTheDocument();
+
+        // Check the styles of the beating/non-beating chips
+        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
+        const nonBeatingChip = nonBeatingChipLabel.closest('.MuiChip-root');
+        expect(beatingChip).toHaveStyle('background-color: green');
+        expect(nonBeatingChip).toHaveStyle('background-color: red');
+
+        // Check the chips for states (only those with count > 0)
+        const runningChipLabel = screen.getByText('Running 3');
+        const stoppedChipLabel = screen.getByText('Stopped 2');
+        const failedChipLabel = screen.getByText('Failed 1');
+        const unknownChipLabel = screen.getByText('Unknown 2');
+        expect(runningChipLabel).toBeInTheDocument();
+        expect(stoppedChipLabel).toBeInTheDocument();
+        expect(failedChipLabel).toBeInTheDocument();
+        expect(unknownChipLabel).toBeInTheDocument();
+        expect(screen.queryByText('Warning 0')).not.toBeInTheDocument();
+
+        // Check the styles of the state chips
+        const runningChip = runningChipLabel.closest('.MuiChip-root');
+        const stoppedChip = stoppedChipLabel.closest('.MuiChip-root');
+        const failedChip = failedChipLabel.closest('.MuiChip-root');
+        const unknownChip = unknownChipLabel.closest('.MuiChip-root');
+        expect(runningChip).toHaveStyle('background-color: green');
+        expect(stoppedChip).toHaveStyle('background-color: orange');
+        expect(failedChip).toHaveStyle('background-color: red');
+        expect(unknownChip).toHaveStyle('background-color: grey');
+
+        // Check clicks on the chips
+        fireEvent.click(beatingChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+
+        fireEvent.click(nonBeatingChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith('non-beating', null);
+
+        fireEvent.click(runningChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith(null, 'running');
+
+        fireEvent.click(stoppedChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith(null, 'stopped');
+
+        fireEvent.click(failedChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith(null, 'failed');
+
+        fireEvent.click(unknownChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith(null, 'unknown');
+
+        // Check click on the entire card
         const card = screen.getByText('Heartbeats').closest('div');
         fireEvent.click(card);
         expect(mockOnClick).toHaveBeenCalled();
@@ -112,7 +170,7 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridObjects renders correctly with non-zero values and handles click', () => {
-        const statusCount = { up: 5, warn: 2, down: 1 };
+        const statusCount = {up: 5, warn: 2, down: 1};
         render(
             <GridObjects
                 objectCount={8}
@@ -158,8 +216,9 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Namespaces')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
     });
+
     test('GridObjects chips call onClick with correct status', () => {
-        const statusCount = { up: 5, warn: 2, down: 1 };
+        const statusCount = {up: 5, warn: 2, down: 1};
         render(
             <GridObjects
                 objectCount={8}

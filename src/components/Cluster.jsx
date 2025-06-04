@@ -82,22 +82,27 @@ const ClusterOverview = () => {
     const heartbeatIds = new Set();
     let beatingCount = 0;
     let nonBeatingCount = 0;
+    const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
 
     Object.values(heartbeatStatus).forEach(node => {
-        let isBeating = false;
         (node.streams || []).forEach(stream => {
             const peer = Object.values(stream.peers || {})[0];
-            if (peer?.is_beating) {
-                isBeating = true;
-            }
             const baseId = stream.id.split('.')[0];
             heartbeatIds.add(baseId);
+
+            if (peer?.is_beating) {
+                beatingCount++;
+            } else {
+                nonBeatingCount++;
+            }
+
+            const state = stream.state || 'unknown';
+            if (stateCount.hasOwnProperty(state)) {
+                stateCount[state]++;
+            } else {
+                stateCount.unknown++;
+            }
         });
-        if (isBeating) {
-            beatingCount++;
-        } else {
-            nonBeatingCount++;
-        }
     });
     const heartbeatCount = heartbeatIds.size;
 
@@ -132,8 +137,13 @@ const ClusterOverview = () => {
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
                     nonBeatingCount={nonBeatingCount}
-                    onClick={(status) => {
-                        const url = status ? `/heartbeats?status=${status}` : '/heartbeats';
+                    stateCount={stateCount}
+                    onClick={(status, state) => {
+                        let url = '/heartbeats';
+                        const params = new URLSearchParams();
+                        if (status) params.append('status', status);
+                        if (state) params.append('state', state);
+                        if (params.toString()) url += `?${params.toString()}`;
                         console.log('[ClusterOverview] Navigating to:', url);
                         navigate(url);
                     }}

@@ -7,12 +7,10 @@ import useEventStore from "../../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource} from "../../eventSourceManager.jsx";
 
-// Mock hooks
 jest.mock("../../hooks/useEventStore.js");
 jest.mock("../../hooks/useFetchDaemonStatus.jsx");
 jest.mock("../../eventSourceManager.jsx");
 
-// Mock localStorage
 const mockLocalStorage = {
     getItem: jest.fn(),
     setItem: jest.fn(),
@@ -101,16 +99,18 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(firstRowCells[0]).toHaveTextContent("✅");
-            expect(firstRowCells[1]).toHaveTextContent("hb#1.rx");
-            expect(firstRowCells[2]).toHaveTextContent("node1");
-            expect(firstRowCells[3]).toHaveTextContent("peer1");
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
+            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATUS
+            expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[3]).toHaveTextContent("node1");
+            expect(firstRowCells[4]).toHaveTextContent("peer1");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(secondRowCells[0]).toHaveTextContent("❌");
-            expect(secondRowCells[1]).toHaveTextContent("hb#1.tx");
-            expect(secondRowCells[2]).toHaveTextContent("node1");
-            expect(firstRowCells[3]).toHaveTextContent("peer1");
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // STATUS
+            expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
+            expect(secondRowCells[3]).toHaveTextContent("node1");
+            expect(secondRowCells[4]).toHaveTextContent("peer1");
         });
     });
 
@@ -146,18 +146,19 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(firstRowCells[0]).toHaveTextContent("❌");
-            expect(firstRowCells[1]).toHaveTextContent("hb#1.rx");
-            expect(firstRowCells[2]).toHaveTextContent("node1");
-            expect(firstRowCells[3]).toHaveTextContent("N/A");
-            expect(firstRowCells[5]).toHaveTextContent("N/A");
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
+            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[3]).toHaveTextContent("node1");
+            expect(firstRowCells[4]).toHaveTextContent("N/A");
+            expect(firstRowCells[5]).toHaveTextContent("unicast");
             expect(firstRowCells[6]).toHaveTextContent("N/A");
+            expect(firstRowCells[7]).toHaveTextContent("N/A");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(secondRowCells[0]).toHaveTextContent("❌");
-            expect(secondRowCells[1]).toHaveTextContent("hb#1.tx");
-            expect(secondRowCells[2]).toHaveTextContent("node1");
-            expect(secondRowCells[3]).toHaveTextContent("N/A");
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(secondRowCells[4]).toHaveTextContent("N/A");
         });
     });
 

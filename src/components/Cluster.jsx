@@ -80,10 +80,28 @@ const ClusterOverview = () => {
         .join(" | ");
 
     const heartbeatIds = new Set();
+    let beatingCount = 0;
+    let nonBeatingCount = 0;
+    const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
+
     Object.values(heartbeatStatus).forEach(node => {
         (node.streams || []).forEach(stream => {
+            const peer = Object.values(stream.peers || {})[0];
             const baseId = stream.id.split('.')[0];
             heartbeatIds.add(baseId);
+
+            if (peer?.is_beating) {
+                beatingCount++;
+            } else {
+                nonBeatingCount++;
+            }
+
+            const state = stream.state || 'unknown';
+            if (stateCount.hasOwnProperty(state)) {
+                stateCount[state]++;
+            } else {
+                stateCount.unknown++;
+            }
         });
     });
     const heartbeatCount = heartbeatIds.size;
@@ -117,7 +135,18 @@ const ClusterOverview = () => {
                 />
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
-                    onClick={() => navigate("/heartbeats")}
+                    beatingCount={beatingCount}
+                    nonBeatingCount={nonBeatingCount}
+                    stateCount={stateCount}
+                    onClick={(status, state) => {
+                        let url = '/heartbeats';
+                        const params = new URLSearchParams();
+                        if (status) params.append('status', status);
+                        if (state) params.append('state', state);
+                        if (params.toString()) url += `?${params.toString()}`;
+                        console.log('[ClusterOverview] Navigating to:', url);
+                        navigate(url);
+                    }}
                 />
                 <GridPools
                     poolCount={poolCount}

@@ -49,7 +49,7 @@ describe('createEventSource', () => {
         const eventSource = createEventSource(URL_NODE_EVENT, 'fake-token');
 
         expect(EventSourcePolyfill).toHaveBeenCalled();
-        expect(eventSource.addEventListener).toHaveBeenCalledTimes(8);
+        expect(eventSource.addEventListener).toHaveBeenCalledTimes(9);
     });
 
     it('should process NodeStatusUpdated events correctly', () => {
@@ -167,13 +167,20 @@ describe('createEventSource', () => {
         const eventSource = createEventSource(URL_NODE_EVENT, 'fake-token');
 
         // Mock console.error
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
         // Trigger error
         eventSource.onerror(error);
 
-        expect(consoleErrorSpy).toHaveBeenCalledWith('🚨 EventSource error:', error);
+        // Expectation that error is logged with all arguments
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '🚨 EventSource error:',
+            error,
+            'URL:',
+            expect.stringContaining(URL_NODE_EVENT), // Vérifie que l'URL contient URL_NODE_EVENT
+            'readyState:',
+            undefined
+        );
         expect(eventSource.close).toHaveBeenCalled();
 
         // Cleanup
@@ -235,14 +242,20 @@ describe('createEventSource', () => {
         const eventSource = createEventSource(URL_NODE_EVENT, 'fake-token');
 
         // Mocking console.error
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
         // Triggering the error event
         eventSource.onerror(error);
 
-        // Expectation that error is logged and EventSource is closed
-        expect(consoleErrorSpy).toHaveBeenCalledWith('🚨 EventSource error:', error);
+        // Expectation that error is logged with all arguments and EventSource is closed
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '🚨 EventSource error:',
+            error,
+            'URL:',
+            expect.stringContaining(URL_NODE_EVENT),
+            'readyState:',
+            undefined
+        );
         expect(eventSource.close).toHaveBeenCalled();
 
         // Expectation that reconnection is attempted

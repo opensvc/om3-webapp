@@ -3,6 +3,8 @@ import {AppBar, Toolbar, Typography, Button, Box} from "@mui/material";
 import {FaSignOutAlt, FaUser} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
+import {useEffect, useState} from "react";
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 
 const NavBar = () => {
     const {userManager} = useOidc();
@@ -10,6 +12,80 @@ const NavBar = () => {
     const auth = useAuth();
     const location = useLocation();
     const authDispatch = useAuthDispatch();
+    const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
+    const [breadcrumb, setBreadcrumb] = useState([]);
+
+    useEffect(() => {
+        const fetchClusterData = async () => {
+            let retryCount = 0;
+            const maxRetries = 3;
+            const retryInterval = 1000;
+
+            const tryFetch = async () => {
+                const token = auth?.authToken || localStorage.getItem("authToken");
+
+                if (!token) {
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        setTimeout(tryFetch, retryInterval);
+                        return;
+                    }
+                    setBreadcrumb([
+                        {name: "Cluster", path: "/cluster"},
+                        ...getPathBreadcrumbs(),
+                    ]);
+                    return;
+                }
+
+                try {
+                    await fetchNodes(token);
+                } catch (error) {
+                    console.error("Error while calling fetchNodes:", error.message);
+                }
+            };
+
+            const getPathBreadcrumbs = () => {
+                const pathParts = location.pathname.split("/").filter(Boolean);
+                const breadcrumbItems = [];
+                if (pathParts[0] !== "login" && pathParts.length > 1) {
+                    pathParts.forEach((part, index) => {
+                        const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                        if (part !== "cluster") {
+                            breadcrumbItems.push({name: part, path: fullPath});
+                        }
+                    });
+                }
+                return breadcrumbItems;
+            };
+
+            tryFetch();
+        };
+
+        fetchClusterData();
+    }, [auth?.authToken, location.pathname]);
+
+    useEffect(() => {
+        const pathParts = location.pathname.split("/").filter(Boolean);
+        const breadcrumbItems = [];
+
+        if (pathParts[0] !== "login") {
+            breadcrumbItems.push({
+                name: loading ? "Loading..." : (clusterName || "Cluster"),
+                path: "/cluster",
+            });
+
+            if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
+                pathParts.forEach((part, index) => {
+                    const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                    if (part !== "cluster") {
+                        breadcrumbItems.push({name: part, path: fullPath});
+                    }
+                });
+            }
+        }
+
+        setBreadcrumb(breadcrumbItems);
+    }, [location.pathname, clusterName, loading]);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {
@@ -20,32 +96,6 @@ const NavBar = () => {
         authDispatch({type: Logout});
         navigate("/auth-choice");
     };
-
-    const getBreadcrumbItems = () => {
-        const pathParts = location.pathname.split("/").filter(Boolean);
-        const breadcrumbItems = [];
-
-        if (pathParts[0] === "login") {
-            return breadcrumbItems;
-        }
-
-        if (pathParts.length === 1 && pathParts[0] === "cluster") {
-            breadcrumbItems.push({name: "Cluster", path: "/cluster"});
-        } else {
-            breadcrumbItems.push({name: "Cluster", path: "/cluster"});
-
-            pathParts.forEach((part, index) => {
-                const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-                if (part !== "cluster") {
-                    breadcrumbItems.push({name: part, path: fullPath});
-                }
-            });
-        }
-
-        return breadcrumbItems;
-    };
-
-    const breadcrumb = getBreadcrumbItems();
 
     return (
         <AppBar position="sticky">

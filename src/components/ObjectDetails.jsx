@@ -40,6 +40,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
+import SettingsIcon from "@mui/icons-material/Settings";
 import {
     RestartAlt,
     LockOpen,
@@ -103,7 +104,6 @@ const RESOURCE_ACTIONS = [
 let renderCount = 0;
 
 const ObjectDetail = () => {
-    console.log(`ObjectDetail render #${++renderCount}`);
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
@@ -111,6 +111,8 @@ const ObjectDetail = () => {
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
+    const configUpdates = useEventStore((s) => s.configUpdates);
+    const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
 
@@ -139,6 +141,10 @@ const ObjectDetail = () => {
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
+    const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
+    const [paramInput, setParamInput] = useState("");
+    const [paramToDelete, setParamToDelete] = useState("");
+    const [configNode, setConfigNode] = useState(null);
 
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -306,27 +312,45 @@ const ObjectDetail = () => {
     };
 
     // Fetch configuration for the object
-    const fetchConfig = async () => {
+    const fetchConfig = async (node) => {
+        if (configLoading) {
+            console.warn(`⏳ [fetchConfig] Already loading, queuing request for node=${node}`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            if (configLoading) {
+                console.warn(`🚫 [fetchConfig] Still loading, skipping request for node=${node}`);
+                return;
+            }
+        }
+        if (!node) {
+            console.warn(`🚫 [fetchConfig] No node provided for ${decodedObjectName}`);
+            return;
+        }
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             setConfigError("Auth token not found.");
+            console.error("❌ [fetchConfig] No auth token for:", decodedObjectName);
             return;
         }
 
         setConfigLoading(true);
         setConfigError(null);
+        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
             const response = await fetch(url, {
                 headers: {Authorization: `Bearer ${token}`},
+                cache: "no-cache",
             });
-            if (!response.ok)
+            if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
+            }
             const text = await response.text();
             setConfigData(text);
+            return text;
         } catch (err) {
+            console.error(`💥 [fetchConfig] Error: ${err.message}, URL: ${url}`);
             setConfigError(err.message);
+            throw err;
         } finally {
             setConfigLoading(false);
         }
@@ -360,7 +384,10 @@ const ObjectDetail = () => {
             if (!response.ok)
                 throw new Error(`Failed to update config: ${response.status}`);
             openSnackbar("Configuration updated successfully");
-            await fetchConfig(); // Refresh configuration
+            if (configNode) {
+                await fetchConfig(configNode); // Refresh configuration
+                setConfigAccordionExpanded(true); // Open accordion
+            }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
@@ -370,18 +397,97 @@ const ObjectDetail = () => {
         }
     };
 
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchNodes(token);
-            startEventReception(token);
-            fetchKeys();
-            fetchConfig();
+    // Add configuration parameter
+    const handleAddParam = async () => {
+        if (!paramInput) {
+            openSnackbar("Parameter input is required.", "error");
+            return;
         }
-        return () => {
-            closeEventSource();
-        };
-    }, [decodedObjectName]);
+        const [key, value] = paramInput.split("=", 2);
+        if (!key || !value) {
+            openSnackbar("Parameter must be in the format 'key=value'.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Adding parameter ${key}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok)
+                throw new Error(`Failed to add parameter: ${response.status}`);
+            openSnackbar(`Parameter '${key}' added successfully`);
+            if (configNode) {
+                await fetchConfig(configNode); // Refresh configuration
+                setConfigAccordionExpanded(true); // Open accordion
+            }
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setParamInput("");
+        }
+    };
+
+    // Delete configuration parameter
+    const handleDeleteParam = async () => {
+        if (!paramToDelete) {
+            openSnackbar("Parameter key to delete is required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Deleting parameter ${paramToDelete}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(paramToDelete)}`;
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok)
+                throw new Error(`Failed to delete parameter: ${response.status}`);
+            openSnackbar(`Parameter '${paramToDelete}' deleted successfully`);
+            if (configNode) {
+                await fetchConfig(configNode); // Refresh configuration
+                setConfigAccordionExpanded(true); // Open accordion
+            }
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setParamToDelete("");
+        }
+    };
+
+    // Handle manage parameters dialog submission
+    const handleManageParamsSubmit = async () => {
+        if (paramInput) {
+            await handleAddParam();
+        }
+        if (paramToDelete) {
+            await handleDeleteParam();
+        }
+        setManageParamsDialogOpen(false);
+    };
 
     // Key action handlers
     const handleDeleteKey = async () => {
@@ -703,6 +809,60 @@ const ObjectDetail = () => {
         });
     };
 
+    // Effect for handling config updates
+    useEffect(() => {
+
+        const unsubscribe = useEventStore.subscribe(
+            (state) => state.configUpdates,
+            async (updates) => {
+                const {name} = parseObjectPath(decodedObjectName);
+                const matchingUpdate = updates.find(u =>
+                    u.name === name || u.fullName === decodedObjectName
+                );
+
+                if (matchingUpdate) {
+
+                    // Force fetch the config
+                    try {
+                        await fetchConfig(matchingUpdate.node);
+                        setConfigAccordionExpanded(true);
+                        openSnackbar("Configuration updated", "info");
+                    } catch (err) {
+                        console.error(`💥 Failed to fetch updated config:`, err);
+                        openSnackbar("Failed to load updated configuration", "error");
+                    } finally {
+                        clearConfigUpdate(decodedObjectName);
+                    }
+                }
+            }
+        );
+
+        // Initial load
+        const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
+        if (initialNode) {
+            fetchConfig(initialNode).catch(console.error);
+        }
+
+        return unsubscribe;
+    }, [decodedObjectName, objectInstanceStatus]);
+
+    // Effect for initial data fetch
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            fetchNodes(token);
+            startEventReception(token);
+            fetchKeys();
+        }
+        return () => {
+            closeEventSource();
+        };
+    }, [decodedObjectName]);
+
+    // Effect to log configData changes
+    useEffect(() => {
+    }, [configData]);
+
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => objectData, [objectData]);
     const memoizedNodes = useMemo(
@@ -740,15 +900,13 @@ const ObjectDetail = () => {
                         <Typography variant="h4" fontWeight="bold">
                             {decodedObjectName}
                         </Typography>
-                        <Box display="flex" alignItems="center" gap={2}>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                             <FiberManualRecordIcon
                                 sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
                             />
                             {getObjectStatus().avail === "warn" && (
                                 <Tooltip title="Warning">
-                                    <WarningAmberIcon
-                                        sx={{color: orange[500], fontSize: "1.2rem"}}
-                                    />
+                                    <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
                             {getObjectStatus().frozen === "frozen" && (
@@ -757,9 +915,7 @@ const ObjectDetail = () => {
                                 </Tooltip>
                             )}
                             {getObjectStatus().globalExpect && (
-                                <Typography variant="caption">
-                                    {getObjectStatus().globalExpect}
-                                </Typography>
+                                <Typography variant="caption">{getObjectStatus().globalExpect}</Typography>
                             )}
                             <IconButton
                                 onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
@@ -879,9 +1035,7 @@ const ObjectDetail = () => {
                                                     <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
                                                     <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
                                                     <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>
-                                                        Actions
-                                                    </TableCell>
+                                                    <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
@@ -968,14 +1122,22 @@ const ObjectDetail = () => {
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails>
-                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
+                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
                                 <IconButton
                                     color="primary"
                                     onClick={() => setUpdateConfigDialogOpen(true)}
                                     disabled={actionLoading}
-                                    aria-label="Edit configuration"
+                                    aria-label="Edit configuration file"
                                 >
                                     <EditIcon/>
+                                </IconButton>
+                                <IconButton
+                                    color="primary"
+                                    onClick={() => setManageParamsDialogOpen(true)}
+                                    disabled={actionLoading}
+                                    aria-label="Manage configuration parameters"
+                                >
+                                    <SettingsIcon/>
                                 </IconButton>
                             </Box>
                             {configLoading && <CircularProgress size={24}/>}
@@ -984,16 +1146,16 @@ const ObjectDetail = () => {
                                     {configError}
                                 </Alert>
                             )}
-                            {!configLoading && !configError && !configData && (
+                            {!configLoading && !configError && configData === null && (
                                 <Typography color="textSecondary">
                                     No configuration available.
                                 </Typography>
                             )}
-                            {!configLoading && !configError && configData && (
+                            {!configLoading && !configError && configData !== null && (
                                 <Box
                                     sx={{
                                         p: 2,
-                                        bgcolor: "grey.100",
+                                        bgcolor: "grey.200",
                                         borderRadius: 1,
                                         maxWidth: "100%",
                                         overflowX: "auto",
@@ -1010,14 +1172,14 @@ const ObjectDetail = () => {
                                 >
                                     <Box
                                         component="pre"
+                                        key={configData} // Force re-render
                                         sx={{
-                                            whiteSpace: "pre",
+                                            whiteSpace: "pre-wrap",
                                             fontFamily: "Monospace",
                                             bgcolor: "inherit",
                                             p: 1,
                                             m: 0,
                                             minWidth: "max-content",
-                                            maxWidth: "none",
                                         }}
                                     >
                                         {configData}
@@ -1035,11 +1197,10 @@ const ObjectDetail = () => {
                     maxWidth="xs"
                     fullWidth
                 >
-                    <DialogTitle>Confirm Delete Key</DialogTitle>
+                    <DialogTitle>Confirm Key Deletion</DialogTitle>
                     <DialogContent>
-                        <Typography>
-                            Are you sure you want to delete the key{" "}
-                            <strong>{keyToDelete}</strong>?
+                        <Typography variant="body1">
+                            Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
                         </Typography>
                     </DialogContent>
                     <DialogActions>
@@ -1097,16 +1258,13 @@ const ObjectDetail = () => {
                                     variant="body2"
                                     color={newKeyFile ? "textPrimary" : "textSecondary"}
                                 >
-                                    {newKeyFile ? newKeyFile.name : "No file chosen"}
+                                    {newKeyFile ? newKeyFile.name : "No file selected"}
                                 </Typography>
                             </Box>
                         </Box>
                     </DialogContent>
                     <DialogActions>
-                        <Button
-                            onClick={() => setCreateDialogOpen(false)}
-                            disabled={actionLoading}
-                        >
+                        <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
                             Cancel
                         </Button>
                         <Button
@@ -1165,10 +1323,7 @@ const ObjectDetail = () => {
                         </Box>
                     </DialogContent>
                     <DialogActions>
-                        <Button
-                            onClick={() => setUpdateDialogOpen(false)}
-                            disabled={actionLoading}
-                        >
+                        <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
                             Cancel
                         </Button>
                         <Button
@@ -1233,15 +1388,67 @@ const ObjectDetail = () => {
                     </DialogActions>
                 </Dialog>
 
+                {/* MANAGE CONFIG PARAMETERS DIALOG */}
+                <Dialog
+                    open={manageParamsDialogOpen}
+                    onClose={() => setManageParamsDialogOpen(false)}
+                    maxWidth="sm"
+                    fullWidth
+                >
+                    <DialogTitle>Manage Configuration Parameters</DialogTitle>
+                    <DialogContent>
+                        <Typography variant="subtitle1" gutterBottom>
+                            Add Parameter
+                        </Typography>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Parameter (e.g., test.test.param=value)"
+                            fullWidth
+                            variant="outlined"
+                            value={paramInput}
+                            onChange={(e) => setParamInput(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
+                            Delete Parameter
+                        </Typography>
+                        <TextField
+                            margin="dense"
+                            label="Parameter key to delete (e.g., test.test.param)"
+                            fullWidth
+                            variant="outlined"
+                            value={paramToDelete}
+                            onChange={(e) => setParamToDelete(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            onClick={() => setManageParamsDialogOpen(false)}
+                            disabled={actionLoading}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleManageParamsSubmit}
+                            disabled={actionLoading || (!paramInput && !paramToDelete)}
+                        >
+                            Apply
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
                 {/* BATCH NODE ACTIONS */}
-                <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
                     <Button
                         variant="outlined"
                         onClick={handleNodesActionsOpen}
                         disabled={selectedNodes.length === 0}
-                        aria-label="Batch actions on selected nodes"
+                        aria-label="Actions on selected nodes"
                     >
-                        Actions on selected nodes
+                        Actions on Selected Nodes
                     </Button>
                 </Box>
 
@@ -1267,16 +1474,16 @@ const ObjectDetail = () => {
                         >
                             {/* NODE */}
                             <Box sx={{p: 1}}>
-                                <Box display="flex" justifyContent="space-between" alignItems="center">
-                                    <Box display="flex" alignItems="center" gap={1}>
+                                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                                         <Checkbox
                                             checked={selectedNodes.includes(node)}
                                             onChange={() => toggleNode(node)}
                                             aria-label={`Select node ${node}`}
                                         />
-                                        <Typography variant="h6">Node: {node}</Typography>
+                                        <Typography variant="h6">{node}</Typography>
                                     </Box>
-                                    <Box display="flex" alignItems="center" gap={2}>
+                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                                         <FiberManualRecordIcon
                                             sx={{color: getColor(avail), fontSize: "1.2rem"}}
                                         />
@@ -1289,12 +1496,10 @@ const ObjectDetail = () => {
                                         )}
                                         {frozen === "frozen" && (
                                             <Tooltip title="Frozen">
-                                                <AcUnitIcon fontSize="medium" sx={{color: blue[300]}}/>
+                                                <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
                                             </Tooltip>
                                         )}
-                                        {state && (
-                                            <Typography variant="caption">{state}</Typography>
-                                        )}
+                                        {state && <Typography variant="caption">{state}</Typography>}
                                         <IconButton
                                             onClick={(e) => {
                                                 setCurrentNode(node);
@@ -1341,15 +1546,15 @@ const ObjectDetail = () => {
                                         <Typography variant="subtitle1" fontWeight="medium">
                                             Resources ({resIds.length})
                                         </Typography>
-                                        <Box display="flex" alignItems="center" gap={1}>
+                                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                                             <Checkbox
                                                 checked={
-                                                    (selectedResourcesByNode[node] || []).length ===
-                                                    resIds.length && resIds.length > 0
+                                                    (selectedResourcesByNode[node]?.length || 0) === resIds.length &&
+                                                    resIds.length > 0
                                                 }
                                                 onChange={(e) => {
                                                     const next = e.target.checked ? resIds : [];
-                                                    setSelectedResourcesByNode((prev) => ({
+                                                    setSelectedResourcesBy((prev) => ({
                                                         ...prev,
                                                         [node]: next,
                                                     }));
@@ -1363,7 +1568,7 @@ const ObjectDetail = () => {
                                                     e.stopPropagation();
                                                 }}
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
-                                                aria-label={`Resources actions for node ${node}`}
+                                                aria-label={`Resource actions for node ${node}`}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
@@ -1418,11 +1623,7 @@ const ObjectDetail = () => {
                                                                     width="100%"
                                                                 >
                                                                     <Checkbox
-                                                                        checked={
-                                                                            (selectedResourcesByNode[node] || []).includes(
-                                                                                rid
-                                                                            )
-                                                                        }
+                                                                        checked={(selectedResourcesByNode[node] || []).includes(rid)}
                                                                         onChange={() => toggleResource(node, rid)}
                                                                         aria-label={`Select resource ${rid}`}
                                                                     />
@@ -1464,9 +1665,7 @@ const ObjectDetail = () => {
                                                                         <strong>Provisioned:</strong>
                                                                         <FiberManualRecordIcon
                                                                             sx={{
-                                                                                color: parseProvisionedState(
-                                                                                    res.provisioned?.state
-                                                                                )
+                                                                                color: parseProvisionedState(res.provisioned?.state)
                                                                                     ? green[500]
                                                                                     : red[500],
                                                                                 fontSize: "1rem",
@@ -1500,10 +1699,7 @@ const ObjectDetail = () => {
                     onClose={handleNodesActionsClose}
                 >
                     {NODE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleBatchNodeActionClick(name)}
-                        >
+                        <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
@@ -1516,10 +1712,7 @@ const ObjectDetail = () => {
                     onClose={() => setIndividualNodeMenuAnchor(null)}
                 >
                     {NODE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleIndividualNodeActionClick(name)}
-                        >
+                        <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
@@ -1532,10 +1725,7 @@ const ObjectDetail = () => {
                     onClose={handleResourcesActionsClose}
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleBatchResourceActionClick(name)}
-                        >
+                        <MenuItem key={name} onClick={() => handleBatchResourceActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
@@ -1548,10 +1738,7 @@ const ObjectDetail = () => {
                     onClose={handleResourceMenuClose}
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleResourceActionClick(name)}
-                        >
+                        <MenuItem key={name} onClick={() => handleResourceActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
@@ -1606,9 +1793,9 @@ const ObjectDetail = () => {
                             : pendingAction?.node && !pendingAction?.rid
                                 ? `node ${pendingAction.node}`
                                 : pendingAction?.batch === "resources"
-                                    ? `selected resources of node ${pendingAction.node}`
+                                    ? `selected resources on node ${pendingAction.node}`
                                     : pendingAction?.rid
-                                        ? `resource ${pendingAction.rid} of node ${pendingAction.node}`
+                                        ? `resource ${pendingAction.rid} on node ${pendingAction.node}`
                                         : "the object"
                     }
                 />

@@ -12,6 +12,7 @@ export const createEventSource = (url, token) => {
     }
 
     if (currentEventSource) {
+        console.log("🛑 Closing existing EventSource");
         currentEventSource.close();
     }
 
@@ -24,6 +25,7 @@ export const createEventSource = (url, token) => {
         setHeartbeatStatuses,
         setInstanceMonitors,
         removeObject,
+        setConfigUpdated,
     } = useEventStore.getState();
 
     // Buffers for batching SSE updates
@@ -34,6 +36,7 @@ export const createEventSource = (url, token) => {
     let nodeStatsBuffer = {};
     let heartbeatStatusBuffer = {};
     let instanceMonitorBuffer = {};
+    let configUpdatedBuffer = new Set();
     let flushTimeout = null;
 
     const scheduleFlush = () => {
@@ -107,8 +110,11 @@ export const createEventSource = (url, token) => {
         "DaemonHeartbeatUpdated",
         "ObjectDeleted",
         "InstanceMonitorUpdated",
+        "InstanceConfigUpdated",
     ];
     filters.forEach((f) => cachedUrl += `&filter=${f}`);
+
+    console.log("🔗 Creating EventSource with URL:", cachedUrl);
 
     currentEventSource = new EventSourcePolyfill(cachedUrl, {
         headers: {
@@ -118,11 +124,11 @@ export const createEventSource = (url, token) => {
     });
 
     currentEventSource.onopen = () => {
-        console.log("✅ SSE connection established!");
+        console.log("✅ SSE connection established! URL:", cachedUrl, "readyState:", currentEventSource.readyState);
     };
 
     currentEventSource.onerror = (error) => {
-        console.error("🚨 EventSource error:", error);
+        console.error("🚨 EventSource error:", error, "URL:", cachedUrl, "readyState:", currentEventSource.readyState);
         currentEventSource.close();
         setTimeout(() => {
             console.log("🔄 Attempting to reconnect...");
@@ -225,6 +231,18 @@ export const createEventSource = (url, token) => {
             instanceMonitorBuffer[key] = instance_monitor;
             scheduleFlush();
         }
+    });
+
+    currentEventSource.addEventListener("InstanceConfigUpdated", (event) => {
+        const parsed = JSON.parse(event.data);
+        const name = parsed.path || parsed.labels?.path;
+        const node = parsed.node;
+        if (!name || !node) {
+            console.warn("⚠️ InstanceConfigUpdated event missing name or node:", parsed);
+            return;
+        }
+        setConfigUpdated([{name, node}]);
+        scheduleFlush();
     });
 
     return currentEventSource;

@@ -127,13 +127,6 @@ const Objects = () => {
 
     // Debug objectStatus and state
     useEffect(() => {
-        console.log("[Objects] objectStatus:", JSON.stringify(objectStatus, null, 2));
-        console.log("[Objects] Query params:", Object.fromEntries(queryParams));
-        console.log("[Objects] Raw globalState:", rawGlobalState);
-        console.log("[Objects] Initial global state:", initialGlobalState);
-        console.log("[Objects] selectedGlobalState:", selectedGlobalState);
-        console.log("[Objects] Initial namespace:", queryParams.get("namespace"));
-        console.log("[Objects] selectedNamespace:", selectedNamespace);
         setSelectedGlobalState(initialGlobalState);
         setSelectedNamespace(
             namespaces.includes(queryParams.get("namespace"))
@@ -179,11 +172,6 @@ const Objects = () => {
                 break;
             }
         }
-        console.log(
-            `[Objects] getObjectStatus for ${objectName}: rawAvail=${JSON.stringify(
-                rawAvail
-            )}, normalized avail=${avail}, typeof rawAvail=${typeof rawAvail}`
-        );
         return {avail, frozen, globalExpect};
     };
 
@@ -208,9 +196,6 @@ const Objects = () => {
         const {avail} = getObjectStatus(name);
         const matchesGlobalState =
             selectedGlobalState === "all" || avail === selectedGlobalState;
-        console.log(
-            `[Objects] Filtering ${name}: avail=${avail}, selectedGlobalState=${selectedGlobalState}, matchesGlobalState=${matchesGlobalState}`
-        );
         return (
             (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
             (selectedKind === "all" || extractKind(name) === selectedKind) &&

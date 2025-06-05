@@ -104,7 +104,6 @@ const RESOURCE_ACTIONS = [
 let renderCount = 0;
 
 const ObjectDetail = () => {
-    console.log(`ObjectDetail render #${++renderCount}`);
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
     const {fetchNodes, startEventReception} = useFetchDaemonStatus();
@@ -314,7 +313,6 @@ const ObjectDetail = () => {
 
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
-        console.log(`🔍 [fetchConfig] Attempting to fetch config for node=${node}, object=${decodedObjectName}`);
         if (configLoading) {
             console.warn(`⏳ [fetchConfig] Already loading, queuing request for node=${node}`);
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -338,20 +336,16 @@ const ObjectDetail = () => {
         setConfigLoading(true);
         setConfigError(null);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
-        console.log(`📡 [fetchConfig] GET request to: ${url}, Object: ${decodedObjectName}`);
         try {
             const response = await fetch(url, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
             });
-            console.log(`📡 [fetchConfig] Response status: ${response.status}, URL: ${url}`);
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
             }
             const text = await response.text();
-            console.log(`📡 [fetchConfig] Config data received: ${text.slice(0, 100)}..., length: ${text.length}`);
             setConfigData(text);
-            console.log(`✅ [fetchConfig] ConfigData set to: ${text.slice(0, 50)}...`);
             return text;
         } catch (err) {
             console.error(`💥 [fetchConfig] Error: ${err.message}, URL: ${url}`);
@@ -749,7 +743,6 @@ const ObjectDetail = () => {
 
     const handleConfigAccordionChange = (event, isExpanded) => {
         setConfigAccordionExpanded(isExpanded);
-        console.log(`📌 [ConfigAccordion] Expanded: ${isExpanded}, ConfigData: ${configData?.slice(0, 50) || "null"}`);
     };
 
     // Dialog confirm handler
@@ -818,7 +811,6 @@ const ObjectDetail = () => {
 
     // Effect for handling config updates
     useEffect(() => {
-        console.log(`🔍 [ObjectDetail] Setting up config updates listener for: ${decodedObjectName}`);
 
         const unsubscribe = useEventStore.subscribe(
             (state) => state.configUpdates,
@@ -829,7 +821,6 @@ const ObjectDetail = () => {
                 );
 
                 if (matchingUpdate) {
-                    console.log(`🔄 [ObjectDetail] Config update detected for ${decodedObjectName} on node ${matchingUpdate.node}`);
 
                     // Force fetch the config
                     try {
@@ -870,7 +861,6 @@ const ObjectDetail = () => {
 
     // Effect to log configData changes
     useEffect(() => {
-        console.log(`📊 [ObjectDetail] configData changed: ${configData?.slice(0, 100) || "null"}`);
     }, [configData]);
 
     // Memoize data to prevent unnecessary re-renders
@@ -1192,7 +1182,6 @@ const ObjectDetail = () => {
                                             minWidth: "max-content",
                                         }}
                                     >
-                                        {console.log(`🎨 [Render] Displaying configData: ${configData.slice(0, 50)}`)}
                                         {configData}
                                     </Box>
                                 </Box>

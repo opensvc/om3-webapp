@@ -172,11 +172,6 @@ const Objects = () => {
                 break;
             }
         }
-        console.log(
-            `[Objects] getObjectStatus for ${objectName}: rawAvail=${JSON.stringify(
-                rawAvail
-            )}, normalized avail=${avail}, typeof rawAvail=${typeof rawAvail}`
-        );
         return {avail, frozen, globalExpect};
     };
 
@@ -201,9 +196,6 @@ const Objects = () => {
         const {avail} = getObjectStatus(name);
         const matchesGlobalState =
             selectedGlobalState === "all" || avail === selectedGlobalState;
-        console.log(
-            `[Objects] Filtering ${name}: avail=${avail}, selectedGlobalState=${selectedGlobalState}, matchesGlobalState=${matchesGlobalState}`
-        );
         return (
             (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
             (selectedKind === "all" || extractKind(name) === selectedKind) &&

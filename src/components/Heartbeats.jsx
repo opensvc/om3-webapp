@@ -16,6 +16,7 @@ import {
     MenuItem,
     Button,
     Collapse,
+    Tooltip
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -244,8 +245,16 @@ const Heartbeats = () => {
                         <TableBody>
                             {filteredRows.map((row, index) => (
                                 <TableRow key={index} hover>
-                                    <TableCell sx={tableCellStyle}>{getStateIcon(row.state)}</TableCell>
-                                    <TableCell sx={tableCellStyle}>{getStatusIcon(row.isBeating)}</TableCell>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.state.charAt(0).toUpperCase() + row.state.slice(1)} arrow>
+                                            <span>{getStateIcon(row.state)}</span>
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.isBeating ? "Beating" : "Non-Beating"} arrow>
+                                            <span>{getStatusIcon(row.isBeating)}</span>
+                                        </Tooltip>
+                                    </TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>

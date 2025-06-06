@@ -47,6 +47,8 @@ describe("Heartbeats Component", () => {
         expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
         expect(screen.getByRole("table")).toBeInTheDocument();
         expect(screen.getByText("NODE")).toBeInTheDocument();
+        expect(screen.getByText("RUNNING")).toBeInTheDocument();
+        expect(screen.getByText("BEATING")).toBeInTheDocument();
     });
 
     test("renders node with heartbeat statuses", async () => {
@@ -93,15 +95,15 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
-            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATUS
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
             expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
             expect(firstRowCells[3]).toHaveTextContent("node1");
             expect(firstRowCells[4]).toHaveTextContent("peer1");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
-            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // STATUS
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
             expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
             expect(secondRowCells[3]).toHaveTextContent("node1");
             expect(secondRowCells[4]).toHaveTextContent("peer1");
@@ -140,8 +142,8 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
-            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
             expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
             expect(firstRowCells[3]).toHaveTextContent("node1");
             expect(firstRowCells[4]).toHaveTextContent("N/A");
@@ -150,8 +152,8 @@ describe("Heartbeats Component", () => {
             expect(firstRowCells[7]).toHaveTextContent("N/A");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
-            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
             expect(secondRowCells[4]).toHaveTextContent("N/A");
         });
     });

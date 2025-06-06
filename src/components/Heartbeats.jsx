@@ -68,14 +68,13 @@ const Heartbeats = () => {
     const location = useLocation();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
 
-    // Get initial status and state from URL
     const initialFilters = useMemo(() => {
         const params = new URLSearchParams(location.search);
         const status = params.get("status");
         const state = params.get("state");
         return {
             status: ["all", "beating", "non-beating"].includes(status) ? status : "all",
-            state: state || "all" // Fallback to "all" if state is not provided
+            state: state || "all"
         };
     }, [location.search]);
 
@@ -232,8 +231,8 @@ const Heartbeats = () => {
                     <Table size="small" sx={{minWidth: 650}}>
                         <TableHead>
                             <TableRow>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>STATE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>STATUS</TableCell>
+                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>RUNNING</TableCell>
+                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>BEATING</TableCell>
                                 <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>ID</TableCell>
                                 <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>NODE</TableCell>
                                 <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>PEER</TableCell>

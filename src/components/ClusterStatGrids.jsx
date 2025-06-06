@@ -73,27 +73,31 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                 subtitle={
                     <Box>
                         <Box sx={{mb: 1}}>
-                            <Chip
-                                label={`Beating ${beatingCount || 0}`}
-                                size="small"
-                                sx={{
-                                    backgroundColor: 'green',
-                                    color: 'white',
-                                    mr: 1,
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => onClick('beating', null)}
-                            />
-                            <Chip
-                                label={`Non-Beating ${nonBeatingCount || 0}`}
-                                size="small"
-                                sx={{
-                                    backgroundColor: 'red',
-                                    color: 'white',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => onClick('non-beating', null)}
-                            />
+                            {beatingCount > 0 && (
+                                <Chip
+                                    label={`Beating ${beatingCount}`}
+                                    size="small"
+                                    sx={{
+                                        backgroundColor: 'green',
+                                        color: 'white',
+                                        mr: 1,
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={() => onClick('beating', null)}
+                                />
+                            )}
+                            {nonBeatingCount > 0 && (
+                                <Chip
+                                    label={`Non-Beating ${nonBeatingCount}`}
+                                    size="small"
+                                    sx={{
+                                        backgroundColor: 'red',
+                                        color: 'white',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={() => onClick('non-beating', null)}
+                                />
+                            )}
                         </Box>
                         <Box>
                             {Object.entries(stateCount).map(([state, count]) => (

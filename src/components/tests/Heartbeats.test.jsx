@@ -4,11 +4,9 @@ import {ThemeProvider, createTheme} from "@mui/material/styles";
 import {BrowserRouter} from "react-router-dom";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource} from "../../eventSourceManager.jsx";
+import {closeEventSource, startEventReception} from "../../eventSourceManager.jsx";
 
 jest.mock("../../hooks/useEventStore.js");
-jest.mock("../../hooks/useFetchDaemonStatus.jsx");
 jest.mock("../../eventSourceManager.jsx");
 
 const mockLocalStorage = {
@@ -28,17 +26,13 @@ const renderWithTheme = (ui, {initialPath = "/"} = {}) => {
 };
 
 describe("Heartbeats Component", () => {
-    const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
     const mockCloseEventSource = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
         mockLocalStorage.getItem.mockReturnValue("valid-token");
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
-        });
+        startEventReception.mockClear();
         closeEventSource.mockImplementation(mockCloseEventSource);
     });
 
@@ -168,8 +162,7 @@ describe("Heartbeats Component", () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-            expect(mockFetchNodes).toHaveBeenCalledWith("valid-token");
-            expect(mockStartEventReception).toHaveBeenCalledWith("valid-token");
+            expect(startEventReception).toHaveBeenCalledWith("valid-token");
         });
     });
 

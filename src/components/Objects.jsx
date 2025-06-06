@@ -51,7 +51,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
-import {closeEventSource} from "../eventSourceManager";
+import {closeEventSource, startEventReception} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {
     FreezeDialog,
@@ -88,7 +88,7 @@ const Objects = () => {
         ? rawGlobalState
         : "all";
 
-    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
+    const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore(
         (state) => state.objectInstanceStatus
@@ -215,7 +215,6 @@ const Objects = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
         }
         return () => {

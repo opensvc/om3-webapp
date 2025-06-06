@@ -3,8 +3,7 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter} from 'react-router-dom';
 import Namespaces from '../Namespaces';
 import useEventStore from '../../hooks/useEventStore.js';
-import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus.jsx';
-import {closeEventSource} from '../../eventSourceManager.jsx';
+import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -72,16 +71,13 @@ describe('Namespaces Component', () => {
         jest.setTimeout(10000);
         jest.clearAllMocks();
 
-        Storage.prototype.getItem = jest.fn(() => 'mock-token');
+        Storage.prototype.getItem = jest.fn(() => 'valid-token');
         Storage.prototype.setItem = jest.fn();
         Storage.prototype.removeItem = jest.fn();
 
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
-        });
+        startEventReception.mockClear();
 
         const mockState = {
             objectStatus: {
@@ -197,7 +193,7 @@ describe('Namespaces Component', () => {
         });
     });
 
-    test('calls fetchNodes and startEventReception on mount with auth token', async () => {
+    test('startEventReception on mount with auth token', async () => {
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -205,8 +201,7 @@ describe('Namespaces Component', () => {
         );
 
         await waitFor(() => {
-            expect(mockFetchNodes).toHaveBeenCalledWith('mock-token');
-            expect(mockStartEventReception).toHaveBeenCalledWith('mock-token');
+            expect(startEventReception).toHaveBeenCalledWith("valid-token");
         });
     });
 

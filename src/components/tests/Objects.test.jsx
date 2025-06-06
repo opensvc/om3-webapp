@@ -6,7 +6,7 @@ import {axe, toHaveNoViolations} from 'jest-axe';
 import Objects from '../Objects';
 import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
-import {closeEventSource} from '../../eventSourceManager';
+import {closeEventSource, startEventReception} from '../../eventSourceManager';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -43,7 +43,6 @@ expect.extend(toHaveNoViolations);
 
 describe('Objects Component', () => {
     const mockNavigate = jest.fn();
-    const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
     const mockRemoveObject = jest.fn();
     const allNodes = ['node1', 'node2'];
@@ -102,9 +101,9 @@ describe('Objects Component', () => {
         // Mock useFetchDaemonStatus
         useFetchDaemonStatus.mockReturnValue({
             daemon: {cluster: {object: {}}},
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
         });
+
+        startEventReception.mockClear();
 
         Storage.prototype.getItem = jest.fn(() => 'mock-token');
     });
@@ -144,10 +143,10 @@ describe('Objects Component', () => {
         });
 
         await waitFor(() => {
-            expect(mockFetchNodes).toHaveBeenCalledWith('mock-token');
-            expect(mockStartEventReception).toHaveBeenCalledWith('mock-token');
+            expect(startEventReception).toHaveBeenCalledWith('mock-token');
         });
     });
+
 
     test('displays objects table with correct data', async () => {
         await act(async () => {

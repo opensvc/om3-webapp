@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from "react";
 import {
     Box,
     Paper,
@@ -36,12 +36,12 @@ const Pools = () => {
     }, []);
 
     return (
-        <Box sx={{ p: 3, maxWidth: "1400px", mx: "auto" }}>
-            <Typography variant="h4" gutterBottom sx={{ mb: 3 }} align="center">
+        <Box sx={{p: 3, maxWidth: "1400px", mx: "auto"}}>
+            <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
                 Pools
             </Typography>
-            <TableContainer component={Paper} sx={{ width: "100%" }}>
-                <Table sx={{ minWidth: 700 }}>
+            <TableContainer component={Paper} sx={{width: "100%"}}>
+                <Table sx={{minWidth: 700}}>
                     <TableHead>
                         <TableRow>
                             <TableCell><strong>Name</strong></TableCell>

@@ -255,3 +255,16 @@ export const closeEventSource = () => {
         currentEventSource = null;
     }
 };
+
+export const startEventReception = (token) => {
+    if (!token) {
+        console.error("❌ No token provided for SSE!");
+        return;
+    }
+
+    if (currentEventSource) {
+        closeEventSource();
+    }
+
+    currentEventSource = createEventSource(URL_NODE_EVENT, token);
+};

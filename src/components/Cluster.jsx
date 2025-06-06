@@ -4,7 +4,6 @@ import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
 import useEventStore from "../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {
     GridNodes,
     GridObjects,
@@ -13,20 +12,19 @@ import {
     GridPools
 } from "./ClusterStatGrids.jsx";
 import {URL_POOL} from "../config/apiPath.js";
+import {startEventReception} from "../eventSourceManager";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const objectStatus = useEventStore((state) => state.objectStatus);
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const [poolCount, setPoolCount] = useState(0);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
 
             axios.get(URL_POOL, {

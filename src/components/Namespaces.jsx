@@ -13,8 +13,7 @@ import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../hooks/useEventStore.js";
 import {useNavigate} from "react-router-dom";
-import {closeEventSource} from "../eventSourceManager.jsx";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
+import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -37,12 +36,10 @@ const extractNamespace = (objectName) => {
 const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
         }
         return () => {

@@ -40,21 +40,6 @@ const useFetchDaemonStatus = () => {
         }
     };
 
-    // Function to start SSE with a token
-    const startEventReception = (token) => {
-        if (!token) {
-            console.error("❌ No token provided for SSE!");
-            return;
-        }
-
-        // Close previous connection before opening a new one
-        if (eventSourceRef.current) {
-            closeEventSource(eventSourceRef.current);
-        }
-
-        // Create new SSE connection
-        eventSourceRef.current = createEventSource(URL_NODE_EVENT, token);
-    };
 
     return {
         daemon,
@@ -64,7 +49,6 @@ const useFetchDaemonStatus = () => {
         error,
         loading,
         fetchNodes: refreshDaemonStatus,
-        startEventReception,
     };
 };
 

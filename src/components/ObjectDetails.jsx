@@ -57,8 +57,7 @@ import {
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource} from "../eventSourceManager.jsx";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
+import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {
     FreezeDialog,
@@ -106,7 +105,6 @@ let renderCount = 0;
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
@@ -850,7 +848,6 @@ const ObjectDetail = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
             fetchKeys();
         }

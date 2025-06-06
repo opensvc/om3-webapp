@@ -28,8 +28,7 @@ import HelpIcon from "@mui/icons-material/Help";
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource} from "../eventSourceManager.jsx";
+import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 
 const getStateIcon = (state) => {
     switch (state) {
@@ -68,7 +67,6 @@ const leftAlignedCellStyle = {
 const Heartbeats = () => {
     const location = useLocation();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     // Get initial status and state from URL
     const initialFilters = useMemo(() => {
@@ -89,7 +87,6 @@ const Heartbeats = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
         }
         return () => closeEventSource();

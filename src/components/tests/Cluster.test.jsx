@@ -4,8 +4,8 @@ import axios from 'axios';
 import {toHaveNoViolations} from 'jest-axe';
 import ClusterOverview from '../Cluster.jsx';
 import useEventStore from '../../hooks/useEventStore.js';
-import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {URL_POOL} from '../../config/apiPath.js';
+import {startEventReception} from '../../eventSourceManager';
 
 expect.extend(toHaveNoViolations);
 
@@ -15,11 +15,10 @@ jest.mock('react-router-dom', () => ({
 }));
 jest.mock('axios');
 jest.mock('../../hooks/useEventStore.js');
-jest.mock('../../hooks/useFetchDaemonStatus');
+jest.mock('../../eventSourceManager');
 
 describe('ClusterOverview', () => {
     const mockNavigate = jest.fn();
-    const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
     const mockNodeStatus = {
         node1: {frozen_at: '2023-01-01T00:00:00Z'},
@@ -55,10 +54,7 @@ describe('ClusterOverview', () => {
             objectStatus: mockObjectStatus,
             heartbeatStatus: mockHeartbeatStatus,
         }));
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: mockFetchNodes.mockResolvedValue(mockNodeStatus),
-            startEventReception: mockStartEventReception,
-        });
+        startEventReception.mockImplementation(mockStartEventReception);
         Storage.prototype.getItem = jest.fn(() => mockToken);
         jest.spyOn(axios, 'get').mockResolvedValue({
             data: {items: [{id: 'pool1'}, {id: 'pool2'}]},
@@ -115,7 +111,6 @@ describe('ClusterOverview', () => {
         );
 
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
-        expect(mockFetchNodes).toHaveBeenCalledWith(mockToken);
         expect(mockStartEventReception).toHaveBeenCalledWith(mockToken);
         expect(axios.get).toHaveBeenCalledWith(`${URL_POOL}`, {
             headers: {Authorization: `Bearer ${mockToken}`},
@@ -162,11 +157,6 @@ describe('ClusterOverview', () => {
             heartbeatStatus: {},
         }));
         jest.spyOn(axios, 'get').mockResolvedValue({data: {items: []}});
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: jest.fn().mockResolvedValue({}),
-            startEventReception: jest.fn(),
-        });
-
         render(
             <MemoryRouter>
                 <ClusterOverview/>
@@ -201,11 +191,9 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        expect(mockFetchNodes).not.toHaveBeenCalled();
         expect(mockStartEventReception).not.toHaveBeenCalled();
         expect(axios.get).not.toHaveBeenCalled();
     });
-
 
     test('handles API error for pools', async () => {
         jest.spyOn(axios, 'get').mockRejectedValue(new Error('Network error'));
@@ -221,6 +209,4 @@ describe('ClusterOverview', () => {
             expect(within(poolsCard).getByText('0')).toBeInTheDocument();
         }, {timeout: 2000});
     });
-
-
 });

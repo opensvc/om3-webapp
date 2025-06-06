@@ -62,7 +62,7 @@ const NavBar = () => {
         };
 
         fetchClusterData();
-    }, [auth?.authToken, location.pathname]);
+    }, [auth]);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);

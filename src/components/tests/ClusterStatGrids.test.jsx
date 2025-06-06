@@ -196,7 +196,7 @@ describe('ClusterStatGrids', () => {
 
         // Verify styles with RGB values
         expect(upChip).toHaveStyle('background-color: green');
-        expect(warnChip).toHaveStyle('background-color: yellow');
+        expect(warnChip).toHaveStyle('background-color: orange');
         expect(downChip).toHaveStyle('background-color: red');
 
         const card = screen.getByText('Objects').closest('div');

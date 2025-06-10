@@ -83,10 +83,10 @@ const Objects = () => {
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
     const globalStates = ["all", "up", "down", "warn", "unknown"];
-    const rawGlobalState = queryParams.get("globalState");
-    const initialGlobalState = globalStates.includes(rawGlobalState)
-        ? rawGlobalState
-        : "all";
+    const rawGlobalState = queryParams.get("globalState") || "all";
+    const rawNamespace = queryParams.get("namespace") || "all";
+    const rawKind = queryParams.get("kind") || "all";
+    const rawSearchQuery = queryParams.get("name") || "";
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
@@ -98,10 +98,11 @@ const Objects = () => {
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [selectedNamespace, setSelectedNamespace] = useState("all");
-    const [selectedKind, setSelectedKind] = useState("all");
-    const [selectedGlobalState, setSelectedGlobalState] =
-        useState(initialGlobalState);
+    const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
+    const [selectedKind, setSelectedKind] = useState(rawKind);
+    const [selectedGlobalState, setSelectedGlobalState] = useState(
+        globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
+    );
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: "",
@@ -119,21 +120,42 @@ const Objects = () => {
         serviceInterruption: false,
     });
     const [pendingAction, setPendingAction] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
-    // Debug objectStatus and state
+    // Update URL when filters change
     useEffect(() => {
-        setSelectedGlobalState(initialGlobalState);
-        setSelectedNamespace(
-            namespaces.includes(queryParams.get("namespace"))
-                ? queryParams.get("namespace")
-                : "all"
+        const newQueryParams = new URLSearchParams();
+        if (selectedGlobalState !== "all") {
+            newQueryParams.set("globalState", selectedGlobalState);
+        }
+        if (selectedNamespace !== "all") {
+            newQueryParams.set("namespace", selectedNamespace);
+        }
+        if (selectedKind !== "all") {
+            newQueryParams.set("kind", selectedKind);
+        }
+        if (searchQuery) {
+            newQueryParams.set("name", searchQuery);
+        }
+        const queryString = newQueryParams.toString();
+        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
+            replace: true,
+        });
+    }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname]);
+
+    // Initialize filter states from URL
+    useEffect(() => {
+        setSelectedGlobalState(
+            globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
         );
-    }, [location.search, objectStatus]);
+        setSelectedNamespace(rawNamespace);
+        setSelectedKind(rawKind);
+        setSearchQuery(rawSearchQuery);
+    }, [location.search]);
 
     // Helper functions
     const extractNamespace = (name) => {
@@ -412,7 +434,7 @@ const Objects = () => {
                             }}
                         >
                             <Autocomplete
-                                key={`global-state-${selectedGlobalState}-${initialGlobalState}`}
+                                key={`global-state-${selectedGlobalState}`}
                                 sx={{minWidth: 200}}
                                 options={globalStates}
                                 value={selectedGlobalState}
@@ -449,6 +471,7 @@ const Objects = () => {
                                 renderInput={(params) => <TextField {...params} label="Namespace"/>}
                             />
                             <Autocomplete
+                                key={`kind-${selectedKind}`}
                                 sx={{minWidth: 200}}
                                 options={["all", ...kinds]}
                                 value={selectedKind}

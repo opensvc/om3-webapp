@@ -4,7 +4,6 @@ import {
     Box,
     Paper,
     Typography,
-    TableContainer,
     Table,
     TableHead,
     TableRow,
@@ -55,14 +54,14 @@ const getStatusIcon = (isBeating) => {
 };
 
 const tableCellStyle = {
-    padding: '8px 16px',
-    textAlign: 'center',
-    verticalAlign: 'middle',
+    padding: "8px 16px",
+    textAlign: "center",
+    verticalAlign: "middle"
 };
 
 const leftAlignedCellStyle = {
     ...tableCellStyle,
-    textAlign: 'left',
+    textAlign: "left"
 };
 
 const Heartbeats = () => {
@@ -119,7 +118,7 @@ const Heartbeats = () => {
                 desc: peerData?.desc || "N/A",
                 isBeating: peerData?.is_beating || false,
                 lastAt: peerData?.last_at || "N/A",
-                state: stream.state || "unknown",
+                state: stream.state || "unknown"
             });
         });
     });
@@ -141,25 +140,18 @@ const Heartbeats = () => {
                     Heartbeats
                 </Typography>
 
+                {/* Sticky Filters + Header */}
                 <Box
                     sx={{
                         position: "sticky",
                         top: 64,
-                        zIndex: 10,
+                        zIndex: 20,
                         backgroundColor: "background.paper",
-                        pt: 2,
-                        pb: 1,
-                        mb: 2,
+                        pb: 2,
+                        mb: 2
                     }}
                 >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 1,
-                        }}
-                    >
+                    <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
                         <Button
                             onClick={() => setShowFilters(!showFilters)}
                             startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
@@ -168,20 +160,19 @@ const Heartbeats = () => {
                         </Button>
                     </Box>
 
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                    <Collapse in={showFilters}>
                         <Box
                             sx={{
                                 display: "flex",
                                 flexWrap: "wrap",
                                 gap: 2,
                                 alignItems: "center",
-                                pb: 2,
+                                mb: 2
                             }}
                         >
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-state-label">Filter by State</InputLabel>
+                                <InputLabel>Filter by State</InputLabel>
                                 <Select
-                                    labelId="filter-state-label"
                                     value={filterState}
                                     label="Filter by State"
                                     onChange={(e) => setFilterState(e.target.value)}
@@ -195,9 +186,8 @@ const Heartbeats = () => {
                             </FormControl>
 
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-beating-label">Filter by Status</InputLabel>
+                                <InputLabel>Filter by Status</InputLabel>
                                 <Select
-                                    labelId="filter-beating-label"
                                     value={filterBeating}
                                     label="Filter by Status"
                                     onChange={(e) => setFilterBeating(e.target.value)}
@@ -209,9 +199,8 @@ const Heartbeats = () => {
                             </FormControl>
 
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-node-label">Filter by Node</InputLabel>
+                                <InputLabel>Filter by Node</InputLabel>
                                 <Select
-                                    labelId="filter-node-label"
                                     value={filterNode}
                                     label="Filter by Node"
                                     onChange={(e) => setFilterNode(e.target.value)}
@@ -226,46 +215,63 @@ const Heartbeats = () => {
                             </FormControl>
                         </Box>
                     </Collapse>
-                </Box>
 
-                <TableContainer>
-                    <Table size="small" sx={{minWidth: 650}}>
+                    {/* Table Header */}
+                    <Table size="small" stickyHeader>
                         <TableHead>
                             <TableRow>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>RUNNING</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>BEATING</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>ID</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>NODE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>PEER</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>TYPE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>DESC</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>LAST_AT</TableCell>
+                                {[
+                                    "RUNNING",
+                                    "BEATING",
+                                    "ID",
+                                    "NODE",
+                                    "PEER",
+                                    "TYPE",
+                                    "DESC",
+                                    "LAST_AT"
+                                ].map((label) => (
+                                    <TableCell
+                                        key={label}
+                                        sx={{
+                                            backgroundColor: "white",
+                                            fontWeight: "bold",
+                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "LAST_AT"].includes(label) ? "left" : "center",
+                                            borderBottom: "2px solid #ccc"
+                                        }}
+                                    >
+                                        {label}
+                                    </TableCell>
+                                ))}
                             </TableRow>
                         </TableHead>
-                        <TableBody>
-                            {filteredRows.map((row, index) => (
-                                <TableRow key={index} hover>
-                                    <TableCell sx={tableCellStyle}>
-                                        <Tooltip title={row.state.charAt(0).toUpperCase() + row.state.slice(1)} arrow>
-                                            <span>{getStateIcon(row.state)}</span>
-                                        </Tooltip>
-                                    </TableCell>
-                                    <TableCell sx={tableCellStyle}>
-                                        <Tooltip title={row.isBeating ? "Beating" : "Non-Beating"} arrow>
-                                            <span>{getStatusIcon(row.isBeating)}</span>
-                                        </Tooltip>
-                                    </TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.lastAt}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
                     </Table>
-                </TableContainer>
+                </Box>
+
+                {/* Table Body */}
+                <Table size="small">
+                    <TableBody>
+                        {filteredRows.map((row, index) => (
+                            <TableRow key={index} hover>
+                                <TableCell sx={tableCellStyle}>
+                                    <Tooltip title={row.state} arrow>
+                                        <span>{getStateIcon(row.state)}</span>
+                                    </Tooltip>
+                                </TableCell>
+                                <TableCell sx={tableCellStyle}>
+                                    <Tooltip title={row.isBeating ? "Beating" : "Non-Beating"} arrow>
+                                        <span>{getStatusIcon(row.isBeating)}</span>
+                                    </Tooltip>
+                                </TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
+                                <TableCell sx={leftAlignedCellStyle}>{row.lastAt}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             </Paper>
         </Box>
     );

@@ -1,5 +1,5 @@
 import React, {useEffect, useState, useMemo} from "react";
-import {useLocation} from "react-router-dom";
+import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
     Paper,
@@ -66,22 +66,48 @@ const leftAlignedCellStyle = {
 
 const Heartbeats = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
 
-    const initialFilters = useMemo(() => {
-        const params = new URLSearchParams(location.search);
-        const status = params.get("status");
-        const state = params.get("state");
-        return {
-            status: ["all", "beating", "stale"].includes(status) ? status : "all",
-            state: state || "all"
-        };
-    }, [location.search]);
+    // Read query parameters
+    const queryParams = new URLSearchParams(location.search);
+    const rawStatus = queryParams.get("status") || "all";
+    const rawNode = queryParams.get("node") || "all";
+    const rawState = queryParams.get("state") || "all";
 
-    const [filterBeating, setFilterBeating] = useState(initialFilters.status);
-    const [filterNode, setFilterNode] = useState("all");
-    const [filterState, setFilterState] = useState(initialFilters.state);
+    const [filterBeating, setFilterBeating] = useState(
+        ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
+    );
+    const [filterNode, setFilterNode] = useState(rawNode);
+    const [filterState, setFilterState] = useState(rawState);
     const [showFilters, setShowFilters] = useState(true);
+
+    // Update URL when filters change
+    useEffect(() => {
+        const newQueryParams = new URLSearchParams();
+        if (filterBeating !== "all") {
+            newQueryParams.set("status", filterBeating);
+        }
+        if (filterNode !== "all") {
+            newQueryParams.set("node", filterNode);
+        }
+        if (filterState !== "all") {
+            newQueryParams.set("state", filterState);
+        }
+        const queryString = newQueryParams.toString();
+        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
+            replace: true,
+        });
+    }, [filterBeating, filterNode, filterState, navigate, location.pathname]);
+
+    // Initialize filter states from URL
+    useEffect(() => {
+        setFilterBeating(
+            ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
+        );
+        setFilterNode(rawNode);
+        setFilterState(rawState);
+    }, [location.search]);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");

@@ -73,7 +73,7 @@ const Heartbeats = () => {
         const status = params.get("status");
         const state = params.get("state");
         return {
-            status: ["all", "beating", "non-beating"].includes(status) ? status : "all",
+            status: ["all", "beating", "stale"].includes(status) ? status : "all",
             state: state || "all"
         };
     }, [location.search]);
@@ -127,7 +127,7 @@ const Heartbeats = () => {
         const matchesBeating =
             filterBeating === "all" ||
             (filterBeating === "beating" && row.isBeating === true) ||
-            (filterBeating === "non-beating" && row.isBeating === false);
+            (filterBeating === "stale" && row.isBeating === false);
         const matchesNode = filterNode === "all" || row.node === filterNode;
         const matchesState = filterState === "all" || row.state === filterState;
         return matchesBeating && matchesNode && matchesState;
@@ -194,7 +194,7 @@ const Heartbeats = () => {
                                 >
                                     <MenuItem value="all">All</MenuItem>
                                     <MenuItem value="beating">Beating</MenuItem>
-                                    <MenuItem value="non-beating">Non-Beating</MenuItem>
+                                    <MenuItem value="stale">Stale</MenuItem>
                                 </Select>
                             </FormControl>
 
@@ -258,7 +258,7 @@ const Heartbeats = () => {
                                     </Tooltip>
                                 </TableCell>
                                 <TableCell sx={tableCellStyle}>
-                                    <Tooltip title={row.isBeating ? "Beating" : "Non-Beating"} arrow>
+                                    <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
                                         <span>{getStatusIcon(row.isBeating)}</span>
                                     </Tooltip>
                                 </TableCell>

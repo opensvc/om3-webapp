@@ -86,14 +86,14 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                         )}
                         {nonBeatingCount > 0 && (
                             <Chip
-                                label={`Non-Beating ${nonBeatingCount}`}
+                                label={`Stale ${nonBeatingCount}`}
                                 size="small"
                                 sx={{
                                     backgroundColor: 'red',
                                     color: 'white',
                                     cursor: 'pointer'
                                 }}
-                                onClick={() => onClick('non-beating', null)}
+                                onClick={() => onClick('stale', null)}
                             />
                         )}
                         {Object.entries(stateCount).map(([state, count]) => (

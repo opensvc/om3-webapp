@@ -79,7 +79,7 @@ const ClusterOverview = () => {
 
     const heartbeatIds = new Set();
     let beatingCount = 0;
-    let nonBeatingCount = 0;
+    let staleCount = 0;
     const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
 
     Object.values(heartbeatStatus).forEach(node => {
@@ -91,7 +91,7 @@ const ClusterOverview = () => {
             if (peer?.is_beating) {
                 beatingCount++;
             } else {
-                nonBeatingCount++;
+                staleCount++;
             }
 
             const state = stream.state || 'unknown';
@@ -134,7 +134,7 @@ const ClusterOverview = () => {
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
-                    nonBeatingCount={nonBeatingCount}
+                    nonBeatingCount={staleCount}
                     stateCount={stateCount}
                     onClick={(status, state) => {
                         let url = '/heartbeats';

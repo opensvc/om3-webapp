@@ -480,9 +480,9 @@ const Objects = () => {
                     </Menu>
                 </Box>
 
-                <TableContainer sx={{boxShadow: "none", border: "none"}}>
+                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                     <Table>
-                        <TableHead>
+                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
                             <TableRow>
                                 <TableCell>
                                     <Checkbox

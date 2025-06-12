@@ -45,145 +45,141 @@ describe("Heartbeats Component", () => {
 
         renderWithTheme(<Heartbeats/>);
 
-        // Titre
         expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
 
-        // Deux tables : header + body
-        const tables = screen.getAllByRole("table");
-        expect(tables.length).toBeGreaterThanOrEqual(2); // au moins 2 tables
+        const table = screen.getByRole("table");
+        expect(table).toBeInTheDocument();
 
-        // Vérifie le header de la 1ère table (sticky header)
-        const headerTable = tables[0];
-        expect(within(headerTable).getByText("NODE")).toBeInTheDocument();
-        expect(within(headerTable).getByText("RUNNING")).toBeInTheDocument();
-        expect(within(headerTable).getByText("BEATING")).toBeInTheDocument();
+        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC LAST_AT/i});
+        expect(within(headerRow).getByText("RUNNING")).toBeInTheDocument();
+        expect(within(headerRow).getByText("BEATING")).toBeInTheDocument();
+        expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
     });
 
 
-test("renders node with heartbeat statuses", async () => {
-    useEventStore.mockImplementation((selector) =>
-        selector({
-            heartbeatStatus: {
-                node1: {
-                    streams: [
-                        {
-                            id: "hb#1.rx",
-                            state: "running",
-                            peers: {
-                                peer1: {
-                                    is_beating: true,
-                                    desc: ":10011 ← peer1",
-                                    last_at: "2025-06-03T04:25:31+00:00",
+    test("renders node with heartbeat statuses", async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                heartbeatStatus: {
+                    node1: {
+                        streams: [
+                            {
+                                id: "hb#1.rx",
+                                state: "running",
+                                peers: {
+                                    peer1: {
+                                        is_beating: true,
+                                        desc: ":10011 ← peer1",
+                                        last_at: "2025-06-03T04:25:31+00:00",
+                                    },
                                 },
+                                type: "unicast",
                             },
-                            type: "unicast",
-                        },
-                        {
-                            id: "hb#1.tx",
-                            state: "running",
-                            peers: {
-                                peer1: {
-                                    is_beating: false,
-                                    desc: "→ peer1:10011",
-                                    last_at: "2025-06-03T04:25:31+00:00",
+                            {
+                                id: "hb#1.tx",
+                                state: "running",
+                                peers: {
+                                    peer1: {
+                                        is_beating: false,
+                                        desc: "→ peer1:10011",
+                                        last_at: "2025-06-03T04:25:31+00:00",
+                                    },
                                 },
+                                type: "unicast",
                             },
-                            type: "unicast",
-                        },
-                    ],
+                        ],
+                    },
                 },
-            },
-        })
-    );
+            })
+        );
 
-    renderWithTheme(<Heartbeats/>);
+        renderWithTheme(<Heartbeats/>);
 
-    await waitFor(() => {
-        const rows = screen.getAllByRole("row");
-        const dataRows = rows.slice(1);
-        expect(dataRows).toHaveLength(2);
+        await waitFor(() => {
+            const rows = screen.getAllByRole("row");
+            const dataRows = rows.slice(1);
+            expect(dataRows).toHaveLength(2);
 
-        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-        expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
-        expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
-        expect(firstRowCells[3]).toHaveTextContent("node1");
-        expect(firstRowCells[4]).toHaveTextContent("peer1");
+            const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
+            expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[3]).toHaveTextContent("node1");
+            expect(firstRowCells[4]).toHaveTextContent("peer1");
 
-        const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-        expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
-        expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
-        expect(secondRowCells[3]).toHaveTextContent("node1");
-        expect(secondRowCells[4]).toHaveTextContent("peer1");
+            const secondRowCells = within(dataRows[1]).getAllByRole("cell");
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
+            expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
+            expect(secondRowCells[3]).toHaveTextContent("node1");
+            expect(secondRowCells[4]).toHaveTextContent("peer1");
+        });
     });
-});
 
-test("handles missing peer data", async () => {
-    useEventStore.mockImplementation((selector) =>
-        selector({
-            heartbeatStatus: {
-                node1: {
-                    streams: [
-                        {
-                            id: "hb#1.rx",
-                            state: "running",
-                            peers: {},
-                            type: "unicast",
-                        },
-                        {
-                            id: "hb#1.tx",
-                            state: "running",
-                            peers: {},
-                            type: "unicast",
-                        },
-                    ],
+    test("handles missing peer data", async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                heartbeatStatus: {
+                    node1: {
+                        streams: [
+                            {
+                                id: "hb#1.rx",
+                                state: "running",
+                                peers: {},
+                                type: "unicast",
+                            },
+                            {
+                                id: "hb#1.tx",
+                                state: "running",
+                                peers: {},
+                                type: "unicast",
+                            },
+                        ],
+                    },
                 },
-            },
-        })
-    );
+            })
+        );
 
-    renderWithTheme(<Heartbeats/>);
+        renderWithTheme(<Heartbeats/>);
 
-    await waitFor(() => {
-        const rows = screen.getAllByRole("row");
-        const dataRows = rows.slice(1);
-        expect(dataRows).toHaveLength(2);
+        await waitFor(() => {
+            const rows = screen.getAllByRole("row");
+            const dataRows = rows.slice(1);
+            expect(dataRows).toHaveLength(2);
 
-        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-        expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
-        expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
-        expect(firstRowCells[3]).toHaveTextContent("node1");
-        expect(firstRowCells[4]).toHaveTextContent("N/A");
-        expect(firstRowCells[5]).toHaveTextContent("unicast");
-        expect(firstRowCells[6]).toHaveTextContent("N/A");
-        expect(firstRowCells[7]).toHaveTextContent("N/A");
+            const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
+            expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
+            expect(firstRowCells[3]).toHaveTextContent("node1");
+            expect(firstRowCells[4]).toHaveTextContent("N/A");
+            expect(firstRowCells[5]).toHaveTextContent("unicast");
+            expect(firstRowCells[6]).toHaveTextContent("N/A");
+            expect(firstRowCells[7]).toHaveTextContent("N/A");
 
-        const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-        expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
-        expect(secondRowCells[4]).toHaveTextContent("N/A");
+            const secondRowCells = within(dataRows[1]).getAllByRole("cell");
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
+            expect(secondRowCells[4]).toHaveTextContent("N/A");
+        });
+    });
+
+    test("initializes with auth token", async () => {
+        useEventStore.mockReturnValue({heartbeatStatus: {}});
+        renderWithTheme(<Heartbeats/>);
+
+        await waitFor(() => {
+            expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
+            expect(startEventReception).toHaveBeenCalledWith("valid-token");
+        });
+    });
+
+    test("cleans up on unmount", async () => {
+        useEventStore.mockReturnValue({heartbeatStatus: {}});
+        const {unmount} = renderWithTheme(<Heartbeats/>);
+        unmount();
+        await waitFor(() => {
+            expect(mockCloseEventSource).toHaveBeenCalled();
+        });
     });
 });
-
-test("initializes with auth token", async () => {
-    useEventStore.mockReturnValue({heartbeatStatus: {}});
-    renderWithTheme(<Heartbeats/>);
-
-    await waitFor(() => {
-        expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-        expect(startEventReception).toHaveBeenCalledWith("valid-token");
-    });
-});
-
-test("cleans up on unmount", async () => {
-    useEventStore.mockReturnValue({heartbeatStatus: {}});
-    const {unmount} = renderWithTheme(<Heartbeats/>);
-    unmount();
-    await waitFor(() => {
-        expect(mockCloseEventSource).toHaveBeenCalled();
-    });
-});
-})
-;

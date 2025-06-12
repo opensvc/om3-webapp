@@ -9,13 +9,14 @@ import {
     TableRow,
     TableCell,
     TableBody,
+    TableContainer,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
     Button,
     Collapse,
-    Tooltip
+    Tooltip,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -56,12 +57,12 @@ const getStatusIcon = (isBeating) => {
 const tableCellStyle = {
     padding: "8px 16px",
     textAlign: "center",
-    verticalAlign: "middle"
+    verticalAlign: "middle",
 };
 
 const leftAlignedCellStyle = {
     ...tableCellStyle,
-    textAlign: "left"
+    textAlign: "left",
 };
 
 const Heartbeats = () => {
@@ -144,7 +145,7 @@ const Heartbeats = () => {
                 desc: peerData?.desc || "N/A",
                 isBeating: peerData?.is_beating || false,
                 lastAt: peerData?.last_at || "N/A",
-                state: stream.state || "unknown"
+                state: stream.state || "unknown",
             });
         });
     });
@@ -166,7 +167,7 @@ const Heartbeats = () => {
                     Heartbeats
                 </Typography>
 
-                {/* Sticky Filters + Header */}
+                {/* Sticky Filters */}
                 <Box
                     sx={{
                         position: "sticky",
@@ -174,7 +175,7 @@ const Heartbeats = () => {
                         zIndex: 20,
                         backgroundColor: "background.paper",
                         pb: 2,
-                        mb: 2
+                        mb: 2,
                     }}
                 >
                     <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
@@ -193,7 +194,7 @@ const Heartbeats = () => {
                                 flexWrap: "wrap",
                                 gap: 2,
                                 alignItems: "center",
-                                mb: 2
+                                mb: 2,
                             }}
                         >
                             <FormControl sx={{minWidth: 200}}>
@@ -241,10 +242,12 @@ const Heartbeats = () => {
                             </FormControl>
                         </Box>
                     </Collapse>
+                </Box>
 
-                    {/* Table Header */}
-                    <Table size="small" stickyHeader>
-                        <TableHead>
+                {/* Table with Sticky Headers */}
+                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
+                    <Table size="small">
+                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
                             <TableRow>
                                 {[
                                     "RUNNING",
@@ -254,15 +257,16 @@ const Heartbeats = () => {
                                     "PEER",
                                     "TYPE",
                                     "DESC",
-                                    "LAST_AT"
+                                    "LAST_AT",
                                 ].map((label) => (
                                     <TableCell
                                         key={label}
                                         sx={{
-                                            backgroundColor: "white",
                                             fontWeight: "bold",
-                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "LAST_AT"].includes(label) ? "left" : "center",
-                                            borderBottom: "2px solid #ccc"
+                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "LAST_AT"].includes(label)
+                                                ? "left"
+                                                : "center",
+                                            borderBottom: "2px solid #ccc",
                                         }}
                                     >
                                         {label}
@@ -270,34 +274,30 @@ const Heartbeats = () => {
                                 ))}
                             </TableRow>
                         </TableHead>
+                        <TableBody>
+                            {filteredRows.map((row, index) => (
+                                <TableRow key={index} hover>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.state} arrow>
+                                            <span>{getStateIcon(row.state)}</span>
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
+                                            <span>{getStatusIcon(row.isBeating)}</span>
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
+                                    <TableCell sx={leftAlignedCellStyle}>{row.lastAt}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
                     </Table>
-                </Box>
-
-                {/* Table Body */}
-                <Table size="small">
-                    <TableBody>
-                        {filteredRows.map((row, index) => (
-                            <TableRow key={index} hover>
-                                <TableCell sx={tableCellStyle}>
-                                    <Tooltip title={row.state} arrow>
-                                        <span>{getStateIcon(row.state)}</span>
-                                    </Tooltip>
-                                </TableCell>
-                                <TableCell sx={tableCellStyle}>
-                                    <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
-                                        <span>{getStatusIcon(row.isBeating)}</span>
-                                    </Tooltip>
-                                </TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
-                                <TableCell sx={leftAlignedCellStyle}>{row.lastAt}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                </TableContainer>
             </Paper>
         </Box>
     );

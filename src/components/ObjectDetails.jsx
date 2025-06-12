@@ -856,10 +856,6 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName]);
 
-    // Effect to log configData changes
-    useEffect(() => {
-    }, [configData]);
-
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => objectData, [objectData]);
     const memoizedNodes = useMemo(

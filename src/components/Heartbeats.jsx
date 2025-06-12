@@ -150,6 +150,15 @@ const Heartbeats = () => {
         });
     });
 
+    // Sort streamRows by node, then id, then peer
+    streamRows.sort((a, b) => {
+        const nodeCompare = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
+        if (nodeCompare !== 0) return nodeCompare;
+        const idCompare = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
+        if (idCompare !== 0) return idCompare;
+        return a.peer.localeCompare(b.peer, undefined, {sensitivity: "base"});
+    });
+
     const filteredRows = streamRows.filter((row) => {
         const matchesBeating =
             filterBeating === "all" ||

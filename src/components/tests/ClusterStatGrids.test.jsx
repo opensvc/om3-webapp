@@ -63,17 +63,17 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
         expect(screen.getByText('8')).toBeInTheDocument();
 
-        // Check the chips for beating and non-beating
+        // Check the chips for beating and stale
         const beatingChipLabel = screen.getByText('Beating 4');
-        const nonBeatingChipLabel = screen.getByText('Non-Beating 4');
+        const staleChipLabel = screen.getByText('Stale 4');
         expect(beatingChipLabel).toBeInTheDocument();
-        expect(nonBeatingChipLabel).toBeInTheDocument();
+        expect(staleChipLabel).toBeInTheDocument();
 
-        // Check the styles of the beating/non-beating chips
+        // Check the styles of the beating/stale chips
         const beatingChip = beatingChipLabel.closest('.MuiChip-root');
-        const nonBeatingChip = nonBeatingChipLabel.closest('.MuiChip-root');
+        const staleChip = staleChipLabel.closest('.MuiChip-root');
         expect(beatingChip).toHaveStyle('background-color: green');
-        expect(nonBeatingChip).toHaveStyle('background-color: red');
+        expect(staleChip).toHaveStyle('background-color: red');
 
         // Check the chips for states (only those with count > 0)
         const runningChipLabel = screen.getByText('Running 3');
@@ -100,8 +100,8 @@ describe('ClusterStatGrids', () => {
         fireEvent.click(beatingChipLabel);
         expect(mockOnClick).toHaveBeenCalledWith('beating', null);
 
-        fireEvent.click(nonBeatingChipLabel);
-        expect(mockOnClick).toHaveBeenCalledWith('non-beating', null);
+        fireEvent.click(staleChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith('stale', null);
 
         fireEvent.click(runningChipLabel);
         expect(mockOnClick).toHaveBeenCalledWith(null, 'running');
@@ -194,9 +194,9 @@ describe('ClusterStatGrids', () => {
         const warnChip = warnChipLabel.closest('.MuiChip-root');
         const downChip = downChipLabel.closest('.MuiChip-root');
 
-        // Verify styles with RGB values
+        // Verify styles with color values
         expect(upChip).toHaveStyle('background-color: green');
-        expect(warnChip).toHaveStyle('background-color: yellow');
+        expect(warnChip).toHaveStyle('background-color: orange');
         expect(downChip).toHaveStyle('background-color: red');
 
         const card = screen.getByText('Objects').closest('div');

@@ -19,17 +19,17 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
             title="Objects"
             value={objectCount}
             subtitle={
-                <>
+                <Box sx={{display: "flex", justifyContent: "center", gap: 1}}>
                     <Chip
                         label={`Up ${statusCount.up}`}
                         size="small"
-                        sx={{backgroundColor: 'green', color: 'white', mr: 1, cursor: 'pointer'}}
+                        sx={{backgroundColor: 'green', color: 'white', cursor: 'pointer'}}
                         onClick={() => onClick('up')}
                     />
                     <Chip
                         label={`Warn ${statusCount.warn}`}
                         size="small"
-                        sx={{backgroundColor: 'yellow', color: 'black', mr: 1, cursor: 'pointer'}}
+                        sx={{backgroundColor: 'orange', color: 'white', cursor: 'pointer'}}
                         onClick={() => onClick('warn')}
                     />
                     <Chip
@@ -38,7 +38,7 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
                         sx={{backgroundColor: 'red', color: 'white', cursor: 'pointer'}}
                         onClick={() => onClick('down')}
                     />
-                </>
+                </Box>
             }
             onClick={() => onClick()}
         />
@@ -61,7 +61,7 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
         running: 'green',
         stopped: 'orange',
         failed: 'red',
-        warning: 'yellow',
+        warning: 'orange',
         unknown: 'grey'
     };
 
@@ -71,49 +71,46 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                 title="Heartbeats"
                 value={heartbeatCount}
                 subtitle={
-                    <Box>
-                        <Box sx={{mb: 1}}>
+                    <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1}}>
+                        {beatingCount > 0 && (
                             <Chip
-                                label={`Beating ${beatingCount || 0}`}
+                                label={`Beating ${beatingCount}`}
                                 size="small"
                                 sx={{
                                     backgroundColor: 'green',
                                     color: 'white',
-                                    mr: 1,
                                     cursor: 'pointer'
                                 }}
                                 onClick={() => onClick('beating', null)}
                             />
+                        )}
+                        {nonBeatingCount > 0 && (
                             <Chip
-                                label={`Non-Beating ${nonBeatingCount || 0}`}
+                                label={`Stale ${nonBeatingCount}`}
                                 size="small"
                                 sx={{
                                     backgroundColor: 'red',
                                     color: 'white',
                                     cursor: 'pointer'
                                 }}
-                                onClick={() => onClick('non-beating', null)}
+                                onClick={() => onClick('stale', null)}
                             />
-                        </Box>
-                        <Box>
-                            {Object.entries(stateCount).map(([state, count]) => (
-                                count > 0 && (
-                                    <Chip
-                                        key={state}
-                                        label={`${state.charAt(0).toUpperCase() + state.slice(1)} ${count}`}
-                                        size="small"
-                                        sx={{
-                                            backgroundColor: stateColors[state] || 'grey',
-                                            color: 'white',
-                                            mr: 1,
-                                            mb: 1,
-                                            cursor: 'pointer'
-                                        }}
-                                        onClick={() => onClick(null, state)}
-                                    />
-                                )
-                            ))}
-                        </Box>
+                        )}
+                        {Object.entries(stateCount).map(([state, count]) => (
+                            count > 0 && (
+                                <Chip
+                                    key={state}
+                                    label={`${state.charAt(0).toUpperCase() + state.slice(1)} ${count}`}
+                                    size="small"
+                                    sx={{
+                                        backgroundColor: stateColors[state] || 'grey',
+                                        color: state === 'warning' || state === 'stopped' ? 'white' : 'white',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={() => onClick(null, state)}
+                                />
+                            )
+                        ))}
                     </Box>
                 }
                 onClick={() => onClick()}

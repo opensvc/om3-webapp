@@ -4,11 +4,9 @@ import {ThemeProvider, createTheme} from "@mui/material/styles";
 import {BrowserRouter} from "react-router-dom";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource} from "../../eventSourceManager.jsx";
+import {closeEventSource, startEventReception} from "../../eventSourceManager.jsx";
 
 jest.mock("../../hooks/useEventStore.js");
-jest.mock("../../hooks/useFetchDaemonStatus.jsx");
 jest.mock("../../eventSourceManager.jsx");
 
 const mockLocalStorage = {
@@ -28,17 +26,13 @@ const renderWithTheme = (ui, {initialPath = "/"} = {}) => {
 };
 
 describe("Heartbeats Component", () => {
-    const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
     const mockCloseEventSource = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
         mockLocalStorage.getItem.mockReturnValue("valid-token");
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
-        });
+        startEventReception.mockImplementation(mockStartEventReception);
         closeEventSource.mockImplementation(mockCloseEventSource);
     });
 
@@ -48,12 +42,20 @@ describe("Heartbeats Component", () => {
 
     test("renders basic structure", () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
+
         renderWithTheme(<Heartbeats/>);
 
         expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
-        expect(screen.getByRole("table")).toBeInTheDocument();
-        expect(screen.getByText("NODE")).toBeInTheDocument();
+
+        const table = screen.getByRole("table");
+        expect(table).toBeInTheDocument();
+
+        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC LAST_AT/i});
+        expect(within(headerRow).getByText("RUNNING")).toBeInTheDocument();
+        expect(within(headerRow).getByText("BEATING")).toBeInTheDocument();
+        expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
     });
+
 
     test("renders node with heartbeat statuses", async () => {
         useEventStore.mockImplementation((selector) =>
@@ -99,15 +101,15 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
-            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATUS
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
             expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
             expect(firstRowCells[3]).toHaveTextContent("node1");
             expect(firstRowCells[4]).toHaveTextContent("peer1");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // STATE
-            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // STATUS
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
             expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
             expect(secondRowCells[3]).toHaveTextContent("node1");
             expect(secondRowCells[4]).toHaveTextContent("peer1");
@@ -146,8 +148,8 @@ describe("Heartbeats Component", () => {
             expect(dataRows).toHaveLength(2);
 
             const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
-            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(firstRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
             expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
             expect(firstRowCells[3]).toHaveTextContent("node1");
             expect(firstRowCells[4]).toHaveTextContent("N/A");
@@ -156,8 +158,8 @@ describe("Heartbeats Component", () => {
             expect(firstRowCells[7]).toHaveTextContent("N/A");
 
             const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument();
-            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument();
+            expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
+            expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING fallback
             expect(secondRowCells[4]).toHaveTextContent("N/A");
         });
     });
@@ -168,8 +170,7 @@ describe("Heartbeats Component", () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-            expect(mockFetchNodes).toHaveBeenCalledWith("valid-token");
-            expect(mockStartEventReception).toHaveBeenCalledWith("valid-token");
+            expect(startEventReception).toHaveBeenCalledWith("valid-token");
         });
     });
 

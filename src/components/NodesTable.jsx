@@ -1,7 +1,7 @@
 import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {createEventSource, closeEventSource} from "../eventSourceManager";
+import {closeEventSource, startEventReception} from "../eventSourceManager";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem,
@@ -17,7 +17,7 @@ import {
 } from "react-icons/fa";
 
 const NodesTable = () => {
-    const {daemon, fetchNodes, startEventReception} = useFetchDaemonStatus();
+    const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);

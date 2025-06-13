@@ -1,5 +1,5 @@
 import React from 'react';
-import {Paper, Typography} from "@mui/material";
+import {Paper, Typography, Box} from "@mui/material";
 
 export const StatCard = ({title, value, subtitle, onClick}) => (
     <Paper
@@ -12,7 +12,10 @@ export const StatCard = ({title, value, subtitle, onClick}) => (
             "&:hover": {
                 boxShadow: 6,
                 transition: "box-shadow 0.3s ease-in-out"
-            }
+            },
+            minHeight: "200px",
+            display: "flex",
+            flexDirection: "column"
         }}
         onClick={onClick}
         role="button"
@@ -25,21 +28,42 @@ export const StatCard = ({title, value, subtitle, onClick}) => (
         >
             {title}
         </Typography>
-        <Typography
-            variant="h3"
-            color="primary"
-            aria-label={`${title} value`}
+        <Box
+            sx={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center"
+            }}
         >
-            {value}
-        </Typography>
+            <Typography
+                variant="h3"
+                color="primary"
+                aria-label={`${title} value`}
+            >
+                {value}
+            </Typography>
+        </Box>
         {subtitle && (
             <div
                 onClick={(e) => e.stopPropagation()}
-                style={{ marginTop: 8 }}
+                style={{
+                    marginTop: 8,
+                    maxHeight: "80px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                }}
             >
                 <Typography
                     variant="body2"
                     aria-label={`${title} subtitle`}
+                    sx={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden"
+                    }}
                 >
                     {subtitle}
                 </Typography>

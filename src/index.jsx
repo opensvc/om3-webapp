@@ -8,12 +8,13 @@ import './styles/main.css';
 const rootElement = document.getElementById('root');
 
 if (rootElement) {
-    const basename = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-    const root = ReactDOM.createRoot(rootElement);
+    const pathname = window.location.pathname;
+    const uiMatch = pathname.startsWith('/ui') ? '/ui' : '/';
 
+    const root = ReactDOM.createRoot(rootElement);
     root.render(
         <React.StrictMode>
-            <Router basename={basename}>
+            <Router basename={uiMatch}>
                 <App/>
             </Router>
         </React.StrictMode>

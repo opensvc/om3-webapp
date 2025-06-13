@@ -71,6 +71,7 @@ export default defineConfig({
                 secure: false,
             },
         },
+        historyApiFallback: true,
     },
     build: {
         assetsInlineLimit: Infinity,

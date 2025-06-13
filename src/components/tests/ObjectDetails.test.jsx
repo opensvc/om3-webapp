@@ -3,8 +3,7 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
-import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus.jsx';
-import {closeEventSource} from '../../eventSourceManager.jsx';
+import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
 
 // Helper to find text within a container
@@ -35,9 +34,9 @@ jest.mock('react-router-dom', () => ({
     useParams: jest.fn(),
 }));
 jest.mock('../../hooks/useEventStore.js');
-jest.mock('../../hooks/useFetchDaemonStatus.jsx');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
+    startEventReception: jest.fn(),
 }));
 
 // Mock Material-UI components (unchanged from original)
@@ -125,7 +124,6 @@ jest.mock('@mui/material', () => {
 });
 
 describe('ObjectDetail Component', () => {
-    const mockFetchNodes = jest.fn();
     const mockStartEventReception = jest.fn();
     const user = userEvent.setup();
 
@@ -169,10 +167,7 @@ describe('ObjectDetail Component', () => {
             objectName: 'root/cfg/cfg1',
         });
 
-        useFetchDaemonStatus.mockReturnValue({
-            fetchNodes: mockFetchNodes,
-            startEventReception: mockStartEventReception,
-        });
+        startEventReception.mockClear();
 
         const mockState = {
             objectStatus: {
@@ -764,7 +759,7 @@ type = flag
         }, {timeout: 10000});
     }, 20000);
 
-    test('calls fetchNodes and startEventReception on mount', () => {
+    test('calls startEventReception on mount', () => {
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -772,9 +767,9 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        expect(mockFetchNodes).toHaveBeenCalledWith('mock-token');
-        expect(mockStartEventReception).toHaveBeenCalledWith('mock-token');
+        expect(startEventReception).toHaveBeenCalledWith('mock-token');
     });
+
 
     test('calls closeEventSource on unmount', async () => {
         const {unmount} = render(
@@ -790,7 +785,7 @@ type = flag
         expect(closeEventSource).toHaveBeenCalled();
     });
 
-    test('does not call fetchNodes or startEventReception without auth token', () => {
+    test('does not call startEventReception without auth token', () => {
         Storage.prototype.getItem = jest.fn(() => null);
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -799,7 +794,7 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        expect(mockFetchNodes).not.toHaveBeenCalled();
+
         expect(mockStartEventReception).not.toHaveBeenCalled();
     });
 

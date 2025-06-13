@@ -4,7 +4,6 @@ import {Box, Grid2, Typography} from "@mui/material";
 import axios from "axios";
 
 import useEventStore from "../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {
     GridNodes,
     GridObjects,
@@ -13,20 +12,19 @@ import {
     GridPools
 } from "./ClusterStatGrids.jsx";
 import {URL_POOL} from "../config/apiPath.js";
+import {startEventReception} from "../eventSourceManager";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const objectStatus = useEventStore((state) => state.objectStatus);
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
     const [poolCount, setPoolCount] = useState(0);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
 
             axios.get(URL_POOL, {
@@ -81,7 +79,7 @@ const ClusterOverview = () => {
 
     const heartbeatIds = new Set();
     let beatingCount = 0;
-    let nonBeatingCount = 0;
+    let staleCount = 0;
     const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
 
     Object.values(heartbeatStatus).forEach(node => {
@@ -93,7 +91,7 @@ const ClusterOverview = () => {
             if (peer?.is_beating) {
                 beatingCount++;
             } else {
-                nonBeatingCount++;
+                staleCount++;
             }
 
             const state = stream.state || 'unknown';
@@ -136,7 +134,7 @@ const ClusterOverview = () => {
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
-                    nonBeatingCount={nonBeatingCount}
+                    nonBeatingCount={staleCount}
                     stateCount={stateCount}
                     onClick={(status, state) => {
                         let url = '/heartbeats';

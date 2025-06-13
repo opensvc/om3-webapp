@@ -1,21 +1,22 @@
 import React, {useEffect, useState, useMemo} from "react";
-import {useLocation} from "react-router-dom";
+import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
     Paper,
     Typography,
-    TableContainer,
     Table,
     TableHead,
     TableRow,
     TableCell,
     TableBody,
+    TableContainer,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
     Button,
     Collapse,
+    Tooltip,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -28,8 +29,7 @@ import HelpIcon from "@mui/icons-material/Help";
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
-import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource} from "../eventSourceManager.jsx";
+import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 
 const getStateIcon = (state) => {
     switch (state) {
@@ -55,41 +55,64 @@ const getStatusIcon = (isBeating) => {
 };
 
 const tableCellStyle = {
-    padding: '8px 16px',
-    textAlign: 'center',
-    verticalAlign: 'middle',
+    padding: "8px 16px",
+    textAlign: "center",
+    verticalAlign: "middle",
 };
 
 const leftAlignedCellStyle = {
     ...tableCellStyle,
-    textAlign: 'left',
+    textAlign: "left",
 };
 
 const Heartbeats = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-    const {fetchNodes, startEventReception} = useFetchDaemonStatus();
 
-    // Get initial status and state from URL
-    const initialFilters = useMemo(() => {
-        const params = new URLSearchParams(location.search);
-        const status = params.get("status");
-        const state = params.get("state");
-        return {
-            status: ["all", "beating", "non-beating"].includes(status) ? status : "all",
-            state: state || "all" // Fallback to "all" if state is not provided
-        };
-    }, [location.search]);
+    // Read query parameters
+    const queryParams = new URLSearchParams(location.search);
+    const rawStatus = queryParams.get("status") || "all";
+    const rawNode = queryParams.get("node") || "all";
+    const rawState = queryParams.get("state") || "all";
 
-    const [filterBeating, setFilterBeating] = useState(initialFilters.status);
-    const [filterNode, setFilterNode] = useState("all");
-    const [filterState, setFilterState] = useState(initialFilters.state);
+    const [filterBeating, setFilterBeating] = useState(
+        ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
+    );
+    const [filterNode, setFilterNode] = useState(rawNode);
+    const [filterState, setFilterState] = useState(rawState);
     const [showFilters, setShowFilters] = useState(true);
+
+    // Update URL when filters change
+    useEffect(() => {
+        const newQueryParams = new URLSearchParams();
+        if (filterBeating !== "all") {
+            newQueryParams.set("status", filterBeating);
+        }
+        if (filterNode !== "all") {
+            newQueryParams.set("node", filterNode);
+        }
+        if (filterState !== "all") {
+            newQueryParams.set("state", filterState);
+        }
+        const queryString = newQueryParams.toString();
+        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
+            replace: true,
+        });
+    }, [filterBeating, filterNode, filterState, navigate, location.pathname]);
+
+    // Initialize filter states from URL
+    useEffect(() => {
+        setFilterBeating(
+            ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
+        );
+        setFilterNode(rawNode);
+        setFilterState(rawState);
+    }, [location.search]);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
             startEventReception(token);
         }
         return () => closeEventSource();
@@ -127,11 +150,20 @@ const Heartbeats = () => {
         });
     });
 
+    // Sort streamRows by node, then id, then peer
+    streamRows.sort((a, b) => {
+        const nodeCompare = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
+        if (nodeCompare !== 0) return nodeCompare;
+        const idCompare = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
+        if (idCompare !== 0) return idCompare;
+        return a.peer.localeCompare(b.peer, undefined, {sensitivity: "base"});
+    });
+
     const filteredRows = streamRows.filter((row) => {
         const matchesBeating =
             filterBeating === "all" ||
             (filterBeating === "beating" && row.isBeating === true) ||
-            (filterBeating === "non-beating" && row.isBeating === false);
+            (filterBeating === "stale" && row.isBeating === false);
         const matchesNode = filterNode === "all" || row.node === filterNode;
         const matchesState = filterState === "all" || row.state === filterState;
         return matchesBeating && matchesNode && matchesState;
@@ -144,25 +176,18 @@ const Heartbeats = () => {
                     Heartbeats
                 </Typography>
 
+                {/* Sticky Filters */}
                 <Box
                     sx={{
                         position: "sticky",
                         top: 64,
-                        zIndex: 10,
+                        zIndex: 20,
                         backgroundColor: "background.paper",
-                        pt: 2,
-                        pb: 1,
+                        pb: 2,
                         mb: 2,
                     }}
                 >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 1,
-                        }}
-                    >
+                    <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
                         <Button
                             onClick={() => setShowFilters(!showFilters)}
                             startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
@@ -171,20 +196,19 @@ const Heartbeats = () => {
                         </Button>
                     </Box>
 
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                    <Collapse in={showFilters}>
                         <Box
                             sx={{
                                 display: "flex",
                                 flexWrap: "wrap",
                                 gap: 2,
                                 alignItems: "center",
-                                pb: 2,
+                                mb: 2,
                             }}
                         >
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-state-label">Filter by State</InputLabel>
+                                <InputLabel>Filter by State</InputLabel>
                                 <Select
-                                    labelId="filter-state-label"
                                     value={filterState}
                                     label="Filter by State"
                                     onChange={(e) => setFilterState(e.target.value)}
@@ -198,23 +222,21 @@ const Heartbeats = () => {
                             </FormControl>
 
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-beating-label">Filter by Status</InputLabel>
+                                <InputLabel>Filter by Status</InputLabel>
                                 <Select
-                                    labelId="filter-beating-label"
                                     value={filterBeating}
                                     label="Filter by Status"
                                     onChange={(e) => setFilterBeating(e.target.value)}
                                 >
                                     <MenuItem value="all">All</MenuItem>
                                     <MenuItem value="beating">Beating</MenuItem>
-                                    <MenuItem value="non-beating">Non-Beating</MenuItem>
+                                    <MenuItem value="stale">Stale</MenuItem>
                                 </Select>
                             </FormControl>
 
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel id="filter-node-label">Filter by Node</InputLabel>
+                                <InputLabel>Filter by Node</InputLabel>
                                 <Select
-                                    labelId="filter-node-label"
                                     value={filterNode}
                                     label="Filter by Node"
                                     onChange={(e) => setFilterNode(e.target.value)}
@@ -231,25 +253,49 @@ const Heartbeats = () => {
                     </Collapse>
                 </Box>
 
-                <TableContainer>
-                    <Table size="small" sx={{minWidth: 650}}>
-                        <TableHead>
+                {/* Table with Sticky Headers */}
+                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
+                    <Table size="small">
+                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
                             <TableRow>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>STATE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...tableCellStyle}}>STATUS</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>ID</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>NODE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>PEER</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>TYPE</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>DESC</TableCell>
-                                <TableCell sx={{fontWeight: "bold", ...leftAlignedCellStyle}}>LAST_AT</TableCell>
+                                {[
+                                    "RUNNING",
+                                    "BEATING",
+                                    "ID",
+                                    "NODE",
+                                    "PEER",
+                                    "TYPE",
+                                    "DESC",
+                                    "LAST_AT",
+                                ].map((label) => (
+                                    <TableCell
+                                        key={label}
+                                        sx={{
+                                            fontWeight: "bold",
+                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "LAST_AT"].includes(label)
+                                                ? "left"
+                                                : "center",
+                                            borderBottom: "2px solid #ccc",
+                                        }}
+                                    >
+                                        {label}
+                                    </TableCell>
+                                ))}
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredRows.map((row, index) => (
                                 <TableRow key={index} hover>
-                                    <TableCell sx={tableCellStyle}>{getStateIcon(row.state)}</TableCell>
-                                    <TableCell sx={tableCellStyle}>{getStatusIcon(row.isBeating)}</TableCell>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.state} arrow>
+                                            <span>{getStateIcon(row.state)}</span>
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell sx={tableCellStyle}>
+                                        <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
+                                            <span>{getStatusIcon(row.isBeating)}</span>
+                                        </Tooltip>
+                                    </TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>

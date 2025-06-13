@@ -187,9 +187,9 @@ describe('Namespaces Component', () => {
         await waitFor(() => {
             const rootRow = screen.getByText('root').closest('tr');
             const statusCells = within(rootRow).getAllByTestId('table-cell');
-            const unknownCell = statusCells[4]; // Unknown status cell
-            fireEvent.click(unknownCell);
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=unknown');
+            const naCell = statusCells[4]; // N/A status cell
+            fireEvent.click(naCell);
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=n/a');
         });
     });
 
@@ -256,15 +256,15 @@ describe('Namespaces Component', () => {
         useEventStore.mockImplementation((selector) =>
             selector({
                 objectStatus: {
-                    'invalid': { avail: 'error' }, // Invalid key, assigned to 'root' with 'unknown'
-                    'prod/svc/valid': { avail: 'up' },
+                    'invalid': {avail: 'error'}, // Invalid key, assigned to 'root' with 'unknown'
+                    'prod/svc/valid': {avail: 'up'},
                 },
             })
         );
 
         render(
             <MemoryRouter>
-                <Namespaces />
+                <Namespaces/>
             </MemoryRouter>
         );
 

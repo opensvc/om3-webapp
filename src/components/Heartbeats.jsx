@@ -75,12 +75,14 @@ const Heartbeats = () => {
     const rawStatus = queryParams.get("status") || "all";
     const rawNode = queryParams.get("node") || "all";
     const rawState = queryParams.get("state") || "all";
+    const rawId = queryParams.get("id") || "all";
 
     const [filterBeating, setFilterBeating] = useState(
         ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
+    const [filterId, setFilterId] = useState(rawId);
     const [showFilters, setShowFilters] = useState(true);
 
     // Update URL when filters change
@@ -95,11 +97,14 @@ const Heartbeats = () => {
         if (filterState !== "all") {
             newQueryParams.set("state", filterState);
         }
+        if (filterId !== "all") {
+            newQueryParams.set("id", filterId);
+        }
         const queryString = newQueryParams.toString();
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
             replace: true,
         });
-    }, [filterBeating, filterNode, filterState, navigate, location.pathname]);
+    }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname]);
 
     // Initialize filter states from URL
     useEffect(() => {
@@ -108,6 +113,7 @@ const Heartbeats = () => {
         );
         setFilterNode(rawNode);
         setFilterState(rawState);
+        setFilterId(rawId);
     }, [location.search]);
 
     useEffect(() => {
@@ -121,7 +127,7 @@ const Heartbeats = () => {
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
 
     const availableStates = useMemo(() => {
-        const states = new Set(["all"]);
+        const states = new Set();
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
                 if (stream.state) {
@@ -130,6 +136,18 @@ const Heartbeats = () => {
             });
         });
         return Array.from(states).sort();
+    }, [heartbeatStatus]);
+
+    const availableIds = useMemo(() => {
+        const ids = new Set();
+        Object.values(heartbeatStatus).forEach((nodeData) => {
+            (nodeData.streams || []).forEach((stream) => {
+                if (stream.id) {
+                    ids.add(stream.id);
+                }
+            });
+        });
+        return Array.from(ids).sort();
     }, [heartbeatStatus]);
 
     const streamRows = [];
@@ -166,7 +184,8 @@ const Heartbeats = () => {
             (filterBeating === "stale" && row.isBeating === false);
         const matchesNode = filterNode === "all" || row.node === filterNode;
         const matchesState = filterState === "all" || row.state === filterState;
-        return matchesBeating && matchesNode && matchesState;
+        const matchesId = filterId === "all" || row.id === filterId;
+        return matchesBeating && matchesNode && matchesState && matchesId;
     });
 
     return (
@@ -213,6 +232,7 @@ const Heartbeats = () => {
                                     label="Filter by Running"
                                     onChange={(e) => setFilterState(e.target.value)}
                                 >
+                                    <MenuItem value="all">All</MenuItem>
                                     {availableStates.map((state) => (
                                         <MenuItem key={state} value={state}>
                                             {state.charAt(0).toUpperCase() + state.slice(1)}
@@ -245,6 +265,22 @@ const Heartbeats = () => {
                                     {nodes.map((node) => (
                                         <MenuItem key={node} value={node}>
                                             {node}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <FormControl sx={{minWidth: 200}}>
+                                <InputLabel>Filter by ID</InputLabel>
+                                <Select
+                                    value={filterId}
+                                    label="Filter by ID"
+                                    onChange={(e) => setFilterId(e.target.value)}
+                                >
+                                    <MenuItem value="all">All</MenuItem>
+                                    {availableIds.map((id) => (
+                                        <MenuItem key={id} value={id}>
+                                            {id}
                                         </MenuItem>
                                     ))}
                                 </Select>

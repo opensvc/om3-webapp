@@ -207,10 +207,10 @@ const Heartbeats = () => {
                             }}
                         >
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by State</InputLabel>
+                                <InputLabel>Filter by Running</InputLabel>
                                 <Select
                                     value={filterState}
-                                    label="Filter by State"
+                                    label="Filter by Running"
                                     onChange={(e) => setFilterState(e.target.value)}
                                 >
                                     {availableStates.map((state) => (
@@ -222,10 +222,10 @@ const Heartbeats = () => {
                             </FormControl>
 
                             <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by Status</InputLabel>
+                                <InputLabel>Filter by Beating</InputLabel>
                                 <Select
                                     value={filterBeating}
-                                    label="Filter by Status"
+                                    label="Filter by Beating"
                                     onChange={(e) => setFilterBeating(e.target.value)}
                                 >
                                     <MenuItem value="all">All</MenuItem>

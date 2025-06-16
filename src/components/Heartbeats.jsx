@@ -50,8 +50,7 @@ const getStatusIcon = (isBeating) => {
     return isBeating ? (
         <CheckCircleIcon sx={{color: green[500]}}/>
     ) : (
-        <CancelIcon sx={{color: red[500]}}/>
-    );
+        <CancelIcon sx={{color: red[500]}}/>);
 };
 
 const tableCellStyle = {
@@ -69,6 +68,7 @@ const Heartbeats = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
+    const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -116,6 +116,29 @@ const Heartbeats = () => {
         setFilterId(rawId);
     }, [location.search]);
 
+    // Cache stopped streams with their last known peers
+    useEffect(() => {
+        setStoppedStreamsCache((prev) => {
+            const newCache = {...prev};
+            Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
+                (nodeData.streams || []).forEach((stream) => {
+                    if (!newCache[node]) {
+                        newCache[node] = {};
+                    }
+                    // Cache stream if it has peers or is stopped
+                    if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
+                        newCache[node][stream.id] = {
+                            ...stream,
+                            peers: {...stream.peers},
+                        };
+                    }
+                });
+            });
+            return newCache;
+        });
+    }, [heartbeatStatus]);
+
+    // Start event reception
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -127,7 +150,7 @@ const Heartbeats = () => {
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
 
     const availableStates = useMemo(() => {
-        const states = new Set();
+        const states = new Set(["all"]);
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
                 if (stream.state) {
@@ -142,7 +165,7 @@ const Heartbeats = () => {
         const ids = new Set();
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
-                if (stream.id) {
+                if (stream.id && stream.id !== "all") {
                     ids.add(stream.id);
                 }
             });
@@ -153,18 +176,38 @@ const Heartbeats = () => {
     const streamRows = [];
     Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
         (nodeData.streams || []).forEach((stream) => {
-            const peerKey = Object.keys(stream.peers || {})[0];
-            const peerData = stream.peers?.[peerKey];
-            streamRows.push({
-                id: stream.id,
-                node: node,
-                peer: peerKey || "N/A",
-                type: stream.type || "N/A",
-                desc: peerData?.desc || "N/A",
-                isBeating: peerData?.is_beating || false,
-                lastAt: peerData?.last_at || "N/A",
-                state: stream.state || "unknown",
-            });
+            const cachedStream = stoppedStreamsCache[node]?.[stream.id] || {};
+            const peers = stream.state === "stopped" && Object.keys(stream.peers || {}).length === 0
+                ? cachedStream.peers || {}
+                : stream.peers || {};
+
+            if (Object.keys(peers).length === 0 && stream.state === "stopped") {
+                // Create a row for stopped streams with no peers
+                streamRows.push({
+                    id: stream.id,
+                    node: node,
+                    peer: "N/A",
+                    type: stream.type || cachedStream.type || "N/A",
+                    desc: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.desc || "N/A",
+                    isBeating: false,
+                    lastAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.last_at || "N/A",
+                    state: stream.state || "unknown",
+                });
+            } else {
+                // Create rows for all peers
+                Object.entries(peers).forEach(([peerKey, peerData]) => {
+                    streamRows.push({
+                        id: stream.id,
+                        node: node,
+                        peer: peerKey || "N/A",
+                        type: stream.type || "N/A",
+                        desc: peerData?.desc || "N/A",
+                        isBeating: peerData?.is_beating || false,
+                        lastAt: peerData?.last_at || "N/A",
+                        state: stream.state || "unknown",
+                    });
+                });
+            }
         });
     });
 
@@ -321,7 +364,7 @@ const Heartbeats = () => {
                         </TableHead>
                         <TableBody>
                             {filteredRows.map((row, index) => (
-                                <TableRow key={index} hover>
+                                <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
                                     <TableCell sx={tableCellStyle}>
                                         <Tooltip title={row.state} arrow>
                                             <span>{getStateIcon(row.state)}</span>

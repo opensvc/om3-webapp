@@ -1,17 +1,8 @@
-import { useState, useEffect } from "react";
-import { URL_AUTH_INFO } from "../config/apiPath.js";
+import {useState, useEffect} from "react";
+import {URL_AUTH_INFO} from "../config/apiPath.js";
 
-// Définir une interface pour authInfo
-interface AuthInfo {
-    openid?: {
-        authority: string;
-        client_id: string;
-    };
-    methods?: string[];
-}
-
-function useAuthInfo(): AuthInfo | undefined {
-    const [authInfo, setAuthInfo] = useState<AuthInfo | undefined>();
+function useAuthInfo() {
+    const [authInfo, setAuthInfo] = useState();
 
     useEffect(() => {
         let isMounted = true;

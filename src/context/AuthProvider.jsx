@@ -1,11 +1,12 @@
-import React, {createContext, useReducer, useContext} from 'react';
+import React, {createContext, useReducer, useContext, useEffect, useRef} from 'react';
+import {decodeToken, refreshToken} from '../components/Login';
 
 const initialState = {
     user: null,
     isAuthenticated: false,
     authChoice: null,
     authInfo: null,
-    accessToken: null,
+    accessToken: localStorage.getItem('authToken') || null,
 };
 
 export const Login = 'Login';
@@ -33,6 +34,7 @@ const authReducer = (state, action) => {
             return {
                 ...state,
                 accessToken: action.data,
+                isAuthenticated: !!action.data, // true if token is not null
             };
         case SetAuthInfo:
             return {
@@ -45,9 +47,7 @@ const authReducer = (state, action) => {
                 authChoice: action.data,
             };
         default:
-            return {
-                ...state,
-            };
+            return state;
     }
 };
 
@@ -56,6 +56,50 @@ const AuthDispatchContext = createContext(null);
 
 export const AuthProvider = ({children}) => {
     const [auth, dispatch] = useReducer(authReducer, initialState);
+    const refreshTimeout = useRef(null);
+
+    // Schedule a token refresh before it expires
+    const scheduleRefresh = (token) => {
+        if (refreshTimeout.current) {
+            clearTimeout(refreshTimeout.current);
+        }
+        if (!token) return;
+
+        const payload = decodeToken(token);
+        if (!payload?.exp) return;
+
+        const expirationTime = payload.exp * 1000;
+        const refreshTime = expirationTime - Date.now() - 5000; // 5 seconds before expiration
+
+        if (refreshTime > 0) {
+            console.log('🔁 Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
+            refreshTimeout.current = setTimeout(() => {
+                refreshToken(dispatch)
+                    .then(() => {
+                        // Get the new token and reschedule the refresh
+                        const newToken = localStorage.getItem('authToken');
+                        scheduleRefresh(newToken);
+                    })
+                    .catch((err) => {
+                        console.error('Token refresh error:', err);
+                    });
+            }, refreshTime);
+        } else {
+            console.warn('⚠️ Token already expired or too close to expiration, no refresh scheduled');
+        }
+    };
+
+    // On every token change, reschedule the refresh
+    useEffect(() => {
+        const token = auth.accessToken ?? localStorage.getItem('authToken');
+        scheduleRefresh(token);
+
+        return () => {
+            if (refreshTimeout.current) {
+                clearTimeout(refreshTimeout.current);
+            }
+        };
+    }, [auth.accessToken]);
 
     return (
         <AuthContext.Provider value={auth}>

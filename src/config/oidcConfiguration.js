@@ -6,16 +6,15 @@ const initData = {
     scope: "openid profile email",
     accessTokenExpiringNotificationTimeInSeconds: 30,
     automaticSilentRenew: true,
+    monitorSession: true,
 };
 
 function oidcConfiguration(authInfo) {
-    // Check if authInfo and authInfo.openid are defined
     if (!authInfo?.openid?.authority) {
         console.warn("OIDC Configuration fallback: 'authInfo.openid.authority' is missing. Falling back to default configuration.");
-        return initData; // Returns default configuration if OIDC configuration is missing
+        return initData;
     }
 
-    // Verify the URI is well-formed
     try {
         const url = new URL(authInfo.openid.authority);
         if (!url.protocol || !url.host) {
@@ -23,12 +22,11 @@ function oidcConfiguration(authInfo) {
         }
     } catch (error) {
         console.error('Well-formed URL required for openid.authority', error);
-        return initData; // Returns default configuration if URI is invalid
+        return initData;
     }
 
-    let baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'))
+    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
 
-    // Returns OIDC configuration with custom values
     return {
         ...initData,
         authority: authInfo.openid.authority,
@@ -36,7 +34,7 @@ function oidcConfiguration(authInfo) {
         redirect_uri: baseUrl + "/auth-callback",
         silent_redirect_uri: baseUrl + "/auth-callback",
         post_logout_redirect_uri: baseUrl + "/",
-    }
+    };
 }
 
 export default oidcConfiguration;

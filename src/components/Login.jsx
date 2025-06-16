@@ -198,7 +198,7 @@ export const refreshToken = async (dispatch) => {
 
             if (!response.ok) throw new Error('Token refresh failed');
             const data = await response.json();
-            console.log('✅ Token refreshed successfully:', data.token);
+            console.log('✅ Token refreshed successfully');
 
             localStorage.setItem('authToken', data.token);
             const expirationTime = Date.now() + 30000;

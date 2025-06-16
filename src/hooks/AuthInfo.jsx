@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { URL_AUTH_INFO } from "../config/apiPath.js";
+import {useState, useEffect} from "react";
+import {URL_AUTH_INFO} from "../config/apiPath.js";
 
 function useAuthInfo() {
     const [authInfo, setAuthInfo] = useState();

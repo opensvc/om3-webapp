@@ -55,16 +55,16 @@ const Namespaces = () => {
 
     allObjectNames.forEach((name) => {
         const ns = extractNamespace(name);
-        const status = objectStatus[name]?.avail || "unknown";
+        const status = objectStatus[name]?.avail || "n/a";
 
         if (!statusByNamespace[ns]) {
-            statusByNamespace[ns] = {up: 0, down: 0, warn: 0, unknown: 0};
+            statusByNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
         }
 
         if (statusByNamespace[ns][status] !== undefined) {
             statusByNamespace[ns][status]++;
         } else {
-            statusByNamespace[ns].unknown++;
+            statusByNamespace[ns]["n/a"]++;
         }
     });
 
@@ -100,14 +100,14 @@ const Namespaces = () => {
                                 <TableCell align="center"><strong>Up</strong></TableCell>
                                 <TableCell align="center"><strong>Down</strong></TableCell>
                                 <TableCell align="center"><strong>Warn</strong></TableCell>
-                                <TableCell align="center"><strong>Unknown</strong></TableCell>
+                                <TableCell align="center"><strong>N/A</strong></TableCell>
                                 <TableCell align="center"><strong>Total</strong></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {Object.entries(statusByNamespace).length > 0 ? (
                                 Object.entries(statusByNamespace).map(([namespace, counts]) => {
-                                    const total = counts.up + counts.down + counts.warn + counts.unknown;
+                                    const total = counts.up + counts.down + counts.warn + counts["n/a"];
                                     return (
                                         <TableRow
                                             key={namespace}
@@ -116,12 +116,12 @@ const Namespaces = () => {
                                                 console.log('[Namespaces] Row clicked, navigating to:', `/objects?namespace=${namespace}`);
                                                 navigate(`/objects?namespace=${namespace}`);
                                             }}
-                                            sx={{ cursor: "pointer" }}
+                                            sx={{cursor: "pointer"}}
                                         >
-                                            <TableCell sx={{ fontWeight: 500 }}>
+                                            <TableCell sx={{fontWeight: 500}}>
                                                 {namespace}
                                             </TableCell>
-                                            {["up", "down", "warn", "unknown"].map((status) => (
+                                            {["up", "down", "warn", "n/a"].map((status) => (
                                                 <TableCell
                                                     key={status}
                                                     align="center"
@@ -131,11 +131,12 @@ const Namespaces = () => {
                                                         console.log('[Namespaces] Status clicked, navigating to:', url);
                                                         navigate(url);
                                                     }}
-                                                    sx={{ cursor: "pointer" }}
+                                                    sx={{cursor: "pointer"}}
                                                 >
-                                                    <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+                                                    <Box display="flex" justifyContent="center" alignItems="center"
+                                                         gap={1}>
                                                         <FiberManualRecordIcon
-                                                            sx={{ fontSize: 18, color: getColorByStatus(status) }}
+                                                            sx={{fontSize: 18, color: getColorByStatus(status)}}
                                                         />
                                                         <Typography variant="body1">{counts[status]}</Typography>
                                                     </Box>
@@ -152,7 +153,8 @@ const Namespaces = () => {
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-namespaces-message">No namespaces available</Typography>
+                                        <Typography data-testid="no-namespaces-message">No namespaces
+                                            available</Typography>
                                     </TableCell>
                                 </TableRow>
                             )}

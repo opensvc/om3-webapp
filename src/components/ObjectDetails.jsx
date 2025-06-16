@@ -203,10 +203,27 @@ const ObjectDetail = () => {
         if (!objName || typeof objName !== "string") {
             return {namespace: "root", kind: "svc", name: ""};
         }
+
         const parts = objName.split("/");
-        const name = parts.length === 3 ? parts[2] : parts[0];
-        const kind = name === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
-        const namespace = parts.length === 3 ? parts[0] : "root";
+        let name, kind, namespace;
+
+        if (parts.length === 3) {
+            // Format: namespace/kind/name
+            namespace = parts[0];
+            kind = parts[1];
+            name = parts[2];
+        } else if (parts.length === 2) {
+            // Format: kind/name (namespace = root)
+            namespace = "root";
+            kind = parts[0];
+            name = parts[1];
+        } else {
+            // Format: name
+            namespace = "root";
+            name = parts[0];
+            kind = name === "cluster" ? "ccfg" : "svc";
+        }
+
         return {namespace, kind, name};
     };
 

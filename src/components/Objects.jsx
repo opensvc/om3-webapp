@@ -165,8 +165,17 @@ const Objects = () => {
 
     const extractKind = (name) => {
         const parts = name.split("/");
-        const objName = parts.length === 3 ? parts[2] : parts[0];
-        return objName === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
+        if (parts.length === 3) {
+            // Format: namespace/kind/name
+            return parts[1];
+        } else if (parts.length === 2) {
+            // Format: kind/name (namespace = root)
+            return parts[0];
+        } else {
+            // Format: name
+            const objName = parts[0];
+            return objName === "cluster" ? "ccfg" : "svc";
+        }
     };
 
     // Objects and namespaces
@@ -297,10 +306,27 @@ const Objects = () => {
         const promises = selectedObjects.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) return;
+
             const parts = objectName.split("/");
-            const name = parts.length === 3 ? parts[2] : parts[0];
-            const kind = name === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
-            const namespace = parts.length === 3 ? parts[0] : "root";
+            let name, kind, namespace;
+
+            if (parts.length === 3) {
+                // Format: namespace/kind/name
+                namespace = parts[0];
+                kind = parts[1];
+                name = parts[2];
+            } else if (parts.length === 2) {
+                // Format: kind/name (namespace = root)
+                namespace = "root";
+                kind = parts[0];
+                name = parts[1];
+            } else {
+                // Format: name
+                namespace = "root";
+                name = parts[0];
+                kind = name === "cluster" ? "ccfg" : "svc";
+            }
+
             const obj = {...rawObj, namespace, kind, name};
 
             if (

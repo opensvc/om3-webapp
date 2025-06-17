@@ -48,7 +48,6 @@ const getStateIcon = (state) => {
 
 // Modified getStatusIcon to handle single-node clusters
 const getStatusIcon = (isBeating, isSingleNode) => {
-    // If it's a single-node cluster, always show green
     if (isSingleNode) {
         return <CheckCircleIcon sx={{color: green[500]}}/>;
     }
@@ -89,7 +88,10 @@ const Heartbeats = () => {
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
-    const [filterId, setFilterId] = useState(rawId);
+    // Remove "hb#" prefix from rawId if present
+    const [filterId, setFilterId] = useState(
+        rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId
+    );
     const [showFilters, setShowFilters] = useState(true);
 
     // Update URL when filters change
@@ -105,7 +107,7 @@ const Heartbeats = () => {
             newQueryParams.set("state", filterState);
         }
         if (filterId !== "all") {
-            newQueryParams.set("id", filterId);
+            newQueryParams.set("id", filterId); // Use cleaned ID
         }
         const queryString = newQueryParams.toString();
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
@@ -120,8 +122,8 @@ const Heartbeats = () => {
         );
         setFilterNode(rawNode);
         setFilterState(rawState);
-        setFilterId(rawId);
-    }, [location.search]);
+        setFilterId(rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId);
+    }, [location.search, rawStatus, rawNode, rawState, rawId]);
 
     // Cache stopped streams with their last known peers
     useEffect(() => {
@@ -155,7 +157,6 @@ const Heartbeats = () => {
     }, []);
 
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
-    // Determine if it's a single-node cluster
     const isSingleNode = nodes.length === 1;
 
     const availableStates = useMemo(() => {
@@ -175,7 +176,9 @@ const Heartbeats = () => {
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
                 if (stream.id && stream.id !== "all") {
-                    ids.add(stream.id);
+                    // Remove "hb#" prefix from ID
+                    const cleanedId = stream.id.replace(/^hb#/, "");
+                    ids.add(cleanedId);
                 }
             });
         });
@@ -190,10 +193,12 @@ const Heartbeats = () => {
                 ? cachedStream.peers || {}
                 : stream.peers || {};
 
+            // Remove "hb#" prefix from stream ID
+            const cleanedId = stream.id.replace(/^hb#/, "");
+
             if (Object.keys(peers).length === 0 && stream.state === "stopped") {
-                // Create a row for stopped streams with no peers
                 streamRows.push({
-                    id: stream.id,
+                    id: cleanedId,
                     node: node,
                     peer: "N/A",
                     type: stream.type || cachedStream.type || "N/A",
@@ -203,10 +208,9 @@ const Heartbeats = () => {
                     state: stream.state || "unknown",
                 });
             } else {
-                // Create rows for all peers
                 Object.entries(peers).forEach(([peerKey, peerData]) => {
                     streamRows.push({
-                        id: stream.id,
+                        id: cleanedId,
                         node: node,
                         peer: peerKey || "N/A",
                         type: stream.type || "N/A",
@@ -382,7 +386,8 @@ const Heartbeats = () => {
                                     <TableCell sx={tableCellStyle}>
                                         <Tooltip
                                             title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
-                                            arrow>
+                                            arrow
+                                        >
                                             <span>{getStatusIcon(row.isBeating, isSingleNode)}</span>
                                         </Tooltip>
                                     </TableCell>

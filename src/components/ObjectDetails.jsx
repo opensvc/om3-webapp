@@ -1,4 +1,4 @@
-import React, {useState, useMemo, useEffect} from "react";
+import React, {useState, useMemo, useEffect, useRef} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
@@ -100,8 +100,6 @@ const RESOURCE_ACTIONS = [
     {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
 ];
 
-let renderCount = 0;
-
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
@@ -109,7 +107,6 @@ const ObjectDetail = () => {
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
-    const configUpdates = useEventStore((s) => s.configUpdates);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
@@ -185,6 +182,9 @@ const ObjectDetail = () => {
     // State for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
+
+    // Debounce ref to prevent multiple fetchConfig calls
+    const lastFetch = useRef({});
 
     const openSnackbar = (msg, sev = "success") =>
         setSnackbar({open: true, message: msg, severity: sev});
@@ -328,6 +328,12 @@ const ObjectDetail = () => {
 
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
+        const key = `${decodedObjectName}:${node}`;
+        const now = Date.now();
+        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
+            return;
+        }
+        lastFetch.current[key] = now;
         if (configLoading) {
             console.warn(`⏳ [fetchConfig] Already loading, queuing request for node=${node}`);
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -350,6 +356,7 @@ const ObjectDetail = () => {
 
         setConfigLoading(true);
         setConfigError(null);
+        setConfigNode(node); // Store the node used for fetching config
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
             const response = await fetch(url, {
@@ -400,8 +407,10 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to update config: ${response.status}`);
             openSnackbar("Configuration updated successfully");
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleUpdateConfig] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -444,8 +453,10 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to add parameter: ${response.status}`);
             openSnackbar(`Parameter '${key}' added successfully`);
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleAddParam] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -482,8 +493,10 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to delete parameter: ${response.status}`);
             openSnackbar(`Parameter '${paramToDelete}' deleted successfully`);
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -1564,7 +1577,7 @@ const ObjectDetail = () => {
                                                 }
                                                 onChange={(e) => {
                                                     const next = e.target.checked ? resIds : [];
-                                                    setSelectedResourcesBy((prev) => ({
+                                                    setSelectedResourcesByNode((prev) => ({
                                                         ...prev,
                                                         [node]: next,
                                                     }));

@@ -138,6 +138,7 @@ const ObjectDetail = () => {
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [paramInput, setParamInput] = useState("");
+    const [paramToUnset, setParamToUnset] = useState("");
     const [paramToDelete, setParamToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
@@ -208,17 +209,14 @@ const ObjectDetail = () => {
         let name, kind, namespace;
 
         if (parts.length === 3) {
-            // Format: namespace/kind/name
             namespace = parts[0];
             kind = parts[1];
             name = parts[2];
         } else if (parts.length === 2) {
-            // Format: kind/name (namespace = root)
             namespace = "root";
             kind = parts[0];
             name = parts[1];
         } else {
-            // Format: name
             namespace = "root";
             name = parts[0];
             kind = name === "cluster" ? "ccfg" : "svc";
@@ -466,6 +464,46 @@ const ObjectDetail = () => {
         }
     };
 
+    // Unset configuration parameter
+    const handleUnsetParam = async () => {
+        if (!paramToUnset) {
+            openSnackbar("Parameter key to unset is required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Unsetting parameter ${paramToUnset}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(paramToUnset)}`;
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok)
+                throw new Error(`Failed to unset parameter: ${response.status}`);
+            openSnackbar(`Parameter '${paramToUnset}' unset successfully`);
+            if (configNode) {
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleUnsetParam] No configNode available for ${decodedObjectName}`);
+            }
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setParamToUnset("");
+        }
+    };
+
     // Delete configuration parameter
     const handleDeleteParam = async () => {
         if (!paramToDelete) {
@@ -510,6 +548,9 @@ const ObjectDetail = () => {
     const handleManageParamsSubmit = async () => {
         if (paramInput) {
             await handleAddParam();
+        }
+        if (paramToUnset) {
+            await handleUnsetParam();
         }
         if (paramToDelete) {
             await handleDeleteParam();
@@ -865,7 +906,6 @@ const ObjectDetail = () => {
                 );
 
                 if (matchingUpdate) {
-                    // Force fetch the config
                     try {
                         await fetchConfig(matchingUpdate.node);
                         setConfigAccordionExpanded(true);
@@ -1206,7 +1246,7 @@ const ObjectDetail = () => {
                                 >
                                     <Box
                                         component="pre"
-                                        key={configData} // Force re-render
+                                        key={configData}
                                         sx={{
                                             whiteSpace: "pre-wrap",
                                             fontFamily: "Monospace",
@@ -1445,11 +1485,23 @@ const ObjectDetail = () => {
                             disabled={actionLoading}
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
+                            Unset Parameter
+                        </Typography>
+                        <TextField
+                            margin="dense"
+                            label="Parameter key to unset (e.g., test.test)"
+                            fullWidth
+                            variant="outlined"
+                            value={paramToUnset}
+                            onChange={(e) => setParamToUnset(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                             Delete Parameter
                         </Typography>
                         <TextField
                             margin="dense"
-                            label="Parameter key to delete (e.g., test.test.param)"
+                            label="Parameter key to delete (e.g., test)"
                             fullWidth
                             variant="outlined"
                             value={paramToDelete}
@@ -1467,7 +1519,7 @@ const ObjectDetail = () => {
                         <Button
                             variant="contained"
                             onClick={handleManageParamsSubmit}
-                            disabled={actionLoading || (!paramInput && !paramToDelete)}
+                            disabled={actionLoading || (!paramInput && !paramToUnset && !paramToDelete)}
                         >
                             Apply
                         </Button>
@@ -1506,7 +1558,6 @@ const ObjectDetail = () => {
                                 p: 2,
                             }}
                         >
-                            {/* NODE */}
                             <Box sx={{p: 1}}>
                                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
@@ -1726,7 +1777,6 @@ const ObjectDetail = () => {
                     );
                 })}
 
-                {/* MENUS */}
                 <Menu
                     anchorEl={nodesActionsAnchor}
                     open={Boolean(nodesActionsAnchor)}
@@ -1779,7 +1829,6 @@ const ObjectDetail = () => {
                     ))}
                 </Menu>
 
-                {/* DIALOGS */}
                 <FreezeDialog
                     open={confirmDialogOpen}
                     onClose={() => setConfirmDialogOpen(false)}

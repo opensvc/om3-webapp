@@ -57,7 +57,7 @@ import {
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {closeEventSource, startEventReception, configureEventSource} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {
     FreezeDialog,
@@ -837,9 +837,25 @@ const ObjectDetail = () => {
         });
     };
 
+    // Effect for configuring EventSource
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            console.log(`🔍 Configuring EventSource for object: ${decodedObjectName}`);
+            configureEventSource(token, decodedObjectName);
+        }
+
+        return () => {
+            console.log(`🛑 Resetting EventSource filters`);
+            const token = localStorage.getItem("authToken");
+            if (token) {
+                configureEventSource(token); // Reset to default filters
+            }
+        };
+    }, [decodedObjectName]);
+
     // Effect for handling config updates
     useEffect(() => {
-
         const unsubscribe = useEventStore.subscribe(
             (state) => state.configUpdates,
             async (updates) => {
@@ -849,7 +865,6 @@ const ObjectDetail = () => {
                 );
 
                 if (matchingUpdate) {
-
                     // Force fetch the config
                     try {
                         await fetchConfig(matchingUpdate.node);
@@ -878,12 +893,8 @@ const ObjectDetail = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token);
             fetchKeys();
         }
-        return () => {
-            closeEventSource();
-        };
     }, [decodedObjectName]);
 
     // Memoize data to prevent unnecessary re-renders

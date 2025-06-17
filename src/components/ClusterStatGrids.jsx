@@ -56,7 +56,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
     </Grid2>
 );
 
-export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, stateCount, onClick}) => {
+export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, stateCount, nodeCount, onClick}) => {
     const stateColors = {
         running: 'green',
         stopped: 'orange',
@@ -65,6 +65,9 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
         unknown: 'grey'
     };
 
+    // Determine if it's a single-node cluster
+    const isSingleNode = nodeCount === 1;
+
     return (
         <Grid2 size={{xs: 12, md: 4}}>
             <StatCard
@@ -72,9 +75,9 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                 value={heartbeatCount}
                 subtitle={
                     <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1}}>
-                        {beatingCount > 0 && (
+                        {isSingleNode ? (
                             <Chip
-                                label={`Beating ${beatingCount}`}
+                                label={`Beating ${heartbeatCount}`}
                                 size="small"
                                 sx={{
                                     backgroundColor: 'green',
@@ -82,19 +85,35 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                                     cursor: 'pointer'
                                 }}
                                 onClick={() => onClick('beating', null)}
+                                title="Healthy (Single Node)"
                             />
-                        )}
-                        {nonBeatingCount > 0 && (
-                            <Chip
-                                label={`Stale ${nonBeatingCount}`}
-                                size="small"
-                                sx={{
-                                    backgroundColor: 'red',
-                                    color: 'white',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => onClick('stale', null)}
-                            />
+                        ) : (
+                            <>
+                                {beatingCount > 0 && (
+                                    <Chip
+                                        label={`Beating ${beatingCount}`}
+                                        size="small"
+                                        sx={{
+                                            backgroundColor: 'green',
+                                            color: 'white',
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => onClick('beating', null)}
+                                    />
+                                )}
+                                {nonBeatingCount > 0 && (
+                                    <Chip
+                                        label={`Stale ${nonBeatingCount}`}
+                                        size="small"
+                                        sx={{
+                                            backgroundColor: 'red',
+                                            color: 'white',
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => onClick('stale', null)}
+                                    />
+                                )}
+                            </>
                         )}
                         {Object.entries(stateCount).map(([state, count]) => (
                             count > 0 && (

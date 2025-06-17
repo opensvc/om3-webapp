@@ -46,11 +46,18 @@ const getStateIcon = (state) => {
     }
 };
 
-const getStatusIcon = (isBeating) => {
+// Modified getStatusIcon to handle single-node clusters
+const getStatusIcon = (isBeating, isSingleNode) => {
+    // If it's a single-node cluster, always show green
+    if (isSingleNode) {
+        return <CheckCircleIcon sx={{color: green[500]}}/>;
+    }
+    // Otherwise, use the existing logic
     return isBeating ? (
         <CheckCircleIcon sx={{color: green[500]}}/>
     ) : (
-        <CancelIcon sx={{color: red[500]}}/>);
+        <CancelIcon sx={{color: red[500]}}/>
+    );
 };
 
 const tableCellStyle = {
@@ -148,6 +155,8 @@ const Heartbeats = () => {
     }, []);
 
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
+    // Determine if it's a single-node cluster
+    const isSingleNode = nodes.length === 1;
 
     const availableStates = useMemo(() => {
         const states = new Set(["all"]);
@@ -371,8 +380,10 @@ const Heartbeats = () => {
                                         </Tooltip>
                                     </TableCell>
                                     <TableCell sx={tableCellStyle}>
-                                        <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
-                                            <span>{getStatusIcon(row.isBeating)}</span>
+                                        <Tooltip
+                                            title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
+                                            arrow>
+                                            <span>{getStatusIcon(row.isBeating, isSingleNode)}</span>
                                         </Tooltip>
                                     </TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>

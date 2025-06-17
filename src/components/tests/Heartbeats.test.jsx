@@ -94,7 +94,6 @@ describe("Heartbeats Component", () => {
 
         renderWithTheme(<Heartbeats/>);
 
-        // Vérifie directement le rendu sans attendre des changements
         const rows = screen.getAllByRole("row");
         const dataRows = rows.slice(1); // Exclut l'en-tête
         expect(dataRows).toHaveLength(2);
@@ -111,7 +110,7 @@ describe("Heartbeats Component", () => {
 
         const secondRowCells = within(dataRows[1]).getAllByRole("cell");
         expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
+        expect(within(secondRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING (single-node cluster)
         expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
         expect(secondRowCells[3]).toHaveTextContent("node1");
         expect(secondRowCells[4]).toHaveTextContent("peer1");

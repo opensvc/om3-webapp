@@ -14,7 +14,7 @@ import {
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../hooks/useEventStore.js";
-import {useNavigate} from "react-router-dom";
+import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 
 const getColorByStatus = (status) => {
@@ -38,7 +38,12 @@ const extractNamespace = (objectName) => {
 const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
-    const [selectedNamespace, setSelectedNamespace] = useState("all");
+    const location = useLocation();
+
+    // Read namespace parameter from URL
+    const queryParams = new URLSearchParams(location.search);
+    const urlNamespace = queryParams.get("namespace");
+    const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -49,6 +54,11 @@ const Namespaces = () => {
             closeEventSource();
         };
     }, []);
+
+    // Update filter when URL changes
+    useEffect(() => {
+        setSelectedNamespace(urlNamespace || "all");
+    }, [urlNamespace]);
 
     const allObjectNames = Object.keys(objectStatus).filter(
         (key) => key && typeof objectStatus[key] === "object"
@@ -112,7 +122,16 @@ const Namespaces = () => {
                         sx={{width: 300}}
                         options={["all", ...namespaces]}
                         value={selectedNamespace}
-                        onChange={(e, val) => setSelectedNamespace(val || "all")}
+                        onChange={(e, val) => {
+                            const newNamespace = val || "all";
+                            setSelectedNamespace(newNamespace);
+                            // Update URL when filter changes
+                            if (newNamespace === "all") {
+                                navigate("/namespaces");
+                            } else {
+                                navigate(`/namespaces?namespace=${newNamespace}`);
+                            }
+                        }}
                         renderInput={(params) => (
                             <TextField {...params} label="Filter by namespace"/>
                         )}
@@ -140,7 +159,6 @@ const Namespaces = () => {
                                             key={namespace}
                                             hover
                                             onClick={() => {
-                                                console.log('[Namespaces] Row clicked, navigating to:', `/objects?namespace=${namespace}`);
                                                 navigate(`/objects?namespace=${namespace}`);
                                             }}
                                             sx={{cursor: "pointer"}}
@@ -155,7 +173,6 @@ const Namespaces = () => {
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         const url = `/objects?namespace=${namespace}&globalState=${status}`;
-                                                        console.log('[Namespaces] Status clicked, navigating to:', url);
                                                         navigate(url);
                                                     }}
                                                     sx={{cursor: "pointer"}}
@@ -180,8 +197,11 @@ const Namespaces = () => {
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-namespaces-message">No namespaces
-                                            available</Typography>
+                                        <Typography data-testid="no-namespaces-message">
+                                            {selectedNamespace !== "all"
+                                                ? "No namespaces match the selected filter"
+                                                : "No namespaces available"}
+                                        </Typography>
                                     </TableCell>
                                 </TableRow>
                             )}

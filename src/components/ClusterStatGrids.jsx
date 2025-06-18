@@ -69,12 +69,11 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                         backgroundColor: getNamespaceColor(status),
                                         color: 'white',
                                         cursor: 'pointer',
-                                        pr: count > 0 ? 3.5 : 0 // Increased padding for larger badge
+                                        pr: count > 0 ? 3.5 : 0
                                     }}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        console.log('[GridNamespaces] Chip clicked, navigating to:', `/objects?namespace=${namespace}`);
-                                        onClick(`/objects?namespace=${namespace}`);
+                                        onClick(`/namespaces?namespace=${namespace}`);
                                     }}
                                 />
                                 {count > 0 && (
@@ -103,7 +102,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                         ))}
                     </Box>
                 }
-                onClick={() => onClick()}
+                onClick={() => onClick('/namespaces')}
             />
         </Grid2>
     );

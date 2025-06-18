@@ -130,27 +130,26 @@ const ClusterOverview = () => {
                     statusCount={statusCount}
                     onClick={(globalState) => {
                         const url = globalState ? `/objects?globalState=${globalState}` : '/objects';
-                        console.log('[ClusterOverview] Navigating to:', url);
                         navigate(url);
                     }}
                 />
                 <GridNamespaces
                     namespaceCount={namespaceCount}
                     namespaceSubtitle={namespaceSubtitle}
-                    onClick={() => navigate("/namespaces")}
+                    onClick={(url) => navigate(url || "/namespaces")}
                 />
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
                     nonBeatingCount={staleCount}
                     stateCount={stateCount}
+                    nodeCount={nodeCount}
                     onClick={(status, state) => {
                         let url = '/heartbeats';
                         const params = new URLSearchParams();
                         if (status) params.append('status', status);
                         if (state) params.append('state', state);
                         if (params.toString()) url += `?${params.toString()}`;
-                        console.log('[ClusterOverview] Navigating to:', url);
                         navigate(url);
                     }}
                 />

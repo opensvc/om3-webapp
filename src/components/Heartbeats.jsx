@@ -97,29 +97,19 @@ const Heartbeats = () => {
     // Update URL when filters change
     useEffect(() => {
         const newQueryParams = new URLSearchParams();
-        if (filterBeating !== "all") {
-            newQueryParams.set("status", filterBeating);
-        }
-        if (filterNode !== "all") {
-            newQueryParams.set("node", filterNode);
-        }
-        if (filterState !== "all") {
-            newQueryParams.set("state", filterState);
-        }
-        if (filterId !== "all") {
-            newQueryParams.set("id", filterId); // Use cleaned ID
-        }
-        const queryString = newQueryParams.toString();
-        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
+        if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
+        if (filterNode !== "all") newQueryParams.set("node", filterNode);
+        if (filterState !== "all") newQueryParams.set("state", filterState);
+        if (filterId !== "all") newQueryParams.set("id", filterId);
+
+        navigate(`${location.pathname}${newQueryParams.toString() ? `?${newQueryParams.toString()}` : ""}`, {
             replace: true,
         });
     }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname]);
 
     // Initialize filter states from URL
     useEffect(() => {
-        setFilterBeating(
-            ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
-        );
+        setFilterBeating(["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all");
         setFilterNode(rawNode);
         setFilterState(rawState);
         setFilterId(rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId);
@@ -131,10 +121,7 @@ const Heartbeats = () => {
             const newCache = {...prev};
             Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
                 (nodeData.streams || []).forEach((stream) => {
-                    if (!newCache[node]) {
-                        newCache[node] = {};
-                    }
-                    // Cache stream if it has peers or is stopped
+                    if (!newCache[node]) newCache[node] = {};
                     if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
                         newCache[node][stream.id] = {
                             ...stream,
@@ -150,9 +137,7 @@ const Heartbeats = () => {
     // Start event reception
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token);
-        }
+        if (token) startEventReception(token);
         return () => closeEventSource();
     }, []);
 
@@ -163,9 +148,7 @@ const Heartbeats = () => {
         const states = new Set(["all"]);
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
-                if (stream.state) {
-                    states.add(stream.state);
-                }
+                if (stream.state) states.add(stream.state);
             });
         });
         return Array.from(states).sort();
@@ -211,7 +194,7 @@ const Heartbeats = () => {
                 Object.entries(peers).forEach(([peerKey, peerData]) => {
                     streamRows.push({
                         id: cleanedId,
-                        node: node,
+                        node,
                         peer: peerKey || "N/A",
                         type: stream.type || "N/A",
                         desc: peerData?.desc || "N/A",
@@ -234,14 +217,14 @@ const Heartbeats = () => {
     });
 
     const filteredRows = streamRows.filter((row) => {
-        const matchesBeating =
-            filterBeating === "all" ||
-            (filterBeating === "beating" && row.isBeating === true) ||
-            (filterBeating === "stale" && row.isBeating === false);
-        const matchesNode = filterNode === "all" || row.node === filterNode;
-        const matchesState = filterState === "all" || row.state === filterState;
-        const matchesId = filterId === "all" || row.id === filterId;
-        return matchesBeating && matchesNode && matchesState && matchesId;
+        return (
+            (filterBeating === "all" ||
+                (filterBeating === "beating" && row.isBeating === true) ||
+                (filterBeating === "stale" && row.isBeating === false)) &&
+            (filterNode === "all" || row.node === filterNode) &&
+            (filterState === "all" || row.state === filterState) &&
+            (filterId === "all" || row.id === filterId)
+        );
     });
 
     return (
@@ -284,16 +267,28 @@ const Heartbeats = () => {
                             <FormControl sx={{minWidth: 200}}>
                                 <InputLabel>Filter by Running</InputLabel>
                                 <Select
+                                    id="state-filter-select"
                                     value={filterState}
                                     label="Filter by Running"
                                     onChange={(e) => setFilterState(e.target.value)}
+                                    MenuProps={{
+                                        PaperProps: {
+                                            style: {
+                                                maxHeight: 300,
+                                            },
+                                        },
+                                    }}
                                 >
-                                    <MenuItem value="all">All</MenuItem>
-                                    {availableStates.map((state) => (
-                                        <MenuItem key={state} value={state}>
-                                            {state.charAt(0).toUpperCase() + state.slice(1)}
-                                        </MenuItem>
-                                    ))}
+                                    <MenuItem value="all" key="all-state">
+                                        All
+                                    </MenuItem>
+                                    {availableStates
+                                        .filter(state => state !== "all")
+                                        .map((state) => (
+                                            <MenuItem key={`state-${state}`} value={state}>
+                                                {state.charAt(0).toUpperCase() + state.slice(1)}
+                                            </MenuItem>
+                                        ))}
                                 </Select>
                             </FormControl>
 
@@ -376,7 +371,7 @@ const Heartbeats = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredRows.map((row, index) => (
+                            {filteredRows.map((row) => (
                                 <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
                                     <TableCell sx={tableCellStyle}>
                                         <Tooltip title={row.state} arrow>

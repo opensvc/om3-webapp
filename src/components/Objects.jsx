@@ -83,7 +83,7 @@ const Objects = () => {
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "unknown"];
+    const globalStates = ["all", "up", "down", "warn", "n/a"];
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -192,7 +192,7 @@ const Objects = () => {
         const obj = objects[objectName] || {};
         const rawAvail = obj?.avail;
         const validStatuses = ["up", "down", "warn"];
-        const avail = validStatuses.includes(rawAvail) ? rawAvail : "unknown";
+        const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
         const frozen = obj?.frozen;
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
@@ -479,7 +479,7 @@ const Objects = () => {
                                             {option === "warn" && (
                                                 <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>
                                             )}
-                                            {option === "unknown" && (
+                                            {option === "n/a" && (
                                                 <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>
                                             )}
                                             {option === "all"
@@ -602,11 +602,11 @@ const Objects = () => {
                                                         />
                                                     </Tooltip>
                                                 )}
-                                                {avail === "unknown" && (
-                                                    <Tooltip title="unknown">
+                                                {avail === "n/a" && (
+                                                    <Tooltip title="n/a">
                                                         <FiberManualRecordIcon
                                                             sx={{color: grey[500]}}
-                                                            aria-label="Object status is unknown"
+                                                            aria-label="Object status is n/a"
                                                         />
                                                     </Tooltip>
                                                 )}

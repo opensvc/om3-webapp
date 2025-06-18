@@ -29,6 +29,7 @@ import {
     ListItemText,
     useMediaQuery,
     useTheme,
+    Tooltip,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -578,37 +579,49 @@ const Objects = () => {
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={0.5}>
                                                 {avail === "up" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: green[500]}}
-                                                        aria-label="Object is up"
-                                                    />
+                                                    <Tooltip title="up">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: green[500]}}
+                                                            aria-label="Object is up"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {avail === "down" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: red[500]}}
-                                                        aria-label="Object is down"
-                                                    />
+                                                    <Tooltip title="down">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: red[500]}}
+                                                            aria-label="Object is down"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {avail === "warn" && (
-                                                    <WarningAmberIcon
-                                                        sx={{color: orange[500]}}
-                                                        aria-label="Object has warning"
-                                                    />
+                                                    <Tooltip title="warn">
+                                                        <WarningAmberIcon
+                                                            sx={{color: orange[500]}}
+                                                            aria-label="Object has warning"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {avail === "unknown" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: grey[500]}}
-                                                        aria-label="Object status is unknown"
-                                                    />
+                                                    <Tooltip title="unknown">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: grey[500]}}
+                                                            aria-label="Object status is unknown"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {frozen === "frozen" && (
-                                                    <AcUnit
-                                                        sx={{color: blue[200]}}
-                                                        aria-label="Object is frozen"
-                                                    />
+                                                    <Tooltip title="frozen">
+                                                        <AcUnit
+                                                            sx={{color: blue[600]}}
+                                                            aria-label="Object is frozen"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {globalExpect && (
-                                                    <Typography variant="caption">{globalExpect}</Typography>
+                                                    <Tooltip title={globalExpect}>
+                                                        <Typography variant="caption">{globalExpect}</Typography>
+                                                    </Tooltip>
                                                 )}
                                             </Box>
                                         </TableCell>
@@ -633,33 +646,43 @@ const Objects = () => {
                                                             {nodeAvail ? (
                                                                 <>
                                                                     {nodeAvail === "up" && (
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{color: green[500]}}
-                                                                            aria-label={`Node ${node} is up`}
-                                                                        />
+                                                                        <Tooltip title="up">
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{color: green[500]}}
+                                                                                aria-label={`Node ${node} is up`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeAvail === "down" && (
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{color: red[500]}}
-                                                                            aria-label={`Node ${node} is down`}
-                                                                        />
+                                                                        <Tooltip title="down">
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{color: red[500]}}
+                                                                                aria-label={`Node ${node} is down`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeAvail === "warn" && (
-                                                                        <WarningAmberIcon
-                                                                            sx={{color: orange[500]}}
-                                                                            aria-label={`Node ${node} has warning`}
-                                                                        />
+                                                                        <Tooltip title="warn">
+                                                                            <WarningAmberIcon
+                                                                                sx={{color: orange[500]}}
+                                                                                aria-label={`Node ${node} has warning`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeFrozen === "frozen" && (
-                                                                        <AcUnit
-                                                                            sx={{color: blue[200]}}
-                                                                            aria-label={`Node ${node} is frozen`}
-                                                                        />
+                                                                        <Tooltip title="frozen">
+                                                                            <AcUnit
+                                                                                sx={{color: blue[600]}}
+                                                                                aria-label={`Node ${node} is frozen`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeState && (
-                                                                        <Typography variant="caption">
-                                                                            {nodeState}
-                                                                        </Typography>
+                                                                        <Tooltip title={nodeState}>
+                                                                            <Typography variant="caption">
+                                                                                {nodeState}
+                                                                            </Typography>
+                                                                        </Tooltip>
                                                                     )}
                                                                 </>
                                                             ) : (

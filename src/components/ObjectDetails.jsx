@@ -975,16 +975,18 @@ const ObjectDetail = () => {
                             {decodedObjectName}
                         </Typography>
                         <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                            <FiberManualRecordIcon
-                                sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
-                            />
+                            <Tooltip title={getObjectStatus().avail || "unknown"}>
+                                <FiberManualRecordIcon
+                                    sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
+                                />
+                            </Tooltip>
                             {getObjectStatus().avail === "warn" && (
-                                <Tooltip title="Warning">
+                                <Tooltip title="warn">
                                     <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
                             {getObjectStatus().frozen === "frozen" && (
-                                <Tooltip title="Frozen">
+                                <Tooltip title="frozen">
                                     <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
@@ -1569,18 +1571,20 @@ const ObjectDetail = () => {
                                         <Typography variant="h6">{node}</Typography>
                                     </Box>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                        <FiberManualRecordIcon
-                                            sx={{color: getColor(avail), fontSize: "1.2rem"}}
-                                        />
+                                        <Tooltip title={avail || "unknown"}>
+                                            <FiberManualRecordIcon
+                                                sx={{color: getColor(avail), fontSize: "1.2rem"}}
+                                            />
+                                        </Tooltip>
                                         {avail === "warn" && (
-                                            <Tooltip title="Warning">
+                                            <Tooltip title="warn">
                                                 <WarningAmberIcon
                                                     sx={{color: orange[500], fontSize: "1.2rem"}}
                                                 />
                                             </Tooltip>
                                         )}
                                         {frozen === "frozen" && (
-                                            <Tooltip title="Frozen">
+                                            <Tooltip title="frozen">
                                                 <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
                                             </Tooltip>
                                         )}
@@ -1714,12 +1718,14 @@ const ObjectDetail = () => {
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
-                                                                    <FiberManualRecordIcon
-                                                                        sx={{
-                                                                            color: getColor(res.status),
-                                                                            fontSize: "1rem",
-                                                                        }}
-                                                                    />
+                                                                    <Tooltip title={res.status || "unknown"}>
+                                                                        <FiberManualRecordIcon
+                                                                            sx={{
+                                                                                color: getColor(res.status),
+                                                                                fontSize: "1rem",
+                                                                            }}
+                                                                        />
+                                                                    </Tooltip>
                                                                     <IconButton
                                                                         onClick={(e) => {
                                                                             handleResourceMenuOpen(node, rid, e);
@@ -1748,16 +1754,18 @@ const ObjectDetail = () => {
                                                                     </Typography>
                                                                     <Typography variant="body2">
                                                                         <strong>Provisioned:</strong>
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{
-                                                                                color: parseProvisionedState(res.provisioned?.state)
-                                                                                    ? green[500]
-                                                                                    : red[500],
-                                                                                fontSize: "1rem",
-                                                                                ml: 1,
-                                                                                verticalAlign: "middle",
-                                                                            }}
-                                                                        />
+                                                                        <Tooltip title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{
+                                                                                    color: parseProvisionedState(res.provisioned?.state)
+                                                                                        ? green[500]
+                                                                                        : red[500],
+                                                                                    fontSize: "1rem",
+                                                                                    ml: 1,
+                                                                                    verticalAlign: "middle",
+                                                                                }}
+                                                                            />
+                                                                        </Tooltip>
                                                                     </Typography>
                                                                     <Typography variant="body2">
                                                                         <strong>Last Updated:</strong>{" "}

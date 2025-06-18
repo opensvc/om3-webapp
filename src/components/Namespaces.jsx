@@ -1,4 +1,4 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useState} from "react";
 import {
     Box,
     Table,
@@ -8,6 +8,8 @@ import {
     TableHead,
     TableRow,
     Typography,
+    Autocomplete,
+    TextField,
 } from "@mui/material";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -36,6 +38,7 @@ const extractNamespace = (objectName) => {
 const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
+    const [selectedNamespace, setSelectedNamespace] = useState("all");
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -50,6 +53,11 @@ const Namespaces = () => {
     const allObjectNames = Object.keys(objectStatus).filter(
         (key) => key && typeof objectStatus[key] === "object"
     );
+
+    // Get all unique namespaces
+    const namespaces = Array.from(
+        new Set(allObjectNames.map(extractNamespace))
+    ).sort();
 
     const statusByNamespace = {};
 
@@ -67,6 +75,11 @@ const Namespaces = () => {
             statusByNamespace[ns]["n/a"]++;
         }
     });
+
+    // Filter namespaces based on selected namespace
+    const filteredNamespaces = Object.entries(statusByNamespace).filter(
+        ([namespace]) => selectedNamespace === "all" || namespace === selectedNamespace
+    );
 
     return (
         <Box
@@ -92,6 +105,20 @@ const Namespaces = () => {
                 <Typography variant="h4" gutterBottom align="center">
                     Namespaces Status Overview
                 </Typography>
+
+                {/* Namespace Filter */}
+                <Box sx={{mb: 3}}>
+                    <Autocomplete
+                        sx={{width: 300}}
+                        options={["all", ...namespaces]}
+                        value={selectedNamespace}
+                        onChange={(e, val) => setSelectedNamespace(val || "all")}
+                        renderInput={(params) => (
+                            <TextField {...params} label="Filter by namespace"/>
+                        )}
+                    />
+                </Box>
+
                 <TableContainer>
                     <Table>
                         <TableHead>
@@ -105,8 +132,8 @@ const Namespaces = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {Object.entries(statusByNamespace).length > 0 ? (
-                                Object.entries(statusByNamespace).map(([namespace, counts]) => {
+                            {filteredNamespaces.length > 0 ? (
+                                filteredNamespaces.map(([namespace, counts]) => {
                                     const total = counts.up + counts.down + counts.warn + counts["n/a"];
                                     return (
                                         <TableRow

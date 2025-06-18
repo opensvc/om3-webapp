@@ -45,16 +45,69 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
     </Grid2>
 );
 
-export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => (
-    <Grid2 size={{xs: 12, md: 4}}>
-        <StatCard
-            title="Namespaces"
-            value={namespaceCount}
-            subtitle={namespaceSubtitle}
-            onClick={onClick}
-        />
-    </Grid2>
-);
+export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => {
+    const getNamespaceColor = (status) => {
+        if (status.down > 0) return 'red';
+        if (status.warn > 0) return 'orange';
+        if (status.up > 0) return 'green';
+        return 'grey';
+    };
+
+    return (
+        <Grid2 size={{xs: 12, md: 4}}>
+            <StatCard
+                title="Namespaces"
+                value={namespaceCount}
+                subtitle={
+                    <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, pt: 1}}>
+                        {namespaceSubtitle.map(({namespace, count, status}) => (
+                            <Box key={namespace} sx={{position: 'relative', display: 'inline-flex'}}>
+                                <Chip
+                                    label={namespace}
+                                    size="small"
+                                    sx={{
+                                        backgroundColor: getNamespaceColor(status),
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        pr: count > 0 ? 3.5 : 0 // Increased padding for larger badge
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        console.log('[GridNamespaces] Chip clicked, navigating to:', `/objects?namespace=${namespace}`);
+                                        onClick(`/objects?namespace=${namespace}`);
+                                    }}
+                                />
+                                {count > 0 && (
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            top: -8,
+                                            right: -8,
+                                            width: 24,
+                                            height: 24,
+                                            borderRadius: '50%',
+                                            backgroundColor: 'red',
+                                            color: 'white',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: 12,
+                                            fontWeight: 'bold',
+                                            border: '1px solid white'
+                                        }}
+                                    >
+                                        {count}
+                                    </Box>
+                                )}
+                            </Box>
+                        ))}
+                    </Box>
+                }
+                onClick={() => onClick()}
+            />
+        </Grid2>
+    );
+};
 
 export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, stateCount, nodeCount, onClick}) => {
     const stateColors = {
@@ -65,7 +118,6 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
         unknown: 'grey'
     };
 
-    // Determine if it's a single-node cluster
     const isSingleNode = nodeCount === 1;
 
     return (

@@ -30,17 +30,23 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridNamespaces renders correctly and handles click', () => {
+        const mockNamespaceSubtitle = [
+            {namespace: 'ns1', count: 10, status: {up: 5, warn: 3, down: 2}},
+            {namespace: 'ns2', count: 5, status: {up: 3, warn: 1, down: 1}}
+        ];
+
         render(
             <GridNamespaces
                 namespaceCount={4}
-                namespaceSubtitle="ns1: 10 | ns2: 5"
+                namespaceSubtitle={mockNamespaceSubtitle}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Namespaces')).toBeInTheDocument();
         expect(screen.getByText('4')).toBeInTheDocument();
-        expect(screen.getByText('ns1: 10 | ns2: 5')).toBeInTheDocument();
+        expect(screen.getByText('ns1')).toBeInTheDocument();
+        expect(screen.getByText('ns2')).toBeInTheDocument();
 
         const card = screen.getByText('Namespaces').closest('div');
         fireEvent.click(card);
@@ -208,7 +214,7 @@ describe('ClusterStatGrids', () => {
         render(
             <GridNamespaces
                 namespaceCount={0}
-                namespaceSubtitle=""
+                namespaceSubtitle={[]}
                 onClick={mockOnClick}
             />
         );

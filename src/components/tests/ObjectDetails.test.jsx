@@ -3,7 +3,7 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
-import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
+import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
 
 // Helper to find text within a container
@@ -37,9 +37,10 @@ jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
+    configureEventSource: jest.fn(),
 }));
 
-// Mock Material-UI components (unchanged from original)
+// Mock Material-UI components
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
     return {
@@ -124,10 +125,9 @@ jest.mock('@mui/material', () => {
 });
 
 describe('ObjectDetail Component', () => {
-    const mockStartEventReception = jest.fn();
     const user = userEvent.setup();
 
-    // Improved findNodeSection helper (unchanged)
+    // Improved findNodeSection helper
     const findNodeSection = async (nodeName, timeout = 10000) => {
         try {
             const nodeElement = await screen.findByText(
@@ -168,6 +168,7 @@ describe('ObjectDetail Component', () => {
         });
 
         startEventReception.mockClear();
+        configureEventSource.mockClear();
 
         const mockState = {
             objectStatus: {
@@ -239,7 +240,7 @@ describe('ObjectDetail Component', () => {
                         }),
                 });
             }
-            if (url.includes('/config/file') && options?.method === 'PUT') {
+            if (url.includes('/config?set=')) {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({}),
@@ -284,10 +285,10 @@ type = flag
     });
 
     test('displays no keys message when keys array is empty', async () => {
-        // 1. Configuration des mocks avec timeout étendu
-        jest.setTimeout(30000); // 30 secondes au total
+        // 1. Mock setup with extended timeout
+        jest.setTimeout(30000);
 
-        // Mock useEventStore avec données minimales mais complètes
+        // Mock useEventStore with minimal but complete data
         useEventStore.mockImplementation((selector) => selector({
             objectStatus: {
                 'root/cfg/cfg1': {
@@ -316,7 +317,7 @@ type = flag
             clearConfigUpdate: jest.fn()
         }));
 
-        // Mock fetch avec réponse vide pour les clés
+        // Mock fetch with empty response for keys
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
@@ -325,7 +326,7 @@ type = flag
                     json: () => Promise.resolve({items: []})
                 });
             }
-            // Réponse par défaut pour les autres endpoints
+            // Default response for other endpoints
             return Promise.resolve({
                 ok: true,
                 status: 200,
@@ -333,7 +334,7 @@ type = flag
             });
         });
 
-        // 2. Rendu du composant
+        // 2. Render the component
         const {container} = render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -343,12 +344,12 @@ type = flag
         );
 
         try {
-            // 3. Attente que le composant soit initialisé
+            // 3. Wait for component initialization
             await waitFor(() => {
                 expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
             }, {timeout: 5000});
 
-            // 4. Recherche optimisée de l'accordéon des clés
+            // 4. Optimized search for keys accordion
             const keysAccordionButton = await waitFor(() => {
                 const buttons = screen.getAllByRole('button');
                 const accordionButton = buttons.find(btn =>
@@ -362,14 +363,14 @@ type = flag
                 return accordionButton;
             }, {timeout: 5000});
 
-            // 5. Interaction avec l'accordéon
+            // 5. Interact with accordion
             await act(async () => {
                 fireEvent.click(keysAccordionButton);
             });
 
-            // 6. Vérification du contenu développé
+            // 6. Verify expanded content
             await waitFor(() => {
-                // Vérification plus robuste du message
+                // More robust message verification
                 const noKeysMessage = screen.getByText((content, element) => {
                     return content.includes('No keys available') &&
                         element?.tagName.toLowerCase() !== 'button';
@@ -378,11 +379,10 @@ type = flag
             }, {timeout: 5000});
 
         } finally {
-            // Nettoyage
+            // Cleanup
             jest.clearAllMocks();
         }
     }, 30000);
-
 
     test('displays configuration with horizontal scrolling', async () => {
         render(
@@ -487,15 +487,21 @@ type = flag
         });
     }, 10000);
 
-    test('opens update configuration dialog and updates configuration', async () => {
+    test('opens manage configuration parameters dialog and adds a parameter', async () => {
         // Setup fetch mock
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+            }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
             }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -513,54 +519,52 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const fileInput = screen.getByRole('button', {name: /choose file/i});
-        const testFile = new File(['test content'], 'config.ini', {type: 'text/plain'});
-
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [testFile]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Verify file selection
-        await waitFor(() => expect(screen.getByText(/config.ini/)).toBeInTheDocument());
-
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify API call and success message
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/config?set=test.param=value'),
                 expect.objectContaining({
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: expect.objectContaining({
                         Authorization: 'Bearer mock-token',
-                        'Content-Type': 'application/octet-stream',
                     }),
-                    body: testFile,
                 })
             );
-            expect(screen.getByText(/Configuration updated successfully/)).toBeInTheDocument();
+            expect(screen.getByText(/Parameter 'test.param' added successfully/i)).toBeInTheDocument();
         });
     }, 15000);
 
-    test('displays error when configuration update fails', async () => {
+    test('displays error when configuration parameter addition fails', async () => {
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
-                return Promise.reject(new Error('Failed to update configuration'));
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
+                return Promise.reject(new Error('Failed to add parameter'));
+            }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
             }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -578,38 +582,44 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify error message
         await waitFor(() => {
-            expect(screen.getByText(/Error: Failed to update configuration/i)).toBeInTheDocument();
+            expect(screen.getByText(/Error: Failed to add parameter/i)).toBeInTheDocument();
         });
     }, 10000);
 
-    test('disables buttons during configuration update', async () => {
+    test('disables buttons during configuration parameter addition', async () => {
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return new Promise(() => {
                 }); // Never resolves
             }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
+            }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -627,35 +637,33 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify buttons are disabled
         await waitFor(() => {
-            expect(updateButton).toBeDisabled();
-            const cancelButton = screen.getByRole('button', {name: /cancel/i});
+            expect(applyButton).toBeDisabled();
+            const cancelButton = screen.getByRole('button', {name: /Cancel/i});
             expect(cancelButton).toBeDisabled();
-
-            const chooseFileButton = screen.getByRole('button', {name: /choose file/i});
-            expect(chooseFileButton).toHaveAttribute('aria-disabled', 'true');
+            expect(paramInput).toBeDisabled();
         });
     }, 10000);
 
-    test('cancels update configuration dialog', async () => {
+    test('cancels manage configuration parameters dialog', async () => {
         global.fetch.mockClear();
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -675,13 +683,13 @@ type = flag
             fireEvent.click(accordionSummary);
         });
 
-        const editButton = screen.getByRole('button', {name: /edit configuration/i});
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
-            fireEvent.click(editButton);
+            fireEvent.click(manageButton);
         });
 
         await waitFor(() => {
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+            expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument();
         });
 
         const cancelButton = screen.getByRole('button', {name: /Cancel/i});
@@ -690,13 +698,13 @@ type = flag
         });
 
         await waitFor(() => {
-            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+            expect(screen.queryByText('Manage Configuration Parameters')).not.toBeInTheDocument();
         });
 
         // Verify no API call was made
         expect(global.fetch).not.toHaveBeenCalledWith(
-            expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
-            expect.objectContaining({method: 'PUT'})
+            expect.stringContaining('/api/object/path/root/cfg/cfg1/config?set='),
+            expect.objectContaining({method: 'PATCH'})
         );
     }, 10000);
 
@@ -726,40 +734,40 @@ type = flag
             </MemoryRouter>
         );
 
-        // Vérifier le titre de l'objet
+        // Verify the object title
         await waitFor(() => {
             expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
         }, {timeout: 10000});
 
-        // Vérifier les nœuds directement par leur nom
+        // Verify nodes directly by their name
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
             expect(screen.getByText('node2')).toBeInTheDocument();
         }, {timeout: 10000});
 
-        // Vérifier le statut global
+        // Verify global status
         await waitFor(() => {
             expect(screen.getByText(/running/i)).toBeInTheDocument();
             expect(screen.getByText(/placed@node1/i)).toBeInTheDocument();
         }, {timeout: 10000});
 
-        // Vérifier les sections de ressources
+        // Verify resource sections
         const resourcesSections = await screen.findAllByText(/Resources \(\d+\)/i);
         expect(resourcesSections).toHaveLength(2);
 
-        // Développer la première section de ressources
+        // Expand the first resource section
         await act(async () => {
             fireEvent.click(resourcesSections[0]);
         });
 
-        // Vérifier que les ressources sont affichées
+        // Verify resources are displayed
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
             expect(screen.getByText('res2')).toBeInTheDocument();
         }, {timeout: 10000});
     }, 20000);
 
-    test('calls startEventReception on mount', () => {
+    test('calls configureEventSource on mount', () => {
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -767,11 +775,10 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        expect(startEventReception).toHaveBeenCalledWith('mock-token');
+        expect(configureEventSource).toHaveBeenCalledWith('mock-token', 'root/cfg/cfg1');
     });
 
-
-    test('calls closeEventSource on unmount', async () => {
+    test('calls configureEventSource on unmount to reset filters', async () => {
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -782,10 +789,10 @@ type = flag
         await act(async () => {
             unmount();
         });
-        expect(closeEventSource).toHaveBeenCalled();
+        expect(configureEventSource).toHaveBeenCalledWith('mock-token');
     });
 
-    test('does not call startEventReception without auth token', () => {
+    test('does not call configureEventSource without auth token', () => {
         Storage.prototype.getItem = jest.fn(() => null);
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -794,8 +801,7 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
-        expect(mockStartEventReception).not.toHaveBeenCalled();
+        expect(configureEventSource).not.toHaveBeenCalled();
     });
 
     test('enables batch node actions button when nodes are selected', async () => {
@@ -834,9 +840,9 @@ type = flag
         const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
         await user.click(actionsButton);
 
-        // Select "Freeze" - version plus précise
+        // Select "Freeze" - more precise version
         const freezeItem = await screen.findByRole('menuitem', {
-            name: /^Freeze$/i // Match exact du texte "Freeze"
+            name: /^Freeze$/i // Exact match of the text "Freeze"
         });
         await user.click(freezeItem);
 
@@ -1023,13 +1029,13 @@ type = flag
             </MemoryRouter>
         );
 
-        // Développer les ressources
+        // Expand resources
         const resourcesHeaders = await screen.findAllByText(/Resources \(\d+\)/i);
         await act(async () => {
             fireEvent.click(resourcesHeaders[0]);
         });
 
-        // Trouver le menu de la ressource
+        // Find the resource menu
         const resourceMenus = await screen.findAllByRole('button', {
             name: /Resource res1 actions/i,
         });
@@ -1039,14 +1045,14 @@ type = flag
             fireEvent.click(resourceMenus[0]);
         });
 
-        // Sélectionner l'action restart
+        // Select the restart action
         await waitFor(() => {
             const restartItem = screen.getByRole('menuitem', {name: /Restart/i});
             expect(restartItem).toBeInTheDocument();
             fireEvent.click(restartItem);
         });
 
-        // Confirmer l'action
+        // Confirm the action
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent('Confirm restart');
         });
@@ -1056,7 +1062,7 @@ type = flag
             fireEvent.click(confirmButton);
         });
 
-        // Vérifier l'appel API
+        // Verify the API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/action/restart?rid=res1'),
@@ -1088,7 +1094,7 @@ type = flag
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
 
-        // Log pour déboguer
+        // Log for debugging
         console.log('[Test] Object menu button found:', objectMenuButton ? 'Yes' : 'No');
         if (!objectMenuButton) {
             console.log('[Test] Header section DOM:', headerSection.outerHTML);
@@ -1100,7 +1106,7 @@ type = flag
             fireEvent.click(objectMenuButton);
         });
 
-        // Attendre que le menu soit ouvert
+        // Wait for the menu to open
         await waitFor(
             () => {
                 const menu = screen.getByRole('menu');

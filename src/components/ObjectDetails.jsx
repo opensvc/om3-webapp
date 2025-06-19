@@ -1,4 +1,4 @@
-import React, {useState, useMemo, useEffect} from "react";
+import React, {useState, useMemo, useEffect, useRef} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
@@ -38,9 +38,9 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
-import SettingsIcon from "@mui/icons-material/Settings";
 import {
     RestartAlt,
     LockOpen,
@@ -57,7 +57,7 @@ import {
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {closeEventSource, startEventReception, configureEventSource} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {
     FreezeDialog,
@@ -100,8 +100,6 @@ const RESOURCE_ACTIONS = [
     {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
 ];
 
-let renderCount = 0;
-
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
@@ -109,7 +107,6 @@ const ObjectDetail = () => {
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
-    const configUpdates = useEventStore((s) => s.configUpdates);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const globalStatus = objectStatus?.[decodedObjectName];
@@ -141,6 +138,7 @@ const ObjectDetail = () => {
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [paramInput, setParamInput] = useState("");
+    const [paramToUnset, setParamToUnset] = useState("");
     const [paramToDelete, setParamToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
@@ -186,6 +184,9 @@ const ObjectDetail = () => {
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
 
+    // Debounce ref to prevent multiple fetchConfig calls
+    const lastFetch = useRef({});
+
     const openSnackbar = (msg, sev = "success") =>
         setSnackbar({open: true, message: msg, severity: sev});
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
@@ -203,10 +204,24 @@ const ObjectDetail = () => {
         if (!objName || typeof objName !== "string") {
             return {namespace: "root", kind: "svc", name: ""};
         }
+
         const parts = objName.split("/");
-        const name = parts.length === 3 ? parts[2] : parts[0];
-        const kind = name === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
-        const namespace = parts.length === 3 ? parts[0] : "root";
+        let name, kind, namespace;
+
+        if (parts.length === 3) {
+            namespace = parts[0];
+            kind = parts[1];
+            name = parts[2];
+        } else if (parts.length === 2) {
+            namespace = "root";
+            kind = parts[0];
+            name = parts[1];
+        } else {
+            namespace = "root";
+            name = parts[0];
+            kind = name === "cluster" ? "ccfg" : "svc";
+        }
+
         return {namespace, kind, name};
     };
 
@@ -311,6 +326,12 @@ const ObjectDetail = () => {
 
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
+        const key = `${decodedObjectName}:${node}`;
+        const now = Date.now();
+        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
+            return;
+        }
+        lastFetch.current[key] = now;
         if (configLoading) {
             console.warn(`⏳ [fetchConfig] Already loading, queuing request for node=${node}`);
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -333,6 +354,7 @@ const ObjectDetail = () => {
 
         setConfigLoading(true);
         setConfigError(null);
+        setConfigNode(node); // Store the node used for fetching config
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
             const response = await fetch(url, {
@@ -383,8 +405,10 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to update config: ${response.status}`);
             openSnackbar("Configuration updated successfully");
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleUpdateConfig] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -427,14 +451,56 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to add parameter: ${response.status}`);
             openSnackbar(`Parameter '${key}' added successfully`);
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleAddParam] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionLoading(false);
             setParamInput("");
+        }
+    };
+
+    // Unset configuration parameter
+    const handleUnsetParam = async () => {
+        if (!paramToUnset) {
+            openSnackbar("Parameter key to unset is required.", "error");
+            return;
+        }
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionLoading(true);
+        openSnackbar(`Unsetting parameter ${paramToUnset}…`, "info");
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(paramToUnset)}`;
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok)
+                throw new Error(`Failed to unset parameter: ${response.status}`);
+            openSnackbar(`Parameter '${paramToUnset}' unset successfully`);
+            if (configNode) {
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleUnsetParam] No configNode available for ${decodedObjectName}`);
+            }
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+        } finally {
+            setActionLoading(false);
+            setParamToUnset("");
         }
     };
 
@@ -465,8 +531,10 @@ const ObjectDetail = () => {
                 throw new Error(`Failed to delete parameter: ${response.status}`);
             openSnackbar(`Parameter '${paramToDelete}' deleted successfully`);
             if (configNode) {
-                await fetchConfig(configNode); // Refresh configuration
-                setConfigAccordionExpanded(true); // Open accordion
+                await fetchConfig(configNode);
+                setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -480,6 +548,9 @@ const ObjectDetail = () => {
     const handleManageParamsSubmit = async () => {
         if (paramInput) {
             await handleAddParam();
+        }
+        if (paramToUnset) {
+            await handleUnsetParam();
         }
         if (paramToDelete) {
             await handleDeleteParam();
@@ -807,9 +878,25 @@ const ObjectDetail = () => {
         });
     };
 
+    // Effect for configuring EventSource
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            console.log(`🔍 Configuring EventSource for object: ${decodedObjectName}`);
+            configureEventSource(token, decodedObjectName);
+        }
+
+        return () => {
+            console.log(`🛑 Resetting EventSource filters`);
+            const token = localStorage.getItem("authToken");
+            if (token) {
+                configureEventSource(token); // Reset to default filters
+            }
+        };
+    }, [decodedObjectName]);
+
     // Effect for handling config updates
     useEffect(() => {
-
         const unsubscribe = useEventStore.subscribe(
             (state) => state.configUpdates,
             async (updates) => {
@@ -819,8 +906,6 @@ const ObjectDetail = () => {
                 );
 
                 if (matchingUpdate) {
-
-                    // Force fetch the config
                     try {
                         await fetchConfig(matchingUpdate.node);
                         setConfigAccordionExpanded(true);
@@ -848,12 +933,8 @@ const ObjectDetail = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token);
             fetchKeys();
         }
-        return () => {
-            closeEventSource();
-        };
     }, [decodedObjectName]);
 
     // Memoize data to prevent unnecessary re-renders
@@ -894,16 +975,18 @@ const ObjectDetail = () => {
                             {decodedObjectName}
                         </Typography>
                         <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                            <FiberManualRecordIcon
-                                sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
-                            />
+                            <Tooltip title={getObjectStatus().avail || "unknown"}>
+                                <FiberManualRecordIcon
+                                    sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
+                                />
+                            </Tooltip>
                             {getObjectStatus().avail === "warn" && (
-                                <Tooltip title="Warning">
+                                <Tooltip title="warn">
                                     <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
                             {getObjectStatus().frozen === "frozen" && (
-                                <Tooltip title="Frozen">
+                                <Tooltip title="frozen">
                                     <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
                                 </Tooltip>
                             )}
@@ -1116,22 +1199,26 @@ const ObjectDetail = () => {
                         </AccordionSummary>
                         <AccordionDetails>
                             <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
-                                <IconButton
-                                    color="primary"
-                                    onClick={() => setUpdateConfigDialogOpen(true)}
-                                    disabled={actionLoading}
-                                    aria-label="Edit configuration file"
-                                >
-                                    <EditIcon/>
-                                </IconButton>
-                                <IconButton
-                                    color="primary"
-                                    onClick={() => setManageParamsDialogOpen(true)}
-                                    disabled={actionLoading}
-                                    aria-label="Manage configuration parameters"
-                                >
-                                    <SettingsIcon/>
-                                </IconButton>
+                                <Tooltip title="Upload a new configuration file">
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setUpdateConfigDialogOpen(true)}
+                                        disabled={actionLoading}
+                                        aria-label="Upload new configuration file"
+                                    >
+                                        <UploadFileIcon/>
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Manage configuration parameters (add, unset, delete)">
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setManageParamsDialogOpen(true)}
+                                        disabled={actionLoading}
+                                        aria-label="Manage configuration parameters"
+                                    >
+                                        <EditIcon/>
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                             {configLoading && <CircularProgress size={24}/>}
                             {configError && (
@@ -1165,7 +1252,7 @@ const ObjectDetail = () => {
                                 >
                                     <Box
                                         component="pre"
-                                        key={configData} // Force re-render
+                                        key={configData}
                                         sx={{
                                             whiteSpace: "pre-wrap",
                                             fontFamily: "Monospace",
@@ -1404,11 +1491,23 @@ const ObjectDetail = () => {
                             disabled={actionLoading}
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
+                            Unset Parameter
+                        </Typography>
+                        <TextField
+                            margin="dense"
+                            label="Parameter key to unset (e.g., test.test)"
+                            fullWidth
+                            variant="outlined"
+                            value={paramToUnset}
+                            onChange={(e) => setParamToUnset(e.target.value)}
+                            disabled={actionLoading}
+                        />
+                        <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                             Delete Parameter
                         </Typography>
                         <TextField
                             margin="dense"
-                            label="Parameter key to delete (e.g., test.test.param)"
+                            label="Parameter key to delete (e.g., test)"
                             fullWidth
                             variant="outlined"
                             value={paramToDelete}
@@ -1426,7 +1525,7 @@ const ObjectDetail = () => {
                         <Button
                             variant="contained"
                             onClick={handleManageParamsSubmit}
-                            disabled={actionLoading || (!paramInput && !paramToDelete)}
+                            disabled={actionLoading || (!paramInput && !paramToUnset && !paramToDelete)}
                         >
                             Apply
                         </Button>
@@ -1465,7 +1564,6 @@ const ObjectDetail = () => {
                                 p: 2,
                             }}
                         >
-                            {/* NODE */}
                             <Box sx={{p: 1}}>
                                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
@@ -1477,18 +1575,20 @@ const ObjectDetail = () => {
                                         <Typography variant="h6">{node}</Typography>
                                     </Box>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                        <FiberManualRecordIcon
-                                            sx={{color: getColor(avail), fontSize: "1.2rem"}}
-                                        />
+                                        <Tooltip title={avail || "unknown"}>
+                                            <FiberManualRecordIcon
+                                                sx={{color: getColor(avail), fontSize: "1.2rem"}}
+                                            />
+                                        </Tooltip>
                                         {avail === "warn" && (
-                                            <Tooltip title="Warning">
+                                            <Tooltip title="warn">
                                                 <WarningAmberIcon
                                                     sx={{color: orange[500], fontSize: "1.2rem"}}
                                                 />
                                             </Tooltip>
                                         )}
                                         {frozen === "frozen" && (
-                                            <Tooltip title="Frozen">
+                                            <Tooltip title="frozen">
                                                 <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
                                             </Tooltip>
                                         )}
@@ -1547,7 +1647,7 @@ const ObjectDetail = () => {
                                                 }
                                                 onChange={(e) => {
                                                     const next = e.target.checked ? resIds : [];
-                                                    setSelectedResourcesBy((prev) => ({
+                                                    setSelectedResourcesByNode((prev) => ({
                                                         ...prev,
                                                         [node]: next,
                                                     }));
@@ -1622,12 +1722,14 @@ const ObjectDetail = () => {
                                                                     />
                                                                     <Typography variant="body1">{rid}</Typography>
                                                                     <Box flexGrow={1}/>
-                                                                    <FiberManualRecordIcon
-                                                                        sx={{
-                                                                            color: getColor(res.status),
-                                                                            fontSize: "1rem",
-                                                                        }}
-                                                                    />
+                                                                    <Tooltip title={res.status || "unknown"}>
+                                                                        <FiberManualRecordIcon
+                                                                            sx={{
+                                                                                color: getColor(res.status),
+                                                                                fontSize: "1rem",
+                                                                            }}
+                                                                        />
+                                                                    </Tooltip>
                                                                     <IconButton
                                                                         onClick={(e) => {
                                                                             handleResourceMenuOpen(node, rid, e);
@@ -1656,16 +1758,19 @@ const ObjectDetail = () => {
                                                                     </Typography>
                                                                     <Typography variant="body2">
                                                                         <strong>Provisioned:</strong>
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{
-                                                                                color: parseProvisionedState(res.provisioned?.state)
-                                                                                    ? green[500]
-                                                                                    : red[500],
-                                                                                fontSize: "1rem",
-                                                                                ml: 1,
-                                                                                verticalAlign: "middle",
-                                                                            }}
-                                                                        />
+                                                                        <Tooltip
+                                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{
+                                                                                    color: parseProvisionedState(res.provisioned?.state)
+                                                                                        ? green[500]
+                                                                                        : red[500],
+                                                                                    fontSize: "1rem",
+                                                                                    ml: 1,
+                                                                                    verticalAlign: "middle",
+                                                                                }}
+                                                                            />
+                                                                        </Tooltip>
                                                                     </Typography>
                                                                     <Typography variant="body2">
                                                                         <strong>Last Updated:</strong>{" "}
@@ -1685,7 +1790,6 @@ const ObjectDetail = () => {
                     );
                 })}
 
-                {/* MENUS */}
                 <Menu
                     anchorEl={nodesActionsAnchor}
                     open={Boolean(nodesActionsAnchor)}
@@ -1738,7 +1842,6 @@ const ObjectDetail = () => {
                     ))}
                 </Menu>
 
-                {/* DIALOGS */}
                 <FreezeDialog
                     open={confirmDialogOpen}
                     onClose={() => setConfirmDialogOpen(false)}

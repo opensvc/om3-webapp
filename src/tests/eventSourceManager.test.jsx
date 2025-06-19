@@ -1,4 +1,4 @@
-import * as eventSourceManager from '../eventSourceManager.jsx';
+import * as eventSourceManager from '../eventSourceManager';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import useEventStore from '../hooks/useEventStore.js';
 import {URL_NODE_EVENT} from '../config/apiPath.js';
@@ -26,13 +26,17 @@ describe('eventSourceManager', () => {
             objectStatus: {},
             objectInstanceStatus: {},
             heartbeatStatus: {},
+            instanceMonitor: {},
+            configUpdates: [],
             setNodeStatuses: jest.fn(),
             setNodeMonitors: jest.fn(),
             setNodeStats: jest.fn(),
             setObjectStatuses: jest.fn(),
             setInstanceStatuses: jest.fn(),
             setHeartbeatStatuses: jest.fn(),
+            setInstanceMonitors: jest.fn(),
             removeObject: jest.fn(),
+            setConfigUpdated: jest.fn(),
         };
 
         useEventStore.getState.mockReturnValue(mockStore);
@@ -48,36 +52,11 @@ describe('eventSourceManager', () => {
         EventSourcePolyfill.mockImplementation(() => mockEventSource);
     });
 
+    afterEach(() => {
+        jest.clearAllTimers();
+    });
+
     describe('createEventSource', () => {
-        it('should create an EventSource and attach event listeners', () => {
-            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
-
-            expect(EventSourcePolyfill).toHaveBeenCalled();
-            expect(eventSource.addEventListener).toHaveBeenCalledTimes(9);
-        });
-
-        it('should process NodeStatusUpdated events correctly', () => {
-            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
-
-            // Get the NodeStatusUpdated handler
-            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
-                (call) => call[0] === 'NodeStatusUpdated'
-            )[1];
-
-            // Simulate event
-            nodeStatusHandler({
-                data: JSON.stringify({node: 'node1', node_status: {status: 'up'}}),
-            });
-
-            // Fast-forward timers to flush the buffer
-            jest.runAllTimers();
-
-            expect(mockStore.setNodeStatuses).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    node1: {status: 'up'},
-                })
-            );
-        });
 
         test('should create an EventSource and attach event listeners', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');

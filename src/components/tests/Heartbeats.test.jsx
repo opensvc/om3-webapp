@@ -94,15 +94,14 @@ describe("Heartbeats Component", () => {
 
         renderWithTheme(<Heartbeats/>);
 
-        // Vérifie directement le rendu sans attendre des changements
         const rows = screen.getAllByRole("row");
-        const dataRows = rows.slice(1); // Exclut l'en-tête
+        const dataRows = rows.slice(1);
         expect(dataRows).toHaveLength(2);
 
         const firstRowCells = within(dataRows[0]).getAllByRole("cell");
         expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
         expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
-        expect(firstRowCells[2]).toHaveTextContent("hb#1.rx");
+        expect(firstRowCells[2]).toHaveTextContent("1.rx");
         expect(firstRowCells[3]).toHaveTextContent("node1");
         expect(firstRowCells[4]).toHaveTextContent("peer1");
         expect(firstRowCells[5]).toHaveTextContent("unicast");
@@ -111,8 +110,8 @@ describe("Heartbeats Component", () => {
 
         const secondRowCells = within(dataRows[1]).getAllByRole("cell");
         expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(secondRowCells[1]).getByTestId("CancelIcon")).toBeInTheDocument(); // BEATING
-        expect(secondRowCells[2]).toHaveTextContent("hb#1.tx");
+        expect(within(secondRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING (single-node cluster)
+        expect(secondRowCells[2]).toHaveTextContent("1.tx");
         expect(secondRowCells[3]).toHaveTextContent("node1");
         expect(secondRowCells[4]).toHaveTextContent("peer1");
         expect(secondRowCells[5]).toHaveTextContent("unicast");

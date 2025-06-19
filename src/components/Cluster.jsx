@@ -55,6 +55,7 @@ const ClusterOverview = () => {
     const namespaces = new Set();
     const statusCount = {up: 0, down: 0, warn: 0, unknown: 0};
     const objectsPerNamespace = {};
+    const statusPerNamespace = {};
 
     const extractNamespace = (objectPath) => {
         const parts = objectPath.split("/");
@@ -67,15 +68,22 @@ const ClusterOverview = () => {
         objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
 
         const s = status?.avail?.toLowerCase();
-        if (s === "up" || s === "down" || s === "warn") statusCount[s]++;
-        else statusCount.unknown++;
+        if (!statusPerNamespace[ns]) {
+            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, unknown: 0};
+        }
+        if (s === "up" || s === "down" || s === "warn") {
+            statusPerNamespace[ns][s]++;
+            statusCount[s]++;
+        } else {
+            statusPerNamespace[ns].unknown++;
+            statusCount.unknown++;
+        }
     });
 
     const namespaceCount = namespaces.size;
 
     const namespaceSubtitle = Object.entries(objectsPerNamespace)
-        .map(([ns, count]) => `${ns}: ${count}`)
-        .join(" | ");
+        .map(([ns, count]) => ({namespace: ns, count, status: statusPerNamespace[ns]}));
 
     const heartbeatIds = new Set();
     let beatingCount = 0;
@@ -122,27 +130,26 @@ const ClusterOverview = () => {
                     statusCount={statusCount}
                     onClick={(globalState) => {
                         const url = globalState ? `/objects?globalState=${globalState}` : '/objects';
-                        console.log('[ClusterOverview] Navigating to:', url);
                         navigate(url);
                     }}
                 />
                 <GridNamespaces
                     namespaceCount={namespaceCount}
                     namespaceSubtitle={namespaceSubtitle}
-                    onClick={() => navigate("/namespaces")}
+                    onClick={(url) => navigate(url || "/namespaces")}
                 />
                 <GridHeartbeats
                     heartbeatCount={heartbeatCount}
                     beatingCount={beatingCount}
                     nonBeatingCount={staleCount}
                     stateCount={stateCount}
+                    nodeCount={nodeCount}
                     onClick={(status, state) => {
                         let url = '/heartbeats';
                         const params = new URLSearchParams();
                         if (status) params.append('status', status);
                         if (state) params.append('state', state);
                         if (params.toString()) url += `?${params.toString()}`;
-                        console.log('[ClusterOverview] Navigating to:', url);
                         navigate(url);
                     }}
                 />

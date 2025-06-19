@@ -29,6 +29,7 @@ import {
     ListItemText,
     useMediaQuery,
     useTheme,
+    Tooltip,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -82,7 +83,7 @@ const Objects = () => {
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "unknown"];
+    const globalStates = ["all", "up", "down", "warn", "n/a"];
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -165,8 +166,17 @@ const Objects = () => {
 
     const extractKind = (name) => {
         const parts = name.split("/");
-        const objName = parts.length === 3 ? parts[2] : parts[0];
-        return objName === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
+        if (parts.length === 3) {
+            // Format: namespace/kind/name
+            return parts[1];
+        } else if (parts.length === 2) {
+            // Format: kind/name (namespace = root)
+            return parts[0];
+        } else {
+            // Format: name
+            const objName = parts[0];
+            return objName === "cluster" ? "ccfg" : "svc";
+        }
     };
 
     // Objects and namespaces
@@ -182,7 +192,7 @@ const Objects = () => {
         const obj = objects[objectName] || {};
         const rawAvail = obj?.avail;
         const validStatuses = ["up", "down", "warn"];
-        const avail = validStatuses.includes(rawAvail) ? rawAvail : "unknown";
+        const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
         const frozen = obj?.frozen;
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
@@ -297,10 +307,27 @@ const Objects = () => {
         const promises = selectedObjects.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
             if (!rawObj) return;
+
             const parts = objectName.split("/");
-            const name = parts.length === 3 ? parts[2] : parts[0];
-            const kind = name === "cluster" ? "ccfg" : parts.length === 3 ? parts[1] : "svc";
-            const namespace = parts.length === 3 ? parts[0] : "root";
+            let name, kind, namespace;
+
+            if (parts.length === 3) {
+                // Format: namespace/kind/name
+                namespace = parts[0];
+                kind = parts[1];
+                name = parts[2];
+            } else if (parts.length === 2) {
+                // Format: kind/name (namespace = root)
+                namespace = "root";
+                kind = parts[0];
+                name = parts[1];
+            } else {
+                // Format: name
+                namespace = "root";
+                name = parts[0];
+                kind = name === "cluster" ? "ccfg" : "svc";
+            }
+
             const obj = {...rawObj, namespace, kind, name};
 
             if (
@@ -452,7 +479,7 @@ const Objects = () => {
                                             {option === "warn" && (
                                                 <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>
                                             )}
-                                            {option === "unknown" && (
+                                            {option === "n/a" && (
                                                 <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>
                                             )}
                                             {option === "all"
@@ -552,37 +579,49 @@ const Objects = () => {
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={0.5}>
                                                 {avail === "up" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: green[500]}}
-                                                        aria-label="Object is up"
-                                                    />
+                                                    <Tooltip title="up">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: green[500]}}
+                                                            aria-label="Object is up"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {avail === "down" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: red[500]}}
-                                                        aria-label="Object is down"
-                                                    />
+                                                    <Tooltip title="down">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: red[500]}}
+                                                            aria-label="Object is down"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {avail === "warn" && (
-                                                    <WarningAmberIcon
-                                                        sx={{color: orange[500]}}
-                                                        aria-label="Object has warning"
-                                                    />
+                                                    <Tooltip title="warn">
+                                                        <WarningAmberIcon
+                                                            sx={{color: orange[500]}}
+                                                            aria-label="Object has warning"
+                                                        />
+                                                    </Tooltip>
                                                 )}
-                                                {avail === "unknown" && (
-                                                    <FiberManualRecordIcon
-                                                        sx={{color: grey[500]}}
-                                                        aria-label="Object status is unknown"
-                                                    />
+                                                {avail === "n/a" && (
+                                                    <Tooltip title="n/a">
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: grey[500]}}
+                                                            aria-label="Object status is n/a"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {frozen === "frozen" && (
-                                                    <AcUnit
-                                                        sx={{color: blue[200]}}
-                                                        aria-label="Object is frozen"
-                                                    />
+                                                    <Tooltip title="frozen">
+                                                        <AcUnit
+                                                            sx={{color: blue[600]}}
+                                                            aria-label="Object is frozen"
+                                                        />
+                                                    </Tooltip>
                                                 )}
                                                 {globalExpect && (
-                                                    <Typography variant="caption">{globalExpect}</Typography>
+                                                    <Tooltip title={globalExpect}>
+                                                        <Typography variant="caption">{globalExpect}</Typography>
+                                                    </Tooltip>
                                                 )}
                                             </Box>
                                         </TableCell>
@@ -607,33 +646,43 @@ const Objects = () => {
                                                             {nodeAvail ? (
                                                                 <>
                                                                     {nodeAvail === "up" && (
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{color: green[500]}}
-                                                                            aria-label={`Node ${node} is up`}
-                                                                        />
+                                                                        <Tooltip title="up">
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{color: green[500]}}
+                                                                                aria-label={`Node ${node} is up`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeAvail === "down" && (
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{color: red[500]}}
-                                                                            aria-label={`Node ${node} is down`}
-                                                                        />
+                                                                        <Tooltip title="down">
+                                                                            <FiberManualRecordIcon
+                                                                                sx={{color: red[500]}}
+                                                                                aria-label={`Node ${node} is down`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeAvail === "warn" && (
-                                                                        <WarningAmberIcon
-                                                                            sx={{color: orange[500]}}
-                                                                            aria-label={`Node ${node} has warning`}
-                                                                        />
+                                                                        <Tooltip title="warn">
+                                                                            <WarningAmberIcon
+                                                                                sx={{color: orange[500]}}
+                                                                                aria-label={`Node ${node} has warning`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeFrozen === "frozen" && (
-                                                                        <AcUnit
-                                                                            sx={{color: blue[200]}}
-                                                                            aria-label={`Node ${node} is frozen`}
-                                                                        />
+                                                                        <Tooltip title="frozen">
+                                                                            <AcUnit
+                                                                                sx={{color: blue[600]}}
+                                                                                aria-label={`Node ${node} is frozen`}
+                                                                            />
+                                                                        </Tooltip>
                                                                     )}
                                                                     {nodeState && (
-                                                                        <Typography variant="caption">
-                                                                            {nodeState}
-                                                                        </Typography>
+                                                                        <Tooltip title={nodeState}>
+                                                                            <Typography variant="caption">
+                                                                                {nodeState}
+                                                                            </Typography>
+                                                                        </Tooltip>
                                                                     )}
                                                                 </>
                                                             ) : (

@@ -46,11 +46,17 @@ const getStateIcon = (state) => {
     }
 };
 
-const getStatusIcon = (isBeating) => {
+// Modified getStatusIcon to handle single-node clusters
+const getStatusIcon = (isBeating, isSingleNode) => {
+    if (isSingleNode) {
+        return <CheckCircleIcon sx={{color: green[500]}}/>;
+    }
+    // Otherwise, use the existing logic
     return isBeating ? (
         <CheckCircleIcon sx={{color: green[500]}}/>
     ) : (
-        <CancelIcon sx={{color: red[500]}}/>);
+        <CancelIcon sx={{color: red[500]}}/>
+    );
 };
 
 const tableCellStyle = {
@@ -82,39 +88,32 @@ const Heartbeats = () => {
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
-    const [filterId, setFilterId] = useState(rawId);
+    // Remove "hb#" prefix from rawId if present
+    const [filterId, setFilterId] = useState(
+        rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId
+    );
     const [showFilters, setShowFilters] = useState(true);
 
     // Update URL when filters change
     useEffect(() => {
         const newQueryParams = new URLSearchParams();
-        if (filterBeating !== "all") {
-            newQueryParams.set("status", filterBeating);
-        }
-        if (filterNode !== "all") {
-            newQueryParams.set("node", filterNode);
-        }
-        if (filterState !== "all") {
-            newQueryParams.set("state", filterState);
-        }
-        if (filterId !== "all") {
-            newQueryParams.set("id", filterId);
-        }
-        const queryString = newQueryParams.toString();
-        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {
+        if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
+        if (filterNode !== "all") newQueryParams.set("node", filterNode);
+        if (filterState !== "all") newQueryParams.set("state", filterState);
+        if (filterId !== "all") newQueryParams.set("id", filterId);
+
+        navigate(`${location.pathname}${newQueryParams.toString() ? `?${newQueryParams.toString()}` : ""}`, {
             replace: true,
         });
     }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname]);
 
     // Initialize filter states from URL
     useEffect(() => {
-        setFilterBeating(
-            ["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all"
-        );
+        setFilterBeating(["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all");
         setFilterNode(rawNode);
         setFilterState(rawState);
-        setFilterId(rawId);
-    }, [location.search]);
+        setFilterId(rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId);
+    }, [location.search, rawStatus, rawNode, rawState, rawId]);
 
     // Cache stopped streams with their last known peers
     useEffect(() => {
@@ -122,10 +121,7 @@ const Heartbeats = () => {
             const newCache = {...prev};
             Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
                 (nodeData.streams || []).forEach((stream) => {
-                    if (!newCache[node]) {
-                        newCache[node] = {};
-                    }
-                    // Cache stream if it has peers or is stopped
+                    if (!newCache[node]) newCache[node] = {};
                     if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
                         newCache[node][stream.id] = {
                             ...stream,
@@ -141,21 +137,18 @@ const Heartbeats = () => {
     // Start event reception
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token);
-        }
+        if (token) startEventReception(token);
         return () => closeEventSource();
     }, []);
 
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
+    const isSingleNode = nodes.length === 1;
 
     const availableStates = useMemo(() => {
         const states = new Set(["all"]);
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
-                if (stream.state) {
-                    states.add(stream.state);
-                }
+                if (stream.state) states.add(stream.state);
             });
         });
         return Array.from(states).sort();
@@ -166,7 +159,9 @@ const Heartbeats = () => {
         Object.values(heartbeatStatus).forEach((nodeData) => {
             (nodeData.streams || []).forEach((stream) => {
                 if (stream.id && stream.id !== "all") {
-                    ids.add(stream.id);
+                    // Remove "hb#" prefix from ID
+                    const cleanedId = stream.id.replace(/^hb#/, "");
+                    ids.add(cleanedId);
                 }
             });
         });
@@ -181,10 +176,12 @@ const Heartbeats = () => {
                 ? cachedStream.peers || {}
                 : stream.peers || {};
 
+            // Remove "hb#" prefix from stream ID
+            const cleanedId = stream.id.replace(/^hb#/, "");
+
             if (Object.keys(peers).length === 0 && stream.state === "stopped") {
-                // Create a row for stopped streams with no peers
                 streamRows.push({
-                    id: stream.id,
+                    id: cleanedId,
                     node: node,
                     peer: "N/A",
                     type: stream.type || cachedStream.type || "N/A",
@@ -194,11 +191,10 @@ const Heartbeats = () => {
                     state: stream.state || "unknown",
                 });
             } else {
-                // Create rows for all peers
                 Object.entries(peers).forEach(([peerKey, peerData]) => {
                     streamRows.push({
-                        id: stream.id,
-                        node: node,
+                        id: cleanedId,
+                        node,
                         peer: peerKey || "N/A",
                         type: stream.type || "N/A",
                         desc: peerData?.desc || "N/A",
@@ -221,14 +217,14 @@ const Heartbeats = () => {
     });
 
     const filteredRows = streamRows.filter((row) => {
-        const matchesBeating =
-            filterBeating === "all" ||
-            (filterBeating === "beating" && row.isBeating === true) ||
-            (filterBeating === "stale" && row.isBeating === false);
-        const matchesNode = filterNode === "all" || row.node === filterNode;
-        const matchesState = filterState === "all" || row.state === filterState;
-        const matchesId = filterId === "all" || row.id === filterId;
-        return matchesBeating && matchesNode && matchesState && matchesId;
+        return (
+            (filterBeating === "all" ||
+                (filterBeating === "beating" && row.isBeating === true) ||
+                (filterBeating === "stale" && row.isBeating === false)) &&
+            (filterNode === "all" || row.node === filterNode) &&
+            (filterState === "all" || row.state === filterState) &&
+            (filterId === "all" || row.id === filterId)
+        );
     });
 
     return (
@@ -271,16 +267,28 @@ const Heartbeats = () => {
                             <FormControl sx={{minWidth: 200}}>
                                 <InputLabel>Filter by Running</InputLabel>
                                 <Select
+                                    id="state-filter-select"
                                     value={filterState}
                                     label="Filter by Running"
                                     onChange={(e) => setFilterState(e.target.value)}
+                                    MenuProps={{
+                                        PaperProps: {
+                                            style: {
+                                                maxHeight: 300,
+                                            },
+                                        },
+                                    }}
                                 >
-                                    <MenuItem value="all">All</MenuItem>
-                                    {availableStates.map((state) => (
-                                        <MenuItem key={state} value={state}>
-                                            {state.charAt(0).toUpperCase() + state.slice(1)}
-                                        </MenuItem>
-                                    ))}
+                                    <MenuItem value="all" key="all-state">
+                                        All
+                                    </MenuItem>
+                                    {availableStates
+                                        .filter(state => state !== "all")
+                                        .map((state) => (
+                                            <MenuItem key={`state-${state}`} value={state}>
+                                                {state.charAt(0).toUpperCase() + state.slice(1)}
+                                            </MenuItem>
+                                        ))}
                                 </Select>
                             </FormControl>
 
@@ -363,7 +371,7 @@ const Heartbeats = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredRows.map((row, index) => (
+                            {filteredRows.map((row) => (
                                 <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
                                     <TableCell sx={tableCellStyle}>
                                         <Tooltip title={row.state} arrow>
@@ -371,8 +379,11 @@ const Heartbeats = () => {
                                         </Tooltip>
                                     </TableCell>
                                     <TableCell sx={tableCellStyle}>
-                                        <Tooltip title={row.isBeating ? "Beating" : "Stale"} arrow>
-                                            <span>{getStatusIcon(row.isBeating)}</span>
+                                        <Tooltip
+                                            title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
+                                            arrow
+                                        >
+                                            <span>{getStatusIcon(row.isBeating, isSingleNode)}</span>
                                         </Tooltip>
                                     </TableCell>
                                     <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>

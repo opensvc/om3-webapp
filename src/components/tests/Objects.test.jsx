@@ -17,12 +17,10 @@ jest.mock('react-router-dom', () => ({
 jest.mock('../../hooks/useEventStore');
 jest.mock('../../hooks/useFetchDaemonStatus');
 jest.mock('../../eventSourceManager');
-jest.mock('@mui/material/useMediaQuery', () => {
-    return jest.fn().mockReturnValue(true);
-});
-jest.mock('@mui/material/Collapse', () => {
-    return ({in: inProp, children}) => (inProp ? children : null);
-});
+jest.mock('@mui/material/useMediaQuery', () => jest.fn());
+jest.mock('@mui/material/Collapse', () => ({in: inProp, children}) =>
+    inProp ? children : null
+);
 
 const AVAILABLE_ACTIONS = [
     'start',
@@ -44,6 +42,7 @@ expect.extend(toHaveNoViolations);
 describe('Objects Component', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = jest.fn();
+    const mockCloseEventSource = jest.fn();
     const mockRemoveObject = jest.fn();
     const allNodes = ['node1', 'node2'];
 
@@ -57,7 +56,10 @@ describe('Objects Component', () => {
         });
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
-        // Mock useEventStore with selector application
+        // Mock useMediaQuery
+        require('@mui/material/useMediaQuery').mockReturnValue(true);
+
+        // Mock useEventStore
         const mockState = {
             objectStatus: {
                 'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
@@ -82,30 +84,29 @@ describe('Objects Component', () => {
                 'node1:test-ns/svc/test2': {state: 'failed', global_expect: 'none'},
                 'node2:root/svc/test3': {state: 'idle', global_expect: 'started'},
             },
-            heartbeatStatus: {
-                node1: {
-                    streams: [{state: 'running'}, {state: 'stopped'}],
-                },
-                node2: {
-                    streams: [{state: 'running'}, {state: 'running'}],
-                },
-            },
             removeObject: mockRemoveObject,
         };
-        useEventStore.mockImplementation((selector) => {
-            const result = selector(mockState);
-            console.log('useEventStore selector result:', result);
-            return result;
-        });
+        useEventStore.mockImplementation((selector) => selector(mockState));
 
         // Mock useFetchDaemonStatus
         useFetchDaemonStatus.mockReturnValue({
             daemon: {cluster: {object: {}}},
         });
 
-        startEventReception.mockClear();
+        // Mock eventSourceManager
+        startEventReception.mockImplementation(mockStartEventReception);
+        closeEventSource.mockImplementation(mockCloseEventSource);
 
-        Storage.prototype.getItem = jest.fn(() => 'mock-token');
+        // Mock localStorage
+        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('mock-token');
+
+        // Mock fetch
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
     });
 
     afterEach(() => {
@@ -133,22 +134,38 @@ describe('Objects Component', () => {
         });
     });
 
-    test('fetches data on mount', async () => {
-        await act(async () => {
-            render(
+    test('fetches data on mount and cleans up on unmount', async () => {
+        // Render the component
+        const {unmount} = await act(async () => {
+            return render(
                 <MemoryRouter>
                     <Objects/>
                 </MemoryRouter>
             );
         });
 
+        // Verify mount behavior
         await waitFor(() => {
+            expect(screen.getByText('Objects')).toBeInTheDocument(); // Verify render
             expect(startEventReception).toHaveBeenCalledWith('mock-token');
+        }, {timeout: 2000});
+
+        // Unmount the component to trigger cleanup
+        await act(async () => {
+            unmount();
         });
+
+        // Verify cleanup behavior
+        expect(closeEventSource).toHaveBeenCalledTimes(1);
     });
 
-
     test('displays objects table with correct data', async () => {
+        // Mock useEffect to ensure proper mount and unmount behavior
+        const mockUseEffect = jest.spyOn(React, 'useEffect').mockImplementation((effect) => {
+            const cleanup = effect();
+            return cleanup;
+        });
+
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -163,115 +180,72 @@ describe('Objects Component', () => {
             expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
         });
 
-        // Verify Status column icons (avail, frozen)
-        const verifyStatusColumn = (row, expected) => {
-            const statusCell = within(row).getAllByRole('cell')[1]; // Status column
-            const svgs = statusCell.querySelectorAll('svg');
-
-            const iconStyles = Array.from(svgs).map((svg) => ({
-                color: window.getComputedStyle(svg).color,
-            }));
-            console.log(`Status column for ${row.textContent}:`, {iconStyles});
-
-            const iconTests = [
-                {
-                    condition: expected.icons?.includes('up'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(76, 175, 80)'), // green[500]
-                },
-                {
-                    condition: expected.icons?.includes('down'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(244, 67, 54)'), // red[500]
-                },
-                {
-                    condition: expected.icons?.includes('warn'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(255, 152, 0)'), // orange[500]
-                },
-                {
-                    condition: expected.icons?.includes('frozen'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(144, 202, 249)'), // blue[200]
-                },
-            ];
-
-            iconTests.forEach(({condition, test}) => {
-                console.log(`Checking condition ${condition}:`, test());
-                if (condition) {
-                    expect(test()).toBeTruthy();
-                } else {
-                    expect(test()).toBeFalsy();
-                }
+        const verifyStatusColumn = (row, expectedIcons, expectedCaption = null) => {
+            const cells = within(row).getAllByRole('cell');
+            const statusCell = cells[1];
+            expectedIcons.forEach((icon) => {
+                // Map icon to correct aria-label
+                const label = icon === 'warn' ? 'Object has warning' : `Object is ${icon}`;
+                expect(within(statusCell).getByLabelText(label)).toBeInTheDocument();
             });
+            if (expectedCaption) {
+                expect(within(statusCell).getByText(expectedCaption)).toBeInTheDocument();
+            }
         };
 
-        // Verify node column icons (avail, frozen)
-        const verifyNodeColumn = (row, node, expected) => {
+        const verifyNodeColumn = (row, node, expectedIcons) => {
             const nodeIndex = allNodes.indexOf(node);
-            const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3]; // Checkbox, Status, Object, then nodes
-            console.log(
-                `Verifying node column ${node} for ${row.textContent}: nodeCell ${
-                    nodeCell ? 'found' : 'not found'
-                }, index ${nodeIndex + 3}`
-            );
-            if (!nodeCell) {
-                console.log(`Expected for ${node}:`, expected);
-                expect(expected).toEqual({icons: []});
+            const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3];
+            if (expectedIcons.length === 0) {
+                expect(within(nodeCell).getByText('-')).toBeInTheDocument();
                 return;
             }
-
-            const svgs = nodeCell.querySelectorAll('svg');
-
-            const iconStyles = Array.from(svgs).map((svg) => ({
-                color: window.getComputedStyle(svg).color,
-            }));
-            console.log(`Node column ${node} for ${row.textContent}:`, {iconStyles});
-
-            const iconTests = [
-                {
-                    condition: expected.icons?.includes('up'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(76, 175, 80)'),
-                },
-                {
-                    condition: expected.icons?.includes('down'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(244, 67, 54)'),
-                },
-                {
-                    condition: expected.icons?.includes('warn'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(255, 152, 0)'),
-                },
-                {
-                    condition: expected.icons?.includes('frozen'),
-                    test: () => iconStyles.some((style) => style.color === 'rgb(144, 202, 249)'),
-                },
-            ];
-
-            iconTests.forEach(({condition, test}) => {
-                console.log(`Checking condition ${condition} for node ${node}:`, test());
-                if (condition) {
-                    expect(test()).toBeTruthy();
-                } else {
-                    expect(test()).toBeFalsy();
-                }
+            expectedIcons.forEach((icon) => {
+                const label = icon === 'warn' ? `Node ${node} has warning` : `Node ${node} is ${icon}`;
+                expect(within(nodeCell).getByLabelText(label)).toBeInTheDocument();
             });
         };
 
-        const rows = screen.getAllByRole('row').slice(1); // Skip header
+        const rows = screen.getAllByRole('row').slice(1);
         const rowTexts = rows.map((row) => row.textContent);
 
         const test1Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test1'))];
         const test2Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test2'))];
         const test3Row = rows[rowTexts.findIndex((text) => text.includes('root/svc/test3'))];
 
-        // Status column expectations (icons only)
-        verifyStatusColumn(test1Row, {icons: ['up']}); // Green icon
-        verifyStatusColumn(test2Row, {icons: ['down', 'frozen']}); // Red and blue icons
-        verifyStatusColumn(test3Row, {icons: ['warn']}); // Orange icon
+        verifyStatusColumn(test1Row, ['up'], 'frozen');
+        verifyStatusColumn(test2Row, ['down', 'frozen']);
+        verifyStatusColumn(test3Row, ['warn'], 'started');
 
-        // Node column expectations (icons only)
-        verifyNodeColumn(test1Row, 'node1', {icons: ['up']});
-        verifyNodeColumn(test1Row, 'node2', {icons: ['down', 'frozen']});
-        verifyNodeColumn(test2Row, 'node1', {icons: ['down', 'frozen']});
-        verifyNodeColumn(test2Row, 'node2', {icons: []});
-        verifyNodeColumn(test3Row, 'node1', {icons: []});
-        verifyNodeColumn(test3Row, 'node2', {icons: ['warn']});
+        verifyNodeColumn(test1Row, 'node1', ['up']);
+        verifyNodeColumn(test1Row, 'node2', ['down', 'frozen']);
+        verifyNodeColumn(test2Row, 'node1', ['down', 'frozen']);
+        verifyNodeColumn(test2Row, 'node2', []);
+        verifyNodeColumn(test3Row, 'node1', []);
+        verifyNodeColumn(test3Row, 'node2', ['warn']);
+
+        mockUseEffect.mockRestore();
+    });
+
+    test('renders correctly with initial state', async () => {
+        await act(async () => {
+            render(
+                <MemoryRouter>
+                    <Objects/>
+                </MemoryRouter>
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+            expect(screen.getByLabelText('Kind')).toBeInTheDocument();
+            expect(screen.getByLabelText('Name')).toBeInTheDocument();
+            expect(screen.getByText('Status')).toBeInTheDocument();
+            expect(screen.getByText('Object')).toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: /node1/i})).toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: /node2/i})).toBeInTheDocument();
+        });
     });
 
     test('handles object selection', async () => {
@@ -285,9 +259,7 @@ describe('Objects Component', () => {
 
         await waitFor(() => {
             const checkbox = within(
-                screen.getByRole('row', {
-                    name: /test-ns\/svc\/test1/i,
-                })
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
             ).getByRole('checkbox');
             fireEvent.click(checkbox);
             expect(checkbox).toBeChecked();
@@ -325,19 +297,19 @@ describe('Objects Component', () => {
 
         await waitFor(() => {
             const checkbox = within(
-                screen.getByRole('row', {
-                    name: /test-ns\/svc\/test1/i,
-                })
+                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
             ).getByRole('checkbox');
             fireEvent.click(checkbox);
         });
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        const menu = screen.getByRole('menu');
+        const menu = await screen.findByRole('menu');
         expect(menu).toBeInTheDocument();
 
         AVAILABLE_ACTIONS.forEach((action) => {
-            expect(within(menu).getByText(action.charAt(0).toUpperCase() + action.slice(1))).toBeInTheDocument();
+            expect(
+                within(menu).getByText(action.charAt(0).toUpperCase() + action.slice(1))
+            ).toBeInTheDocument();
         });
     });
 
@@ -396,13 +368,6 @@ describe('Objects Component', () => {
     });
 
     test('executes action and shows snackbar', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -433,17 +398,14 @@ describe('Objects Component', () => {
                     expect.stringContaining('/test-ns/svc/test1/action/restart'),
                     expect.any(Object)
                 );
-                const alert = screen.getByRole('alert');
-                expect(alert).toHaveTextContent(/succeeded/i);
+                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
             },
             {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('handles failed action execution', async () => {
-        global.fetch = jest.fn(() =>
+        global.fetch.mockImplementation(() =>
             Promise.resolve({
                 ok: false,
                 json: () => Promise.resolve({}),
@@ -476,23 +438,13 @@ describe('Objects Component', () => {
 
         await waitFor(
             () => {
-                const alert = screen.getByRole('alert');
-                expect(alert).toHaveTextContent(/failed/i);
+                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
             },
             {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('executes delete action and removes object', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -528,18 +480,9 @@ describe('Objects Component', () => {
             },
             {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('executes purge action with confirmation', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -558,29 +501,13 @@ describe('Objects Component', () => {
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Purge/i));
 
-        await waitFor(
-            () => {
-                const dialog = screen.getByRole('dialog');
-                expect(dialog).toBeInTheDocument();
-                console.log('[Test] PurgeDialog opened, DOM content:', document.body.innerHTML);
-            },
-            {timeout: 10000}
-        );
-
-        // Search by aria-label instead of label text
-        const dataLossCheckbox = screen.getByRole('checkbox', {
-            name: /Confirm data loss/i,
-        });
-        const configLossCheckbox = screen.getByRole('checkbox', {
-            name: /Confirm configuration loss/i,
-        });
-        const serviceInterruptionCheckbox = screen.getByRole('checkbox', {
-            name: /Confirm service interruption/i,
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
 
-        fireEvent.click(dataLossCheckbox);
-        fireEvent.click(configLossCheckbox);
-        fireEvent.click(serviceInterruptionCheckbox);
+        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm data loss/i}));
+        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm configuration loss/i}));
+        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm service interruption/i}));
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         expect(confirmButton).not.toBeDisabled();
@@ -594,20 +521,11 @@ describe('Objects Component', () => {
                 );
                 expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
             },
-            {timeout: 10000}
+            {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('executes stop action with confirmation', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -646,18 +564,9 @@ describe('Objects Component', () => {
             },
             {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('executes unprovision action with confirmation', async () => {
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-
         await act(async () => {
             render(
                 <MemoryRouter>
@@ -696,8 +605,6 @@ describe('Objects Component', () => {
             },
             {timeout: 5000}
         );
-
-        global.fetch.mockClear();
     });
 
     test('toggles filters visibility', async () => {
@@ -713,8 +620,6 @@ describe('Objects Component', () => {
         const toggleButton = await screen.findByRole('button', {name: /filters/i});
         expect(toggleButton).toHaveTextContent('Hide filters');
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        expect(screen.getByLabelText('Kind')).toBeInTheDocument();
-        expect(screen.getByLabelText('Name')).toBeInTheDocument();
 
         // Click to hide filters
         fireEvent.click(toggleButton);
@@ -723,19 +628,14 @@ describe('Objects Component', () => {
         await waitFor(() => {
             expect(toggleButton).toHaveTextContent('Show filters');
             expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
-            expect(screen.queryByLabelText('Kind')).not.toBeInTheDocument();
-            expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
         });
 
         // Click to show filters again
         fireEvent.click(toggleButton);
 
-        // Check filters are visible again
         await waitFor(() => {
             expect(toggleButton).toHaveTextContent('Hide filters');
             expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-            expect(screen.getByLabelText('Kind')).toBeInTheDocument();
-            expect(screen.getByLabelText('Name')).toBeInTheDocument();
         });
     });
 

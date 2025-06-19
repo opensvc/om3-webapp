@@ -1,4 +1,4 @@
-import React, {useEffect} from "react";
+import React, {useEffect, useState} from "react";
 import {
     Box,
     Table,
@@ -8,11 +8,13 @@ import {
     TableHead,
     TableRow,
     Typography,
+    Autocomplete,
+    TextField,
 } from "@mui/material";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../hooks/useEventStore.js";
-import {useNavigate} from "react-router-dom";
+import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 
 const getColorByStatus = (status) => {
@@ -36,6 +38,12 @@ const extractNamespace = (objectName) => {
 const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Read namespace parameter from URL
+    const queryParams = new URLSearchParams(location.search);
+    const urlNamespace = queryParams.get("namespace");
+    const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -47,9 +55,19 @@ const Namespaces = () => {
         };
     }, []);
 
+    // Update filter when URL changes
+    useEffect(() => {
+        setSelectedNamespace(urlNamespace || "all");
+    }, [urlNamespace]);
+
     const allObjectNames = Object.keys(objectStatus).filter(
         (key) => key && typeof objectStatus[key] === "object"
     );
+
+    // Get all unique namespaces
+    const namespaces = Array.from(
+        new Set(allObjectNames.map(extractNamespace))
+    ).sort();
 
     const statusByNamespace = {};
 
@@ -67,6 +85,11 @@ const Namespaces = () => {
             statusByNamespace[ns]["n/a"]++;
         }
     });
+
+    // Filter namespaces based on selected namespace
+    const filteredNamespaces = Object.entries(statusByNamespace).filter(
+        ([namespace]) => selectedNamespace === "all" || namespace === selectedNamespace
+    );
 
     return (
         <Box
@@ -92,6 +115,29 @@ const Namespaces = () => {
                 <Typography variant="h4" gutterBottom align="center">
                     Namespaces Status Overview
                 </Typography>
+
+                {/* Namespace Filter */}
+                <Box sx={{mb: 3}}>
+                    <Autocomplete
+                        sx={{width: 300}}
+                        options={["all", ...namespaces]}
+                        value={selectedNamespace}
+                        onChange={(e, val) => {
+                            const newNamespace = val || "all";
+                            setSelectedNamespace(newNamespace);
+                            // Update URL when filter changes
+                            if (newNamespace === "all") {
+                                navigate("/namespaces");
+                            } else {
+                                navigate(`/namespaces?namespace=${newNamespace}`);
+                            }
+                        }}
+                        renderInput={(params) => (
+                            <TextField {...params} label="Filter by namespace"/>
+                        )}
+                    />
+                </Box>
+
                 <TableContainer>
                     <Table>
                         <TableHead>
@@ -105,15 +151,14 @@ const Namespaces = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {Object.entries(statusByNamespace).length > 0 ? (
-                                Object.entries(statusByNamespace).map(([namespace, counts]) => {
+                            {filteredNamespaces.length > 0 ? (
+                                filteredNamespaces.map(([namespace, counts]) => {
                                     const total = counts.up + counts.down + counts.warn + counts["n/a"];
                                     return (
                                         <TableRow
                                             key={namespace}
                                             hover
                                             onClick={() => {
-                                                console.log('[Namespaces] Row clicked, navigating to:', `/objects?namespace=${namespace}`);
                                                 navigate(`/objects?namespace=${namespace}`);
                                             }}
                                             sx={{cursor: "pointer"}}
@@ -128,7 +173,6 @@ const Namespaces = () => {
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         const url = `/objects?namespace=${namespace}&globalState=${status}`;
-                                                        console.log('[Namespaces] Status clicked, navigating to:', url);
                                                         navigate(url);
                                                     }}
                                                     sx={{cursor: "pointer"}}
@@ -153,8 +197,11 @@ const Namespaces = () => {
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-namespaces-message">No namespaces
-                                            available</Typography>
+                                        <Typography data-testid="no-namespaces-message">
+                                            {selectedNamespace !== "all"
+                                                ? "No namespaces match the selected filter"
+                                                : "No namespaces available"}
+                                        </Typography>
                                     </TableCell>
                                 </TableRow>
                             )}

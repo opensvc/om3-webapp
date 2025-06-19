@@ -528,7 +528,7 @@ const ObjectDetail = () => {
                 },
             });
             if (!response.ok)
-                throw new Error(`Failed to delete parameter: ${response.status}`);
+                throw new Error(`Failed to delete section: ${response.status}`);
             openSnackbar(`Parameter '${paramToDelete}' deleted successfully`);
             if (configNode) {
                 await fetchConfig(configNode);
@@ -1478,7 +1478,7 @@ const ObjectDetail = () => {
                     <DialogTitle>Manage Configuration Parameters</DialogTitle>
                     <DialogContent>
                         <Typography variant="subtitle1" gutterBottom>
-                            Add Parameter
+                            Add parameter
                         </Typography>
                         <TextField
                             autoFocus
@@ -1491,7 +1491,7 @@ const ObjectDetail = () => {
                             disabled={actionLoading}
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Unset Parameter
+                            Unset parameter
                         </Typography>
                         <TextField
                             margin="dense"
@@ -1503,11 +1503,11 @@ const ObjectDetail = () => {
                             disabled={actionLoading}
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Delete Parameter
+                            Delete section
                         </Typography>
                         <TextField
                             margin="dense"
-                            label="Parameter key to delete (e.g., test)"
+                            label="Section key to delete (e.g., test)"
                             fullWidth
                             variant="outlined"
                             value={paramToDelete}

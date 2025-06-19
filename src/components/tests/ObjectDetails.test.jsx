@@ -37,7 +37,7 @@ jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
-    configureEventSource: jest.fn(), // Added to match import in ObjectDetails
+    configureEventSource: jest.fn(),
 }));
 
 // Mock Material-UI components
@@ -240,7 +240,7 @@ describe('ObjectDetail Component', () => {
                         }),
                 });
             }
-            if (url.includes('/config/file') && options?.method === 'PUT') {
+            if (url.includes('/config?set=')) {
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({}),
@@ -487,15 +487,21 @@ type = flag
         });
     }, 10000);
 
-    test('opens update configuration dialog and updates configuration', async () => {
+    test('opens manage configuration parameters dialog and adds a parameter', async () => {
         // Setup fetch mock
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+            }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
             }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -513,54 +519,52 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const fileInput = screen.getByRole('button', {name: /choose file/i});
-        const testFile = new File(['test content'], 'config.ini', {type: 'text/plain'});
-
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [testFile]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Verify file selection
-        await waitFor(() => expect(screen.getByText(/config.ini/)).toBeInTheDocument());
-
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify API call and success message
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
+                expect.stringContaining('/api/object/path/root/cfg/cfg1/config?set=test.param=value'),
                 expect.objectContaining({
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: expect.objectContaining({
                         Authorization: 'Bearer mock-token',
-                        'Content-Type': 'application/octet-stream',
                     }),
-                    body: testFile,
                 })
             );
-            expect(screen.getByText(/Configuration updated successfully/)).toBeInTheDocument();
+            expect(screen.getByText(/Parameter 'test.param' added successfully/i)).toBeInTheDocument();
         });
     }, 15000);
 
-    test('displays error when configuration update fails', async () => {
+    test('displays error when configuration parameter addition fails', async () => {
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
-                return Promise.reject(new Error('Failed to update configuration'));
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
+                return Promise.reject(new Error('Failed to add parameter'));
+            }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
             }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -578,38 +582,44 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify error message
         await waitFor(() => {
-            expect(screen.getByText(/Error: Failed to update configuration/i)).toBeInTheDocument();
+            expect(screen.getByText(/Error: Failed to add parameter/i)).toBeInTheDocument();
         });
     }, 10000);
 
-    test('disables buttons during configuration update', async () => {
+    test('disables buttons during configuration parameter addition', async () => {
         global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/api/object/path/root/cfg/cfg1/config/file') && options.method === 'PUT') {
+            if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return new Promise(() => {
                 }); // Never resolves
             }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
+            }
             return Promise.resolve({
                 ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                json: () => Promise.resolve({}),
             });
         });
 
@@ -627,35 +637,33 @@ type = flag
         const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
         await act(async () => fireEvent.click(accordionSummary));
 
-        // Find edit button
-        const editButton = screen.getByRole('button', {name: /edit/i});
-        await act(async () => fireEvent.click(editButton));
+        // Find manage parameters button
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => fireEvent.click(manageButton));
 
         // Wait for dialog
-        await waitFor(() => expect(screen.getByText('Update Configuration')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Select file
-        const hiddenFileInput = document.querySelector('input[type="file"]');
+        // Enter parameter
+        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
         await act(async () => {
-            fireEvent.change(hiddenFileInput, {target: {files: [new File(['new config'], 'config.ini')]}});
+            fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
 
-        // Click Update
-        const updateButton = screen.getByRole('button', {name: /update/i});
-        await act(async () => fireEvent.click(updateButton));
+        // Click Apply
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => fireEvent.click(applyButton));
 
         // Verify buttons are disabled
         await waitFor(() => {
-            expect(updateButton).toBeDisabled();
-            const cancelButton = screen.getByRole('button', {name: /cancel/i});
+            expect(applyButton).toBeDisabled();
+            const cancelButton = screen.getByRole('button', {name: /Cancel/i});
             expect(cancelButton).toBeDisabled();
-
-            const chooseFileButton = screen.getByRole('button', {name: /choose file/i});
-            expect(chooseFileButton).toHaveAttribute('aria-disabled', 'true');
+            expect(paramInput).toBeDisabled();
         });
     }, 10000);
 
-    test('cancels update configuration dialog', async () => {
+    test('cancels manage configuration parameters dialog', async () => {
         global.fetch.mockClear();
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -675,13 +683,13 @@ type = flag
             fireEvent.click(accordionSummary);
         });
 
-        const editButton = screen.getByRole('button', {name: /edit configuration/i});
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
-            fireEvent.click(editButton);
+            fireEvent.click(manageButton);
         });
 
         await waitFor(() => {
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+            expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument();
         });
 
         const cancelButton = screen.getByRole('button', {name: /Cancel/i});
@@ -690,13 +698,13 @@ type = flag
         });
 
         await waitFor(() => {
-            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+            expect(screen.queryByText('Manage Configuration Parameters')).not.toBeInTheDocument();
         });
 
         // Verify no API call was made
         expect(global.fetch).not.toHaveBeenCalledWith(
-            expect.stringContaining('/api/object/path/root/cfg/cfg1/config/file'),
-            expect.objectContaining({method: 'PUT'})
+            expect.stringContaining('/api/object/path/root/cfg/cfg1/config?set='),
+            expect.objectContaining({method: 'PATCH'})
         );
     }, 10000);
 

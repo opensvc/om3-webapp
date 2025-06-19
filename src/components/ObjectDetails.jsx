@@ -38,9 +38,9 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
-import SettingsIcon from "@mui/icons-material/Settings";
 import {
     RestartAlt,
     LockOpen,
@@ -1199,22 +1199,26 @@ const ObjectDetail = () => {
                         </AccordionSummary>
                         <AccordionDetails>
                             <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
-                                <IconButton
-                                    color="primary"
-                                    onClick={() => setUpdateConfigDialogOpen(true)}
-                                    disabled={actionLoading}
-                                    aria-label="Edit configuration file"
-                                >
-                                    <EditIcon/>
-                                </IconButton>
-                                <IconButton
-                                    color="primary"
-                                    onClick={() => setManageParamsDialogOpen(true)}
-                                    disabled={actionLoading}
-                                    aria-label="Manage configuration parameters"
-                                >
-                                    <SettingsIcon/>
-                                </IconButton>
+                                <Tooltip title="Upload a new configuration file">
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setUpdateConfigDialogOpen(true)}
+                                        disabled={actionLoading}
+                                        aria-label="Upload new configuration file"
+                                    >
+                                        <UploadFileIcon/>
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Manage configuration parameters (add, unset, delete)">
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => setManageParamsDialogOpen(true)}
+                                        disabled={actionLoading}
+                                        aria-label="Manage configuration parameters"
+                                    >
+                                        <EditIcon/>
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                             {configLoading && <CircularProgress size={24}/>}
                             {configError && (
@@ -1754,7 +1758,8 @@ const ObjectDetail = () => {
                                                                     </Typography>
                                                                     <Typography variant="body2">
                                                                         <strong>Provisioned:</strong>
-                                                                        <Tooltip title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
+                                                                        <Tooltip
+                                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
                                                                             <FiberManualRecordIcon
                                                                                 sx={{
                                                                                     color: parseProvisionedState(res.provisioned?.state)

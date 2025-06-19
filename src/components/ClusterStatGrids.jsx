@@ -19,23 +19,45 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
             title="Objects"
             value={objectCount}
             subtitle={
-                <Box sx={{display: "flex", justifyContent: "center", gap: 1}}>
+                <Box sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                    minHeight: "32px"
+                }}>
                     <Chip
                         label={`Up ${statusCount.up}`}
                         size="small"
-                        sx={{backgroundColor: 'green', color: 'white', cursor: 'pointer'}}
+                        sx={{
+                            backgroundColor: 'green',
+                            color: 'white',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                        }}
                         onClick={() => onClick('up')}
                     />
                     <Chip
                         label={`Warn ${statusCount.warn}`}
                         size="small"
-                        sx={{backgroundColor: 'orange', color: 'white', cursor: 'pointer'}}
+                        sx={{
+                            backgroundColor: 'orange',
+                            color: 'white',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                        }}
                         onClick={() => onClick('warn')}
                     />
                     <Chip
                         label={`Down ${statusCount.down}`}
                         size="small"
-                        sx={{backgroundColor: 'red', color: 'white', cursor: 'pointer'}}
+                        sx={{
+                            backgroundColor: 'red',
+                            color: 'white',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                        }}
                         onClick={() => onClick('down')}
                     />
                 </Box>
@@ -59,9 +81,24 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                 title="Namespaces"
                 value={namespaceCount}
                 subtitle={
-                    <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, pt: 1}}>
+                    <Box sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                        alignItems: "flex-start",
+                        gap: 1,
+                        pt: 1,
+                        minHeight: "40px",
+                        maxWidth: "100%",
+                        overflow: "visible"
+                    }}>
                         {namespaceSubtitle.map(({namespace, count, status}) => (
-                            <Box key={namespace} sx={{position: 'relative', display: 'inline-flex'}}>
+                            <Box key={namespace} sx={{
+                                position: 'relative',
+                                display: 'inline-flex',
+                                flexShrink: 0,
+                                margin: "2px"
+                            }}>
                                 <Chip
                                     label={namespace}
                                     size="small"
@@ -69,7 +106,8 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                         backgroundColor: getNamespaceColor(status),
                                         color: 'white',
                                         cursor: 'pointer',
-                                        pr: count > 0 ? 3.5 : 0
+                                        pr: count > 0 ? 3.5 : 1,
+                                        minWidth: "fit-content"
                                     }}
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -82,17 +120,18 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                             position: 'absolute',
                                             top: -8,
                                             right: -8,
-                                            width: 24,
-                                            height: 24,
+                                            width: 20,
+                                            height: 20,
                                             borderRadius: '50%',
                                             backgroundColor: 'red',
                                             color: 'white',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            fontSize: 12,
+                                            fontSize: 10,
                                             fontWeight: 'bold',
-                                            border: '1px solid white'
+                                            border: '1px solid white',
+                                            zIndex: 1
                                         }}
                                     >
                                         {count}
@@ -125,7 +164,15 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                 title="Heartbeats"
                 value={heartbeatCount}
                 subtitle={
-                    <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1}}>
+                    <Box sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                        alignItems: "flex-start",
+                        gap: 1,
+                        minHeight: "40px",
+                        maxWidth: "100%"
+                    }}>
                         {isSingleNode ? (
                             <Chip
                                 label={`Beating ${heartbeatCount}`}
@@ -133,7 +180,9 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                                 sx={{
                                     backgroundColor: 'green',
                                     color: 'white',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    flexShrink: 0,
+                                    margin: "2px"
                                 }}
                                 onClick={() => onClick('beating', null)}
                                 title="Healthy (Single Node)"
@@ -147,7 +196,9 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                                         sx={{
                                             backgroundColor: 'green',
                                             color: 'white',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            margin: "2px"
                                         }}
                                         onClick={() => onClick('beating', null)}
                                     />
@@ -159,7 +210,9 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                                         sx={{
                                             backgroundColor: 'red',
                                             color: 'white',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            margin: "2px"
                                         }}
                                         onClick={() => onClick('stale', null)}
                                     />
@@ -174,8 +227,10 @@ export const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, s
                                     size="small"
                                     sx={{
                                         backgroundColor: stateColors[state] || 'grey',
-                                        color: state === 'warning' || state === 'stopped' ? 'white' : 'white',
-                                        cursor: 'pointer'
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        flexShrink: 0,
+                                        margin: "2px"
                                     }}
                                     onClick={() => onClick(null, state)}
                                 />

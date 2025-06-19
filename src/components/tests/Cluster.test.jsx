@@ -94,21 +94,22 @@ describe('ClusterOverview', () => {
         const namespacesCard = screen.getByRole('button', {name: /Namespaces stat card/i});
         expect(namespacesCard).toBeInTheDocument();
         expect(within(namespacesCard).getByText('3')).toBeInTheDocument();
+
         // Check namespace chips and their badges within the Namespaces card
         const ns1Chip = within(namespacesCard).getByText('ns1');
         expect(ns1Chip).toBeInTheDocument();
         const ns1Badge = within(ns1Chip.closest('.MuiBox-root')).getByText('2');
-        expect(ns1Badge).toHaveStyle({fontSize: '12px'});
+        expect(ns1Badge).toHaveStyle({fontSize: '10px'});
 
         const rootChip = within(namespacesCard).getByText('root');
         expect(rootChip).toBeInTheDocument();
         const rootBadge = within(rootChip.closest('.MuiBox-root')).getByText('1');
-        expect(rootBadge).toHaveStyle({fontSize: '12px'});
+        expect(rootBadge).toHaveStyle({fontSize: '10px'});
 
         const ns2Chip = within(namespacesCard).getByText('ns2');
         expect(ns2Chip).toBeInTheDocument();
         const ns2Badge = within(ns2Chip.closest('.MuiBox-root')).getByText('1');
-        expect(ns2Badge).toHaveStyle({fontSize: '12px'});
+        expect(ns2Badge).toHaveStyle({fontSize: '10px'});
 
         const heartbeatsCard = screen.getByRole('button', {name: /Heartbeats stat card/i});
         expect(heartbeatsCard).toBeInTheDocument();

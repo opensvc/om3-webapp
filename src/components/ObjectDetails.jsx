@@ -534,10 +534,9 @@ const ObjectDetail = () => {
             if (configNode) {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
+            } else {
+                console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
             }
-            else第一时间
-
-            console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
@@ -819,6 +818,7 @@ const ObjectDetail = () => {
     // Dialog confirm handler
     const handleDialogConfirm = () => {
         if (!pendingAction) return;
+
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) =>
                 postNodeAction({node, action: pendingAction.action})
@@ -848,6 +848,8 @@ const ObjectDetail = () => {
         } else {
             postObjectAction(pendingAction);
         }
+
+        // Reset all dialog states
         setPendingAction(null);
         setCheckboxes({failover: false});
         setStopCheckbox(false);
@@ -904,7 +906,8 @@ const ObjectDetail = () => {
             async (updates) => {
                 const {name} = parseObjectPath(decodedObjectName);
                 const matchingUpdate = updates.find(u =>
-                    u.name === name || u.fullName === decodedObjectName
+                    (u.name === name || u.fullName === decodedObjectName) &&
+                    u.type === 'InstanceConfigUpdated'
                 );
 
                 if (matchingUpdate) {
@@ -922,17 +925,18 @@ const ObjectDetail = () => {
             }
         );
 
-        // Initial load
+        return unsubscribe;
+    }, [decodedObjectName]);
+
+    // Initial load effects
+    useEffect(() => {
+        // Initial config load
         const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
         if (initialNode) {
             fetchConfig(initialNode).catch(console.error);
         }
 
-        return unsubscribe;
-    }, [decodedObjectName, objectInstanceStatus]);
-
-    // Effect for initial data fetch
-    useEffect(() => {
+        // Initial keys load
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchKeys();

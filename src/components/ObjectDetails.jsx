@@ -57,7 +57,7 @@ import {
 } from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource, startEventReception, configureEventSource} from "../eventSourceManager.jsx";
+import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {
     FreezeDialog,
@@ -886,16 +886,20 @@ const ObjectDetail = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            console.log(`🔍 Configuring EventSource for object: ${decodedObjectName}`);
-            configureEventSource(token, decodedObjectName);
+            console.log(`🔍 Starting EventSource for object: ${decodedObjectName}`);
+            const filters = [
+                `ObjectStatusUpdated,path=${decodedObjectName}`,
+                `InstanceStatusUpdated,path=${decodedObjectName}`,
+                `ObjectDeleted,path=${decodedObjectName}`,
+                `InstanceMonitorUpdated,path=${decodedObjectName}`,
+                `InstanceConfigUpdated,path=${decodedObjectName}`
+            ];
+            startEventReception(token, filters);
         }
 
         return () => {
-            console.log(`🛑 Resetting EventSource filters`);
-            const token = localStorage.getItem("authToken");
-            if (token) {
-                configureEventSource(token); // Reset to default filters
-            }
+            console.log(`🛑 Closing EventSource for object: ${decodedObjectName}`);
+            closeEventSource();
         };
     }, [decodedObjectName]);
 

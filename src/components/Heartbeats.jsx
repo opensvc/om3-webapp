@@ -134,10 +134,12 @@ const Heartbeats = () => {
         });
     }, [heartbeatStatus]);
 
-    // Start event reception
+    // Start event reception with only DaemonHeartbeatUpdated filter
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) startEventReception(token);
+        if (token) {
+            startEventReception(token, ['DaemonHeartbeatUpdated']);
+        }
         return () => closeEventSource();
     }, []);
 

@@ -5,7 +5,7 @@ import {URL_NODE_EVENT} from './config/apiPath.js';
 let currentEventSource = null;
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// Default filters when no objectName is provided
+// Default filters when no specific filters are provided
 const defaultFilters = [
     'NodeStatusUpdated',
     'NodeMonitorUpdated',
@@ -28,12 +28,12 @@ const objectSpecificFilters = [
 ];
 
 // Create query string for EventSource URL
-function createQueryString(objectName = null) {
-    let filters = defaultFilters;
+function createQueryString(filters = defaultFilters, objectName = null) {
+    let queryFilters = filters;
     if (objectName) {
-        filters = objectSpecificFilters.map(filter => `${filter},path=${encodeURIComponent(objectName)}`);
+        queryFilters = objectSpecificFilters.map(filter => `${filter},path=${encodeURIComponent(objectName)}`);
     }
-    return `cache=true&${filters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
+    return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 }
 
 export const createEventSource = (url, token) => {
@@ -278,13 +278,13 @@ export const closeEventSource = () => {
     }
 };
 
-export const configureEventSource = (token, objectName = null) => {
+export const configureEventSource = (token, objectName = null, filters = defaultFilters) => {
     if (!token) {
         console.error('❌ No token provided for SSE!');
         return;
     }
 
-    const queryString = createQueryString(objectName);
+    const queryString = createQueryString(filters, objectName);
     const url = `${URL_NODE_EVENT}?${queryString}`;
 
     if (currentEventSource) {
@@ -294,10 +294,10 @@ export const configureEventSource = (token, objectName = null) => {
     currentEventSource = createEventSource(url, token);
 };
 
-export const startEventReception = (token) => {
+export const startEventReception = (token, filters = defaultFilters) => {
     if (!token) {
         console.error('❌ No token provided for SSE!');
         return;
     }
-    configureEventSource(token);
+    configureEventSource(token, null, filters);
 };

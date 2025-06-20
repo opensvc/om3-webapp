@@ -36,7 +36,11 @@ const NodesTable = () => {
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchNodes(token);
-            startEventReception(token);
+            startEventReception(token, [
+                'NodeStatusUpdated',
+                'NodeMonitorUpdated',
+                'NodeStatsUpdated'
+            ]);
         }
         return () => {
             closeEventSource();
@@ -44,9 +48,9 @@ const NodesTable = () => {
     }, []);
 
     const cellStyle = {
-        px: { xs: 0.25, sm: 0.5, md: 1 },
-        py: { xs: 0.25, sm: 0.5 },
-        fontSize: { xs: '0.7rem', sm: '0.8rem' },
+        px: {xs: 0.25, sm: 0.5, md: 1},
+        py: {xs: 0.25, sm: 0.5},
+        fontSize: {xs: '0.7rem', sm: '0.8rem'},
     };
 
     const handleLogout = () => {
@@ -151,18 +155,30 @@ const NodesTable = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}><FaSnowflake style={{marginRight: 8}}/> Freeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}><FaPlay style={{marginRight: 8}}/> Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}><FaSync style={{marginRight: 8}}/> Restart Daemon</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}><FaStop style={{marginRight: 8}}/> Abort</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}><FaBroom style={{marginRight: 8}}/> Clear</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}><FaTint style={{marginRight: 8}}/> Drain</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}><FaBox style={{marginRight: 8}}/> Asset</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}><FaHdd style={{marginRight: 8}}/> Disk</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}><FaPuzzlePiece style={{marginRight: 8}}/> Patch</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}><FaArchive style={{marginRight: 8}}/> Pkg</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}><FaBrain style={{marginRight: 8}}/> Capabilities</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}><FaClipboardList style={{marginRight: 8}}/> Sysreport</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}><FaSnowflake
+                            style={{marginRight: 8}}/> Freeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}><FaPlay
+                            style={{marginRight: 8}}/> Unfreeze</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}><FaSync
+                            style={{marginRight: 8}}/> Restart Daemon</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}><FaStop
+                            style={{marginRight: 8}}/> Abort</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}><FaBroom
+                            style={{marginRight: 8}}/> Clear</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}><FaTint
+                            style={{marginRight: 8}}/> Drain</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}><FaBox
+                            style={{marginRight: 8}}/> Asset</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}><FaHdd
+                            style={{marginRight: 8}}/> Disk</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}><FaPuzzlePiece
+                            style={{marginRight: 8}}/> Patch</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}><FaArchive
+                            style={{marginRight: 8}}/> Pkg</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}><FaBrain
+                            style={{marginRight: 8}}/> Capabilities</MenuItem>
+                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}><FaClipboardList
+                            style={{marginRight: 8}}/> Sysreport</MenuItem>
                     </Menu>
                 </Box>
 
@@ -188,11 +204,16 @@ const NodesTable = () => {
                                     <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Name</TableCell>
                                     <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>State</TableCell>
                                     <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Score</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Load (15m)</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Mem Avail</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Swap Avail</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Version</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Action</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Load
+                                        (15m)</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Mem
+                                        Avail</TableCell>
+                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Swap
+                                        Avail</TableCell>
+                                    <TableCell
+                                        sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Version</TableCell>
+                                    <TableCell
+                                        sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Action</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>

@@ -767,7 +767,7 @@ type = flag
         }, {timeout: 10000});
     }, 20000);
 
-    test('calls configureEventSource on mount', () => {
+    test('calls startEventReception on mount', () => {
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -775,10 +775,18 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        expect(configureEventSource).toHaveBeenCalledWith('mock-token', 'root/cfg/cfg1');
+
+        expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
+        expect(startEventReception).toHaveBeenCalledWith('mock-token', [
+            'ObjectStatusUpdated,path=root/cfg/cfg1',
+            'InstanceStatusUpdated,path=root/cfg/cfg1',
+            'ObjectDeleted,path=root/cfg/cfg1',
+            'InstanceMonitorUpdated,path=root/cfg/cfg1',
+            'InstanceConfigUpdated,path=root/cfg/cfg1',
+        ]);
     });
 
-    test('calls configureEventSource on unmount to reset filters', async () => {
+    test('calls closeEventSource on unmount', async () => {
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -786,10 +794,12 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
         await act(async () => {
             unmount();
         });
-        expect(configureEventSource).toHaveBeenCalledWith('mock-token');
+
+        expect(closeEventSource).toHaveBeenCalled();
     });
 
     test('does not call configureEventSource without auth token', () => {

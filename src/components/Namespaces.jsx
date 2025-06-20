@@ -48,7 +48,12 @@ const Namespaces = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token);
+            startEventReception(token, [
+                'ObjectStatusUpdated',
+                'InstanceStatusUpdated',
+                'ObjectDeleted',
+                'InstanceConfigUpdated'
+            ]);
         }
         return () => {
             closeEventSource();

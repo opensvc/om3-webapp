@@ -117,7 +117,7 @@ jest.mock('@mui/material/LinearProgress', () => ({value, color, sx, ...props}) =
     />
 ));
 
-describe('NodeRow Component', () => {
+describe('NodesTable Component', () => {
     const defaultProps = {
         nodename: 'node1',
         stats: {

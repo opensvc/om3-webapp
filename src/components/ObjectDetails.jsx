@@ -66,6 +66,7 @@ import {
     PurgeDialog,
     SimpleConfirmDialog,
 } from "../components/ActionDialogs";
+import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 
 const NODE_ACTIONS = [
     {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
@@ -533,9 +534,10 @@ const ObjectDetail = () => {
             if (configNode) {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
             }
+            else第一时间
+
+            console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
@@ -1005,37 +1007,50 @@ const ObjectDetail = () => {
                                 open={Boolean(objectMenuAnchor)}
                                 onClose={() => setObjectMenuAnchor(null)}
                             >
-                                {OBJECT_ACTIONS.map(({name, icon}) => (
-                                    <MenuItem
-                                        key={name}
-                                        onClick={() => {
-                                            setPendingAction({action: name});
-                                            if (name === "freeze") {
-                                                setCheckboxes({failover: false});
-                                                setConfirmDialogOpen(true);
-                                            } else if (name === "stop") {
-                                                setStopCheckbox(false);
-                                                setStopDialogOpen(true);
-                                            } else if (name === "unprovision") {
-                                                setUnprovisionChecked(false);
-                                                setUnprovisionDialogOpen(true);
-                                            } else if (name === "purge") {
-                                                setPurgeCheckboxes({
-                                                    dataLoss: false,
-                                                    configLoss: false,
-                                                    serviceInterruption: false,
-                                                });
-                                                setPurgeDialogOpen(true);
-                                            } else {
-                                                setSimpleDialogOpen(true);
-                                            }
-                                            setObjectMenuAnchor(null);
-                                        }}
-                                    >
-                                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                    </MenuItem>
-                                ))}
+                                {OBJECT_ACTIONS.map(({name, icon}) => {
+                                    const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
+                                    return (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => {
+                                                setPendingAction({action: name});
+                                                if (name === "freeze") {
+                                                    setCheckboxes({failover: false});
+                                                    setConfirmDialogOpen(true);
+                                                } else if (name === "stop") {
+                                                    setStopCheckbox(false);
+                                                    setStopDialogOpen(true);
+                                                } else if (name === "unprovision") {
+                                                    setUnprovisionChecked(false);
+                                                    setUnprovisionDialogOpen(true);
+                                                } else if (name === "purge") {
+                                                    setPurgeCheckboxes({
+                                                        dataLoss: false,
+                                                        configLoss: false,
+                                                        serviceInterruption: false,
+                                                    });
+                                                    setPurgeDialogOpen(true);
+                                                } else {
+                                                    setSimpleDialogOpen(true);
+                                                }
+                                                setObjectMenuAnchor(null);
+                                            }}
+                                            disabled={!isAllowed || actionInProgress}
+                                            sx={{
+                                                color: isAllowed ? 'inherit' : 'text.disabled',
+                                                '&.Mui-disabled': {
+                                                    opacity: 0.5
+                                                }
+                                            }}
+                                        >
+                                            <ListItemIcon
+                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                                {icon}
+                                            </ListItemIcon>
+                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                        </MenuItem>
+                                    );
+                                })}
                             </Menu>
                         </Box>
                     </Box>

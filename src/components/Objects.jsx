@@ -61,6 +61,7 @@ import {
     PurgeDialog,
     SimpleConfirmDialog,
 } from "./ActionDialogs";
+import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 
 const AVAILABLE_ACTIONS = [
     {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
@@ -157,27 +158,6 @@ const Objects = () => {
         setSelectedKind(rawKind);
         setSearchQuery(rawSearchQuery);
     }, [location.search]);
-
-    // Helper functions
-    const extractNamespace = (name) => {
-        const parts = name.split("/");
-        return parts.length === 3 ? parts[0] : "root";
-    };
-
-    const extractKind = (name) => {
-        const parts = name.split("/");
-        if (parts.length === 3) {
-            // Format: namespace/kind/name
-            return parts[1];
-        } else if (parts.length === 2) {
-            // Format: kind/name (namespace = root)
-            return parts[0];
-        } else {
-            // Format: name
-            const objName = parts[0];
-            return objName === "cluster" ? "ccfg" : "svc";
-        }
-    };
 
     // Objects and namespaces
     const objects = Object.keys(objectStatus).length
@@ -519,14 +499,29 @@ const Objects = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        {AVAILABLE_ACTIONS.map(({name, icon}) => (
-                            <MenuItem key={name} onClick={() => handleActionClick(name)}>
-                                <ListItemIcon>{icon}</ListItemIcon>
-                                <ListItemText>
-                                    {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </ListItemText>
-                            </MenuItem>
-                        ))}
+                        {AVAILABLE_ACTIONS.map(({name, icon}) => {
+                            const isAllowed = isActionAllowedForSelection(name, selectedObjects);
+                            return (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleActionClick(name)}
+                                    disabled={!isAllowed}
+                                    sx={{
+                                        color: isAllowed ? 'inherit' : 'text.disabled',
+                                        '&.Mui-disabled': {
+                                            opacity: 0.5
+                                        }
+                                    }}
+                                >
+                                    <ListItemIcon sx={{color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                        {icon}
+                                    </ListItemIcon>
+                                    <ListItemText>
+                                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                                    </ListItemText>
+                                </MenuItem>
+                            );
+                        })}
                     </Menu>
                 </Box>
 

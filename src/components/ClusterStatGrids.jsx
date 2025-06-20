@@ -75,6 +75,10 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
         return 'grey';
     };
 
+    const sortedNamespaceSubtitle = [...namespaceSubtitle].sort((a, b) =>
+        a.namespace.localeCompare(b.namespace)
+    );
+
     return (
         <Grid2 size={{xs: 12, md: 4}}>
             <StatCard
@@ -92,7 +96,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                         maxWidth: "100%",
                         overflow: "visible"
                     }}>
-                        {namespaceSubtitle.map(({namespace, count, status}) => (
+                        {sortedNamespaceSubtitle.map(({namespace, count, status}) => (
                             <Box key={namespace} sx={{
                                 position: 'relative',
                                 display: 'inline-flex',

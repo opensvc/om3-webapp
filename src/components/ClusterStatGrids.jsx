@@ -104,7 +104,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                         width: 20,
                                         height: 20,
                                         borderRadius: '50%',
-                                        backgroundColor: 'red',
+                                        backgroundColor: '#3f51b5',
                                         color: 'white',
                                         display: 'flex',
                                         alignItems: 'center',

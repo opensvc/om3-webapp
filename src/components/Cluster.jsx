@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {Box, Grid2, Typography} from "@mui/material";
+import {Box, Typography} from "@mui/material";
 import axios from "axios";
 
 import useEventStore from "../hooks/useEventStore.js";
@@ -118,46 +118,67 @@ const ClusterOverview = () => {
                 Cluster Overview
             </Typography>
 
-            <Grid2 container spacing={3}>
-                <GridNodes
-                    nodeCount={nodeCount}
-                    frozenCount={frozenCount}
-                    unfrozenCount={unfrozenCount}
-                    onClick={() => navigate("/nodes")}
-                />
-                <GridObjects
-                    objectCount={Object.keys(objectStatus).length}
-                    statusCount={statusCount}
-                    onClick={(globalState) => {
-                        const url = globalState ? `/objects?globalState=${globalState}` : '/objects';
-                        navigate(url);
-                    }}
-                />
-                <GridNamespaces
-                    namespaceCount={namespaceCount}
-                    namespaceSubtitle={namespaceSubtitle}
-                    onClick={(url) => navigate(url || "/namespaces")}
-                />
-                <GridHeartbeats
-                    heartbeatCount={heartbeatCount}
-                    beatingCount={beatingCount}
-                    nonBeatingCount={staleCount}
-                    stateCount={stateCount}
-                    nodeCount={nodeCount}
-                    onClick={(status, state) => {
-                        let url = '/heartbeats';
-                        const params = new URLSearchParams();
-                        if (status) params.append('status', status);
-                        if (state) params.append('state', state);
-                        if (params.toString()) url += `?${params.toString()}`;
-                        navigate(url);
-                    }}
-                />
-                <GridPools
-                    poolCount={poolCount}
-                    onClick={() => navigate("/storage-pools")}
-                />
-            </Grid2>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: {xs: 'column', md: 'row'},
+                gap: 3,
+                alignItems: 'stretch'
+            }}>
+                {/* Left side - 2x2 grid */}
+                <Box sx={{
+                    flex: 2,
+                    display: 'grid',
+                    gridTemplateColumns: {md: '1fr 1fr'},
+                    gap: 3,
+                    minHeight: '100%'
+                }}>
+                    <Box>
+                        <GridNodes
+                            nodeCount={nodeCount}
+                            frozenCount={frozenCount}
+                            unfrozenCount={unfrozenCount}
+                            onClick={() => navigate("/nodes")}
+                        />
+                    </Box>
+                    <Box>
+                        <GridObjects
+                            objectCount={Object.keys(objectStatus).length}
+                            statusCount={statusCount}
+                            onClick={(globalState) => navigate(globalState ? `/objects?globalState=${globalState}` : '/objects')}
+                        />
+                    </Box>
+                    <Box>
+                        <GridHeartbeats
+                            heartbeatCount={heartbeatCount}
+                            beatingCount={beatingCount}
+                            nonBeatingCount={staleCount}
+                            stateCount={stateCount}
+                            nodeCount={nodeCount}
+                            onClick={(status, state) => {
+                                const params = new URLSearchParams();
+                                if (status) params.append('status', status);
+                                if (state) params.append('state', state);
+                                navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+                            }}
+                        />
+                    </Box>
+                    <Box>
+                        <GridPools
+                            poolCount={poolCount}
+                            onClick={() => navigate("/storage-pools")}
+                        />
+                    </Box>
+                </Box>
+
+                {/* Right side - Namespaces */}
+                <Box sx={{flex: 1}}>
+                    <GridNamespaces
+                        namespaceCount={namespaceCount}
+                        namespaceSubtitle={namespaceSubtitle}
+                        onClick={(url) => navigate(url || "/namespaces")}
+                    />
+                </Box>
+            </Box>
         </Box>
     );
 };

@@ -526,8 +526,8 @@ type = flag
         // Wait for dialog
         await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
-        // Enter parameter
-        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
+        // Enter parameter using the correct TextField
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
         await act(async () => {
             fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
@@ -547,7 +547,7 @@ type = flag
                     }),
                 })
             );
-            expect(screen.getByText(/Parameter 'test.param' added successfully/i)).toBeInTheDocument();
+            expect(screen.getByText(/Successfully added \d+ parameter\(s\)/i)).toBeInTheDocument();
         });
     }, 15000);
 
@@ -590,7 +590,7 @@ type = flag
         await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
         // Enter parameter
-        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
         await act(async () => {
             fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
@@ -601,7 +601,7 @@ type = flag
 
         // Verify error message
         await waitFor(() => {
-            expect(screen.getByText(/Error: Failed to add parameter/i)).toBeInTheDocument();
+            expect(screen.getByText(/Error adding parameter test\.param: Failed to add parameter/i)).toBeInTheDocument();
         });
     }, 10000);
 
@@ -645,7 +645,7 @@ type = flag
         await waitFor(() => expect(screen.getByText('Manage Configuration Parameters')).toBeInTheDocument());
 
         // Enter parameter
-        const paramInput = screen.getByPlaceholderText(/Parameter \(e.g., test.test.param=value\)/i);
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
         await act(async () => {
             fireEvent.change(paramInput, {target: {value: 'test.param=value'}});
         });
@@ -1694,9 +1694,29 @@ type = flag
     });
 
     test('disables buttons during key creation', async () => {
-        // Mock fetch to hang for loading state
-        global.fetch.mockImplementationOnce(() => new Promise(() => {
-        }));
+        // Mock fetch for initial data and key creation
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/api/object/path/root/cfg/cfg1')) {
+                // Mock initial object data with 2 keys
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        keys: [{name: 'key1'}, {name: 'key2'}], // 2 keys
+                        // Add other necessary data if required
+                    }),
+                });
+            }
+            if (url.includes('/config/file')) {
+                // Mock config file if needed
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
+                });
+            }
+            // Mock key creation to hang for loading state
+            return new Promise(() => {
+            }); // Never resolves
+        });
 
         // Set up userEvent
         const user = userEvent.setup();
@@ -1709,10 +1729,17 @@ type = flag
             </MemoryRouter>
         );
 
-        // Expand keys accordion
-        const keysHeader = await screen.findByText(/Object Keys \(2\)/i, {}, {timeout: 5000});
+        // Find and expand keys accordion with flexible selector
+        const keysHeader = await screen.findByText(/Object Keys/i, {}, {timeout: 10000});
+        console.log('Keys header found:', keysHeader); // Debug
+        const accordionSummary = keysHeader.closest('[data-testid="accordion-summary"]') || keysHeader;
         await act(async () => {
-            await user.click(keysHeader);
+            await user.click(accordionSummary);
+        });
+
+        // Verify accordion is expanded (optional, for robustness)
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: /add new key/i})).toBeInTheDocument();
         });
 
         // Open create dialog

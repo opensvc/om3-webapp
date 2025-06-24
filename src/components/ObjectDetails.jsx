@@ -138,9 +138,9 @@ const ObjectDetail = () => {
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
-    const [paramInput, setParamInput] = useState("");
-    const [paramToUnset, setParamToUnset] = useState("");
-    const [paramToDelete, setParamToDelete] = useState("");
+    const [paramsToSet, setParamsToSet] = useState("");
+    const [paramsToUnset, setParamsToUnset] = useState("");
+    const [paramsToDelete, setParamsToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
     // State for batch selection & actions
@@ -327,6 +327,11 @@ const ObjectDetail = () => {
 
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
+        if (!node) {
+            console.warn(`🚫 [fetchConfig] No node provided for ${decodedObjectName}`);
+            setConfigError("No node available to fetch configuration.");
+            return;
+        }
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
         if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
@@ -340,10 +345,6 @@ const ObjectDetail = () => {
                 console.warn(`🚫 [fetchConfig] Still loading, skipping request for node=${node}`);
                 return;
             }
-        }
-        if (!node) {
-            console.warn(`🚫 [fetchConfig] No node provided for ${decodedObjectName}`);
-            return;
         }
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
@@ -420,143 +421,182 @@ const ObjectDetail = () => {
         }
     };
 
-    // Add configuration parameter
-    const handleAddParam = async () => {
-        if (!paramInput) {
+    // Add configuration parameters
+    const handleAddParams = async () => {
+        if (!paramsToSet) {
             openSnackbar("Parameter input is required.", "error");
-            return;
+            return false;
         }
-        const [key, value] = paramInput.split("=", 2);
-        if (!key || !value) {
-            openSnackbar("Parameter must be in the format 'key=value'.", "error");
-            return;
+        const paramList = paramsToSet.split("\n").filter(param => param.trim());
+        if (paramList.length === 0) {
+            openSnackbar("No valid parameters provided.", "error");
+            return false;
         }
+
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
-            return;
+            return false;
         }
 
         setActionLoading(true);
-        openSnackbar(`Adding parameter ${key}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-            const response = await fetch(url, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (!response.ok)
-                throw new Error(`Failed to add parameter: ${response.status}`);
-            openSnackbar(`Parameter '${key}' added successfully`);
+        let successCount = 0;
+        for (const param of paramList) {
+            const [key, value] = param.split("=", 2);
+            if (!key || !value) {
+                openSnackbar(`Invalid format for parameter: ${param}. Use 'key=value'.`, "error");
+                continue;
+            }
+            try {
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+                const response = await fetch(url, {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                if (!response.ok)
+                    throw new Error(`Failed to add parameter ${key}: ${response.status}`);
+                successCount++;
+            } catch (err) {
+                openSnackbar(`Error adding parameter ${key}: ${err.message}`, "error");
+            }
+        }
+        if (successCount > 0) {
+            openSnackbar(`Successfully added ${successCount} parameter(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleAddParam] No configNode available for ${decodedObjectName}`);
+                console.warn(`⚠️ [handleAddParams] No configNode available for ${decodedObjectName}`);
             }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setParamInput("");
         }
+        setActionLoading(false);
+        return successCount > 0;
     };
 
-    // Unset configuration parameter
-    const handleUnsetParam = async () => {
-        if (!paramToUnset) {
-            openSnackbar("Parameter key to unset is required.", "error");
-            return;
+    // Unset configuration parameters
+    const handleUnsetParams = async () => {
+        if (!paramsToUnset) {
+            openSnackbar("Parameter key(s) to unset are required.", "error");
+            return false;
         }
+        const paramList = paramsToUnset.split("\n").filter(param => param.trim());
+        if (paramList.length === 0) {
+            openSnackbar("No valid parameters to unset provided.", "error");
+            return false;
+        }
+
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
-            return;
+            return false;
         }
 
         setActionLoading(true);
-        openSnackbar(`Unsetting parameter ${paramToUnset}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(paramToUnset)}`;
-            const response = await fetch(url, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (!response.ok)
-                throw new Error(`Failed to unset parameter: ${response.status}`);
-            openSnackbar(`Parameter '${paramToUnset}' unset successfully`);
+        let successCount = 0;
+        for (const key of paramList) {
+            try {
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(key)}`;
+                const response = await fetch(url, {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                if (!response.ok)
+                    throw new Error(`Failed to unset parameter ${key}: ${response.status}`);
+                successCount++;
+            } catch (err) {
+                openSnackbar(`Error unsetting parameter ${key}: ${err.message}`, "error");
+            }
+        }
+        if (successCount > 0) {
+            openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleUnsetParam] No configNode available for ${decodedObjectName}`);
+                console.warn(`⚠️ [handleUnsetParams] No configNode available for ${decodedObjectName}`);
             }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setParamToUnset("");
         }
+        setActionLoading(false);
+        return successCount > 0;
     };
 
-    // Delete configuration parameter
-    const handleDeleteParam = async () => {
-        if (!paramToDelete) {
-            openSnackbar("Parameter key to delete is required.", "error");
-            return;
+    // Delete configuration parameters
+    const handleDeleteParams = async () => {
+        if (!paramsToDelete) {
+            openSnackbar("Parameter key(s) to delete are required.", "error");
+            return false;
         }
+        const paramList = paramsToDelete.split("\n").filter(param => param.trim());
+        if (paramList.length === 0) {
+            openSnackbar("No valid parameters to delete provided.", "error");
+            return false;
+        }
+
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
-            return;
+            return false;
         }
 
         setActionLoading(true);
-        openSnackbar(`Deleting parameter ${paramToDelete}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(paramToDelete)}`;
-            const response = await fetch(url, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (!response.ok)
-                throw new Error(`Failed to delete section: ${response.status}`);
-            openSnackbar(`Parameter '${paramToDelete}' deleted successfully`);
+        let successCount = 0;
+        for (const key of paramList) {
+            try {
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(key)}`;
+                const response = await fetch(url, {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                if (!response.ok)
+                    throw new Error(`Failed to delete section ${key}: ${response.status}`);
+                successCount++;
+            } catch (err) {
+                openSnackbar(`Error deleting section ${key}: ${err.message}`, "error");
+            }
+        }
+        if (successCount > 0) {
+            openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleDeleteParam] No configNode available for ${decodedObjectName}`);
+                console.warn(`⚠️ [handleDeleteParams] No configNode available for ${decodedObjectName}`);
             }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setParamToDelete("");
         }
+        setActionLoading(false);
+        return successCount > 0;
     };
 
     // Handle manage parameters dialog submission
     const handleManageParamsSubmit = async () => {
-        if (paramInput) {
-            await handleAddParam();
+        let anySuccess = false;
+        if (paramsToSet) {
+            const success = await handleAddParams();
+            anySuccess = anySuccess || success;
         }
-        if (paramToUnset) {
-            await handleUnsetParam();
+        if (paramsToUnset) {
+            const success = await handleUnsetParams();
+            anySuccess = anySuccess || success;
         }
-        if (paramToDelete) {
-            await handleDeleteParam();
+        if (paramsToDelete) {
+            const success = await handleDeleteParams();
+            anySuccess = anySuccess || success;
         }
-        setManageParamsDialogOpen(false);
+        if (anySuccess) {
+            setParamsToSet("");
+            setParamsToUnset("");
+            setParamsToDelete("");
+            setManageParamsDialogOpen(false);
+        }
     };
 
     // Key action handlers
@@ -934,18 +974,34 @@ const ObjectDetail = () => {
 
     // Initial load effects
     useEffect(() => {
-        // Initial config load
-        const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
-        if (initialNode) {
-            fetchConfig(initialNode).catch(console.error);
-        }
+        const loadInitialConfig = async () => {
+            // Vérifier si objectInstanceStatus est disponible
+            if (!objectInstanceStatus[decodedObjectName]) {
+                console.log(`⏳ [Initial Load] Waiting for objectInstanceStatus for ${decodedObjectName}`);
+                return;
+            }
+
+            const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
+            if (initialNode) {
+                try {
+                    await fetchConfig(initialNode);
+                } catch (err) {
+                    console.error(`💥 [Initial Load] Failed to fetch config for ${decodedObjectName}:`, err);
+                }
+            } else {
+                setConfigError("No nodes available to fetch configuration.");
+                console.warn(`🚫 [Initial Load] No initial node found for ${decodedObjectName}`);
+            }
+        };
 
         // Initial keys load
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchKeys();
         }
-    }, [decodedObjectName]);
+
+        loadInitialConfig();
+    }, [decodedObjectName, objectInstanceStatus]);
 
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => objectData, [objectData]);
@@ -1501,41 +1557,50 @@ const ObjectDetail = () => {
                     <DialogTitle>Manage Configuration Parameters</DialogTitle>
                     <DialogContent>
                         <Typography variant="subtitle1" gutterBottom>
-                            Add parameter
+                            Add parameters (one per line, e.g., section.param=value)
                         </Typography>
                         <TextField
                             autoFocus
                             margin="dense"
-                            label="Parameter (e.g., test.test.param=value)"
+                            label="Parameters to set"
                             fullWidth
                             variant="outlined"
-                            value={paramInput}
-                            onChange={(e) => setParamInput(e.target.value)}
+                            multiline
+                            rows={4}
+                            value={paramsToSet}
+                            onChange={(e) => setParamsToSet(e.target.value)}
                             disabled={actionLoading}
+                            placeholder="section.param1=value1&#10;section.param2=value2"
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Unset parameter
+                            Unset parameters (one key per line, e.g., section.param)
                         </Typography>
                         <TextField
                             margin="dense"
-                            label="Parameter key to unset (e.g., test.test)"
+                            label="Parameter keys to unset"
                             fullWidth
                             variant="outlined"
-                            value={paramToUnset}
-                            onChange={(e) => setParamToUnset(e.target.value)}
+                            multiline
+                            rows={4}
+                            value={paramsToUnset}
+                            onChange={(e) => setParamsToUnset(e.target.value)}
                             disabled={actionLoading}
+                            placeholder="section.param1&#10;section.param2"
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Delete section
+                            Delete sections (one key per line, e.g., section)
                         </Typography>
                         <TextField
                             margin="dense"
-                            label="Section key to delete (e.g., test)"
+                            label="Section keys to delete"
                             fullWidth
                             variant="outlined"
-                            value={paramToDelete}
-                            onChange={(e) => setParamToDelete(e.target.value)}
+                            multiline
+                            rows={4}
+                            value={paramsToDelete}
+                            onChange={(e) => setParamsToDelete(e.target.value)}
                             disabled={actionLoading}
+                            placeholder="section1&#10;section2"
                         />
                     </DialogContent>
                     <DialogActions>
@@ -1548,7 +1613,7 @@ const ObjectDetail = () => {
                         <Button
                             variant="contained"
                             onClick={handleManageParamsSubmit}
-                            disabled={actionLoading || (!paramInput && !paramToUnset && !paramToDelete)}
+                            disabled={actionLoading || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
                         >
                             Apply
                         </Button>

@@ -1064,7 +1064,9 @@ const ObjectDetail = () => {
                                 disabled={actionInProgress}
                                 aria-label="Object actions"
                             >
-                                <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
+                                <Tooltip title="Actions">
+                                    <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
+                                </Tooltip>
                             </IconButton>
                             <Menu
                                 anchorEl={objectMenuAnchor}
@@ -1164,14 +1166,16 @@ const ObjectDetail = () => {
                             </AccordionSummary>
                             <AccordionDetails>
                                 <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
-                                    <IconButton
-                                        color="primary"
-                                        onClick={() => setCreateDialogOpen(true)}
-                                        disabled={actionLoading}
-                                        aria-label="Add new key"
-                                    >
-                                        <AddIcon/>
-                                    </IconButton>
+                                    <Tooltip title="Add new key">
+                                        <IconButton
+                                            color="primary"
+                                            onClick={() => setCreateDialogOpen(true)}
+                                            disabled={actionLoading}
+                                            aria-label="Add new key"
+                                        >
+                                            <AddIcon/>
+                                        </IconButton>
+                                    </Tooltip>
                                 </Box>
                                 {keysLoading && <CircularProgress size={24}/>}
                                 {keysError && (
@@ -1202,27 +1206,35 @@ const ObjectDetail = () => {
                                                         <TableCell>{key.node}</TableCell>
                                                         <TableCell>{key.size} bytes</TableCell>
                                                         <TableCell>
-                                                            <IconButton
-                                                                onClick={() => {
-                                                                    setKeyToUpdate(key.name);
-                                                                    setUpdateKeyName(key.name);
-                                                                    setUpdateDialogOpen(true);
-                                                                }}
-                                                                disabled={actionLoading}
-                                                                aria-label={`Edit key ${key.name}`}
-                                                            >
-                                                                <EditIcon/>
-                                                            </IconButton>
-                                                            <IconButton
-                                                                onClick={() => {
-                                                                    setKeyToDelete(key.name);
-                                                                    setDeleteDialogOpen(true);
-                                                                }}
-                                                                disabled={actionLoading}
-                                                                aria-label={`Delete key ${key.name}`}
-                                                            >
-                                                                <DeleteIcon/>
-                                                            </IconButton>
+                                                            <Tooltip title="Edit">
+                                                                <span>
+                                                                    <IconButton
+                                                                        onClick={() => {
+                                                                            setKeyToUpdate(key.name);
+                                                                            setUpdateKeyName(key.name);
+                                                                            setUpdateDialogOpen(true);
+                                                                        }}
+                                                                        disabled={actionLoading}
+                                                                        aria-label={`Edit key ${key.name}`}
+                                                                    >
+                                                                        <EditIcon/>
+                                                                    </IconButton>
+                                                                </span>
+                                                            </Tooltip>
+                                                            <Tooltip title="Delete">
+                                                                <span>
+                                                                    <IconButton
+                                                                        onClick={() => {
+                                                                            setKeyToDelete(key.name);
+                                                                            setDeleteDialogOpen(true);
+                                                                        }}
+                                                                        disabled={actionLoading}
+                                                                        aria-label={`Delete key ${key.name}`}
+                                                                    >
+                                                                        <DeleteIcon/>
+                                                                    </IconButton>
+                                                                </span>
+                                                            </Tooltip>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -1689,7 +1701,9 @@ const ObjectDetail = () => {
                                             disabled={actionInProgress}
                                             aria-label={`Node ${node} actions`}
                                         >
-                                            <MoreVertIcon/>
+                                            <Tooltip title="Actions">
+                                                <MoreVertIcon/>
+                                            </Tooltip>
                                         </IconButton>
                                     </Box>
                                 </Box>
@@ -1751,7 +1765,9 @@ const ObjectDetail = () => {
                                                 disabled={!(selectedResourcesByNode[node] || []).length}
                                                 aria-label={`Resource actions for node ${node}`}
                                             >
-                                                <MoreVertIcon/>
+                                                <Tooltip title="Actions">
+                                                    <MoreVertIcon/>
+                                                </Tooltip>
                                             </IconButton>
                                         </Box>
                                     </Box>
@@ -1826,7 +1842,9 @@ const ObjectDetail = () => {
                                                                         disabled={actionInProgress}
                                                                         aria-label={`Resource ${rid} actions`}
                                                                     >
-                                                                        <MoreVertIcon/>
+                                                                        <Tooltip title="Actions">
+                                                                            <MoreVertIcon/>
+                                                                        </Tooltip>
                                                                     </IconButton>
                                                                 </Box>
                                                             </AccordionSummary>

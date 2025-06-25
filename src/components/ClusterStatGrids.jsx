@@ -48,11 +48,14 @@ const StatusChip = ({status, count, onClick}) => {
 };
 
 export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => {
-    const getNamespaceColor = (status) => {
-        if (status.down > 0) return 'red';
-        if (status.warn > 0) return 'orange';
-        if (status.up > 0) return 'green';
-        return 'grey';
+    const getStatusColor = (status) => {
+        const colors = {
+            up: 'green',
+            warn: 'orange',
+            down: 'red',
+            'n/a': 'grey'
+        };
+        return colors[status] || 'grey';
     };
 
     const sortedNamespaceSubtitle = [...namespaceSubtitle].sort((a, b) =>
@@ -73,51 +76,64 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                     overflowY: 'auto',
                     justifyContent: 'flex-start'
                 }}>
-                    {sortedNamespaceSubtitle.map(({namespace, count, status}) => (
+                    {sortedNamespaceSubtitle.map(({namespace, status}) => (
                         <Box key={namespace} sx={{
                             position: 'relative',
                             display: 'inline-flex',
                             flexShrink: 0,
-                            margin: "2px"
+                            margin: "4px"
                         }}>
                             <Chip
                                 label={namespace}
                                 size="small"
                                 sx={{
-                                    backgroundColor: getNamespaceColor(status),
-                                    color: 'white',
+                                    backgroundColor: 'default',
                                     cursor: 'pointer',
-                                    pr: count > 0 ? 3.5 : 1,
-                                    minWidth: "fit-content"
+                                    minWidth: "fit-content",
+                                    px: 1.5
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onClick(`/namespaces?namespace=${namespace}`);
                                 }}
                             />
-                            {count > 0 && (
-                                <Box
-                                    sx={{
-                                        position: 'absolute',
-                                        top: -8,
-                                        right: -8,
-                                        width: 20,
-                                        height: 20,
-                                        borderRadius: '50%',
-                                        backgroundColor: '#3f51b5',
-                                        color: 'white',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: 10,
-                                        fontWeight: 'bold',
-                                        border: '1px solid white',
-                                        zIndex: 1
-                                    }}
-                                >
-                                    {count}
-                                </Box>
-                            )}
+                            <Box sx={{
+                                position: 'absolute',
+                                top: -10,
+                                right: -12,
+                                display: 'flex',
+                                gap: 0.5,
+                                flexWrap: 'wrap'
+                            }}>
+                                {['up', 'warn', 'down', 'n/a'].map((stat) => (
+                                    (status[stat] || 0) > 0 && (
+                                        <Box
+                                            key={stat}
+                                            sx={{
+                                                width: 16,
+                                                height: 16,
+                                                borderRadius: '50%',
+                                                backgroundColor: getStatusColor(stat),
+                                                color: 'white',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: 8,
+                                                fontWeight: 'bold',
+                                                border: '1px solid white',
+                                                cursor: 'pointer',
+                                                zIndex: 1
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onClick(`/objects?namespace=${namespace}&globalState=${stat}`);
+                                            }}
+                                        >
+                                            {status[stat]}
+                                        </Box>
+                                    )
+                                ))}
+                            </Box>
                         </Box>
                     ))}
                 </Box>

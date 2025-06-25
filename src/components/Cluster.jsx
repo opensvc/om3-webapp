@@ -53,7 +53,7 @@ const ClusterOverview = () => {
     });
 
     const namespaces = new Set();
-    const statusCount = {up: 0, down: 0, warn: 0, unknown: 0};
+    const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0};
     const objectsPerNamespace = {};
     const statusPerNamespace = {};
 
@@ -67,16 +67,16 @@ const ClusterOverview = () => {
         namespaces.add(ns);
         objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
 
-        const s = status?.avail?.toLowerCase();
+        const s = status?.avail?.toLowerCase() || "n/a";
         if (!statusPerNamespace[ns]) {
-            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, unknown: 0};
+            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
         }
-        if (s === "up" || s === "down" || s === "warn") {
+        if (s === "up" || s === "down" || s === "warn" || s === "n/a") {
             statusPerNamespace[ns][s]++;
             statusCount[s]++;
         } else {
-            statusPerNamespace[ns].unknown++;
-            statusCount.unknown++;
+            statusPerNamespace[ns]["n/a"]++;
+            statusCount["n/a"]++;
         }
     });
 

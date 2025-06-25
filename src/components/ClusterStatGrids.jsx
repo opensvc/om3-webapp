@@ -17,9 +17,16 @@ export const GridObjects = ({objectCount, statusCount, onClick}) => (
         value={objectCount}
         subtitle={
             <Box sx={{display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap"}}>
-                <StatusChip status="up" count={statusCount.up} onClick={() => onClick('up')}/>
-                <StatusChip status="warn" count={statusCount.warn} onClick={() => onClick('warn')}/>
-                <StatusChip status="down" count={statusCount.down} onClick={() => onClick('down')}/>
+                {['up', 'warn', 'down'].map((status) => (
+                    statusCount[status] > 0 && (
+                        <StatusChip
+                            key={status}
+                            status={status}
+                            count={statusCount[status]}
+                            onClick={() => onClick(status)}
+                        />
+                    )
+                ))}
             </Box>
         }
         onClick={() => onClick()}
@@ -87,10 +94,10 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                 label={namespace}
                                 size="small"
                                 sx={{
-                                    backgroundColor: 'default',
+                                    backgroundColor: 'default', // Utilise la couleur par défaut de MUI
                                     cursor: 'pointer',
                                     minWidth: "fit-content",
-                                    px: 1.5
+                                    px: 1.5 // Padding horizontal pour centrer le texte
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();

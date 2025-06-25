@@ -1598,6 +1598,21 @@ const ObjectDetail = () => {
                             onChange={(e) => setParamsToUnset(e.target.value)}
                             disabled={actionLoading}
                             placeholder="section.param1&#10;section.param2"
+                            sx={{
+                                '& .MuiInputBase-root': {
+                                    padding: '8px',
+                                    lineHeight: '1.5',
+                                    minHeight: '100px',
+                                },
+                                '& .MuiInputBase-input': {
+                                    overflow: 'auto',
+                                    boxSizing: 'border-box',
+                                },
+                                '& .MuiInputLabel-root': {
+                                    backgroundColor: 'white',
+                                    padding: '0 4px',
+                                },
+                            }}
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                             Delete sections (one key per line, e.g., section)
@@ -1613,6 +1628,21 @@ const ObjectDetail = () => {
                             onChange={(e) => setParamsToDelete(e.target.value)}
                             disabled={actionLoading}
                             placeholder="section1&#10;section2"
+                            sx={{
+                                '& .MuiInputBase-root': {
+                                    padding: '8px',
+                                    lineHeight: '1.5',
+                                    minHeight: '100px',
+                                },
+                                '& .MuiInputBase-input': {
+                                    overflow: 'auto',
+                                    boxSizing: 'border-box',
+                                },
+                                '& .MuiInputLabel-root': {
+                                    backgroundColor: 'white',
+                                    padding: '0 4px',
+                                },
+                            }}
                         />
                     </DialogContent>
                     <DialogActions>

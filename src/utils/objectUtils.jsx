@@ -42,25 +42,24 @@ const extractKind = (name) => {
 const isActionAllowedForSelection = (actionName, selectedObjects) => {
     if (selectedObjects.length === 0) return false;
 
-    // Obtenir les types (kinds) des objets sélectionnés
+    // Get the kinds of the selected objects
     const selectedKinds = [...new Set(selectedObjects.map(extractKind))];
 
-    // Si un seul type est sélectionné, appliquer les restrictions de ce type
+    // If only one kind is selected, apply the restrictions for that kind
     if (selectedKinds.length === 1) {
         const kind = selectedKinds[0];
         const allowedActions = ALLOWED_ACTIONS_BY_KIND[kind] || ALLOWED_ACTIONS_BY_KIND.default;
         return allowedActions.includes(actionName);
     }
 
-    // Si plusieurs types sont sélectionnés, trouver l'intersection des actions autorisées
-    const allowedActionsSets = selectedKinds.map(kind =>
-        new Set(ALLOWED_ACTIONS_BY_KIND[kind] || ALLOWED_ACTIONS_BY_KIND.default)
-    );
-    const commonActions = [...allowedActionsSets[0]].filter(action =>
-        allowedActionsSets.every(set => set.has(action))
-    );
+    // If multiple kinds are selected, find the union of allowed actions
+    const allowedActions = new Set();
+    selectedKinds.forEach(kind => {
+        const actions = ALLOWED_ACTIONS_BY_KIND[kind] || ALLOWED_ACTIONS_BY_KIND.default;
+        actions.forEach(action => allowedActions.add(action));
+    });
 
-    return commonActions.includes(actionName);
+    return allowedActions.has(actionName);
 };
 
 export { extractNamespace, extractKind, isActionAllowedForSelection, ALLOWED_ACTIONS_BY_KIND };

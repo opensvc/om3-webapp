@@ -3,7 +3,7 @@
 const initData = {
     client_id: "om3",
     response_type: "code",
-    scope: "openid profile email",
+    scope: "openid profile email grant offline_access",
     accessTokenExpiringNotificationTimeInSeconds: 30,
     automaticSilentRenew: true,
     monitorSession: true,

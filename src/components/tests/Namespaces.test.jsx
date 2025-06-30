@@ -201,7 +201,7 @@ describe('Namespaces Component', () => {
         );
 
         await waitFor(() => {
-            expect(startEventReception).toHaveBeenCalledWith("valid-token");
+            expect(startEventReception).toHaveBeenCalledWith("valid-token", ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceConfigUpdated"]);
         });
     });
 

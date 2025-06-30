@@ -160,7 +160,7 @@ describe("Heartbeats Component", () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-            expect(startEventReception).toHaveBeenCalledWith("valid-token");
+            expect(startEventReception).toHaveBeenCalledWith("valid-token", ["DaemonHeartbeatUpdated"]);
         });
     });
 

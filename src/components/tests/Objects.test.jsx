@@ -147,7 +147,7 @@ describe('Objects Component', () => {
         // Verify mount behavior
         await waitFor(() => {
             expect(screen.getByText('Objects')).toBeInTheDocument(); // Verify render
-            expect(startEventReception).toHaveBeenCalledWith('mock-token');
+            expect(startEventReception).toHaveBeenCalledWith("mock-token", ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceMonitorUpdated"]);
         }, {timeout: 2000});
 
         // Unmount the component to trigger cleanup

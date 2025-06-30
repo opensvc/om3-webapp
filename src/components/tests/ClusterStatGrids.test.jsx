@@ -170,9 +170,9 @@ describe('ClusterStatGrids', () => {
 
         expect(screen.getByText('Objects')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getByText('Up 0')).toBeInTheDocument();
-        expect(screen.getByText('Warn 0')).toBeInTheDocument();
-        expect(screen.getByText('Down 0')).toBeInTheDocument();
+        expect(screen.queryByText(/Up \d+/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Warn \d+/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Down \d+/)).not.toBeInTheDocument();
     });
 
     test('GridObjects renders correctly with non-zero values and handles click', () => {

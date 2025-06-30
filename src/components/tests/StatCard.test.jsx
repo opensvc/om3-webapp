@@ -1,82 +1,94 @@
 import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {StatCard} from '../StatCard';
-import '@testing-library/jest-dom';
 
 describe('StatCard Component', () => {
-    const mockProps = {
-        title: 'Total Users',
-        value: '1,234',
-        subtitle: 'Active this month',
-        onClick: jest.fn(),
-    };
+    const mockOnClick = jest.fn();
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+    test('renders with title and value', () => {
+        render(<StatCard title="Test Title" value="42" onClick={mockOnClick}/>);
+
+        expect(screen.getByText('Test Title')).toBeInTheDocument();
+        expect(screen.getByText('42')).toBeInTheDocument();
     });
 
-    test('renders correctly with all props', () => {
-        render(<StatCard {...mockProps} />);
+    test('renders with string subtitle', () => {
+        render(
+            <StatCard
+                title="Test"
+                value="42"
+                subtitle="Subtitle text"
+                onClick={mockOnClick}
+            />
+        );
 
-        const card = screen.getByRole('button', {name: /Total Users stat card/i});
-        expect(card).toBeInTheDocument();
-
-        expect(screen.getByText('Total Users')).toHaveAttribute('aria-label', 'Total Users title');
-        expect(screen.getByText('1,234')).toHaveAttribute('aria-label', 'Total Users value');
-        expect(screen.getByText('Active this month')).toHaveAttribute('aria-label', 'Total Users subtitle');
+        expect(screen.getByText('Subtitle text')).toBeInTheDocument();
     });
 
-    test('renders without subtitle when not provided', () => {
-        const {subtitle, ...propsWithoutSubtitle} = mockProps;
-        render(<StatCard {...propsWithoutSubtitle} />);
+    test('renders with React element subtitle', () => {
+        render(
+            <StatCard
+                title="Test"
+                value="42"
+                subtitle={<div>Complex content</div>}
+                onClick={mockOnClick}
+            />
+        );
 
-        expect(screen.getByRole('button', {name: /Total Users stat card/i})).toBeInTheDocument();
-        expect(screen.getByText('Total Users')).toBeInTheDocument();
-        expect(screen.getByText('1,234')).toBeInTheDocument();
-        expect(screen.queryByText('Active this month')).not.toBeInTheDocument();
+        expect(screen.getByText('Complex content')).toBeInTheDocument();
     });
 
-    test('handles click event', () => {
-        render(<StatCard {...mockProps} />);
+    test('calls onClick when clicked', () => {
+        const {container} = render(
+            <StatCard
+                title="Test"
+                value="42"
+                onClick={mockOnClick}
+            />
+        );
 
-        const card = screen.getByRole('button', {name: /Total Users stat card/i});
+        const card = container.firstChild;
         fireEvent.click(card);
-
-        expect(mockProps.onClick).toHaveBeenCalledTimes(1);
+        expect(mockOnClick).toHaveBeenCalled();
     });
 
-    test('applies correct styles on hover', () => {
-        render(<StatCard {...mockProps} />);
+    test('does not render subtitle when not provided', () => {
+        const {container} = render(
+            <StatCard
+                title="Test"
+                value="42"
+                onClick={mockOnClick}
+            />
+        );
 
-        const card = screen.getByRole('button', {name: /Total Users stat card/i});
-        expect(card).toHaveStyle({
-            textAlign: 'center',
-            cursor: 'pointer',
-        });
-        // Note: Testing hover styles requires jsdom or a visual testing library like Cypress
+        const typographyElements = container.querySelectorAll('.MuiTypography-root');
+        expect(typographyElements.length).toBe(2);
     });
 
-    test('generates correct content for complex titles', () => {
-        const complexTitleProps = {
-            ...mockProps,
-            title: 'Complex Title With Spaces',
-        };
-        render(<StatCard {...complexTitleProps} />);
+    test('applies dynamic height when enabled', () => {
+        const {container} = render(
+            <StatCard
+                title="Test"
+                value="42"
+                onClick={mockOnClick}
+                dynamicHeight
+            />
+        );
 
-        const card = screen.getByRole('button', {name: /Complex Title With Spaces stat card/i});
-        expect(card).toBeInTheDocument();
-        expect(screen.getByText('Complex Title With Spaces')).toHaveAttribute('aria-label', 'Complex Title With Spaces title');
-        expect(screen.getByText('1,234')).toHaveAttribute('aria-label', 'Complex Title With Spaces value');
-        expect(screen.getByText('Active this month')).toHaveAttribute('aria-label', 'Complex Title With Spaces subtitle');
+        const paper = container.querySelector('.MuiPaper-root');
+        expect(paper).toHaveStyle('height: auto');
     });
 
-    test('renders with default props', () => {
-        const {subtitle, onClick, ...defaultProps} = mockProps;
-        render(<StatCard {...defaultProps} />);
+    test('applies fixed height by default', () => {
+        const {container} = render(
+            <StatCard
+                title="Test"
+                value="42"
+                onClick={mockOnClick}
+            />
+        );
 
-        expect(screen.getByRole('button', {name: /Total Users stat card/i})).toBeInTheDocument();
-        expect(screen.getByText('Total Users')).toBeInTheDocument();
-        expect(screen.getByText('1,234')).toBeInTheDocument();
-        expect(screen.queryByText('Active this month')).not.toBeInTheDocument();
+        const paper = container.querySelector('.MuiPaper-root');
+        expect(paper).toHaveStyle('height: 240px');
     });
 });

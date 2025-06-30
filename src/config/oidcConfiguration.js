@@ -3,7 +3,6 @@
 const initData = {
     client_id: "om3",
     response_type: "code",
-    scope: "openid profile email grant offline_access",
     accessTokenExpiringNotificationTimeInSeconds: 30,
     automaticSilentRenew: true,
     monitorSession: true,
@@ -31,6 +30,7 @@ function oidcConfiguration(authInfo) {
         ...initData,
         authority: authInfo.openid.authority,
         client_id: authInfo.openid.client_id,
+        scope: authInfo.openid.scope || "openid profile email offline_access grant",
         redirect_uri: baseUrl + "/auth-callback",
         silent_redirect_uri: baseUrl + "/auth-callback",
         post_logout_redirect_uri: baseUrl + "/",

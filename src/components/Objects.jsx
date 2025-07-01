@@ -60,6 +60,7 @@ import {
     UnprovisionDialog,
     PurgeDialog,
     SimpleConfirmDialog,
+    SwitchDialog,
 } from "./ActionDialogs";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 
@@ -92,9 +93,7 @@ const Objects = () => {
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore(
-        (state) => state.objectInstanceStatus
-    );
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
 
@@ -115,12 +114,14 @@ const Objects = () => {
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
+    const [switchDialogOpen, setSwitchDialogOpen] = useState(false); // Added state for switch dialog
     const [confirmationChecked, setConfirmationChecked] = useState(false);
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
         serviceInterruption: false,
     });
+    const [switchCheckbox, setSwitchCheckbox] = useState(false); // Added state for switch checkbox
     const [pendingAction, setPendingAction] = useState("");
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
@@ -228,10 +229,10 @@ const Objects = () => {
         const token = localStorage.getItem("authToken");
         if (token) {
             startEventReception(token, [
-                'ObjectStatusUpdated',
-                'InstanceStatusUpdated',
-                'ObjectDeleted',
-                'InstanceMonitorUpdated',
+                "ObjectStatusUpdated",
+                "InstanceStatusUpdated",
+                "ObjectDeleted",
+                "InstanceMonitorUpdated",
             ]);
         }
         return () => {
@@ -273,6 +274,9 @@ const Objects = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "switch") {
+            setSwitchCheckbox(false);
+            setSwitchDialogOpen(true);
         } else {
             setSimpleConfirmDialogOpen(true);
         }
@@ -364,7 +368,8 @@ const Objects = () => {
             serviceInterruption: false,
         });
         setSimpleConfirmDialogOpen(false);
-        setConfirmationChecked(false);
+        setSwitchDialogOpen(false);
+        setSwitchCheckbox(false);
     };
 
     const handleObjectClick = (objectName) => {
@@ -512,13 +517,13 @@ const Objects = () => {
                                     onClick={() => handleActionClick(name)}
                                     disabled={!isAllowed}
                                     sx={{
-                                        color: isAllowed ? 'inherit' : 'text.disabled',
-                                        '&.Mui-disabled': {
-                                            opacity: 0.5
-                                        }
+                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        "&.Mui-disabled": {
+                                            opacity: 0.5,
+                                        },
                                     }}
                                 >
-                                    <ListItemIcon sx={{color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
                                         {icon}
                                     </ListItemIcon>
                                     <ListItemText>
@@ -536,13 +541,9 @@ const Objects = () => {
                             <TableRow>
                                 <TableCell>
                                     <Checkbox
-                                        checked={
-                                            selectedObjects.length === filteredObjectNames.length
-                                        }
+                                        checked={selectedObjects.length === filteredObjectNames.length}
                                         onChange={(e) =>
-                                            setSelectedObjects(
-                                                e.target.checked ? filteredObjectNames : []
-                                            )
+                                            setSelectedObjects(e.target.checked ? filteredObjectNames : [])
                                         }
                                     />
                                 </TableCell>
@@ -630,11 +631,8 @@ const Objects = () => {
                                         </TableCell>
                                         {isWideScreen &&
                                             allNodes.map((node) => {
-                                                const {
-                                                    avail: nodeAvail,
-                                                    frozen: nodeFrozen,
-                                                    state: nodeState,
-                                                } = getNodeState(objectName, node);
+                                                const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState} =
+                                                    getNodeState(objectName, node);
                                                 return (
                                                     <TableCell key={node} align="center">
                                                         <Box
@@ -748,6 +746,15 @@ const Objects = () => {
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
                     checkboxes={purgeCheckboxes}
                     setCheckboxes={setPurgeCheckboxes}
+                    disabled={false}
+                />
+
+                <SwitchDialog
+                    open={switchDialogOpen}
+                    onClose={() => setSwitchDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checked={switchCheckbox}
+                    setChecked={setSwitchCheckbox}
                     disabled={false}
                 />
 

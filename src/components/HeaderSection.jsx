@@ -33,6 +33,8 @@ const HeaderSection = ({
                            setStopCheckbox,
                            setUnprovisionChecked,
                            setPurgeCheckboxes,
+                           setSwitchDialogOpen,
+                           setSwitchCheckbox,
                            getObjectStatus,
                            getColor,
                        }) => {
@@ -106,6 +108,9 @@ const HeaderSection = ({
                                                 serviceInterruption: false,
                                             });
                                             setPurgeDialogOpen(true);
+                                        } else if (name === 'switch') {
+                                            setSwitchCheckbox(false);
+                                            setSwitchDialogOpen(true);
                                         } else {
                                             setSimpleDialogOpen(true);
                                         }

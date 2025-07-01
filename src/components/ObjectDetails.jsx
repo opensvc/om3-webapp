@@ -41,20 +41,6 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
-import {
-    RestartAlt,
-    LockOpen,
-    Delete,
-    Settings,
-    Block,
-    CleaningServices,
-    SwapHoriz,
-    Undo,
-    Cancel,
-    PlayArrow,
-    Stop,
-    PlayCircleFilled,
-} from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
@@ -67,39 +53,11 @@ import {
     SimpleConfirmDialog,
 } from "../components/ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
-
-const NODE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
-    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
-    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
-    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
-];
-
-const OBJECT_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
-    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
-    {name: "delete", icon: <Delete sx={{fontSize: 24}}/>},
-    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
-    {name: "purge", icon: <CleaningServices sx={{fontSize: 24}}/>},
-    {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
-    {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
-    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
-];
-
-const RESOURCE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
-];
+import HeaderSection from "./HeaderSection";
+import ConfigSection from "./ConfigSection";
+import KeysSection from "./KeysSection";
+import NodeCard from "./NodeCard";
+import {OBJECT_ACTIONS, NODE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -187,6 +145,12 @@ const ObjectDetail = () => {
 
     // Debounce ref to prevent multiple fetchConfig calls
     const lastFetch = useRef({});
+
+    // Log initial state to confirm setSelectedResourcesByNode
+    console.log("ObjectDetail initial state:", {
+        selectedResourcesByNode,
+        setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
+    });
 
     const openSnackbar = (msg, sev = "success") =>
         setSnackbar({open: true, message: msg, severity: sev});
@@ -356,7 +320,7 @@ const ObjectDetail = () => {
 
         setConfigLoading(true);
         setConfigError(null);
-        setConfigNode(node); // Store the node used for fetching config
+        setConfigNode(node);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
             const response = await fetch(url, {
@@ -427,7 +391,7 @@ const ObjectDetail = () => {
             openSnackbar("Parameter input is required.", "error");
             return false;
         }
-        const paramList = paramsToSet.split("\n").filter(param => param.trim());
+        const paramList = paramsToSet.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters provided.", "error");
             return false;
@@ -482,7 +446,7 @@ const ObjectDetail = () => {
             openSnackbar("Parameter key(s) to unset are required.", "error");
             return false;
         }
-        const paramList = paramsToUnset.split("\n").filter(param => param.trim());
+        const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters to unset provided.", "error");
             return false;
@@ -532,7 +496,7 @@ const ObjectDetail = () => {
             openSnackbar("Parameter key(s) to delete are required.", "error");
             return false;
         }
-        const paramList = paramsToDelete.split("\n").filter(param => param.trim());
+        const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters to delete provided.", "error");
             return false;
@@ -913,11 +877,17 @@ const ObjectDetail = () => {
         );
 
     const toggleResource = (node, rid) => {
+        console.log("toggleResource called:", {
+            node,
+            rid,
+            setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
+        });
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
             const next = current.includes(rid)
                 ? current.filter((r) => r !== rid)
                 : [...current, rid];
+            console.log("toggleResource:", {node, rid, current, next, prev});
             return {...prev, [node]: next};
         });
     };
@@ -932,7 +902,7 @@ const ObjectDetail = () => {
                 `InstanceStatusUpdated,path=${decodedObjectName}`,
                 `ObjectDeleted,path=${decodedObjectName}`,
                 `InstanceMonitorUpdated,path=${decodedObjectName}`,
-                `InstanceConfigUpdated,path=${decodedObjectName}`
+                `InstanceConfigUpdated,path=${decodedObjectName}`,
             ];
             startEventReception(token, filters);
         }
@@ -949,9 +919,10 @@ const ObjectDetail = () => {
             (state) => state.configUpdates,
             async (updates) => {
                 const {name} = parseObjectPath(decodedObjectName);
-                const matchingUpdate = updates.find(u =>
-                    (u.name === name || u.fullName === decodedObjectName) &&
-                    u.type === 'InstanceConfigUpdated'
+                const matchingUpdate = updates.find(
+                    (u) =>
+                        (u.name === name || u.fullName === decodedObjectName) &&
+                        u.type === "InstanceConfigUpdated"
                 );
 
                 if (matchingUpdate) {
@@ -975,26 +946,33 @@ const ObjectDetail = () => {
     // Initial load effects
     useEffect(() => {
         const loadInitialConfig = async () => {
-            // Vérifier si objectInstanceStatus est disponible
             if (!objectInstanceStatus[decodedObjectName]) {
-                console.log(`⏳ [Initial Load] Waiting for objectInstanceStatus for ${decodedObjectName}`);
+                console.log(
+                    `⏳ [Initial Load] Waiting for objectInstanceStatus for ${decodedObjectName}`
+                );
                 return;
             }
 
-            const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
+            const initialNode = Object.keys(
+                objectInstanceStatus[decodedObjectName] || {}
+            )[0];
             if (initialNode) {
                 try {
                     await fetchConfig(initialNode);
                 } catch (err) {
-                    console.error(`💥 [Initial Load] Failed to fetch config for ${decodedObjectName}:`, err);
+                    console.error(
+                        `💥 [Initial Load] Failed to fetch config for ${decodedObjectName}:`,
+                        err
+                    );
                 }
             } else {
                 setConfigError("No nodes available to fetch configuration.");
-                console.warn(`🚫 [Initial Load] No initial node found for ${decodedObjectName}`);
+                console.warn(
+                    `🚫 [Initial Load] No initial node found for ${decodedObjectName}`
+                );
             }
         };
 
-        // Initial keys load
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchKeys();
@@ -1026,340 +1004,34 @@ const ObjectDetail = () => {
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
-                {/* HEADER */}
-                {globalStatus && (
-                    <Box
-                        sx={{
-                            p: 1,
-                            mb: 4,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                        }}
-                    >
-                        <Typography variant="h4" fontWeight="bold">
-                            {decodedObjectName}
-                        </Typography>
-                        <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                            <Tooltip title={getObjectStatus().avail || "unknown"}>
-                                <FiberManualRecordIcon
-                                    sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
-                                />
-                            </Tooltip>
-                            {getObjectStatus().avail === "warn" && (
-                                <Tooltip title="warn">
-                                    <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            )}
-                            {getObjectStatus().frozen === "frozen" && (
-                                <Tooltip title="frozen">
-                                    <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            )}
-                            {getObjectStatus().globalExpect && (
-                                <Typography variant="caption">{getObjectStatus().globalExpect}</Typography>
-                            )}
-                            <IconButton
-                                onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
-                                disabled={actionInProgress}
-                                aria-label="Object actions"
-                            >
-                                <Tooltip title="Actions">
-                                    <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            </IconButton>
-                            <Menu
-                                anchorEl={objectMenuAnchor}
-                                open={Boolean(objectMenuAnchor)}
-                                onClose={() => setObjectMenuAnchor(null)}
-                            >
-                                {OBJECT_ACTIONS.map(({name, icon}) => {
-                                    const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
-                                    return (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => {
-                                                setPendingAction({action: name});
-                                                if (name === "freeze") {
-                                                    setCheckboxes({failover: false});
-                                                    setConfirmDialogOpen(true);
-                                                } else if (name === "stop") {
-                                                    setStopCheckbox(false);
-                                                    setStopDialogOpen(true);
-                                                } else if (name === "unprovision") {
-                                                    setUnprovisionChecked(false);
-                                                    setUnprovisionDialogOpen(true);
-                                                } else if (name === "purge") {
-                                                    setPurgeCheckboxes({
-                                                        dataLoss: false,
-                                                        configLoss: false,
-                                                        serviceInterruption: false,
-                                                    });
-                                                    setPurgeDialogOpen(true);
-                                                } else {
-                                                    setSimpleDialogOpen(true);
-                                                }
-                                                setObjectMenuAnchor(null);
-                                            }}
-                                            disabled={!isAllowed || actionInProgress}
-                                            sx={{
-                                                color: isAllowed ? 'inherit' : 'text.disabled',
-                                                '&.Mui-disabled': {
-                                                    opacity: 0.5
-                                                }
-                                            }}
-                                        >
-                                            <ListItemIcon
-                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}>
-                                                {icon}
-                                            </ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    );
-                                })}
-                            </Menu>
-                        </Box>
-                    </Box>
-                )}
+                <HeaderSection
+                    decodedObjectName={decodedObjectName}
+                    globalStatus={globalStatus}
+                    actionInProgress={actionInProgress}
+                    objectMenuAnchor={objectMenuAnchor}
+                    setObjectMenuAnchor={setObjectMenuAnchor}
+                    setPendingAction={setPendingAction}
+                    setConfirmDialogOpen={setConfirmDialogOpen}
+                    setStopDialogOpen={setStopDialogOpen}
+                    setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                    setPurgeDialogOpen={setPurgeDialogOpen}
+                    setSimpleDialogOpen={setSimpleDialogOpen}
+                    setCheckboxes={setCheckboxes}
+                    setStopCheckbox={setStopCheckbox}
+                    setUnprovisionChecked={setUnprovisionChecked}
+                    setPurgeCheckboxes={setPurgeCheckboxes}
+                    getObjectStatus={getObjectStatus}
+                    getColor={getColor}
+                />
 
-                {/* KEYS SECTION */}
-                {showKeys && (
-                    <Box
-                        sx={{
-                            mb: 4,
-                            p: 2,
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 1,
-                        }}
-                    >
-                        <Accordion
-                            expanded={keysAccordionExpanded}
-                            onChange={handleKeysAccordionChange}
-                            sx={{
-                                border: "none",
-                                boxShadow: "none",
-                                backgroundColor: "transparent",
-                                "&:before": {display: "none"},
-                                "& .MuiAccordionSummary-root": {
-                                    border: "none",
-                                    backgroundColor: "transparent",
-                                    minHeight: "auto",
-                                    "&.Mui-expanded": {minHeight: "auto"},
-                                    padding: 0,
-                                },
-                                "& .MuiAccordionDetails-root": {
-                                    border: "none",
-                                    backgroundColor: "transparent",
-                                    padding: 0,
-                                },
-                            }}
-                        >
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon/>}
-                                aria-controls="panel-keys-content"
-                                id="panel-keys-header"
-                            >
-                                <Typography variant="h6" fontWeight="medium">
-                                    Object Keys ({keys.length})
-                                </Typography>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
-                                    <Tooltip title="Add new key">
-                                        <IconButton
-                                            color="primary"
-                                            onClick={() => setCreateDialogOpen(true)}
-                                            disabled={actionLoading}
-                                            aria-label="Add new key"
-                                        >
-                                            <AddIcon/>
-                                        </IconButton>
-                                    </Tooltip>
-                                </Box>
-                                {keysLoading && <CircularProgress size={24}/>}
-                                {keysError && (
-                                    <Alert severity="error" sx={{mb: 2}}>
-                                        {keysError}
-                                    </Alert>
-                                )}
-                                {!keysLoading && !keysError && keys.length === 0 && (
-                                    <Typography color="textSecondary">No keys available.</Typography>
-                                )}
-                                {!keysLoading && !keysError && keys.length > 0 && (
-                                    <TableContainer component={Paper} sx={{boxShadow: "none"}}>
-                                        <Table sx={{minWidth: 650}} aria-label="keys table">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {keys.map((key) => (
-                                                    <TableRow key={key.name}>
-                                                        <TableCell component="th" scope="row">
-                                                            {key.name}
-                                                        </TableCell>
-                                                        <TableCell>{key.node}</TableCell>
-                                                        <TableCell>{key.size} bytes</TableCell>
-                                                        <TableCell>
-                                                            <Tooltip title="Edit">
-                                                                <span>
-                                                                    <IconButton
-                                                                        onClick={() => {
-                                                                            setKeyToUpdate(key.name);
-                                                                            setUpdateKeyName(key.name);
-                                                                            setUpdateDialogOpen(true);
-                                                                        }}
-                                                                        disabled={actionLoading}
-                                                                        aria-label={`Edit key ${key.name}`}
-                                                                    >
-                                                                        <EditIcon/>
-                                                                    </IconButton>
-                                                                </span>
-                                                            </Tooltip>
-                                                            <Tooltip title="Delete">
-                                                                <span>
-                                                                    <IconButton
-                                                                        onClick={() => {
-                                                                            setKeyToDelete(key.name);
-                                                                            setDeleteDialogOpen(true);
-                                                                        }}
-                                                                        disabled={actionLoading}
-                                                                        aria-label={`Delete key ${key.name}`}
-                                                                    >
-                                                                        <DeleteIcon/>
-                                                                    </IconButton>
-                                                                </span>
-                                                            </Tooltip>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                )}
-                            </AccordionDetails>
-                        </Accordion>
-                    </Box>
-                )}
+                <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
 
-                {/* CONFIGURATION SECTION */}
-                <Box
-                    sx={{
-                        mb: 4,
-                        p: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        borderRadius: 1,
-                    }}
-                >
-                    <Accordion
-                        expanded={configAccordionExpanded}
-                        onChange={handleConfigAccordionChange}
-                        sx={{
-                            border: "none",
-                            boxShadow: "none",
-                            backgroundColor: "transparent",
-                            "&:before": {display: "none"},
-                            "& .MuiAccordionSummary-root": {
-                                border: "none",
-                                backgroundColor: "transparent",
-                                minHeight: "auto",
-                                "&.Mui-expanded": {minHeight: "auto"},
-                                padding: 0,
-                            },
-                            "& .MuiAccordionDetails-root": {
-                                border: "none",
-                                backgroundColor: "transparent",
-                                padding: 0,
-                            },
-                        }}
-                    >
-                        <AccordionSummary
-                            expandIcon={<ExpandMoreIcon/>}
-                            aria-controls="panel-config-content"
-                            id="panel-config-header"
-                        >
-                            <Typography variant="h6" fontWeight="medium">
-                                Configuration
-                            </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
-                                <Tooltip title="Upload a new configuration file">
-                                    <IconButton
-                                        color="primary"
-                                        onClick={() => setUpdateConfigDialogOpen(true)}
-                                        disabled={actionLoading}
-                                        aria-label="Upload new configuration file"
-                                    >
-                                        <UploadFileIcon/>
-                                    </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Manage configuration parameters (add, unset, delete)">
-                                    <IconButton
-                                        color="primary"
-                                        onClick={() => setManageParamsDialogOpen(true)}
-                                        disabled={actionLoading}
-                                        aria-label="Manage configuration parameters"
-                                    >
-                                        <EditIcon/>
-                                    </IconButton>
-                                </Tooltip>
-                            </Box>
-                            {configLoading && <CircularProgress size={24}/>}
-                            {configError && (
-                                <Alert severity="error" sx={{mb: 2}}>
-                                    {configError}
-                                </Alert>
-                            )}
-                            {!configLoading && !configError && configData === null && (
-                                <Typography color="textSecondary">
-                                    No configuration available.
-                                </Typography>
-                            )}
-                            {!configLoading && !configError && configData !== null && (
-                                <Box
-                                    sx={{
-                                        p: 2,
-                                        bgcolor: "grey.200",
-                                        borderRadius: 1,
-                                        maxWidth: "100%",
-                                        overflowX: "auto",
-                                        boxSizing: "border-box",
-                                        scrollbarWidth: "thin",
-                                        "&::-webkit-scrollbar": {
-                                            height: "8px",
-                                        },
-                                        "&::-webkit-scrollbar-thumb": {
-                                            backgroundColor: "grey.400",
-                                            borderRadius: "4px",
-                                        },
-                                    }}
-                                >
-                                    <Box
-                                        component="pre"
-                                        key={configData}
-                                        sx={{
-                                            whiteSpace: "pre-wrap",
-                                            fontFamily: "Monospace",
-                                            bgcolor: "inherit",
-                                            p: 1,
-                                            m: 0,
-                                            minWidth: "max-content",
-                                        }}
-                                    >
-                                        {configData}
-                                    </Box>
-                                </Box>
-                            )}
-                        </AccordionDetails>
-                    </Accordion>
-                </Box>
+                <ConfigSection
+                    decodedObjectName={decodedObjectName}
+                    configNode={configNode}
+                    setConfigNode={setConfigNode}
+                    openSnackbar={openSnackbar}
+                />
 
                 {/* DELETE KEY DIALOG */}
                 <Dialog
@@ -1582,7 +1254,8 @@ const ObjectDetail = () => {
                             value={paramsToSet}
                             onChange={(e) => setParamsToSet(e.target.value)}
                             disabled={actionLoading}
-                            placeholder="section.param1=value1&#10;section.param2=value2"
+                            placeholder="section.param1=value1
+section.param2=value2"
                         />
                         <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                             Unset parameters (one key per line, e.g., section.param)
@@ -1597,20 +1270,21 @@ const ObjectDetail = () => {
                             value={paramsToUnset}
                             onChange={(e) => setParamsToUnset(e.target.value)}
                             disabled={actionLoading}
-                            placeholder="section.param1&#10;section.param2"
+                            placeholder="section.param1
+section.param2"
                             sx={{
-                                '& .MuiInputBase-root': {
-                                    padding: '8px',
-                                    lineHeight: '1.5',
-                                    minHeight: '100px',
+                                "& .MuiInputBase-root": {
+                                    padding: "8px",
+                                    lineHeight: "1.5",
+                                    minHeight: "100px",
                                 },
-                                '& .MuiInputBase-input': {
-                                    overflow: 'auto',
-                                    boxSizing: 'border-box',
+                                "& .MuiInputBase-input": {
+                                    overflow: "auto",
+                                    boxSizing: "border-box",
                                 },
-                                '& .MuiInputLabel-root': {
-                                    backgroundColor: 'white',
-                                    padding: '0 4px',
+                                "& .MuiInputLabel-root": {
+                                    backgroundColor: "white",
+                                    padding: "0 4px",
                                 },
                             }}
                         />
@@ -1627,20 +1301,21 @@ const ObjectDetail = () => {
                             value={paramsToDelete}
                             onChange={(e) => setParamsToDelete(e.target.value)}
                             disabled={actionLoading}
-                            placeholder="section1&#10;section2"
+                            placeholder="section1
+section2"
                             sx={{
-                                '& .MuiInputBase-root': {
-                                    padding: '8px',
-                                    lineHeight: '1.5',
-                                    minHeight: '100px',
+                                "& .MuiInputBase-root": {
+                                    padding: "8px",
+                                    lineHeight: "1.5",
+                                    minHeight: "100px",
                                 },
-                                '& .MuiInputBase-input': {
-                                    overflow: 'auto',
-                                    boxSizing: 'border-box',
+                                "& .MuiInputBase-input": {
+                                    overflow: "auto",
+                                    boxSizing: "border-box",
                                 },
-                                '& .MuiInputLabel-root': {
-                                    backgroundColor: 'white',
-                                    padding: '0 4px',
+                                "& .MuiInputLabel-root": {
+                                    backgroundColor: "white",
+                                    padding: "0 4px",
                                 },
                             }}
                         />
@@ -1655,7 +1330,10 @@ const ObjectDetail = () => {
                         <Button
                             variant="contained"
                             onClick={handleManageParamsSubmit}
-                            disabled={actionLoading || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
+                            disabled={
+                                actionLoading ||
+                                (!paramsToSet && !paramsToUnset && !paramsToDelete)
+                            }
                         >
                             Apply
                         </Button>
@@ -1676,253 +1354,44 @@ const ObjectDetail = () => {
 
                 {/* LIST OF NODES WITH THEIR RESOURCES */}
                 {memoizedNodes.map((node) => {
-                    const {resources = {}} = memoizedObjectData[node] || {};
-                    const {avail, frozen, state} = getNodeState(node);
-                    const resIds = Object.keys(resources);
-
+                    console.log("Rendering NodeCard for node:", node, {
+                        selectedResourcesByNode,
+                        setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
+                        toggleResource: typeof toggleResource,
+                    });
                     return (
-                        <Box
+                        <NodeCard
                             key={node}
-                            sx={{
-                                mb: 5,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 2,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                borderRadius: 1,
-                                p: 2,
-                            }}
-                        >
-                            <Box sx={{p: 1}}>
-                                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                        <Checkbox
-                                            checked={selectedNodes.includes(node)}
-                                            onChange={() => toggleNode(node)}
-                                            aria-label={`Select node ${node}`}
-                                        />
-                                        <Typography variant="h6">{node}</Typography>
-                                    </Box>
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                        <Tooltip title={avail || "unknown"}>
-                                            <FiberManualRecordIcon
-                                                sx={{color: getColor(avail), fontSize: "1.2rem"}}
-                                            />
-                                        </Tooltip>
-                                        {avail === "warn" && (
-                                            <Tooltip title="warn">
-                                                <WarningAmberIcon
-                                                    sx={{color: orange[500], fontSize: "1.2rem"}}
-                                                />
-                                            </Tooltip>
-                                        )}
-                                        {frozen === "frozen" && (
-                                            <Tooltip title="frozen">
-                                                <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                                            </Tooltip>
-                                        )}
-                                        {state && <Typography variant="caption">{state}</Typography>}
-                                        <IconButton
-                                            onClick={(e) => {
-                                                setCurrentNode(node);
-                                                setIndividualNodeMenuAnchor(e.currentTarget);
-                                            }}
-                                            disabled={actionInProgress}
-                                            aria-label={`Node ${node} actions`}
-                                        >
-                                            <Tooltip title="Actions">
-                                                <MoreVertIcon/>
-                                            </Tooltip>
-                                        </IconButton>
-                                    </Box>
-                                </Box>
-                            </Box>
-
-                            {/* RESOURCES ACCORDION */}
-                            <Accordion
-                                expanded={expandedNodeResources[node] || false}
-                                onChange={handleNodeResourcesAccordionChange(node)}
-                                sx={{
-                                    border: "none",
-                                    boxShadow: "none",
-                                    backgroundColor: "transparent",
-                                    "&:before": {display: "none"},
-                                    "& .MuiAccordionSummary-root": {
-                                        border: "none",
-                                        backgroundColor: "transparent",
-                                        minHeight: "auto",
-                                        "&.Mui-expanded": {minHeight: "auto"},
-                                        padding: 0,
-                                    },
-                                    "& .MuiAccordionDetails-root": {
-                                        border: "none",
-                                        backgroundColor: "transparent",
-                                        padding: 0,
-                                    },
-                                }}
-                            >
-                                <AccordionSummary
-                                    expandIcon={<ExpandMoreIcon/>}
-                                    aria-controls={`panel-resources-${node}-content`}
-                                    id={`panel-resources-${node}-header`}
-                                >
-                                    <Box display="flex" alignItems="center" gap={2} width="100%">
-                                        <Typography variant="subtitle1" fontWeight="medium">
-                                            Resources ({resIds.length})
-                                        </Typography>
-                                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                            <Checkbox
-                                                checked={
-                                                    (selectedResourcesByNode[node]?.length || 0) === resIds.length &&
-                                                    resIds.length > 0
-                                                }
-                                                onChange={(e) => {
-                                                    const next = e.target.checked ? resIds : [];
-                                                    setSelectedResourcesByNode((prev) => ({
-                                                        ...prev,
-                                                        [node]: next,
-                                                    }));
-                                                }}
-                                                disabled={resIds.length === 0}
-                                                aria-label={`Select all resources for node ${node}`}
-                                            />
-                                            <IconButton
-                                                onClick={(e) => {
-                                                    handleResourcesActionsOpen(node, e);
-                                                    e.stopPropagation();
-                                                }}
-                                                disabled={!(selectedResourcesByNode[node] || []).length}
-                                                aria-label={`Resource actions for node ${node}`}
-                                            >
-                                                <Tooltip title="Actions">
-                                                    <MoreVertIcon/>
-                                                </Tooltip>
-                                            </IconButton>
-                                        </Box>
-                                    </Box>
-                                </AccordionSummary>
-                                <AccordionDetails>
-                                    <Box>
-                                        {resIds.length === 0 ? (
-                                            <Typography color="textSecondary">
-                                                No resources available.
-                                            </Typography>
-                                        ) : (
-                                            <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
-                                                {resIds.map((rid) => {
-                                                    const res = resources[rid] || {};
-                                                    const resourcePanelId = `resource-${node}-${rid}`;
-                                                    return (
-                                                        <Accordion
-                                                            key={rid}
-                                                            expanded={expandedResources[resourcePanelId] || false}
-                                                            onChange={handleAccordionChange(resourcePanelId)}
-                                                            sx={{
-                                                                mb: 1,
-                                                                border: "none",
-                                                                boxShadow: "none",
-                                                                backgroundColor: "transparent",
-                                                                "&:before": {display: "none"},
-                                                                "& .MuiAccordionSummary-root": {
-                                                                    border: "none",
-                                                                    backgroundColor: "transparent",
-                                                                    minHeight: "auto",
-                                                                    "&.Mui-expanded": {minHeight: "auto"},
-                                                                    padding: 0,
-                                                                },
-                                                                "& .MuiAccordionDetails-root": {
-                                                                    border: "none",
-                                                                    backgroundColor: "transparent",
-                                                                    padding: 0,
-                                                                },
-                                                            }}
-                                                        >
-                                                            <AccordionSummary
-                                                                expandIcon={<ExpandMoreIcon/>}
-                                                                aria-controls={`panel-${resourcePanelId}-content`}
-                                                                id={`panel-${resourcePanelId}-header`}
-                                                            >
-                                                                <Box
-                                                                    display="flex"
-                                                                    alignItems="center"
-                                                                    gap={2}
-                                                                    width="100%"
-                                                                >
-                                                                    <Checkbox
-                                                                        checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                                                                        onChange={() => toggleResource(node, rid)}
-                                                                        aria-label={`Select resource ${rid}`}
-                                                                    />
-                                                                    <Typography variant="body1">{rid}</Typography>
-                                                                    <Box flexGrow={1}/>
-                                                                    <Tooltip title={res.status || "unknown"}>
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{
-                                                                                color: getColor(res.status),
-                                                                                fontSize: "1rem",
-                                                                            }}
-                                                                        />
-                                                                    </Tooltip>
-                                                                    <IconButton
-                                                                        onClick={(e) => {
-                                                                            handleResourceMenuOpen(node, rid, e);
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        disabled={actionInProgress}
-                                                                        aria-label={`Resource ${rid} actions`}
-                                                                    >
-                                                                        <Tooltip title="Actions">
-                                                                            <MoreVertIcon/>
-                                                                        </Tooltip>
-                                                                    </IconButton>
-                                                                </Box>
-                                                            </AccordionSummary>
-                                                            <AccordionDetails>
-                                                                <Box
-                                                                    sx={{
-                                                                        display: "flex",
-                                                                        flexDirection: "column",
-                                                                        gap: 1,
-                                                                    }}
-                                                                >
-                                                                    <Typography variant="body2">
-                                                                        <strong>Label:</strong> {res.label || "N/A"}
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Type:</strong> {res.type || "N/A"}
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Provisioned:</strong>
-                                                                        <Tooltip
-                                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
-                                                                            <FiberManualRecordIcon
-                                                                                sx={{
-                                                                                    color: parseProvisionedState(res.provisioned?.state)
-                                                                                        ? green[500]
-                                                                                        : red[500],
-                                                                                    fontSize: "1rem",
-                                                                                    ml: 1,
-                                                                                    verticalAlign: "middle",
-                                                                                }}
-                                                                            />
-                                                                        </Tooltip>
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Last Updated:</strong>{" "}
-                                                                        {res.provisioned?.mtime || "N/A"}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </AccordionDetails>
-                                                        </Accordion>
-                                                    );
-                                                })}
-                                            </Box>
-                                        )}
-                                    </Box>
-                                </AccordionDetails>
-                            </Accordion>
-                        </Box>
+                            node={node}
+                            nodeData={memoizedObjectData[node] || {}}
+                            selectedNodes={selectedNodes}
+                            toggleNode={toggleNode}
+                            selectedResourcesByNode={selectedResourcesByNode}
+                            setSelectedResourcesByNode={setSelectedResourcesByNode}
+                            toggleResource={toggleResource}
+                            actionInProgress={actionInProgress}
+                            setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                            setCurrentNode={setCurrentNode}
+                            handleResourcesActionsOpen={handleResourcesActionsOpen}
+                            handleResourceMenuOpen={handleResourceMenuOpen}
+                            expandedNodeResources={expandedNodeResources}
+                            handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                            expandedResources={expandedResources}
+                            handleAccordionChange={handleAccordionChange}
+                            getColor={getColor}
+                            getNodeState={getNodeState}
+                            setPendingAction={setPendingAction}
+                            setConfirmDialogOpen={setConfirmDialogOpen}
+                            setStopDialogOpen={setStopDialogOpen}
+                            setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                            setPurgeDialogOpen={setPurgeDialogOpen}
+                            setSimpleDialogOpen={setSimpleDialogOpen}
+                            setCheckboxes={setCheckboxes}
+                            setStopCheckbox={setStopCheckbox}
+                            setUnprovisionChecked={setUnprovisionChecked}
+                            setPurgeCheckboxes={setPurgeCheckboxes}
+                            parseProvisionedState={parseProvisionedState}
+                        />
                     );
                 })}
 
@@ -1945,7 +1414,10 @@ const ObjectDetail = () => {
                     onClose={() => setIndividualNodeMenuAnchor(null)}
                 >
                     {NODE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
+                        <MenuItem
+                            key={name}
+                            onClick={() => handleIndividualNodeActionClick(name)}
+                        >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
@@ -1958,7 +1430,10 @@ const ObjectDetail = () => {
                     onClose={handleResourcesActionsClose}
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleBatchResourceActionClick(name)}>
+                        <MenuItem
+                            key={name}
+                            onClick={() => handleBatchResourceActionClick(name)}
+                        >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>

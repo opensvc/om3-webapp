@@ -51,6 +51,7 @@ import {
     UnprovisionDialog,
     PurgeDialog,
     SimpleConfirmDialog,
+    SwitchDialog, // Added import
 } from "../components/ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 import HeaderSection from "./HeaderSection";
@@ -123,6 +124,7 @@ const ObjectDetail = () => {
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
+    const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
 
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
@@ -132,6 +134,7 @@ const ObjectDetail = () => {
         configLoss: false,
         serviceInterruption: false,
     });
+    const [switchCheckbox, setSwitchCheckbox] = useState(false); // Added state for switch checkbox
 
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -740,6 +743,9 @@ const ObjectDetail = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "switch") {
+            setSwitchCheckbox(false);
+            setSwitchDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
@@ -765,6 +771,9 @@ const ObjectDetail = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "switch") {
+            setSwitchCheckbox(false);
+            setSwitchDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
@@ -863,11 +872,13 @@ const ObjectDetail = () => {
             configLoss: false,
             serviceInterruption: false,
         });
+        setSwitchCheckbox(false);
         setConfirmDialogOpen(false);
         setStopDialogOpen(false);
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
+        setSwitchDialogOpen(false);
     };
 
     // Selection helpers
@@ -1020,6 +1031,8 @@ const ObjectDetail = () => {
                     setStopCheckbox={setStopCheckbox}
                     setUnprovisionChecked={setUnprovisionChecked}
                     setPurgeCheckboxes={setPurgeCheckboxes}
+                    setSwitchDialogOpen={setSwitchDialogOpen} // Pass setSwitchDialogOpen
+                    setSwitchCheckbox={setSwitchCheckbox} // Pass setSwitchCheckbox
                     getObjectStatus={getObjectStatus}
                     getColor={getColor}
                 />
@@ -1486,6 +1499,15 @@ section2"
                     onConfirm={handleDialogConfirm}
                     checkboxes={purgeCheckboxes}
                     setCheckboxes={setPurgeCheckboxes}
+                    disabled={actionInProgress}
+                />
+
+                <SwitchDialog
+                    open={switchDialogOpen}
+                    onClose={() => setSwitchDialogOpen(false)}
+                    onConfirm={handleDialogConfirm}
+                    checked={switchCheckbox}
+                    setChecked={setSwitchCheckbox}
                     disabled={actionInProgress}
                 />
 

@@ -209,6 +209,39 @@ export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, dis
     </Dialog>
 );
 
+// Dialog for the "giveback" action
+export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Giveback</DialogTitle>
+        <DialogContent>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checked}
+                        onChange={(e) => setChecked(e.target.checked)}
+                        aria-label="Confirm service unavailability"
+                    />
+                }
+                label="I understand the selected services will be unavailable during move."
+            />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                disabled={!checked || disabled}
+                onClick={onConfirm}
+                aria-label="Confirm giveback action"
+            >
+                Confirm
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
 // Simple dialog for other actions
 export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) => (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>

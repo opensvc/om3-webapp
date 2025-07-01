@@ -61,6 +61,7 @@ import {
     PurgeDialog,
     SimpleConfirmDialog,
     SwitchDialog,
+    GivebackDialog,
 } from "./ActionDialogs";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 
@@ -114,14 +115,16 @@ const Objects = () => {
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
-    const [switchDialogOpen, setSwitchDialogOpen] = useState(false); // Added state for switch dialog
+    const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
+    const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
         serviceInterruption: false,
     });
-    const [switchCheckbox, setSwitchCheckbox] = useState(false); // Added state for switch checkbox
+    const [switchCheckbox, setSwitchCheckbox] = useState(false);
+    const [givebackCheckbox, setGivebackCheckbox] = useState(false);
     const [pendingAction, setPendingAction] = useState("");
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
@@ -277,6 +280,9 @@ const Objects = () => {
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
+        } else if (action === "giveback") {
+            setGivebackCheckbox(false);
+            setGivebackDialogOpen(true);
         } else {
             setSimpleConfirmDialogOpen(true);
         }
@@ -370,6 +376,8 @@ const Objects = () => {
         setSimpleConfirmDialogOpen(false);
         setSwitchDialogOpen(false);
         setSwitchCheckbox(false);
+        setGivebackDialogOpen(false);
+        setGivebackCheckbox(false);
     };
 
     const handleObjectClick = (objectName) => {
@@ -755,6 +763,15 @@ const Objects = () => {
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
                     checked={switchCheckbox}
                     setChecked={setSwitchCheckbox}
+                    disabled={false}
+                />
+
+                <GivebackDialog
+                    open={givebackDialogOpen}
+                    onClose={() => setGivebackDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checked={givebackCheckbox}
+                    setChecked={setGivebackCheckbox}
                     disabled={false}
                 />
 

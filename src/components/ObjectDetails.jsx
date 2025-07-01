@@ -51,7 +51,8 @@ import {
     UnprovisionDialog,
     PurgeDialog,
     SimpleConfirmDialog,
-    SwitchDialog, // Added import
+    SwitchDialog,
+    GivebackDialog, // Added import
 } from "../components/ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 import HeaderSection from "./HeaderSection";
@@ -125,7 +126,7 @@ const ObjectDetail = () => {
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
-
+    const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
     const [unprovisionChecked, setUnprovisionChecked] = useState(false);
@@ -134,7 +135,8 @@ const ObjectDetail = () => {
         configLoss: false,
         serviceInterruption: false,
     });
-    const [switchCheckbox, setSwitchCheckbox] = useState(false); // Added state for switch checkbox
+    const [switchCheckbox, setSwitchCheckbox] = useState(false);
+    const [givebackCheckbox, setGivebackCheckbox] = useState(false);
 
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -746,6 +748,9 @@ const ObjectDetail = () => {
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
+        } else if (action === "giveback") {
+            setGivebackCheckbox(false);
+            setGivebackDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
@@ -774,6 +779,9 @@ const ObjectDetail = () => {
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
+        } else if (action === "giveback") {
+            setGivebackCheckbox(false);
+            setGivebackDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
@@ -873,12 +881,14 @@ const ObjectDetail = () => {
             serviceInterruption: false,
         });
         setSwitchCheckbox(false);
+        setGivebackCheckbox(false);
         setConfirmDialogOpen(false);
         setStopDialogOpen(false);
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
         setSwitchDialogOpen(false);
+        setGivebackDialogOpen(false);
     };
 
     // Selection helpers
@@ -1031,8 +1041,10 @@ const ObjectDetail = () => {
                     setStopCheckbox={setStopCheckbox}
                     setUnprovisionChecked={setUnprovisionChecked}
                     setPurgeCheckboxes={setPurgeCheckboxes}
-                    setSwitchDialogOpen={setSwitchDialogOpen} // Pass setSwitchDialogOpen
-                    setSwitchCheckbox={setSwitchCheckbox} // Pass setSwitchCheckbox
+                    setSwitchDialogOpen={setSwitchDialogOpen}
+                    setSwitchCheckbox={setSwitchCheckbox}
+                    setGivebackDialogOpen={setGivebackDialogOpen}
+                    setGivebackCheckbox={setGivebackCheckbox}
                     getObjectStatus={getObjectStatus}
                     getColor={getColor}
                 />
@@ -1508,6 +1520,15 @@ section2"
                     onConfirm={handleDialogConfirm}
                     checked={switchCheckbox}
                     setChecked={setSwitchCheckbox}
+                    disabled={actionInProgress}
+                />
+
+                <GivebackDialog
+                    open={givebackDialogOpen}
+                    onClose={() => setGivebackDialogOpen(false)}
+                    onConfirm={handleDialogConfirm}
+                    checked={givebackCheckbox}
+                    setChecked={setGivebackCheckbox}
                     disabled={actionInProgress}
                 />
 

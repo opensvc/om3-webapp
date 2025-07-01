@@ -35,6 +35,8 @@ const HeaderSection = ({
                            setPurgeCheckboxes,
                            setSwitchDialogOpen,
                            setSwitchCheckbox,
+                           setGivebackDialogOpen,
+                           setGivebackCheckbox,
                            getObjectStatus,
                            getColor,
                        }) => {
@@ -111,6 +113,9 @@ const HeaderSection = ({
                                         } else if (name === 'switch') {
                                             setSwitchCheckbox(false);
                                             setSwitchDialogOpen(true);
+                                        } else if (name === 'giveback') {
+                                            setGivebackCheckbox(false);
+                                            setGivebackDialogOpen(true);
                                         } else {
                                             setSimpleDialogOpen(true);
                                         }

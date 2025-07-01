@@ -11,6 +11,7 @@ import {
     MenuItem,
     ListItemIcon,
     ListItemText,
+    Button,
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -277,7 +278,8 @@ const NodeCard = ({
                     <Box sx={{flexGrow: 1}}/> {/* Pushes buttons to the right */}
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <IconButton
+                            <Button
+                                variant="outlined"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     handleResourcesActionsOpen(node, e);
@@ -285,10 +287,8 @@ const NodeCard = ({
                                 disabled={!(selectedResourcesByNode[node] || []).length}
                                 aria-label={`Resource actions for node ${node}`}
                             >
-                                <Tooltip title="Actions">
-                                    <MoreVertIcon/>
-                                </Tooltip>
-                            </IconButton>
+                                Actions on Selected Resources
+                            </Button>
                         </Box>
                         <IconButton
                             onClick={() => handleNodeResourcesAccordionChange(node)(null, !expandedNodeResources[node])}
@@ -403,7 +403,8 @@ const NodeCard = ({
                                                     <Typography variant="body2">
                                                         <strong>Provisioned:</strong>
                                                         <Tooltip
-                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
+                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}
+                                                        >
                                                             <FiberManualRecordIcon
                                                                 sx={{
                                                                     color: parseProvisionedState(res.provisioned?.state) ? green[500] : red[500],

@@ -27,13 +27,10 @@ const extractNamespace = (name) => {
 const extractKind = (name) => {
     const parts = name.split("/");
     if (parts.length === 3) {
-        // Format: namespace/kind/name
         return parts[1];
     } else if (parts.length === 2) {
-        // Format: kind/name (namespace = root)
         return parts[0];
     } else {
-        // Format: name
         const objName = parts[0];
         return objName === "cluster" ? "ccfg" : "svc";
     }
@@ -42,17 +39,14 @@ const extractKind = (name) => {
 const isActionAllowedForSelection = (actionName, selectedObjects) => {
     if (selectedObjects.length === 0) return false;
 
-    // Get the kinds of the selected objects
     const selectedKinds = [...new Set(selectedObjects.map(extractKind))];
 
-    // If only one kind is selected, apply the restrictions for that kind
     if (selectedKinds.length === 1) {
         const kind = selectedKinds[0];
         const allowedActions = ALLOWED_ACTIONS_BY_KIND[kind] || ALLOWED_ACTIONS_BY_KIND.default;
         return allowedActions.includes(actionName);
     }
 
-    // If multiple kinds are selected, find the union of allowed actions
     const allowedActions = new Set();
     selectedKinds.forEach(kind => {
         const actions = ALLOWED_ACTIONS_BY_KIND[kind] || ALLOWED_ACTIONS_BY_KIND.default;

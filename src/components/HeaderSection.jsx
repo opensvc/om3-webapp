@@ -28,11 +28,13 @@ const HeaderSection = ({
                            setStopDialogOpen,
                            setUnprovisionDialogOpen,
                            setPurgeDialogOpen,
+                           setDeleteDialogOpen,
                            setSimpleDialogOpen,
                            setCheckboxes,
                            setStopCheckbox,
                            setUnprovisionChecked,
                            setPurgeCheckboxes,
+                           setDeleteCheckboxes,
                            setSwitchDialogOpen,
                            setSwitchCheckbox,
                            setGivebackDialogOpen,
@@ -110,6 +112,12 @@ const HeaderSection = ({
                                                 serviceInterruption: false,
                                             });
                                             setPurgeDialogOpen(true);
+                                        } else if (name === 'delete') {
+                                            setDeleteCheckboxes({
+                                                configLoss: false,
+                                                clusterwide: false,
+                                            });
+                                            setDeleteDialogOpen(true);
                                         } else if (name === 'switch') {
                                             setSwitchCheckbox(false);
                                             setSwitchDialogOpen(true);

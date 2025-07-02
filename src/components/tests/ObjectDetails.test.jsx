@@ -1113,13 +1113,15 @@ type = flag
     }, 15000);
 
     test('triggers object action with unprovision dialog', async () => {
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
+        await act(async () => {
+            render(
+                <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                    <Routes>
+                        <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                    </Routes>
+                </MemoryRouter>
+            );
+        });
 
         await waitFor(() => {
             expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
@@ -1163,15 +1165,32 @@ type = flag
             {timeout: 10000}
         );
 
-        // Fill dialog
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
-        });
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
+        // Debug dialog rendering
+        await waitFor(
+            () => {
+                const dialogs = screen.getAllByRole('dialog', {hidden: true});
+                console.log('[Test] Dialogs found:', dialogs.length);
+                dialogs.forEach((dialog, index) => {
+                    console.log(`[Test] Dialog ${index} DOM:`, dialog.outerHTML);
+                });
+                const unprovisionDialog = screen.getByRole('dialog', {hidden: true});
+                expect(unprovisionDialog).toBeInTheDocument();
+            },
+            {timeout: 5000}
+        );
+
+        // Check all three required checkboxes for object unprovision
         await act(async () => {
-            fireEvent.click(dialogCheckbox);
+            fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
+            fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+            fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
         });
+
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await waitFor(() => {
+            expect(confirmButton).not.toBeDisabled();
+        });
+
         await act(async () => {
             fireEvent.click(confirmButton);
         });

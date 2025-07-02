@@ -120,6 +120,11 @@ const Objects = () => {
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
     const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
+    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
+        dataLoss: false,
+        clusterwide: false,
+        serviceInterruption: false,
+    });
     const [deleteCheckboxes, setDeleteCheckboxes] = useState({
         configLoss: false,
         clusterwide: false,
@@ -274,7 +279,11 @@ const Objects = () => {
             setConfirmationChecked(false);
             setStopDialogOpen(true);
         } else if (action === "unprovision") {
-            setConfirmationChecked(false);
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                clusterwide: false,
+                serviceInterruption: false,
+            });
             setUnprovisionDialogOpen(true);
         } else if (action === "purge") {
             setPurgeCheckboxes({
@@ -378,6 +387,11 @@ const Objects = () => {
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
         setDeleteDialogOpen(false);
+        setUnprovisionCheckboxes({
+            dataLoss: false,
+            clusterwide: false,
+            serviceInterruption: false,
+        });
         setPurgeCheckboxes({
             dataLoss: false,
             configLoss: false,
@@ -757,8 +771,8 @@ const Objects = () => {
                     open={unprovisionDialogOpen}
                     onClose={() => setUnprovisionDialogOpen(false)}
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
+                    checkboxes={unprovisionCheckboxes}
+                    setCheckboxes={setUnprovisionCheckboxes}
                     disabled={false}
                 />
 

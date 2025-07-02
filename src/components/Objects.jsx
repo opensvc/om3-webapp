@@ -30,6 +30,7 @@ import {
     useMediaQuery,
     useTheme,
     Tooltip,
+    IconButton,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -45,6 +46,7 @@ import {
     Stop,
     PlayArrow,
 } from "@mui/icons-material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -101,6 +103,8 @@ const Objects = () => {
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+    const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
     const [selectedKind, setSelectedKind] = useState(rawKind);
     const [selectedGlobalState, setSelectedGlobalState] = useState(
@@ -270,8 +274,21 @@ const Objects = () => {
         setActionsMenuAnchor(null);
     };
 
-    const handleActionClick = (action) => {
+    const handleRowMenuOpen = (event, objectName) => {
+        setRowMenuAnchor(event.currentTarget);
+        setCurrentObject(objectName);
+    };
+
+    const handleRowMenuClose = () => {
+        setRowMenuAnchor(null);
+        setCurrentObject(null);
+    };
+
+    const handleActionClick = (action, isSingleObject = false, objectName = null) => {
         setPendingAction(action);
+        if (isSingleObject && objectName) {
+            setSelectedObjects([objectName]);
+        }
         if (action === "freeze") {
             setConfirmationChecked(false);
             setConfirmationDialogOpen(true);
@@ -307,7 +324,11 @@ const Objects = () => {
         } else {
             setSimpleConfirmDialogOpen(true);
         }
-        handleActionsMenuClose();
+        if (isSingleObject) {
+            handleRowMenuClose();
+        } else {
+            handleActionsMenuClose();
+        }
     };
 
     const handleExecuteActionOnSelected = async (action) => {
@@ -595,11 +616,21 @@ const Objects = () => {
                                             <strong>{node}</strong>
                                         </TableCell>
                                     ))}
+                                <TableCell>
+                                    <strong>Actions</strong>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect} = getObjectStatus(objectName);
+                                const isFrozen = frozen === "frozen";
+                                const filteredActions = AVAILABLE_ACTIONS.filter(
+                                    ({name}) =>
+                                        isActionAllowedForSelection(name, [objectName]) &&
+                                        (name !== "freeze" || !isFrozen) &&
+                                        (name !== "unfreeze" || isFrozen)
+                                );
                                 return (
                                     <TableRow
                                         key={objectName}
@@ -728,6 +759,37 @@ const Objects = () => {
                                                     </TableCell>
                                                 );
                                             })}
+                                        <TableCell>
+                                            <IconButton
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRowMenuOpen(e, objectName);
+                                                }}
+                                                aria-label={`More actions for object ${objectName}`}
+                                            >
+                                                <MoreVertIcon/>
+                                            </IconButton>
+                                            <Menu
+                                                anchorEl={rowMenuAnchor}
+                                                open={Boolean(rowMenuAnchor) && currentObject === objectName}
+                                                onClose={handleRowMenuClose}
+                                            >
+                                                {filteredActions.map(({name, icon}) => (
+                                                    <MenuItem
+                                                        key={name}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleActionClick(name, true, objectName);
+                                                        }}
+                                                        sx={{display: "flex", alignItems: "center", gap: 1}}
+                                                        aria-label={`${name} action for object ${objectName}`}
+                                                    >
+                                                        <ListItemIcon>{icon}</ListItemIcon>
+                                                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                                                    </MenuItem>
+                                                ))}
+                                            </Menu>
+                                        </TableCell>
                                     </TableRow>
                                 );
                             })}

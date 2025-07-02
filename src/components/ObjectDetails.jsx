@@ -52,7 +52,8 @@ import {
     PurgeDialog,
     SimpleConfirmDialog,
     SwitchDialog,
-    GivebackDialog, // Added import
+    GivebackDialog,
+    DeleteDialog,
 } from "../components/ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 import HeaderSection from "./HeaderSection";
@@ -124,12 +125,17 @@ const ObjectDetail = () => {
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+    const [deleteDialogOpen2, setDeleteDialogOpen2] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
     const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
     const [unprovisionChecked, setUnprovisionChecked] = useState(false);
+    const [deleteCheckboxes, setDeleteCheckboxes] = useState({
+        configLoss: false,
+        clusterwide: false,
+    });
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
@@ -745,6 +751,12 @@ const ObjectDetail = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen2(true);
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
@@ -776,6 +788,12 @@ const ObjectDetail = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen2(true);
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
@@ -796,7 +814,15 @@ const ObjectDetail = () => {
     const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
     const handleBatchResourceActionClick = (action) => {
         setPendingAction({action, batch: "resources", node: resGroupNode});
-        setSimpleDialogOpen(true);
+        if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen2(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
         handleResourcesActionsClose();
     };
 
@@ -809,7 +835,15 @@ const ObjectDetail = () => {
     const handleResourceMenuClose = () => setResourceMenuAnchor(null);
     const handleResourceActionClick = (action) => {
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
-        setSimpleDialogOpen(true);
+        if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen2(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
         handleResourceMenuClose();
     };
 
@@ -875,6 +909,10 @@ const ObjectDetail = () => {
         setCheckboxes({failover: false});
         setStopCheckbox(false);
         setUnprovisionChecked(false);
+        setDeleteCheckboxes({
+            configLoss: false,
+            clusterwide: false,
+        });
         setPurgeCheckboxes({
             dataLoss: false,
             configLoss: false,
@@ -886,6 +924,7 @@ const ObjectDetail = () => {
         setStopDialogOpen(false);
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
+        setDeleteDialogOpen2(false);
         setSimpleDialogOpen(false);
         setSwitchDialogOpen(false);
         setGivebackDialogOpen(false);
@@ -1036,11 +1075,13 @@ const ObjectDetail = () => {
                     setStopDialogOpen={setStopDialogOpen}
                     setUnprovisionDialogOpen={setUnprovisionDialogOpen}
                     setPurgeDialogOpen={setPurgeDialogOpen}
+                    setDeleteDialogOpen={setDeleteDialogOpen2}
                     setSimpleDialogOpen={setSimpleDialogOpen}
                     setCheckboxes={setCheckboxes}
                     setStopCheckbox={setStopCheckbox}
                     setUnprovisionChecked={setUnprovisionChecked}
                     setPurgeCheckboxes={setPurgeCheckboxes}
+                    setDeleteCheckboxes={setDeleteCheckboxes}
                     setSwitchDialogOpen={setSwitchDialogOpen}
                     setSwitchCheckbox={setSwitchCheckbox}
                     setGivebackDialogOpen={setGivebackDialogOpen}
@@ -1410,11 +1451,13 @@ section2"
                             setStopDialogOpen={setStopDialogOpen}
                             setUnprovisionDialogOpen={setUnprovisionDialogOpen}
                             setPurgeDialogOpen={setPurgeDialogOpen}
+                            setDeleteDialogOpen={setDeleteDialogOpen2}
                             setSimpleDialogOpen={setSimpleDialogOpen}
                             setCheckboxes={setCheckboxes}
                             setStopCheckbox={setStopCheckbox}
                             setUnprovisionChecked={setUnprovisionChecked}
                             setPurgeCheckboxes={setPurgeCheckboxes}
+                            setDeleteCheckboxes={setDeleteCheckboxes}
                             parseProvisionedState={parseProvisionedState}
                         />
                     );
@@ -1511,6 +1554,15 @@ section2"
                     onConfirm={handleDialogConfirm}
                     checkboxes={purgeCheckboxes}
                     setCheckboxes={setPurgeCheckboxes}
+                    disabled={actionInProgress}
+                />
+
+                <DeleteDialog
+                    open={deleteDialogOpen2}
+                    onClose={() => setDeleteDialogOpen2(false)}
+                    onConfirm={handleDialogConfirm}
+                    checkboxes={deleteCheckboxes}
+                    setCheckboxes={setDeleteCheckboxes}
                     disabled={actionInProgress}
                 />
 

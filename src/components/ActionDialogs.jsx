@@ -176,6 +176,53 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
     </Dialog>
 );
 
+// Dialog for the "delete" action
+export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checkboxes.configLoss}
+                        onChange={(e) =>
+                            setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
+                        }
+                        aria-label="Confirm configuration loss"
+                    />
+                }
+                label="I understand the configuration will be lost."
+            />
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checkboxes.clusterwide}
+                        onChange={(e) =>
+                            setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
+                        }
+                        aria-label="Confirm clusterwide orchestration"
+                    />
+                }
+                label="I understand this action will be orchestrated clusterwide."
+            />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="error"
+                disabled={!checkboxes.configLoss || !checkboxes.clusterwide || disabled}
+                onClick={onConfirm}
+                aria-label="Confirm delete action"
+            >
+                Delete
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
 // Dialog for the "switch" action
 export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>

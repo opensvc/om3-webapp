@@ -59,6 +59,7 @@ import {
     StopDialog,
     UnprovisionDialog,
     PurgeDialog,
+    DeleteDialog,
     SimpleConfirmDialog,
     SwitchDialog,
     GivebackDialog,
@@ -114,10 +115,15 @@ const Objects = () => {
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
     const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
+    const [deleteCheckboxes, setDeleteCheckboxes] = useState({
+        configLoss: false,
+        clusterwide: false,
+    });
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
@@ -277,6 +283,12 @@ const Objects = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen(true);
         } else if (action === "switch") {
             setSwitchCheckbox(false);
             setSwitchDialogOpen(true);
@@ -307,17 +319,14 @@ const Objects = () => {
             let name, kind, namespace;
 
             if (parts.length === 3) {
-                // Format: namespace/kind/name
                 namespace = parts[0];
                 kind = parts[1];
                 name = parts[2];
             } else if (parts.length === 2) {
-                // Format: kind/name (namespace = root)
                 namespace = "root";
                 kind = parts[0];
                 name = parts[1];
             } else {
-                // Format: name
                 namespace = "root";
                 name = parts[0];
                 kind = name === "cluster" ? "ccfg" : "svc";
@@ -368,10 +377,15 @@ const Objects = () => {
         setStopDialogOpen(false);
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
+        setDeleteDialogOpen(false);
         setPurgeCheckboxes({
             dataLoss: false,
             configLoss: false,
             serviceInterruption: false,
+        });
+        setDeleteCheckboxes({
+            configLoss: false,
+            clusterwide: false,
         });
         setSimpleConfirmDialogOpen(false);
         setSwitchDialogOpen(false);
@@ -754,6 +768,15 @@ const Objects = () => {
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
                     checkboxes={purgeCheckboxes}
                     setCheckboxes={setPurgeCheckboxes}
+                    disabled={false}
+                />
+
+                <DeleteDialog
+                    open={deleteDialogOpen}
+                    onClose={() => setDeleteDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checkboxes={deleteCheckboxes}
+                    setCheckboxes={setDeleteCheckboxes}
                     disabled={false}
                 />
 

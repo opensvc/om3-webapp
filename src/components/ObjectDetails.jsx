@@ -131,7 +131,10 @@ const ObjectDetail = () => {
     const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
-    const [unprovisionChecked, setUnprovisionChecked] = useState(false);
+    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
+        dataLoss: false,
+        serviceInterruption: false,
+    });
     const [deleteCheckboxes, setDeleteCheckboxes] = useState({
         configLoss: false,
         clusterwide: false,
@@ -742,7 +745,10 @@ const ObjectDetail = () => {
             setStopCheckbox(false);
             setStopDialogOpen(true);
         } else if (action === "unprovision") {
-            setUnprovisionChecked(false);
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
             setUnprovisionDialogOpen(true);
         } else if (action === "purge") {
             setPurgeCheckboxes({
@@ -779,7 +785,10 @@ const ObjectDetail = () => {
             setStopCheckbox(false);
             setStopDialogOpen(true);
         } else if (action === "unprovision") {
-            setUnprovisionChecked(false);
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
             setUnprovisionDialogOpen(true);
         } else if (action === "purge") {
             setPurgeCheckboxes({
@@ -847,6 +856,47 @@ const ObjectDetail = () => {
         handleResourceMenuClose();
     };
 
+    // Object action handler
+    const handleObjectActionClick = (action) => {
+        setPendingAction({action});
+        if (action === "freeze") {
+            setCheckboxes({failover: false});
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(false);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                clusterwide: false,
+                serviceInterruption: false,
+            });
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes({
+                dataLoss: false,
+                configLoss: false,
+                serviceInterruption: false,
+            });
+            setPurgeDialogOpen(true);
+        } else if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen2(true);
+        } else if (action === "switch") {
+            setSwitchCheckbox(false);
+            setSwitchDialogOpen(true);
+        } else if (action === "giveback") {
+            setGivebackCheckbox(false);
+            setGivebackDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
+        setObjectMenuAnchor(null);
+    };
+
     // Accordion expansion handlers
     const handleAccordionChange = (panel) => (event, isExpanded) => {
         setExpandedResources((prev) => ({
@@ -908,7 +958,10 @@ const ObjectDetail = () => {
         setPendingAction(null);
         setCheckboxes({failover: false});
         setStopCheckbox(false);
-        setUnprovisionChecked(false);
+        setUnprovisionCheckboxes({
+            dataLoss: false,
+            serviceInterruption: false,
+        });
         setDeleteCheckboxes({
             configLoss: false,
             clusterwide: false,
@@ -1079,7 +1132,7 @@ const ObjectDetail = () => {
                     setSimpleDialogOpen={setSimpleDialogOpen}
                     setCheckboxes={setCheckboxes}
                     setStopCheckbox={setStopCheckbox}
-                    setUnprovisionChecked={setUnprovisionChecked}
+                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
                     setPurgeCheckboxes={setPurgeCheckboxes}
                     setDeleteCheckboxes={setDeleteCheckboxes}
                     setSwitchDialogOpen={setSwitchDialogOpen}
@@ -1088,6 +1141,7 @@ const ObjectDetail = () => {
                     setGivebackCheckbox={setGivebackCheckbox}
                     getObjectStatus={getObjectStatus}
                     getColor={getColor}
+                    handleObjectActionClick={handleObjectActionClick}
                 />
 
                 <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
@@ -1455,7 +1509,7 @@ section2"
                             setSimpleDialogOpen={setSimpleDialogOpen}
                             setCheckboxes={setCheckboxes}
                             setStopCheckbox={setStopCheckbox}
-                            setUnprovisionChecked={setUnprovisionChecked}
+                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
                             setPurgeCheckboxes={setPurgeCheckboxes}
                             setDeleteCheckboxes={setDeleteCheckboxes}
                             parseProvisionedState={parseProvisionedState}
@@ -1543,9 +1597,10 @@ section2"
                     open={unprovisionDialogOpen}
                     onClose={() => setUnprovisionDialogOpen(false)}
                     onConfirm={handleDialogConfirm}
-                    checked={unprovisionChecked}
-                    setChecked={setUnprovisionChecked}
+                    checkboxes={unprovisionCheckboxes}
+                    setCheckboxes={setUnprovisionCheckboxes}
                     disabled={actionInProgress}
+                    pendingAction={pendingAction}
                 />
 
                 <PurgeDialog

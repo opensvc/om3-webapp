@@ -47,7 +47,7 @@ const NodeCard = ({
                       setSimpleDialogOpen = () => console.warn("setSimpleDialogOpen not provided"),
                       setCheckboxes = () => console.warn("setCheckboxes not provided"),
                       setStopCheckbox = () => console.warn("setStopCheckbox not provided"),
-                      setUnprovisionChecked = () => console.warn("setUnprovisionChecked not provided"),
+                      setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
                       setPurgeCheckboxes = () => console.warn("setPurgeCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
@@ -85,7 +85,7 @@ const NodeCard = ({
             setSimpleDialogOpen,
             setCheckboxes,
             setStopCheckbox,
-            setUnprovisionChecked,
+            setUnprovisionCheckboxes,
             setPurgeCheckboxes,
             setSelectedResourcesByNode,
             parseProvisionedState,
@@ -134,7 +134,10 @@ const NodeCard = ({
             setStopCheckbox(false);
             setStopDialogOpen(true);
         } else if (action === "unprovision") {
-            setUnprovisionChecked(false);
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
             setUnprovisionDialogOpen(true);
         } else if (action === "purge") {
             setPurgeCheckboxes({

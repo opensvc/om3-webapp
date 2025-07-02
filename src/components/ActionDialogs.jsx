@@ -77,37 +77,77 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
 );
 
 // Dialog for the "unprovision" action
-export const UnprovisionDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Unprovision</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm data loss"
+export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction}) => {
+    const isNodeAction = pendingAction?.node || pendingAction?.batch === 'nodes';
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle>Confirm Unprovision</DialogTitle>
+            <DialogContent>
+                <FormControlLabel
+                    control={
+                        <Checkbox
+                            checked={checkboxes.dataLoss}
+                            onChange={(e) =>
+                                setCheckboxes((prev) => ({...prev, dataLoss: e.target.checked}))
+                            }
+                            aria-label="Confirm data loss"
+                        />
+                    }
+                    label="I understand data will be lost."
+                />
+                {!isNodeAction && (
+                    <FormControlLabel
+                        control={
+                            <Checkbox
+                                checked={checkboxes.clusterwide}
+                                onChange={(e) =>
+                                    setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
+                                }
+                                aria-label="Confirm clusterwide orchestration"
+                            />
+                        }
+                        label="I understand this action will be orchestrated clusterwide."
                     />
-                }
-                label="I understand that data will be lost."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="error"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm unprovision action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
-);
+                )}
+                <FormControlLabel
+                    control={
+                        <Checkbox
+                            checked={checkboxes.serviceInterruption}
+                            onChange={(e) =>
+                                setCheckboxes((prev) => ({
+                                    ...prev,
+                                    serviceInterruption: e.target.checked,
+                                }))
+                            }
+                            aria-label="Confirm service interruption"
+                        />
+                    }
+                    label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
+                />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={disabled}>
+                    Cancel
+                </Button>
+                <Button
+                    variant="contained"
+                    color="error"
+                    disabled={
+                        !checkboxes.dataLoss ||
+                        !checkboxes.serviceInterruption ||
+                        (!isNodeAction && !checkboxes.clusterwide) ||
+                        disabled
+                    }
+                    onClick={onConfirm}
+                    aria-label="Confirm unprovision action"
+                >
+                    Confirm
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
 
 // Dialog for the "purge" action
 export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (

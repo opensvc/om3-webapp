@@ -598,10 +598,13 @@ describe('Objects Component', () => {
         fireEvent.click(screen.getByText(/Unprovision/i));
 
         await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByRole('dialog', {name: /Confirm Unprovision/i})).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByLabelText(/I understand that data will be lost/i));
+        // Check all three required checkboxes for object unprovision
+        fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
+        fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+        fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         expect(confirmButton).not.toBeDisabled();

@@ -32,7 +32,7 @@ const HeaderSection = ({
                            setSimpleDialogOpen,
                            setCheckboxes,
                            setStopCheckbox,
-                           setUnprovisionChecked,
+                           setUnprovisionCheckboxes,
                            setPurgeCheckboxes,
                            setDeleteCheckboxes,
                            setSwitchDialogOpen,
@@ -103,7 +103,11 @@ const HeaderSection = ({
                                             setStopCheckbox(false);
                                             setStopDialogOpen(true);
                                         } else if (name === 'unprovision') {
-                                            setUnprovisionChecked(false);
+                                            setUnprovisionCheckboxes({
+                                                dataLoss: false,
+                                                clusterwide: false,
+                                                serviceInterruption: false,
+                                            });
                                             setUnprovisionDialogOpen(true);
                                         } else if (name === 'purge') {
                                             setPurgeCheckboxes({

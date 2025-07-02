@@ -1021,7 +1021,7 @@ const ObjectDetail = () => {
         }
 
         return () => {
-            console.log(`🛑 Closing EventSource for object: ${decodedObjectName}`);
+            console.log(`Closing EventSource for object: ${decodedObjectName}`);
             closeEventSource();
         };
     }, [decodedObjectName]);

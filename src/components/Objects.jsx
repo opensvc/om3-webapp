@@ -69,7 +69,6 @@ import {
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
 
-
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -760,6 +759,7 @@ const Objects = () => {
                                                 anchorEl={rowMenuAnchor}
                                                 open={Boolean(rowMenuAnchor) && currentObject === objectName}
                                                 onClose={handleRowMenuClose}
+                                                onClick={(e) => e.stopPropagation()}
                                             >
                                                 {filteredActions.map(({name, icon}) => (
                                                     <MenuItem

@@ -43,7 +43,7 @@ export const createEventSource = (url, token) => {
     }
 
     if (currentEventSource) {
-        console.log('🛑 Closing existing EventSource');
+        console.log('Closing existing EventSource');
         currentEventSource.close();
     }
 
@@ -272,7 +272,7 @@ export const createEventSource = (url, token) => {
 
 export const closeEventSource = () => {
     if (currentEventSource) {
-        console.log('🛑 Closing current EventSource');
+        console.log('Closing current EventSource');
         currentEventSource.close();
         currentEventSource = null;
     }

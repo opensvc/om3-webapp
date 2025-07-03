@@ -30,6 +30,7 @@ import {
     useMediaQuery,
     useTheme,
     Tooltip,
+    IconButton,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -45,6 +46,7 @@ import {
     Stop,
     PlayArrow,
 } from "@mui/icons-material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -59,24 +61,13 @@ import {
     StopDialog,
     UnprovisionDialog,
     PurgeDialog,
+    DeleteDialog,
     SimpleConfirmDialog,
+    SwitchDialog,
+    GivebackDialog,
 } from "./ActionDialogs";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
-
-const AVAILABLE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt/>},
-    {name: "freeze", icon: <AcUnit/>},
-    {name: "unfreeze", icon: <LockOpen/>},
-    {name: "delete", icon: <Delete/>},
-    {name: "provision", icon: <Settings/>},
-    {name: "unprovision", icon: <Block/>},
-    {name: "purge", icon: <CleaningServices/>},
-    {name: "switch", icon: <SwapHoriz/>},
-    {name: "giveback", icon: <Undo/>},
-    {name: "abort", icon: <Cancel/>},
-];
+import {OBJECT_ACTIONS} from "../constants/actions";
 
 const Objects = () => {
     const location = useLocation();
@@ -92,14 +83,14 @@ const Objects = () => {
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore(
-        (state) => state.objectInstanceStatus
-    );
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+    const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
     const [selectedKind, setSelectedKind] = useState(rawKind);
     const [selectedGlobalState, setSelectedGlobalState] = useState(
@@ -114,13 +105,27 @@ const Objects = () => {
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
+    const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
+    const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [confirmationChecked, setConfirmationChecked] = useState(false);
+    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
+        dataLoss: false,
+        clusterwide: false,
+        serviceInterruption: false,
+    });
+    const [deleteCheckboxes, setDeleteCheckboxes] = useState({
+        configLoss: false,
+        clusterwide: false,
+    });
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
         serviceInterruption: false,
     });
+    const [switchCheckbox, setSwitchCheckbox] = useState(false);
+    const [givebackCheckbox, setGivebackCheckbox] = useState(false);
     const [pendingAction, setPendingAction] = useState("");
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
@@ -228,10 +233,10 @@ const Objects = () => {
         const token = localStorage.getItem("authToken");
         if (token) {
             startEventReception(token, [
-                'ObjectStatusUpdated',
-                'InstanceStatusUpdated',
-                'ObjectDeleted',
-                'InstanceMonitorUpdated',
+                "ObjectStatusUpdated",
+                "InstanceStatusUpdated",
+                "ObjectDeleted",
+                "InstanceMonitorUpdated",
             ]);
         }
         return () => {
@@ -255,8 +260,21 @@ const Objects = () => {
         setActionsMenuAnchor(null);
     };
 
-    const handleActionClick = (action) => {
+    const handleRowMenuOpen = (event, objectName) => {
+        setRowMenuAnchor(event.currentTarget);
+        setCurrentObject(objectName);
+    };
+
+    const handleRowMenuClose = () => {
+        setRowMenuAnchor(null);
+        setCurrentObject(null);
+    };
+
+    const handleActionClick = (action, isSingleObject = false, objectName = null) => {
         setPendingAction(action);
+        if (isSingleObject && objectName) {
+            setSelectedObjects([objectName]);
+        }
         if (action === "freeze") {
             setConfirmationChecked(false);
             setConfirmationDialogOpen(true);
@@ -264,7 +282,11 @@ const Objects = () => {
             setConfirmationChecked(false);
             setStopDialogOpen(true);
         } else if (action === "unprovision") {
-            setConfirmationChecked(false);
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                clusterwide: false,
+                serviceInterruption: false,
+            });
             setUnprovisionDialogOpen(true);
         } else if (action === "purge") {
             setPurgeCheckboxes({
@@ -273,10 +295,26 @@ const Objects = () => {
                 serviceInterruption: false,
             });
             setPurgeDialogOpen(true);
+        } else if (action === "delete") {
+            setDeleteCheckboxes({
+                configLoss: false,
+                clusterwide: false,
+            });
+            setDeleteDialogOpen(true);
+        } else if (action === "switch") {
+            setSwitchCheckbox(false);
+            setSwitchDialogOpen(true);
+        } else if (action === "giveback") {
+            setGivebackCheckbox(false);
+            setGivebackDialogOpen(true);
         } else {
             setSimpleConfirmDialogOpen(true);
         }
-        handleActionsMenuClose();
+        if (isSingleObject) {
+            handleRowMenuClose();
+        } else {
+            handleActionsMenuClose();
+        }
     };
 
     const handleExecuteActionOnSelected = async (action) => {
@@ -297,17 +335,14 @@ const Objects = () => {
             let name, kind, namespace;
 
             if (parts.length === 3) {
-                // Format: namespace/kind/name
                 namespace = parts[0];
                 kind = parts[1];
                 name = parts[2];
             } else if (parts.length === 2) {
-                // Format: kind/name (namespace = root)
                 namespace = "root";
                 kind = parts[0];
                 name = parts[1];
             } else {
-                // Format: name
                 namespace = "root";
                 name = parts[0];
                 kind = name === "cluster" ? "ccfg" : "svc";
@@ -358,13 +393,26 @@ const Objects = () => {
         setStopDialogOpen(false);
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
+        setDeleteDialogOpen(false);
+        setUnprovisionCheckboxes({
+            dataLoss: false,
+            clusterwide: false,
+            serviceInterruption: false,
+        });
         setPurgeCheckboxes({
             dataLoss: false,
             configLoss: false,
             serviceInterruption: false,
         });
+        setDeleteCheckboxes({
+            configLoss: false,
+            clusterwide: false,
+        });
         setSimpleConfirmDialogOpen(false);
-        setConfirmationChecked(false);
+        setSwitchDialogOpen(false);
+        setSwitchCheckbox(false);
+        setGivebackDialogOpen(false);
+        setGivebackCheckbox(false);
     };
 
     const handleObjectClick = (objectName) => {
@@ -504,7 +552,7 @@ const Objects = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        {AVAILABLE_ACTIONS.map(({name, icon}) => {
+                        {OBJECT_ACTIONS.map(({name, icon}) => {
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (
                                 <MenuItem
@@ -512,13 +560,13 @@ const Objects = () => {
                                     onClick={() => handleActionClick(name)}
                                     disabled={!isAllowed}
                                     sx={{
-                                        color: isAllowed ? 'inherit' : 'text.disabled',
-                                        '&.Mui-disabled': {
-                                            opacity: 0.5
-                                        }
+                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        "&.Mui-disabled": {
+                                            opacity: 0.5,
+                                        },
                                     }}
                                 >
-                                    <ListItemIcon sx={{color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
                                         {icon}
                                     </ListItemIcon>
                                     <ListItemText>
@@ -536,13 +584,9 @@ const Objects = () => {
                             <TableRow>
                                 <TableCell>
                                     <Checkbox
-                                        checked={
-                                            selectedObjects.length === filteredObjectNames.length
-                                        }
+                                        checked={selectedObjects.length === filteredObjectNames.length}
                                         onChange={(e) =>
-                                            setSelectedObjects(
-                                                e.target.checked ? filteredObjectNames : []
-                                            )
+                                            setSelectedObjects(e.target.checked ? filteredObjectNames : [])
                                         }
                                     />
                                 </TableCell>
@@ -558,11 +602,21 @@ const Objects = () => {
                                             <strong>{node}</strong>
                                         </TableCell>
                                     ))}
+                                <TableCell>
+                                    <strong>Actions</strong>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect} = getObjectStatus(objectName);
+                                const isFrozen = frozen === "frozen";
+                                const filteredActions = OBJECT_ACTIONS.filter(
+                                    ({name}) =>
+                                        isActionAllowedForSelection(name, [objectName]) &&
+                                        (name !== "freeze" || !isFrozen) &&
+                                        (name !== "unfreeze" || isFrozen)
+                                );
                                 return (
                                     <TableRow
                                         key={objectName}
@@ -630,11 +684,8 @@ const Objects = () => {
                                         </TableCell>
                                         {isWideScreen &&
                                             allNodes.map((node) => {
-                                                const {
-                                                    avail: nodeAvail,
-                                                    frozen: nodeFrozen,
-                                                    state: nodeState,
-                                                } = getNodeState(objectName, node);
+                                                const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState} =
+                                                    getNodeState(objectName, node);
                                                 return (
                                                     <TableCell key={node} align="center">
                                                         <Box
@@ -694,6 +745,38 @@ const Objects = () => {
                                                     </TableCell>
                                                 );
                                             })}
+                                        <TableCell>
+                                            <IconButton
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRowMenuOpen(e, objectName);
+                                                }}
+                                                aria-label={`More actions for object ${objectName}`}
+                                            >
+                                                <MoreVertIcon/>
+                                            </IconButton>
+                                            <Menu
+                                                anchorEl={rowMenuAnchor}
+                                                open={Boolean(rowMenuAnchor) && currentObject === objectName}
+                                                onClose={handleRowMenuClose}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                {filteredActions.map(({name, icon}) => (
+                                                    <MenuItem
+                                                        key={name}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleActionClick(name, true, objectName);
+                                                        }}
+                                                        sx={{display: "flex", alignItems: "center", gap: 1}}
+                                                        aria-label={`${name} action for object ${objectName}`}
+                                                    >
+                                                        <ListItemIcon>{icon}</ListItemIcon>
+                                                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                                                    </MenuItem>
+                                                ))}
+                                            </Menu>
+                                        </TableCell>
                                     </TableRow>
                                 );
                             })}
@@ -737,8 +820,8 @@ const Objects = () => {
                     open={unprovisionDialogOpen}
                     onClose={() => setUnprovisionDialogOpen(false)}
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
+                    checkboxes={unprovisionCheckboxes}
+                    setCheckboxes={setUnprovisionCheckboxes}
                     disabled={false}
                 />
 
@@ -748,6 +831,33 @@ const Objects = () => {
                     onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
                     checkboxes={purgeCheckboxes}
                     setCheckboxes={setPurgeCheckboxes}
+                    disabled={false}
+                />
+
+                <DeleteDialog
+                    open={deleteDialogOpen}
+                    onClose={() => setDeleteDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checkboxes={deleteCheckboxes}
+                    setCheckboxes={setDeleteCheckboxes}
+                    disabled={false}
+                />
+
+                <SwitchDialog
+                    open={switchDialogOpen}
+                    onClose={() => setSwitchDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checked={switchCheckbox}
+                    setChecked={setSwitchCheckbox}
+                    disabled={false}
+                />
+
+                <GivebackDialog
+                    open={givebackDialogOpen}
+                    onClose={() => setGivebackDialogOpen(false)}
+                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
+                    checked={givebackCheckbox}
+                    setChecked={setGivebackCheckbox}
                     disabled={false}
                 />
 

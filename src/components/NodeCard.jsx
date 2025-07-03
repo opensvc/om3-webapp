@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from "react";
+import React, {useEffect, useState} from "react";
 import {
     Box,
     Typography,
@@ -33,6 +33,7 @@ const NodeCard = ({
                       setCurrentNode = () => console.warn("setCurrentNode not provided"),
                       handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
                       handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
+                      individualNodeMenuAnchor = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
                       expandedResources = {},
@@ -59,6 +60,7 @@ const NodeCard = ({
         setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
         toggleResource: typeof toggleResource,
         parseProvisionedState: typeof parseProvisionedState,
+        individualNodeMenuAnchor,
         props: Object.keys({
             node,
             nodeData,
@@ -71,6 +73,7 @@ const NodeCard = ({
             setCurrentNode,
             handleResourcesActionsOpen,
             handleResourceMenuOpen,
+            individualNodeMenuAnchor,
             expandedNodeResources,
             handleNodeResourcesAccordionChange,
             expandedResources,
@@ -93,7 +96,6 @@ const NodeCard = ({
     });
 
     // Local state for menus
-    const [localIndividualNodeMenuAnchor, setLocalIndividualNodeMenuAnchor] = useState(null);
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
@@ -149,7 +151,7 @@ const NodeCard = ({
         } else {
             setSimpleDialogOpen(true);
         }
-        setLocalIndividualNodeMenuAnchor(null);
+        setIndividualNodeMenuAnchor(null);
     };
 
     // Handler for batch resource actions
@@ -225,8 +227,8 @@ const NodeCard = ({
                         {state && <Typography variant="caption">{state}</Typography>}
                         <IconButton
                             onClick={(e) => {
+                                e.stopPropagation();
                                 setCurrentNode(node);
-                                setLocalIndividualNodeMenuAnchor(e.currentTarget);
                                 setIndividualNodeMenuAnchor(e.currentTarget);
                             }}
                             disabled={actionInProgress}
@@ -434,17 +436,18 @@ const NodeCard = ({
 
             {/* Menu for node actions */}
             <Menu
-                anchorEl={localIndividualNodeMenuAnchor}
-                open={Boolean(localIndividualNodeMenuAnchor)}
-                onClose={() => {
-                    setLocalIndividualNodeMenuAnchor(null);
-                    setIndividualNodeMenuAnchor(null);
-                }}
+                anchorEl={individualNodeMenuAnchor}
+                open={Boolean(individualNodeMenuAnchor)}
+                onClose={() => setIndividualNodeMenuAnchor(null)}
+                onClick={(e) => e.stopPropagation()}
             >
                 {INSTANCE_ACTIONS.map(({name, icon}) => (
                     <MenuItem
                         key={name}
-                        onClick={() => handleIndividualNodeActionClick(name)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleIndividualNodeActionClick(name);
+                        }}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -457,11 +460,15 @@ const NodeCard = ({
                 anchorEl={resourcesActionsAnchor}
                 open={Boolean(resourcesActionsAnchor)}
                 onClose={() => setResourcesActionsAnchor(null)}
+                onClick={(e) => e.stopPropagation()}
             >
                 {RESOURCE_ACTIONS.map(({name, icon}) => (
                     <MenuItem
                         key={name}
-                        onClick={() => handleBatchResourceActionClick(name)}
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent click propagation
+                            handleBatchResourceActionClick(name);
+                        }}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -474,11 +481,15 @@ const NodeCard = ({
                 anchorEl={resourceMenuAnchor}
                 open={Boolean(resourceMenuAnchor)}
                 onClose={() => setResourceMenuAnchor(null)}
+                onClick={(e) => e.stopPropagation()}
             >
                 {RESOURCE_ACTIONS.map(({name, icon}) => (
                     <MenuItem
                         key={name}
-                        onClick={() => handleResourceActionClick(name)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleResourceActionClick(name);
+                        }}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>

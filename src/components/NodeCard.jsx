@@ -19,7 +19,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {green, red, orange, grey, blue} from "@mui/material/colors";
-import {NODE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const NodeCard = ({
                       node,
@@ -441,7 +441,7 @@ const NodeCard = ({
                     setIndividualNodeMenuAnchor(null);
                 }}
             >
-                {NODE_ACTIONS.map(({name, icon}) => (
+                {INSTANCE_ACTIONS.map(({name, icon}) => (
                     <MenuItem
                         key={name}
                         onClick={() => handleIndividualNodeActionClick(name)}

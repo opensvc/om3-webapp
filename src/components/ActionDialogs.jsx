@@ -76,6 +76,105 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
     </Dialog>
 );
 
+// Dialog for the "restart" action
+export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Restart</DialogTitle>
+        <DialogContent sx={{padding: 3}}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checked}
+                        onChange={(e) => setChecked(e.target.checked)}
+                        aria-label="Confirm service interruption"
+                    />
+                }
+                label="I understand that this may interrupt services."
+            />
+        </DialogContent>
+        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
+            <Button onClick={onClose} disabled={disabled} variant="outlined">
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="error"
+                disabled={!checked || disabled}
+                onClick={onConfirm}
+                aria-label="Confirm restart action"
+            >
+                Restart
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "clear" action
+export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Clear</DialogTitle>
+        <DialogContent sx={{padding: 3}}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checked}
+                        onChange={(e) => setChecked(e.target.checked)}
+                        aria-label="Confirm clear action"
+                    />
+                }
+                label="I understand that this will clear node status and logs."
+            />
+        </DialogContent>
+        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
+            <Button onClick={onClose} disabled={disabled} variant="outlined">
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                disabled={!checked || disabled}
+                onClick={onConfirm}
+                aria-label="Confirm clear action"
+            >
+                Confirm
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "drain" action
+export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Drain</DialogTitle>
+        <DialogContent sx={{padding: 3}}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checked}
+                        onChange={(e) => setChecked(e.target.checked)}
+                        aria-label="Confirm service migration"
+                    />
+                }
+                label="I understand that this will migrate services away from the selected nodes."
+            />
+        </DialogContent>
+        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
+            <Button onClick={onClose} disabled={disabled} variant="outlined">
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                disabled={!checked || disabled}
+                onClick={onConfirm}
+                aria-label="Confirm drain action"
+            >
+                Confirm
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
 // Dialog for the "unprovision" action
 export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction}) => {
     const isNodeAction = pendingAction?.node || pendingAction?.batch === 'nodes';

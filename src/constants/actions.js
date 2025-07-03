@@ -1,4 +1,3 @@
-// constants/actions.js
 import {
     PlayArrow,
     Stop,
@@ -13,6 +12,13 @@ import {
     Undo,
     Cancel,
     PlayCircleFilled,
+    WaterDrop,
+    Inventory,
+    Storage,
+    Extension,
+    Archive,
+    Psychology,
+    Description,
 } from "@mui/icons-material";
 
 export const OBJECT_ACTIONS = [
@@ -30,7 +36,7 @@ export const OBJECT_ACTIONS = [
     {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
 ];
 
-export const NODE_ACTIONS = [
+export const INSTANCE_ACTIONS = [
     {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
@@ -46,4 +52,26 @@ export const RESOURCE_ACTIONS = [
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
     {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
+];
+
+export const NODE_ACTIONS = [
+    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
+    {name: "restart daemon", icon: <RestartAlt sx={{fontSize: 24}}/>},
+    {name: "freeze", icon: <AcUnit sx={{fontSize: 24}}/>},
+    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
+    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
+    {name: "clear", icon: <CleaningServices sx={{fontSize: 24}}/>},
+    {name: "drain", icon: <WaterDrop sx={{fontSize: 24}}/>},
+    {name: "asset", icon: <Inventory sx={{fontSize: 24}}/>},
+    {name: "disk", icon: <Storage sx={{fontSize: 24}}/>},
+    {name: "patch", icon: <Extension sx={{fontSize: 24}}/>},
+    {name: "pkg", icon: <Archive sx={{fontSize: 24}}/>},
+    {name: "capabilities", icon: <Psychology sx={{fontSize: 24}}/>},
+    {name: "sysreport", icon: <Description sx={{fontSize: 24}}/>},
+    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
+    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
+    {name: "delete", icon: <Delete sx={{fontSize: 24}}/>},
+    {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
+    {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
 ];

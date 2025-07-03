@@ -67,21 +67,8 @@ import {
     GivebackDialog,
 } from "./ActionDialogs";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
+import {OBJECT_ACTIONS} from "../constants/actions";
 
-const AVAILABLE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt/>},
-    {name: "freeze", icon: <AcUnit/>},
-    {name: "unfreeze", icon: <LockOpen/>},
-    {name: "delete", icon: <Delete/>},
-    {name: "provision", icon: <Settings/>},
-    {name: "unprovision", icon: <Block/>},
-    {name: "purge", icon: <CleaningServices/>},
-    {name: "switch", icon: <SwapHoriz/>},
-    {name: "giveback", icon: <Undo/>},
-    {name: "abort", icon: <Cancel/>},
-];
 
 const Objects = () => {
     const location = useLocation();
@@ -566,7 +553,7 @@ const Objects = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        {AVAILABLE_ACTIONS.map(({name, icon}) => {
+                        {OBJECT_ACTIONS.map(({name, icon}) => {
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (
                                 <MenuItem
@@ -625,7 +612,7 @@ const Objects = () => {
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect} = getObjectStatus(objectName);
                                 const isFrozen = frozen === "frozen";
-                                const filteredActions = AVAILABLE_ACTIONS.filter(
+                                const filteredActions = OBJECT_ACTIONS.filter(
                                     ({name}) =>
                                         isActionAllowedForSelection(name, [objectName]) &&
                                         (name !== "freeze" || !isFrozen) &&

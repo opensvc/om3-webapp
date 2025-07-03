@@ -60,7 +60,7 @@ import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
-import {OBJECT_ACTIONS, NODE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -1522,7 +1522,7 @@ section2"
                     open={Boolean(nodesActionsAnchor)}
                     onClose={handleNodesActionsClose}
                 >
-                    {NODE_ACTIONS.map(({name, icon}) => (
+                    {INSTANCE_ACTIONS.map(({name, icon}) => (
                         <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -1535,7 +1535,7 @@ section2"
                     open={Boolean(individualNodeMenuAnchor)}
                     onClose={() => setIndividualNodeMenuAnchor(null)}
                 >
-                    {NODE_ACTIONS.map(({name, icon}) => (
+                    {INSTANCE_ACTIONS.map(({name, icon}) => (
                         <MenuItem
                             key={name}
                             onClick={() => handleIndividualNodeActionClick(name)}

@@ -34,7 +34,7 @@ describe('AuthChoice Component', () => {
             recreateUserManager: mockRecreateUserManager,
         });
         useAuthInfo.mockReturnValue(null);
-        oidcConfiguration.mockReturnValue({authority: 'mock-authority', client_id: 'mock-client'});
+        oidcConfiguration.mockReturnValue({issuer: 'mock-issuer', client_id: 'mock-client'});
     });
 
     afterEach(() => {
@@ -68,9 +68,9 @@ describe('AuthChoice Component', () => {
         expect(screen.queryByText('Login')).not.toBeInTheDocument();
     });
 
-    test('renders OpenID button when openid.authority is defined', () => {
+    test('renders OpenID button when openid.issuer is defined', () => {
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         renderComponent();
@@ -92,7 +92,7 @@ describe('AuthChoice Component', () => {
 
     test('renders both buttons when both methods are available', () => {
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: ['basic'],
         });
         renderComponent();
@@ -107,7 +107,7 @@ describe('AuthChoice Component', () => {
             signinRedirect: mockSigninRedirect,
         };
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         useOidc.mockReturnValue({
@@ -124,7 +124,7 @@ describe('AuthChoice Component', () => {
 
     test('clicking OpenID button logs message when userManager is null', () => {
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         useOidc.mockReturnValue({
@@ -150,9 +150,9 @@ describe('AuthChoice Component', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
     });
 
-    test('useEffect calls recreateUserManager when authInfo.openid.authority exists and userManager is null', async () => {
+    test('useEffect calls recreateUserManager when authInfo.openid.issuer exists and userManager is null', async () => {
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         useOidc.mockReturnValue({
@@ -163,11 +163,11 @@ describe('AuthChoice Component', () => {
 
         await waitFor(() => {
             expect(mockRecreateUserManager).toHaveBeenCalledWith({
-                authority: 'mock-authority',
+                issuer: 'mock-issuer',
                 client_id: 'mock-client'
             });
             expect(oidcConfiguration).toHaveBeenCalledWith({
-                openid: {authority: 'https://auth.example.com'},
+                openid: {issuer: 'https://auth.example.com'},
                 methods: [],
             });
         })
@@ -179,7 +179,7 @@ describe('AuthChoice Component', () => {
             signinRedirect: mockSigninRedirect,
         };
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         useOidc.mockReturnValue({
@@ -191,7 +191,7 @@ describe('AuthChoice Component', () => {
         expect(mockRecreateUserManager).not.toHaveBeenCalled();
     });
 
-    test('useEffect does not call recreateUserManager when authInfo.openid.authority is undefined', () => {
+    test('useEffect does not call recreateUserManager when authInfo.openid.issuer is undefined', () => {
         useAuthInfo.mockReturnValue({
             openid: null,
             methods: ['basic'],
@@ -211,7 +211,7 @@ describe('AuthChoice Component', () => {
             signinRedirect: mockSigninRedirect,
         };
         useAuthInfo.mockReturnValue({
-            openid: {authority: 'https://auth.example.com'},
+            openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
         useOidc.mockReturnValue({

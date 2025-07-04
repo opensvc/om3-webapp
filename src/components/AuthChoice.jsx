@@ -37,7 +37,7 @@ function AuthChoice() {
     };
 
     useEffect(() => {
-        if (authInfo?.openid?.authority && !userManager) {
+        if (authInfo?.openid?.issuer && !userManager) {
             (async () => {
                 try {
                     const config = await oidcConfiguration(authInfo);
@@ -61,7 +61,7 @@ function AuthChoice() {
                     Please select one of the authentication methods the cluster advertises.
                 </Typography>
                 <Stack spacing={2} mt={2}>
-                    {authInfo?.openid?.authority && (
+                    {authInfo?.openid?.issuer && (
                         <Button
                             variant="contained"
                             color="primary"

@@ -34,13 +34,13 @@ function filterScopes(allowedScopes) {
 
 async function oidcConfiguration(authInfo) {
     let scopesSupported = DEFAULT_SCOPES;
-    if (!authInfo?.openid?.authority) {
-        console.warn("OIDC Configuration fallback: 'authInfo.openid.authority' is missing. Falling back to default configuration.");
+    if (!authInfo?.openid?.issuer) {
+        console.warn("OIDC Configuration fallback: 'authInfo.openid.issuer' is missing. Falling back to default configuration.");
         return initData;
     }
 
     try {
-        const url = new URL(authInfo.openid.authority);
+        const url = new URL(authInfo.openid.issuer);
         if (!url.protocol || !url.host) {
             throw new Error("Malformed URI");
         }
@@ -54,7 +54,7 @@ async function oidcConfiguration(authInfo) {
             console.warn("Failed to fetch .well-known/openid-configuration:", response.status);
         }
     } catch (error) {
-        console.error("Well-formed URL required for openid.authority", error);
+        console.error("Well-formed URL required for openid.issuer", error);
         return initData;
     }
 
@@ -63,7 +63,7 @@ async function oidcConfiguration(authInfo) {
     const finalScope = filterScopes(scopesSupported);
     return {
         ...initData,
-        authority: authInfo.openid.authority,
+        authority: authInfo.openid.issuer,
         client_id: authInfo.openid.client_id,
         scope: finalScope,
         redirect_uri: `${baseUrl}/auth-callback`,

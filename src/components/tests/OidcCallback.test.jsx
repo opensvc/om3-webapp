@@ -68,12 +68,15 @@ describe('OidcCallback Component', () => {
         expect(screen.getByText('Logging ...')).toBeInTheDocument();
     });
 
-    test('calls recreateUserManager when authInfo exists and userManager is null', () => {
+    test('calls recreateUserManager when authInfo exists and userManager is null', async () => {
         useAuthInfo.mockReturnValue(mockAuthInfo);
         render(<OidcCallback/>);
-        expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
-        expect(oidcConfiguration).toHaveBeenCalledWith(mockAuthInfo);
-        expect(console.log).toHaveBeenCalledWith('OidcCallback recreate user manager');
+        await waitFor(() => {
+
+            expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
+            expect(oidcConfiguration).toHaveBeenCalledWith(mockAuthInfo);
+            expect(console.log).toHaveBeenCalledWith('OidcCallback recreate user manager');
+        });
     });
 
     test('does not call recreateUserManager when authInfo is null', () => {
@@ -180,13 +183,16 @@ describe('OidcCallback Component', () => {
     test('re-runs effect when authInfo changes', async () => {
         useAuthInfo.mockReturnValue(mockAuthInfo);
         const {rerender} = render(<OidcCallback/>);
-        expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
-
+        await waitFor(() => {
+            expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
+        })
         useAuthInfo.mockReturnValue({different: 'auth-info'});
         oidcConfiguration.mockReturnValue({different: 'config'});
         rerender(<OidcCallback/>);
 
-        expect(mockRecreateUserManager).toHaveBeenCalledWith({different: 'config'});
+        await waitFor(() => {
+            expect(mockRecreateUserManager).toHaveBeenCalledWith({different: 'config'});
+        })
         expect(oidcConfiguration).toHaveBeenCalledWith({different: 'auth-info'});
     });
 

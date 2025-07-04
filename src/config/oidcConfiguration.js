@@ -40,12 +40,15 @@ async function oidcConfiguration(authInfo) {
     }
 
     try {
-        const url = new URL(authInfo.openid.issuer);
+        let url = new URL(authInfo.openid.issuer);
         if (!url.protocol || !url.host) {
             throw new Error("Malformed URI");
         }
-        const wellKnownUrl = new URL('.well-known/openid-configuration', url);
-        const response = await fetch(wellKnownUrl);
+        if (!url.pathname.endsWith("/")) {
+            url.pathname += "/";
+        }
+        url.pathname += '.well-known/openid-configuration'
+        const response = await fetch(url);
 
         if (response.ok) {
             const wellKnown = await response.json();

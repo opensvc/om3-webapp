@@ -21,8 +21,15 @@ const OidcCallback = () => {
 
     useEffect(() => {
         if (authInfo && !userManager) {
-            console.log("OidcCallback recreate user manager")
-            recreateUserManager(oidcConfiguration(authInfo))
+            (async () => {
+                try {
+                    console.log("OidcCallback recreate user manager")
+                    const config = await oidcConfiguration(authInfo);
+                    recreateUserManager(config);
+                } catch (error) {
+                    console.error("Failed to initialize OIDC config:", error);
+                }
+            })();
         } else if (userManager) {
             console.log("OidcCallback signinRedirectCallback")
             userManager.signinRedirectCallback()

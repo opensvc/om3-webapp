@@ -38,7 +38,14 @@ function AuthChoice() {
 
     useEffect(() => {
         if (authInfo?.openid?.authority && !userManager) {
-            recreateUserManager(oidcConfiguration(authInfo));
+            (async () => {
+                try {
+                    const config = await oidcConfiguration(authInfo);
+                    recreateUserManager(config);
+                } catch (error) {
+                    console.error("Failed to initialize OIDC config:", error);
+                }
+            })();
         }
     }, [authInfo]);
 

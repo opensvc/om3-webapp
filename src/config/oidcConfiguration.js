@@ -1,5 +1,16 @@
 /* eslint-disable no-unused-vars */
 
+const DEFAULT_SCOPES = [
+    "openid",
+    "profile",
+    "email",
+    "offline_access",
+    "opensvc:om3",
+    "opensvc:om3:root",
+    "opensvc:om3:guest",
+    "opensvc:badscope",
+];
+
 const initData = {
     client_id: "om3",
     response_type: "code",
@@ -7,6 +18,19 @@ const initData = {
     automaticSilentRenew: true,
     monitorSession: true,
 };
+
+/**
+ * Filters the DEFAULT_SCOPES based on a list of allowed scopes from the well-known configuration.
+ * @param {string[]} allowedScopes - Scopes allowed from well-known config
+ * @returns {string} space-separated filtered scopes
+ */
+function filterScopes(allowedScopes) {
+    if (!Array.isArray(allowedScopes) || allowedScopes.length === 0) {
+        return DEFAULT_SCOPES.join(" ");
+    }
+
+    return DEFAULT_SCOPES.filter(scope => allowedScopes.includes(scope)).join(" ");
+}
 
 function oidcConfiguration(authInfo) {
     if (!authInfo?.openid?.authority) {
@@ -17,23 +41,26 @@ function oidcConfiguration(authInfo) {
     try {
         const url = new URL(authInfo.openid.authority);
         if (!url.protocol || !url.host) {
-            throw new Error('Malformed URI');
+            throw new Error("Malformed URI");
         }
     } catch (error) {
-        console.error('Well-formed URL required for openid.authority', error);
+        console.error("Well-formed URL required for openid.authority", error);
         return initData;
     }
 
-    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"));
+
+    const scopesAllowed = authInfo.openid.scopes_allowed;
+    const finalScope = authInfo.openid.scope || filterScopes(scopesAllowed);
 
     return {
         ...initData,
         authority: authInfo.openid.authority,
         client_id: authInfo.openid.client_id,
-        scope: authInfo.openid.scope || "openid profile email offline_access grant",
-        redirect_uri: baseUrl + "/auth-callback",
-        silent_redirect_uri: baseUrl + "/auth-callback",
-        post_logout_redirect_uri: baseUrl + "/",
+        scope: finalScope,
+        redirect_uri: `${baseUrl}/auth-callback`,
+        silent_redirect_uri: `${baseUrl}/auth-callback`,
+        post_logout_redirect_uri: `${baseUrl}/`,
     };
 }
 

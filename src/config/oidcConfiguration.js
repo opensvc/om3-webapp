@@ -32,7 +32,8 @@ function filterScopes(allowedScopes) {
     return DEFAULT_SCOPES.filter(scope => allowedScopes.includes(scope)).join(" ");
 }
 
-function oidcConfiguration(authInfo) {
+async function oidcConfiguration(authInfo) {
+    let scopesSupported = DEFAULT_SCOPES;
     if (!authInfo?.openid?.authority) {
         console.warn("OIDC Configuration fallback: 'authInfo.openid.authority' is missing. Falling back to default configuration.");
         return initData;
@@ -43,6 +44,15 @@ function oidcConfiguration(authInfo) {
         if (!url.protocol || !url.host) {
             throw new Error("Malformed URI");
         }
+        const wellKnownUrl = new URL('.well-known/openid-configuration', url);
+        const response = await fetch(wellKnownUrl);
+
+        if (response.ok) {
+            const wellKnown = await response.json();
+            scopesSupported = wellKnown.scopes_supported;
+        } else {
+            console.warn("Failed to fetch .well-known/openid-configuration:", response.status);
+        }
     } catch (error) {
         console.error("Well-formed URL required for openid.authority", error);
         return initData;
@@ -50,9 +60,7 @@ function oidcConfiguration(authInfo) {
 
     const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"));
 
-    const scopesAllowed = authInfo.openid.scopes_allowed;
-    const finalScope = authInfo.openid.scope || filterScopes(scopesAllowed);
-
+    const finalScope = filterScopes(scopesSupported);
     return {
         ...initData,
         authority: authInfo.openid.authority,

@@ -150,7 +150,7 @@ describe('AuthChoice Component', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
     });
 
-    test('useEffect calls recreateUserManager when authInfo.openid.authority exists and userManager is null', () => {
+    test('useEffect calls recreateUserManager when authInfo.openid.authority exists and userManager is null', async () => {
         useAuthInfo.mockReturnValue({
             openid: {authority: 'https://auth.example.com'},
             methods: [],
@@ -161,11 +161,16 @@ describe('AuthChoice Component', () => {
         });
         renderComponent();
 
-        expect(mockRecreateUserManager).toHaveBeenCalledWith({authority: 'mock-authority', client_id: 'mock-client'});
-        expect(oidcConfiguration).toHaveBeenCalledWith({
-            openid: {authority: 'https://auth.example.com'},
-            methods: [],
-        });
+        await waitFor(() => {
+            expect(mockRecreateUserManager).toHaveBeenCalledWith({
+                authority: 'mock-authority',
+                client_id: 'mock-client'
+            });
+            expect(oidcConfiguration).toHaveBeenCalledWith({
+                openid: {authority: 'https://auth.example.com'},
+                methods: [],
+            });
+        })
     });
 
     test('useEffect does not call recreateUserManager when userManager exists', () => {

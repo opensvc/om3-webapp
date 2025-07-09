@@ -26,19 +26,8 @@ import {closeEventSource, startEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 import {URL_NODE} from "../config/apiPath.js";
-import {
-    FreezeDialog,
-    StopDialog,
-    SimpleConfirmDialog,
-    ClearDialog,
-    DrainDialog,
-    RestartDialog,
-    UnprovisionDialog,
-    DeleteDialog,
-    SwitchDialog,
-    GivebackDialog,
-} from "./ActionDialogs";
 import {NODE_ACTIONS} from "../constants/actions";
+import ActionDialogManager from "./ActionDialogManager";
 
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
@@ -53,84 +42,11 @@ const NodesTable = () => {
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
-    const [freezeDialogOpen, setFreezeDialogOpen] = useState(false);
-    const [stopDialogOpen, setStopDialogOpen] = useState(false);
-    const [restartDialogOpen, setRestartDialogOpen] = useState(false);
-    const [clearDialogOpen, setClearDialogOpen] = useState(false);
-    const [drainDialogOpen, setDrainDialogOpen] = useState(false);
-    const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
-    const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [switchDialogOpen, setSwitchDialogOpen] = useState(false);
-    const [givebackDialogOpen, setGivebackDialogOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState(null);
-    const [confirmationChecked, setConfirmationChecked] = useState(false);
-    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
-        dataLoss: false,
-        clusterwide: false,
-        serviceInterruption: false,
-    });
-    const [deleteCheckboxes, setDeleteCheckboxes] = useState({
-        configLoss: false,
-        clusterwide: false,
-    });
 
-    const actionDialogMap = {
-        freeze: {
-            openDialog: () => setFreezeDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        stop: {
-            openDialog: () => setStopDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        "restart daemon": {
-            openDialog: () => setRestartDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        clear: {
-            openDialog: () => setClearDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        drain: {
-            openDialog: () => setDrainDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        unprovision: {
-            openDialog: () => setUnprovisionDialogOpen(true),
-            initState: () => setUnprovisionCheckboxes({
-                dataLoss: false,
-                clusterwide: false,
-                serviceInterruption: false,
-            }),
-        },
-        delete: {
-            openDialog: () => setDeleteDialogOpen(true),
-            initState: () => setDeleteCheckboxes({
-                configLoss: false,
-                clusterwide: false,
-            }),
-        },
-        switch: {
-            openDialog: () => setSwitchDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        giveback: {
-            openDialog: () => setGivebackDialogOpen(true),
-            initState: () => setConfirmationChecked(false),
-        },
-        default: {
-            openDialog: () => setSimpleConfirmDialogOpen(true),
-            initState: () => {
-            },
-        },
-    };
 
     const handleAction = (action, nodename = null) => {
-        const dialogConfig = actionDialogMap[action] || actionDialogMap.default;
         setPendingAction({action, node: nodename});
-        dialogConfig.initState();
-        dialogConfig.openDialog();
         if (nodename) {
             handleMenuClose(nodename);
         } else {
@@ -189,11 +105,20 @@ const NodesTable = () => {
         return `${URL_NODE}/${node}/action/${action}`;
     };
 
-    const handleDialogConfirm = () => {
+    const handleDialogConfirm = async (action) => {
         if (!pendingAction) return;
 
         const token = localStorage.getItem("authToken");
-        const actionLabel = pendingAction.action
+        if (!token) {
+            setSnackbar({
+                open: true,
+                message: "Authentication token not found",
+                severity: "error",
+            });
+            return;
+        }
+
+        const actionLabel = action
             .split(" ")
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(" ");
@@ -211,9 +136,15 @@ const NodesTable = () => {
 
         const promises = nodesToProcess.map(async (node) => {
             const isFrozen = !!nodeStatus[node]?.frozen_at && nodeStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z";
-            if (pendingAction.action === "freeze" && isFrozen) return;
-            if (pendingAction.action === "unfreeze" && !isFrozen) return;
-            const url = postActionUrl(node, pendingAction.action);
+            if (action === "freeze" && isFrozen) {
+                errorCount++;
+                return;
+            }
+            if (action === "unfreeze" && !isFrozen) {
+                errorCount++;
+                return;
+            }
+            const url = postActionUrl(node, action);
             try {
                 const response = await fetch(url, {
                     method: "POST",
@@ -222,48 +153,30 @@ const NodesTable = () => {
                         "Content-Type": "application/json",
                     },
                 });
-                if (!response.ok) throw new Error();
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 successCount++;
-            } catch {
+            } catch (error) {
+                console.error(`Failed to execute ${action} on ${node}:`, error);
                 errorCount++;
             }
         });
 
-        Promise.all(promises).then(() => {
-            setSnackbar({
-                open: true,
-                message:
-                    successCount && !errorCount
-                        ? `✅ '${actionLabel}' succeeded on ${successCount} node(s).`
-                        : successCount
-                            ? `⚠️ '${actionLabel}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
-                            : `❌ '${actionLabel}' failed on all nodes.`,
-                severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
-            });
-
-            setSelectedNodes([]);
-            setFreezeDialogOpen(false);
-            setStopDialogOpen(false);
-            setRestartDialogOpen(false);
-            setClearDialogOpen(false);
-            setDrainDialogOpen(false);
-            setSimpleConfirmDialogOpen(false);
-            setUnprovisionDialogOpen(false);
-            setDeleteDialogOpen(false);
-            setSwitchDialogOpen(false);
-            setGivebackDialogOpen(false);
-            setConfirmationChecked(false);
-            setUnprovisionCheckboxes({
-                dataLoss: false,
-                clusterwide: false,
-                serviceInterruption: false,
-            });
-            setDeleteCheckboxes({
-                configLoss: false,
-                clusterwide: false,
-            });
-            setPendingAction(null);
+        await Promise.all(promises);
+        setSnackbar({
+            open: true,
+            message:
+                successCount && !errorCount
+                    ? `✅ '${actionLabel}' succeeded on ${successCount} node(s).`
+                    : successCount
+                        ? `⚠️ '${actionLabel}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
+                        : `❌ '${actionLabel}' failed on all ${nodesToProcess.length} node(s).`,
+            severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
         });
+
+        setSelectedNodes([]);
+        setPendingAction(null);
     };
 
     const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
@@ -348,7 +261,8 @@ const NodesTable = () => {
                     <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                         <Table sx={{minWidth: 900}} aria-label="nodes table">
                             <TableHead
-                                sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
+                                sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}
+                            >
                                 <TableRow>
                                     <TableCell>
                                         <Checkbox
@@ -404,97 +318,12 @@ const NodesTable = () => {
                     </Alert>
                 </Snackbar>
 
-                <FreezeDialog
-                    open={freezeDialogOpen}
-                    onClose={() => setFreezeDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <StopDialog
-                    open={stopDialogOpen}
-                    onClose={() => setStopDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <RestartDialog
-                    open={restartDialogOpen}
-                    onClose={() => setRestartDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <ClearDialog
-                    open={clearDialogOpen}
-                    onClose={() => setClearDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <DrainDialog
-                    open={drainDialogOpen}
-                    onClose={() => setDrainDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <SimpleConfirmDialog
-                    open={simpleConfirmDialogOpen}
-                    onClose={() => setSimpleConfirmDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    action={pendingAction?.action || ""}
-                    target={
-                        pendingAction?.node
-                            ? `node ${pendingAction.node}`
-                            : `${selectedNodes.length} nodes`
-                    }
-                />
-
-                <UnprovisionDialog
-                    open={unprovisionDialogOpen}
-                    onClose={() => setUnprovisionDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checkboxes={unprovisionCheckboxes}
-                    setCheckboxes={setUnprovisionCheckboxes}
-                    disabled={false}
-                />
-
-                <DeleteDialog
-                    open={deleteDialogOpen}
-                    onClose={() => setDeleteDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checkboxes={deleteCheckboxes}
-                    setCheckboxes={setDeleteCheckboxes}
-                    disabled={false}
-                />
-
-                <SwitchDialog
-                    open={switchDialogOpen}
-                    onClose={() => setSwitchDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <GivebackDialog
-                    open={givebackDialogOpen}
-                    onClose={() => setGivebackDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
+                <ActionDialogManager
+                    pendingAction={pendingAction}
+                    handleConfirm={handleDialogConfirm}
+                    target={pendingAction?.node ? `node ${pendingAction.node}` : `${selectedNodes.length} nodes`}
+                    supportedActions={NODE_ACTIONS.map(action => action.name)}
+                    onClose={() => setPendingAction(null)}
                 />
             </Box>
         </Box>

@@ -8,6 +8,8 @@ import {
     FormControlLabel,
     Checkbox,
     Typography,
+    TextField,
+    Box,
 } from '@mui/material';
 
 // Dialog for the "freeze" action
@@ -423,6 +425,331 @@ export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, d
                 aria-label="Confirm giveback action"
             >
                 Confirm
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "delete key" action
+export const DeleteKeyDialog = ({
+                                    open,
+                                    onClose,
+                                    onConfirm,
+                                    keyToDelete,
+                                    disabled,
+                                }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Key Deletion</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1">
+                Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
+            </Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="error"
+                onClick={onConfirm}
+                disabled={disabled}
+            >
+                Delete
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "create key" action
+export const CreateKeyDialog = ({
+                                    open,
+                                    onClose,
+                                    onConfirm,
+                                    newKeyName,
+                                    setNewKeyName,
+                                    newKeyFile,
+                                    setNewKeyFile,
+                                    disabled,
+                                }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Key</DialogTitle>
+        <DialogContent>
+            <TextField
+                autoFocus
+                margin="dense"
+                label="Key Name"
+                fullWidth
+                variant="outlined"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                disabled={disabled}
+            />
+            <Box sx={{mt: 2}}>
+                <input
+                    id="create-key-file-upload"
+                    type="file"
+                    hidden
+                    onChange={(e) => setNewKeyFile(e.target.files[0])}
+                    disabled={disabled}
+                />
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                    <Button
+                        variant="outlined"
+                        component="label"
+                        htmlFor="create-key-file-upload"
+                        disabled={disabled}
+                    >
+                        Choose File
+                    </Button>
+                    <Typography
+                        variant="body2"
+                        color={newKeyFile ? 'textPrimary' : 'textSecondary'}
+                    >
+                        {newKeyFile ? newKeyFile.name : 'No file selected'}
+                    </Typography>
+                </Box>
+            </Box>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                onClick={onConfirm}
+                disabled={disabled || !newKeyName || !newKeyFile}
+            >
+                Create
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "update key" action
+export const UpdateKeyDialog = ({
+                                    open,
+                                    onClose,
+                                    onConfirm,
+                                    updateKeyName,
+                                    setUpdateKeyName,
+                                    updateKeyFile,
+                                    setUpdateKeyFile,
+                                    disabled,
+                                }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Update Key</DialogTitle>
+        <DialogContent>
+            <TextField
+                autoFocus
+                margin="dense"
+                label="Key Name"
+                fullWidth
+                variant="outlined"
+                value={updateKeyName}
+                onChange={(e) => setUpdateKeyName(e.target.value)}
+                disabled={disabled}
+            />
+            <Box sx={{mt: 2}}>
+                <input
+                    id="update-key-file-upload"
+                    type="file"
+                    hidden
+                    onChange={(e) => setUpdateKeyFile(e.target.files[0])}
+                    disabled={disabled}
+                />
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                    <Button
+                        variant="outlined"
+                        component="label"
+                        htmlFor="update-key-file-upload"
+                        disabled={disabled}
+                    >
+                        Choose File
+                    </Button>
+                    <Typography
+                        variant="body2"
+                        color={updateKeyFile ? 'textPrimary' : 'textSecondary'}
+                    >
+                        {updateKeyFile ? updateKeyFile.name : 'No file chosen'}
+                    </Typography>
+                </Box>
+            </Box>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                onClick={onConfirm}
+                disabled={disabled || !updateKeyName || !updateKeyFile}
+            >
+                Update
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "update config" action
+export const UpdateConfigDialog = ({
+                                       open,
+                                       onClose,
+                                       onConfirm,
+                                       newConfigFile,
+                                       setNewConfigFile,
+                                       disabled,
+                                   }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Update Configuration</DialogTitle>
+        <DialogContent>
+            <Box sx={{mt: 2}}>
+                <input
+                    id="update-config-file-upload"
+                    type="file"
+                    hidden
+                    onChange={(e) => setNewConfigFile(e.target.files[0])}
+                    disabled={disabled}
+                />
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
+                    <Button
+                        variant="outlined"
+                        component="label"
+                        htmlFor="update-config-file-upload"
+                        disabled={disabled}
+                    >
+                        Choose File
+                    </Button>
+                    <Typography
+                        variant="body2"
+                        color={newConfigFile ? 'textPrimary' : 'textSecondary'}
+                    >
+                        {newConfigFile ? newConfigFile.name : 'No file chosen'}
+                    </Typography>
+                </Box>
+            </Box>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                onClick={onConfirm}
+                disabled={disabled || !newConfigFile}
+            >
+                Update
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
+// Dialog for the "manage config parameters" action
+export const ManageConfigParamsDialog = ({
+                                             open,
+                                             onClose,
+                                             onConfirm,
+                                             paramsToSet,
+                                             setParamsToSet,
+                                             paramsToUnset,
+                                             setParamsToUnset,
+                                             paramsToDelete,
+                                             setParamsToDelete,
+                                             disabled,
+                                         }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Manage Configuration Parameters</DialogTitle>
+        <DialogContent>
+            <Typography variant="subtitle1" gutterBottom>
+                Add parameters (one per line, e.g., section.param=value)
+            </Typography>
+            <TextField
+                autoFocus
+                margin="dense"
+                label="Parameters to set"
+                fullWidth
+                variant="outlined"
+                multiline
+                rows={4}
+                value={paramsToSet}
+                onChange={(e) => setParamsToSet(e.target.value)}
+                disabled={disabled}
+                placeholder="section.param1=value1&#10;section.param2=value2"
+            />
+            <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
+                Unset parameters (one key per line, e.g., section.param)
+            </Typography>
+            <TextField
+                margin="dense"
+                label="Parameter keys to unset"
+                fullWidth
+                variant="outlined"
+                multiline
+                rows={4}
+                value={paramsToUnset}
+                onChange={(e) => setParamsToUnset(e.target.value)}
+                disabled={disabled}
+                placeholder="section.param1&#10;section.param2"
+                sx={{
+                    "& .MuiInputBase-root": {
+                        padding: "8px",
+                        lineHeight: "1.5",
+                        minHeight: "100px",
+                    },
+                    "& .MuiInputBase-input": {
+                        overflow: "auto",
+                        boxSizing: "border-box",
+                    },
+                    "& .MuiInputLabel-root": {
+                        backgroundColor: "white",
+                        padding: "0 4px",
+                    },
+                }}
+            />
+            <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
+                Delete sections (one key per line, e.g., section)
+            </Typography>
+            <TextField
+                margin="dense"
+                label="Section keys to delete"
+                fullWidth
+                variant="outlined"
+                multiline
+                rows={4}
+                value={paramsToDelete}
+                onChange={(e) => setParamsToDelete(e.target.value)}
+                disabled={disabled}
+                placeholder="section1&#10;section2"
+                sx={{
+                    "& .MuiInputBase-root": {
+                        padding: "8px",
+                        lineHeight: "1.5",
+                        minHeight: "100px",
+                    },
+                    "& .MuiInputBase-input": {
+                        overflow: "auto",
+                        boxSizing: "border-box",
+                    },
+                    "& .MuiInputLabel-root": {
+                        backgroundColor: "white",
+                        padding: "0 4px",
+                    },
+                }}
+            />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                onClick={onConfirm}
+                disabled={
+                    disabled ||
+                    (!paramsToSet && !paramsToUnset && !paramsToDelete)
+                }
+            >
+                Apply
             </Button>
         </DialogActions>
     </Dialog>

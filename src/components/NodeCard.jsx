@@ -56,43 +56,15 @@ const NodeCard = ({
     // Log received props for debugging
     console.log("NodeCard render:", {
         node,
+        nodeData,
+        resources: nodeData?.resources,
+        resourcesType: typeof nodeData?.resources,
+        resourcesIsObject: nodeData?.resources && typeof nodeData.resources === "object",
         selectedResourcesByNode,
         setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
         toggleResource: typeof toggleResource,
         parseProvisionedState: typeof parseProvisionedState,
         individualNodeMenuAnchor,
-        props: Object.keys({
-            node,
-            nodeData,
-            selectedNodes,
-            toggleNode,
-            selectedResourcesByNode,
-            toggleResource,
-            actionInProgress,
-            setIndividualNodeMenuAnchor,
-            setCurrentNode,
-            handleResourcesActionsOpen,
-            handleResourceMenuOpen,
-            individualNodeMenuAnchor,
-            expandedNodeResources,
-            handleNodeResourcesAccordionChange,
-            expandedResources,
-            handleAccordionChange,
-            getColor,
-            getNodeState,
-            setPendingAction,
-            setConfirmDialogOpen,
-            setStopDialogOpen,
-            setUnprovisionDialogOpen,
-            setPurgeDialogOpen,
-            setSimpleDialogOpen,
-            setCheckboxes,
-            setStopCheckbox,
-            setUnprovisionCheckboxes,
-            setPurgeCheckboxes,
-            setSelectedResourcesByNode,
-            parseProvisionedState,
-        }),
     });
 
     // Local state for menus
@@ -101,9 +73,9 @@ const NodeCard = ({
     const [currentResourceId, setCurrentResourceId] = useState(null);
 
     // Extract node data
-    const {resources = {}} = nodeData || {};
-    const {avail, frozen, state} = getNodeState(node);
+    const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
+    const {avail, frozen, state} = getNodeState(node);
 
     // Log changes to selectedResourcesByNode
     useEffect(() => {
@@ -245,6 +217,7 @@ const NodeCard = ({
             {/* Resources accordion */}
             <Accordion
                 expanded={expandedNodeResources[node] || false}
+                onChange={handleNodeResourcesAccordionChange(node)}
                 sx={{
                     border: "none",
                     boxShadow: "none",
@@ -257,10 +230,7 @@ const NodeCard = ({
                     },
                 }}
             >
-                <Box
-                    sx={{display: "flex", alignItems: "center", gap: 2, width: "100%", p: 1}}
-                    onClick={(e) => e.stopPropagation()}
-                >
+                <Box sx={{display: "flex", alignItems: "center", gap: 2, width: "100%", p: 1}}>
                     <Typography variant="subtitle1" fontWeight="medium">
                         Resources ({resIds.length})
                     </Typography>
@@ -280,7 +250,7 @@ const NodeCard = ({
                             aria-label={`Select all resources for node ${node}`}
                         />
                     </Box>
-                    <Box sx={{flexGrow: 1}}/> {/* Pushes buttons to the right */}
+                    <Box sx={{flexGrow: 1}}/>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Box onClick={(e) => e.stopPropagation()}>
                             <Button
@@ -316,11 +286,11 @@ const NodeCard = ({
                             <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
                                 {resIds.map((rid) => {
                                     const res = resources[rid] || {};
-                                    const resourcePanelId = `resource-${node}-${rid}`;
                                     return (
                                         <Accordion
                                             key={rid}
-                                            expanded={expandedResources[resourcePanelId] || false}
+                                            expanded={expandedResources[`${node}:${rid}`] || false}
+                                            onChange={handleAccordionChange(node, rid)}
                                             sx={{
                                                 mb: 1,
                                                 border: "none",
@@ -342,7 +312,6 @@ const NodeCard = ({
                                                     width: "100%",
                                                     p: 1,
                                                 }}
-                                                onClick={(e) => e.stopPropagation()}
                                             >
                                                 <Box onClick={(e) => e.stopPropagation()}>
                                                     <Checkbox
@@ -386,12 +355,12 @@ const NodeCard = ({
                                                     </IconButton>
                                                 </Box>
                                                 <IconButton
-                                                    onClick={() => handleAccordionChange(resourcePanelId)(null, !expandedResources[resourcePanelId])}
+                                                    onClick={() => handleAccordionChange(node, rid)(null, !expandedResources[`${node}:${rid}`])}
                                                     aria-label={`Expand resource ${rid}`}
                                                 >
                                                     <ExpandMoreIcon
                                                         sx={{
-                                                            transform: expandedResources[resourcePanelId] ? "rotate(180deg)" : "rotate(0deg)",
+                                                            transform: expandedResources[`${node}:${rid}`] ? "rotate(180deg)" : "rotate(0deg)",
                                                             transition: "transform 0.2s",
                                                         }}
                                                     />
@@ -466,7 +435,7 @@ const NodeCard = ({
                     <MenuItem
                         key={name}
                         onClick={(e) => {
-                            e.stopPropagation(); // Prevent click propagation
+                            e.stopPropagation();
                             handleBatchResourceActionClick(name);
                         }}
                     >

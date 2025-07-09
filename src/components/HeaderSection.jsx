@@ -23,22 +23,7 @@ const HeaderSection = ({
                            actionInProgress,
                            objectMenuAnchor,
                            setObjectMenuAnchor,
-                           setPendingAction,
-                           setConfirmDialogOpen,
-                           setStopDialogOpen,
-                           setUnprovisionDialogOpen,
-                           setPurgeDialogOpen,
-                           setDeleteDialogOpen,
-                           setSimpleDialogOpen,
-                           setCheckboxes,
-                           setStopCheckbox,
-                           setUnprovisionCheckboxes,
-                           setPurgeCheckboxes,
-                           setDeleteCheckboxes,
-                           setSwitchDialogOpen,
-                           setSwitchCheckbox,
-                           setGivebackDialogOpen,
-                           setGivebackCheckbox,
+                           handleObjectActionClick,
                            getObjectStatus,
                            getColor,
                        }) => {
@@ -95,42 +80,7 @@ const HeaderSection = ({
                                 <MenuItem
                                     key={name}
                                     onClick={() => {
-                                        setPendingAction({action: name});
-                                        if (name === 'freeze') {
-                                            setCheckboxes({failover: false});
-                                            setConfirmDialogOpen(true);
-                                        } else if (name === 'stop') {
-                                            setStopCheckbox(false);
-                                            setStopDialogOpen(true);
-                                        } else if (name === 'unprovision') {
-                                            setUnprovisionCheckboxes({
-                                                dataLoss: false,
-                                                clusterwide: false,
-                                                serviceInterruption: false,
-                                            });
-                                            setUnprovisionDialogOpen(true);
-                                        } else if (name === 'purge') {
-                                            setPurgeCheckboxes({
-                                                dataLoss: false,
-                                                configLoss: false,
-                                                serviceInterruption: false,
-                                            });
-                                            setPurgeDialogOpen(true);
-                                        } else if (name === 'delete') {
-                                            setDeleteCheckboxes({
-                                                configLoss: false,
-                                                clusterwide: false,
-                                            });
-                                            setDeleteDialogOpen(true);
-                                        } else if (name === 'switch') {
-                                            setSwitchCheckbox(false);
-                                            setSwitchDialogOpen(true);
-                                        } else if (name === 'giveback') {
-                                            setGivebackCheckbox(false);
-                                            setGivebackDialogOpen(true);
-                                        } else {
-                                            setSimpleDialogOpen(true);
-                                        }
+                                        handleObjectActionClick(name);
                                         setObjectMenuAnchor(null);
                                     }}
                                     disabled={!isAllowed || actionInProgress}
@@ -146,7 +96,9 @@ const HeaderSection = ({
                                     >
                                         {icon}
                                     </ListItemIcon>
-                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                    <ListItemText>
+                                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                                    </ListItemText>
                                 </MenuItem>
                             );
                         })}

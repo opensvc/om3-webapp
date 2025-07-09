@@ -2,6 +2,7 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
+import KeysSection from '../KeysSection';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
@@ -50,11 +51,12 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        AccordionSummary: ({children, id, onChange, ...props}) => (
+        AccordionSummary: ({children, id, onChange, expanded, ...props}) => (
             <div
                 role="button"
                 data-testid="accordion-summary"
-                onClick={() => onChange?.({}, !props.expanded)}
+                aria-expanded={expanded ? 'true' : 'false'}
+                onClick={() => onChange?.({}, !expanded)}
                 {...props}
             >
                 {children}
@@ -295,121 +297,53 @@ type = flag
     });
 
     test('displays no keys message when keys array is empty', async () => {
-        // 1. Mock setup with extended timeout
-        jest.setTimeout(30000);
+        const openSnackbar = jest.fn();
 
-        // Mock useEventStore with minimal but complete data
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'root/cfg/cfg1': {
-                        avail: 'up',
-                        frozen: 'unfrozen',
-                        overall: 'ok',
-                    },
-                },
-                objectInstanceStatus: {
-                    'root/cfg/cfg1': {
-                        node1: {
-                            avail: 'up',
-                            frozen_at: null,
-                            resources: {},
-                            provisioned: true,
-                        },
-                    },
-                },
-                instanceMonitor: {
-                    'node1:root/cfg/cfg1': {
-                        state: 'idle',
-                        global_expect: 'none',
-                    },
-                },
-                configUpdates: [],
-                clearConfigUpdate: jest.fn(),
-            })
-        );
-
-        // Mock fetch with empty response for keys and text response for config
+        // Specific mock for empty keys
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
                     ok: true,
-                    status: 200,
                     json: () => Promise.resolve({items: []}),
                 });
             }
-            if (url.includes('/config/file')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    text: () => Promise.resolve('[DEFAULT]\nnodes = *'),
-                });
-            }
-            // Default response for other endpoints
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({}),
-            });
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
 
-        // 2. Render the component
-        const {container} = render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
         );
 
-        try {
-            // 3. Wait for component initialization
-            await waitFor(
-                () => {
-                    expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-                },
-                {timeout: 5000}
-            );
+        // Wait for the component to be mounted
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
 
-            // 4. Optimized search for keys accordion
-            const keysAccordionButton = await waitFor(
-                () => {
-                    const buttons = screen.getAllByRole('button');
-                    const accordionButton = buttons.find((btn) =>
-                        btn.textContent?.match(/Object Keys.*\(0\)/i)
-                    );
-                    if (!accordionButton) {
-                        console.log('Buttons found:', buttons.map((b) => b.textContent));
-                        screen.debug(container);
-                        throw new Error('Keys accordion button not found');
-                    }
-                    return accordionButton;
-                },
-                {timeout: 5000}
-            );
+        // Find the accordion button
+        const accordionSummary = screen.getByTestId('accordion-summary');
 
-            // 5. Interact with accordion
-            await act(async () => {
-                fireEvent.click(keysAccordionButton);
-            });
+        // Debug: display state before click
+        screen.debug(accordionSummary);
+        console.log('Before click - aria-expanded:', accordionSummary.getAttribute('aria-expanded'));
 
-            // 6. Verify expanded content
-            await waitFor(
-                () => {
-                    const noKeysMessage = screen.getByText(/No keys available/i);
-                    expect(noKeysMessage).toBeInTheDocument();
-                },
-                {timeout: 5000}
-            );
-        } catch (error) {
-            console.error('Test failed:', error);
-            screen.debug(container);
-            throw error;
-        } finally {
-            // Cleanup
-            jest.clearAllMocks();
-        }
-    }, 30000);
+        // Simulate the click
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        // Debug: display state after click
+        screen.debug(accordionSummary);
+        console.log('After click - aria-expanded:', accordionSummary.getAttribute('aria-expanded'));
+
+        // Verify expanded state with multiple approaches
+        await waitFor(() => {
+            // Approach 2: Verify content presence
+            expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
+        });
+
+        // Additional verifications
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    });
 
     test('displays configuration with horizontal scrolling', async () => {
         render(
@@ -449,13 +383,12 @@ type = flag
     }, 15000);
 
     test('displays error when fetching configuration fails', async () => {
-        // Mock fetch pour simuler une erreur HTTP
         global.fetch = jest.fn()
-            .mockResolvedValueOnce({ // Premier appel (récupération des clés)
+            .mockResolvedValueOnce({ // First call (fetching keys)
                 ok: true,
                 json: () => Promise.resolve({items: []})
             })
-            .mockImplementationOnce(async () => { // Deuxième appel (config)
+            .mockImplementationOnce(async () => { // Second call (config)
                 return {
                     ok: false,
                     status: 500,
@@ -472,7 +405,7 @@ type = flag
             </MemoryRouter>
         );
 
-        // Attendre et ouvrir l'accordéon
+        // Wait and open the accordion
         await waitFor(() => {
             expect(screen.getByText(/Failed to fetch config/i)).toBeInTheDocument();
         });
@@ -512,7 +445,6 @@ type = flag
     }, 10000);
 
     test('opens manage configuration parameters dialog and adds a parameter', async () => {
-        // Setup fetch mock
         global.fetch.mockImplementation((url, options) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return Promise.resolve({ok: true, json: () => Promise.resolve({})});
@@ -733,9 +665,28 @@ type = flag
     }, 10000);
 
     test('renders object name and no information message when no data', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
+        // 1. Mock useEventStore for a completely empty and explicit state
+        useEventStore.mockImplementation((selector) => {
+            const emptyState = {
+                objectStatus: {},
+                objectInstanceStatus: {}, // Empty object with no key for our object
+                instanceMonitor: {},
+                configUpdates: [],
+                clearConfigUpdate: jest.fn()
+            };
+            return selector(emptyState);
+        });
+
+        // 2. Complete mock of fetch to avoid any API calls
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+                text: () => Promise.resolve('')
+            })
         );
+
+        // 3. Render the component with MemoryRouter
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -743,11 +694,34 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
+        // 4. Initial debug to verify the first render
+        screen.debug();
+
+        // 5. Explicit wait for the component to finish its initial render
         await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
+            // Verify that no loading indicator is present
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         });
-    });
+
+        // 6. Debug after the initial wait
+        screen.debug();
+
+        // 7. Verification of expected elements
+        // findByText for the name (asynchronous wait)
+        const objectNameElement = await screen.findByText('root/cfg/cfg1');
+        expect(objectNameElement).toBeInTheDocument();
+
+        // getByText for the message (synchronous now that the component is stable)
+        const noInfoMessage = screen.getByText(/No information available for object/i);
+        expect(noInfoMessage).toBeInTheDocument();
+
+        // 8. Verification that no API call was made
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        // 9. Final debug to verify the complete DOM
+        screen.debug();
+    }, 10000); // 10s timeout just in case
 
     test('renders global status, nodes, and resources', async () => {
         render(
@@ -1068,39 +1042,37 @@ type = flag
         );
 
         // Expand resources
-        const resourcesHeaders = await screen.findAllByText(/Resources \(\d+\)/i);
-        await act(async () => {
-            fireEvent.click(resourcesHeaders[0]);
+        const resourcesHeader = await screen.findByText(/Resources \(1\)/i);
+        await act(() => {
+            fireEvent.click(resourcesHeader);
         });
 
-        // Find the resource menu
-        const resourceMenus = await screen.findAllByRole('button', {
-            name: /Resource res1 actions/i,
-        });
-        expect(resourceMenus.length).toBeGreaterThan(0);
-
-        await act(async () => {
-            fireEvent.click(resourceMenus[0]);
+        // Open resource menu
+        const resourceMenuButton = await screen.findByRole('button', {name: /Resource res1 actions/i});
+        await act(() => {
+            fireEvent.click(resourceMenuButton);
         });
 
-        // Select the restart action
-        await waitFor(() => {
-            const restartItem = screen.getByRole('menuitem', {name: /Restart/i});
-            expect(restartItem).toBeInTheDocument();
+        // Select restart action
+        const restartItem = await screen.findByRole('menuitem', {name: /Restart/i});
+        await act(() => {
             fireEvent.click(restartItem);
         });
 
-        // Confirm the action
+        // Verify SimpleConfirmDialog
         await waitFor(() => {
-            expect(screen.getByRole('dialog')).toHaveTextContent('Confirm restart');
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm Restart/i);
+            expect(dialog).toHaveTextContent(/Are you sure you want to restart on object root\/cfg\/cfg1\?/i);
         });
 
+        // Click Confirm button
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
-        await act(async () => {
+        await act(() => {
             fireEvent.click(confirmButton);
         });
 
-        // Verify the API call
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/action/restart?rid=res1'),
@@ -1110,7 +1082,7 @@ type = flag
                 })
             );
         });
-    }, 15000);
+    }, 10000);
 
     test('triggers object action with unprovision dialog', async () => {
         await act(async () => {
@@ -1324,7 +1296,7 @@ type = flag
         );
 
         // Find node1 section
-        const nodeSection = await findNodeSection('node1', 15000);
+        const nodeSection = await findNodeSection('node1', 10000);
 
         // Select node
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
@@ -1333,12 +1305,19 @@ type = flag
         });
 
         // Open actions menu
-        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
         await act(async () => {
             await user.click(actionsButton);
         });
 
-        // Select Freeze (use more specific selector)
+        // Debug menu items
+        await waitFor(async () => {
+            const menu = await screen.findByRole('menu');
+            const menuItems = within(menu).getAllByRole('menuitem');
+            console.log('Menu items:', menuItems.map((item) => item.textContent));
+        });
+
+        // Select Freeze with exact match
         const menu = await screen.findByRole('menu');
         const freezeItem = await within(menu).findByRole('menuitem', {name: 'Freeze'});
         await act(async () => {
@@ -1346,33 +1325,38 @@ type = flag
         });
 
         // Verify dialog
-        await waitFor(
-            () => {
-                expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm Freeze/i);
-            },
-            {timeout: 10000}
-        );
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm Freeze/i);
+            expect(dialog).toHaveTextContent(/I understand that the selected service orchestration will be paused/i);
+        }, {timeout: 5000});
 
-        // Cancel
-        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /cancel/i});
+        // Check the checkbox to enable buttons
+        const checkbox = within(screen.getByRole('dialog')).getByRole('checkbox', {name: /Confirm failover pause/i});
+        await act(async () => {
+            await user.click(checkbox);
+        });
+
+        // Cancel dialog
+        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
+        await waitFor(() => {
+            expect(cancelButton).not.toBeDisabled(); // Ensure button is enabled
+        }, {timeout: 5000});
         await act(async () => {
             await user.click(cancelButton);
         });
 
         // Verify dialog is closed
-        await waitFor(
-            () => {
-                expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-            },
-            {timeout: 10000}
-        );
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 5000});
 
         // Verify no API call
         expect(global.fetch).not.toHaveBeenCalledWith(
             expect.stringContaining('/action/freeze'),
             expect.any(Object)
         );
-    }, 30000);
+    }, 20000);
 
     test('shows error snackbar when action fails', async () => {
         // Mock fetch to simulate failure

@@ -1,3 +1,4 @@
+import React from "react";
 import {
     Box,
     Checkbox,
@@ -7,53 +8,28 @@ import {
     MenuItem,
     TableCell,
     TableRow,
-    Tooltip
+    Tooltip,
+    Typography,
+    ListItemIcon,
+    ListItemText,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import {
-    FaSnowflake,
-    FaPlay,
-    FaSync,
-    FaStop,
-    FaBroom,
-    FaTint,
-    FaBox,
-    FaHdd,
-    FaPuzzlePiece,
-    FaArchive,
-    FaBrain,
-    FaClipboardList,
-    FaWifi
-} from "react-icons/fa";
-import {blue, green} from "@mui/material/colors";
+import {Wifi, AcUnit} from "@mui/icons-material";
+import {blue, green, red, orange} from "@mui/material/colors";
+import {NODE_ACTIONS} from "../constants/actions";
 
 const COLORS = {
-    frozen: blue[200],
+    frozen: blue[600],
     daemon: green[500],
-    error: "error",
-    warning: "warning",
-    success: "success"
+    error: red[500],
+    warning: orange[500],
+    success: green[500],
 };
 
 const STYLES = {
     progress: {mt: 1, height: 4},
-    flexBox: {display: "flex", gap: 1, alignItems: "center"}
+    flexBox: {display: "flex", gap: 0.5, alignItems: "center"},
 };
-
-const MENU_ITEMS = [
-    {label: "Freeze", action: "action/freeze", icon: <FaSnowflake/>, condition: (isFrozen) => !isFrozen},
-    {label: "Unfreeze", action: "action/unfreeze", icon: <FaPlay/>, condition: (isFrozen) => isFrozen},
-    {label: "Restart Daemon", action: "daemon/action/restart", icon: <FaSync/>},
-    {label: "Abort", action: "action/abort", icon: <FaStop/>},
-    {label: "Clear", action: "action/clear", icon: <FaBroom/>},
-    {label: "Drain", action: "action/drain", icon: <FaTint/>},
-    {label: "Asset", action: "action/push/asset", icon: <FaBox/>},
-    {label: "Disk", action: "action/push/disk", icon: <FaHdd/>},
-    {label: "Patch", action: "action/push/patch", icon: <FaPuzzlePiece/>},
-    {label: "Pkg", action: "action/push/pkg", icon: <FaArchive/>},
-    {label: "Capabilities", action: "action/scan/capabilities", icon: <FaBrain/>},
-    {label: "Sysreport", action: "action/sysreport", icon: <FaClipboardList/>}
-];
 
 const NodeRow = ({
                      nodename,
@@ -64,96 +40,129 @@ const NodeRow = ({
                      daemonNodename,
                      onSelect,
                      onMenuOpen,
-                     onMenuClose,
                      onAction,
-                     anchorEl
+                     onMenuClose,
+                     anchorEl,
                  }) => {
     const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
-    console.log('NodeRow: isFrozen=', isFrozen, 'status=', status);
     const isDaemonNode = daemonNodename === nodename;
-    const filteredMenuItems = MENU_ITEMS.filter(({ condition }) => condition === undefined || condition(isFrozen));
-    console.log('Filtered Menu Items:', filteredMenuItems.map(item => item.label));
+    const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
+        if (name === "freeze" && isFrozen) return false;
+        if (name === "unfreeze" && !isFrozen) return false;
+        return true;
+    });
 
     return (
-        <TableRow hover aria-label={`Node ${nodename} row`}>
+        <TableRow hover aria-label={`Node ${nodename} row`} sx={{cursor: "pointer"}}>
             <TableCell>
                 <Checkbox
                     checked={isSelected}
                     onChange={(e) => onSelect(e, nodename)}
-                    inputProps={{ 'aria-label': `Select node ${nodename}` }}
+                    inputProps={{'aria-label': `Select node ${nodename}`}}
+                    onClick={(e) => e.stopPropagation()}
                 />
             </TableCell>
-            <TableCell>{nodename || "-"}</TableCell>
+            <TableCell>
+                <Typography>{nodename || "-"}</Typography>
+            </TableCell>
             <TableCell>
                 <Box sx={STYLES.flexBox}>
-                    {monitor?.state !== "idle" && monitor?.state}
+                    {monitor && monitor.state !== "idle" && (
+                        <Tooltip title={monitor.state}>
+                            <Typography variant="caption">{monitor.state}</Typography>
+                        </Tooltip>
+                    )}
                     {isFrozen && (
                         <Tooltip title="Frozen">
-                            <span aria-label="Frozen indicator"><FaSnowflake style={{color: COLORS.frozen}}/></span>
+                            <AcUnit sx={{color: COLORS.frozen}} aria-label="Frozen indicator" />
                         </Tooltip>
                     )}
                     {isDaemonNode && (
                         <Tooltip title="Daemon Node">
-                            <span aria-label="Daemon node indicator"><FaWifi style={{color: COLORS.daemon}}/></span>
+                            <Wifi sx={{color: COLORS.daemon}} aria-label="Daemon node indicator"/>
                         </Tooltip>
                     )}
                 </Box>
             </TableCell>
-            <TableCell>{stats?.score || "N/A"}</TableCell>
+            <TableCell>
+                <Typography>{stats?.score || "N/A"}</Typography>
+            </TableCell>
             <TableCell>
                 {stats?.load_15m ? (
                     <>
-                        {stats.load_15m}
+                        <Typography>{stats.load_15m}</Typography>
                         <LinearProgress
                             variant="determinate"
                             value={Math.min(stats.load_15m * 20, 100)}
                             sx={STYLES.progress}
                             color={
-                                stats.load_15m > 4 ? COLORS.error :
-                                    stats.load_15m > 2 ? COLORS.warning : COLORS.success
+                                stats.load_15m > 4 ? "error" :
+                                    stats.load_15m > 2 ? "warning" : "success"
                             }
                         />
                     </>
-                ) : "N/A"}
+                ) : (
+                    <Typography>N/A</Typography>
+                )}
             </TableCell>
             <TableCell>
                 {stats?.mem_avail ? (
                     <>
-                        {stats.mem_avail}%
+                        <Typography>{stats.mem_avail}%</Typography>
                         <LinearProgress
                             variant="determinate"
                             value={stats.mem_avail}
                             sx={STYLES.progress}
                             color={
-                                stats.mem_avail < 20 ? COLORS.error :
-                                    stats.mem_avail < 50 ? COLORS.warning : COLORS.success
+                                stats.mem_avail < 20 ? "error" :
+                                    stats.mem_avail < 50 ? "warning" : "success"
                             }
                         />
                     </>
-                ) : "N/A"}
+                ) : (
+                    <Typography>N/A</Typography>
+                )}
             </TableCell>
-            <TableCell>{stats?.swap_avail || "N/A"}%</TableCell>
-            <TableCell>{status?.agent || "N/A"}</TableCell>
+            <TableCell>
+                <Typography>{stats?.swap_avail || "N/A"}%</Typography>
+            </TableCell>
+            <TableCell>
+                <Typography>{status?.agent || "N/A"}</Typography>
+            </TableCell>
             <TableCell>
                 <IconButton
-                    onClick={(e) => onMenuOpen(e, nodename)}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onMenuOpen(e, nodename);
+                    }}
                     aria-label={`More actions for node ${nodename}`}
                 >
                     <MoreVertIcon/>
                 </IconButton>
-                <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => onMenuClose(nodename)}>
-                    {filteredMenuItems.map(({label, action, icon}) => (
+                <Menu
+                    anchorEl={anchorEl}
+                    open={Boolean(anchorEl)}
+                    onClose={() => onMenuClose(nodename)}
+                >
+                    {filteredMenuItems.map(({name, icon}) => (
                         <MenuItem
-                            key={action}
-                            onClick={() => {
-                                onAction(nodename, action);
+                            key={name}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onAction(nodename, name);
                                 onMenuClose(nodename);
                             }}
                             sx={{display: "flex", alignItems: "center", gap: 1}}
-                            aria-label={`${label} action`}
+                            aria-label={`${name} action`}
                         >
-                            {icon && <Box sx={{minWidth: 20}}>{icon}</Box>}
-                            {label}
+                            <ListItemIcon>{icon}</ListItemIcon>
+                            <ListItemText>
+                                {name
+                                    .split(" ")
+                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                    .join(" ")
+                                }
+                            </ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>

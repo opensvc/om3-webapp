@@ -10,10 +10,6 @@ import {
     Menu,
     MenuItem,
     IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     FormControlLabel,
     Checkbox,
     Button,
@@ -41,65 +37,21 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
-import {
-    RestartAlt,
-    LockOpen,
-    Delete,
-    Settings,
-    Block,
-    CleaningServices,
-    SwapHoriz,
-    Undo,
-    Cancel,
-    PlayArrow,
-    Stop,
-    PlayCircleFilled,
-} from "@mui/icons-material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
+import ActionDialogManager from "../components/ActionDialogManager";
 import {
-    FreezeDialog,
-    StopDialog,
-    UnprovisionDialog,
-    PurgeDialog,
-    SimpleConfirmDialog,
-} from "../components/ActionDialogs";
+    UpdateConfigDialog,
+    ManageConfigParamsDialog,
+} from "./ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
-
-const NODE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
-    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
-    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
-    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
-];
-
-const OBJECT_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "freeze", icon: <AcUnitIcon sx={{fontSize: 24}}/>},
-    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
-    {name: "delete", icon: <Delete sx={{fontSize: 24}}/>},
-    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
-    {name: "purge", icon: <CleaningServices sx={{fontSize: 24}}/>},
-    {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
-    {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
-    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
-];
-
-const RESOURCE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
-];
+import HeaderSection from "./HeaderSection";
+import ConfigSection from "./ConfigSection";
+import KeysSection from "./KeysSection";
+import NodeCard from "./NodeCard";
+import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -110,25 +62,6 @@ const ObjectDetail = () => {
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
-    const globalStatus = objectStatus?.[decodedObjectName];
-
-    // State for keys
-    const [keys, setKeys] = useState([]);
-    const [keysLoading, setKeysLoading] = useState(false);
-    const [keysError, setKeysError] = useState(null);
-    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(false);
-
-    // State for key actions
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-    const [keyToDelete, setKeyToDelete] = useState(null);
-    const [keyToUpdate, setKeyToUpdate] = useState(null);
-    const [newKeyName, setNewKeyName] = useState("");
-    const [updateKeyName, setUpdateKeyName] = useState("");
-    const [newKeyFile, setNewKeyFile] = useState(null);
-    const [updateKeyFile, setUpdateKeyFile] = useState(null);
-    const [actionLoading, setActionLoading] = useState(false);
 
     // State for configuration
     const [configData, setConfigData] = useState(null);
@@ -148,7 +81,6 @@ const ObjectDetail = () => {
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
     const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(null);
     const [currentNode, setCurrentNode] = useState(null);
-
     const [selectedResourcesByNode, setSelectedResourcesByNode] = useState({});
     const [resGroupNode, setResGroupNode] = useState(null);
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
@@ -160,15 +92,18 @@ const ObjectDetail = () => {
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
+    // State for dialog management
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
-
     const [checkboxes, setCheckboxes] = useState({failover: false});
     const [stopCheckbox, setStopCheckbox] = useState(false);
-    const [unprovisionChecked, setUnprovisionChecked] = useState(false);
+    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
+        dataLoss: false,
+        serviceInterruption: false,
+    });
     const [purgeCheckboxes, setPurgeCheckboxes] = useState({
         dataLoss: false,
         configLoss: false,
@@ -187,6 +122,73 @@ const ObjectDetail = () => {
 
     // Debounce ref to prevent multiple fetchConfig calls
     const lastFetch = useRef({});
+    // Ref to track subscription status
+    const isProcessingConfigUpdate = useRef(false);
+    // Ref to track if component is mounted
+    const isMounted = useRef(true);
+
+    // Debug logging for component lifecycle
+    console.log(`[ObjectDetail] Mounting component for ${decodedObjectName}`);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            console.log(`[ObjectDetail] Unmounting component for ${decodedObjectName}`);
+            isMounted.current = false;
+        };
+    }, [decodedObjectName]);
+
+    // Debug selectedResourcesByNode changes
+    useEffect(() => {
+        console.log("[ObjectDetail] selectedResourcesByNode updated:", selectedResourcesByNode);
+    }, [selectedResourcesByNode]);
+
+    // Initialize and update accordion states for nodes and resources
+    useEffect(() => {
+        if (!objectData) return; // Skip if no data
+        console.log("[ObjectDetail] Updating accordion states for nodes and resources");
+        const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+        setExpandedNodeResources((prev) => {
+            const updatedNodeResources = {...prev};
+            nodes.forEach((node) => {
+                if (!(node in updatedNodeResources)) {
+                    updatedNodeResources[node] = false;
+                }
+            });
+            Object.keys(updatedNodeResources).forEach((node) => {
+                if (!nodes.includes(node)) {
+                    delete updatedNodeResources[node];
+                }
+            });
+            console.log("[ObjectDetail] Updated expandedNodeResources:", updatedNodeResources);
+            return updatedNodeResources;
+        });
+
+        setExpandedResources((prev) => {
+            const updatedResources = {...prev};
+            nodes.forEach((node) => {
+                const resources = objectInstanceStatus[decodedObjectName]?.[node]?.resources || {};
+                Object.keys(resources).forEach((rid) => {
+                    const key = `${node}:${rid}`;
+                    if (!(key in updatedResources)) {
+                        updatedResources[key] = false;
+                    }
+                });
+            });
+            Object.keys(updatedResources).forEach((key) => {
+                const [node] = key.split(":");
+                if (
+                    !nodes.includes(node) ||
+                    !(objectInstanceStatus[decodedObjectName]?.[node]?.resources?.[key.split(":")[1]])
+                ) {
+                    delete updatedResources[key];
+                }
+            });
+            console.log("[ObjectDetail] Updated expandedResources:", updatedResources);
+            return updatedResources;
+        });
+    }, [objectInstanceStatus, decodedObjectName]);
 
     const openSnackbar = (msg, sev = "success") =>
         setSnackbar({open: true, message: msg, severity: sev});
@@ -255,14 +257,17 @@ const ObjectDetail = () => {
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
         const url = postActionUrl({node, objectName: decodedObjectName, action});
+        console.log("[ObjectDetail] postNodeAction URL:", url);
         try {
             const res = await fetch(url, {
                 method: "POST",
                 headers: {Authorization: `Bearer ${token}`},
             });
+            console.log("[ObjectDetail] postNodeAction response:", res.status, res.statusText);
             if (!res.ok) throw new Error(`Failed to execute ${action}`);
             openSnackbar(`'${action}' succeeded on node '${node}'`);
         } catch (err) {
+            console.error("[ObjectDetail] postNodeAction error:", err);
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionInProgress(false);
@@ -297,89 +302,72 @@ const ObjectDetail = () => {
         }
     };
 
-    // Fetch keys for cfg or sec objects
-    const fetchKeys = async () => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        if (!["cfg", "sec"].includes(kind)) return;
-
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            setKeysError("Auth token not found.");
-            return;
-        }
-
-        setKeysLoading(true);
-        setKeysError(null);
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
-            const response = await fetch(url, {
-                headers: {Authorization: `Bearer ${token}`},
-            });
-            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
-            const data = await response.json();
-            setKeys(data.items || []);
-        } catch (err) {
-            setKeysError(err.message);
-        } finally {
-            setKeysLoading(false);
-        }
-    };
-
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
+        console.log("[ObjectDetail] fetchConfig called with node:", node);
         if (!node) {
-            console.warn(`🚫 [fetchConfig] No node provided for ${decodedObjectName}`);
+            console.warn(`[ObjectDetail] fetchConfig: No node provided for ${decodedObjectName}`);
             setConfigError("No node available to fetch configuration.");
             return;
         }
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
         if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
+            console.log("[ObjectDetail] fetchConfig: Debounced, skipping");
             return;
         }
         lastFetch.current[key] = now;
         if (configLoading) {
-            console.warn(`⏳ [fetchConfig] Already loading, queuing request for node=${node}`);
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            if (configLoading) {
-                console.warn(`🚫 [fetchConfig] Still loading, skipping request for node=${node}`);
-                return;
-            }
+            console.warn(`[ObjectDetail] fetchConfig: Already loading for ${node}, skipping`);
+            return;
         }
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             setConfigError("Auth token not found.");
-            console.error("❌ [fetchConfig] No auth token for:", decodedObjectName);
+            console.error("[ObjectDetail] fetchConfig: No auth token");
             return;
         }
 
         setConfigLoading(true);
         setConfigError(null);
-        setConfigNode(node); // Store the node used for fetching config
+        setConfigNode(node);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
+        console.log("[ObjectDetail] fetchConfig URL:", url);
         try {
-            const response = await fetch(url, {
-                headers: {Authorization: `Bearer ${token}`},
-                cache: "no-cache",
-            });
+            const response = await Promise.race([
+                fetch(url, {
+                    headers: {Authorization: `Bearer ${token}`},
+                    cache: "no-cache",
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000))
+            ]);
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
             }
             const text = await response.text();
-            setConfigData(text);
+            if (isMounted.current) {
+                setConfigData(text);
+                console.log("[ObjectDetail] fetchConfig success, configData:", text);
+            }
             return text;
         } catch (err) {
-            console.error(`💥 [fetchConfig] Error: ${err.message}, URL: ${url}`);
-            setConfigError(err.message);
+            if (isMounted.current) {
+                setConfigError(err.message);
+                console.error(`[ObjectDetail] fetchConfig error: ${err.message}, URL: ${url}`);
+            }
             throw err;
         } finally {
-            setConfigLoading(false);
+            if (isMounted.current) {
+                setConfigLoading(false);
+                console.log("[ObjectDetail] fetchConfig completed");
+            }
         }
     };
 
     // Update configuration for the object
     const handleUpdateConfig = async () => {
+        console.log("[ObjectDetail] handleUpdateConfig called");
         if (!newConfigFile) {
             openSnackbar("Configuration file is required.", "error");
             return;
@@ -391,7 +379,7 @@ const ObjectDetail = () => {
             return;
         }
 
-        setActionLoading(true);
+        setActionInProgress(true);
         openSnackbar("Updating configuration…", "info");
         try {
             const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
@@ -410,12 +398,12 @@ const ObjectDetail = () => {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleUpdateConfig] No configNode available for ${decodedObjectName}`);
+                console.warn(`[ObjectDetail] handleUpdateConfig: No configNode available`);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
-            setActionLoading(false);
+            setActionInProgress(false);
             setUpdateConfigDialogOpen(false);
             setNewConfigFile(null);
         }
@@ -423,11 +411,12 @@ const ObjectDetail = () => {
 
     // Add configuration parameters
     const handleAddParams = async () => {
+        console.log("[ObjectDetail] handleAddParams called with paramsToSet:", paramsToSet);
         if (!paramsToSet) {
             openSnackbar("Parameter input is required.", "error");
             return false;
         }
-        const paramList = paramsToSet.split("\n").filter(param => param.trim());
+        const paramList = paramsToSet.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters provided.", "error");
             return false;
@@ -440,7 +429,7 @@ const ObjectDetail = () => {
             return false;
         }
 
-        setActionLoading(true);
+        setActionInProgress(true);
         let successCount = 0;
         for (const param of paramList) {
             const [key, value] = param.split("=", 2);
@@ -469,20 +458,21 @@ const ObjectDetail = () => {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleAddParams] No configNode available for ${decodedObjectName}`);
+                console.warn(`[ObjectDetail] handleAddParams: No configNode available`);
             }
         }
-        setActionLoading(false);
+        setActionInProgress(false);
         return successCount > 0;
     };
 
     // Unset configuration parameters
     const handleUnsetParams = async () => {
+        console.log("[ObjectDetail] handleUnsetParams called with paramsToUnset:", paramsToUnset);
         if (!paramsToUnset) {
             openSnackbar("Parameter key(s) to unset are required.", "error");
             return false;
         }
-        const paramList = paramsToUnset.split("\n").filter(param => param.trim());
+        const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters to unset provided.", "error");
             return false;
@@ -495,7 +485,7 @@ const ObjectDetail = () => {
             return false;
         }
 
-        setActionLoading(true);
+        setActionInProgress(true);
         let successCount = 0;
         for (const key of paramList) {
             try {
@@ -519,20 +509,21 @@ const ObjectDetail = () => {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleUnsetParams] No configNode available for ${decodedObjectName}`);
+                console.warn(`[ObjectDetail] handleUnsetParams: No configNode available`);
             }
         }
-        setActionLoading(false);
+        setActionInProgress(false);
         return successCount > 0;
     };
 
     // Delete configuration parameters
     const handleDeleteParams = async () => {
+        console.log("[ObjectDetail] handleDeleteParams called with paramsToDelete:", paramsToDelete);
         if (!paramsToDelete) {
             openSnackbar("Parameter key(s) to delete are required.", "error");
             return false;
         }
-        const paramList = paramsToDelete.split("\n").filter(param => param.trim());
+        const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
         if (paramList.length === 0) {
             openSnackbar("No valid parameters to delete provided.", "error");
             return false;
@@ -545,7 +536,7 @@ const ObjectDetail = () => {
             return false;
         }
 
-        setActionLoading(true);
+        setActionInProgress(true);
         let successCount = 0;
         for (const key of paramList) {
             try {
@@ -569,15 +560,16 @@ const ObjectDetail = () => {
                 await fetchConfig(configNode);
                 setConfigAccordionExpanded(true);
             } else {
-                console.warn(`⚠️ [handleDeleteParams] No configNode available for ${decodedObjectName}`);
+                console.warn(`[ObjectDetail] handleDeleteParams: No configNode available`);
             }
         }
-        setActionLoading(false);
+        setActionInProgress(false);
         return successCount > 0;
     };
 
     // Handle manage parameters dialog submission
     const handleManageParamsSubmit = async () => {
+        console.log("[ObjectDetail] handleManageParamsSubmit called");
         let anySuccess = false;
         if (paramsToSet) {
             const success = await handleAddParams();
@@ -596,120 +588,6 @@ const ObjectDetail = () => {
             setParamsToUnset("");
             setParamsToDelete("");
             setManageParamsDialogOpen(false);
-        }
-    };
-
-    // Key action handlers
-    const handleDeleteKey = async () => {
-        if (!keyToDelete) return;
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Deleting key ${keyToDelete}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(
-                keyToDelete
-            )}`;
-            const response = await fetch(url, {
-                method: "DELETE",
-                headers: {Authorization: `Bearer ${token}`},
-            });
-            if (!response.ok)
-                throw new Error(`Failed to delete key: ${response.status}`);
-            openSnackbar(`Key '${keyToDelete}' deleted successfully`);
-            await fetchKeys();
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setDeleteDialogOpen(false);
-            setKeyToDelete(null);
-        }
-    };
-
-    const handleCreateKey = async () => {
-        if (!newKeyName || !newKeyFile) {
-            openSnackbar("Key name and file are required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Creating key ${newKeyName}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(
-                newKeyName
-            )}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream",
-                },
-                body: newKeyFile,
-            });
-            if (!response.ok)
-                throw new Error(`Failed to create key: ${response.status}`);
-            openSnackbar(`Key '${newKeyName}' created successfully`);
-            await fetchKeys();
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setCreateDialogOpen(false);
-            setNewKeyName("");
-            setNewKeyFile(null);
-        }
-    };
-
-    const handleUpdateKey = async () => {
-        if (!updateKeyName || !updateKeyFile) {
-            openSnackbar("Key name and file are required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionLoading(true);
-        openSnackbar(`Updating key ${updateKeyName}…`, "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(
-                updateKeyName
-            )}`;
-            const response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream",
-                },
-                body: updateKeyFile,
-            });
-            if (!response.ok)
-                throw new Error(`Failed to update key: ${response.status}`);
-            openSnackbar(`Key '${updateKeyName}' updated successfully`);
-            await fetchKeys();
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionLoading(false);
-            setUpdateDialogOpen(false);
-            setKeyToUpdate(null);
-            setUpdateKeyName("");
-            setUpdateKeyFile(null);
         }
     };
 
@@ -755,108 +633,76 @@ const ObjectDetail = () => {
         return {avail, frozen, globalExpect};
     };
 
-    // Batch node actions handlers
-    const handleNodesActionsOpen = (e) => setNodesActionsAnchor(e.currentTarget);
-    const handleNodesActionsClose = () => setNodesActionsAnchor(null);
-    const handleBatchNodeActionClick = (action) => {
-        setPendingAction({action, batch: "nodes"});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionChecked(false);
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
-        handleNodesActionsClose();
-    };
-
-    // Individual node actions handlers
-    const handleIndividualNodeActionClick = (action) => {
-        setPendingAction({action, node: currentNode});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionChecked(false);
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
-        setIndividualNodeMenuAnchor(null);
-    };
-
-    // Batch resource actions handlers
-    const handleResourcesActionsOpen = (node, e) => {
-        setResGroupNode(node);
-        setResourcesActionsAnchor(e.currentTarget);
-    };
-    const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
-    const handleBatchResourceActionClick = (action) => {
-        setPendingAction({action, batch: "resources", node: resGroupNode});
-        setSimpleDialogOpen(true);
-        handleResourcesActionsClose();
-    };
-
-    // Individual resource actions handlers
-    const handleResourceMenuOpen = (node, rid, e) => {
-        setCurrentResourceId(rid);
-        setResGroupNode(node);
-        setResourceMenuAnchor(e.currentTarget);
-    };
-    const handleResourceMenuClose = () => setResourceMenuAnchor(null);
-    const handleResourceActionClick = (action) => {
-        setPendingAction({action, node: resGroupNode, rid: currentResourceId});
-        setSimpleDialogOpen(true);
-        handleResourceMenuClose();
-    };
-
-    // Accordion expansion handlers
-    const handleAccordionChange = (panel) => (event, isExpanded) => {
-        setExpandedResources((prev) => ({
-            ...prev,
-            [panel]: isExpanded,
-        }));
-    };
-
+    // Accordion handlers
     const handleNodeResourcesAccordionChange = (node) => (event, isExpanded) => {
+        console.log("[ObjectDetail] handleNodeResourcesAccordionChange:", {node, isExpanded});
         setExpandedNodeResources((prev) => ({
             ...prev,
             [node]: isExpanded,
         }));
     };
 
-    const handleKeysAccordionChange = (event, isExpanded) => {
-        setKeysAccordionExpanded(isExpanded);
+    const handleAccordionChange = (node, rid) => (event, isExpanded) => {
+        console.log("[ObjectDetail] handleAccordionChange:", {node, rid, isExpanded});
+        setExpandedResources((prev) => ({
+            ...prev,
+            [`${node}:${rid}`]: isExpanded,
+        }));
     };
 
-    const handleConfigAccordionChange = (event, isExpanded) => {
-        setConfigAccordionExpanded(isExpanded);
+    // Batch node actions handlers
+    const handleNodesActionsOpen = (e) => setNodesActionsAnchor(e.currentTarget);
+    const handleNodesActionsClose = () => setNodesActionsAnchor(null);
+    const handleBatchNodeActionClick = (action) => {
+        console.log("[ObjectDetail] handleBatchNodeActionClick:", action);
+        setPendingAction({action, batch: "nodes"});
+        handleNodesActionsClose();
+    };
+
+    // Individual node actions handlers
+    const handleIndividualNodeActionClick = (action) => {
+        console.log("[ObjectDetail] handleIndividualNodeActionClick:", action, currentNode);
+        setPendingAction({action, node: currentNode});
+        setIndividualNodeMenuAnchor(null);
+    };
+
+    // Batch resource actions handlers
+    const handleResourcesActionsOpen = (node, e) => {
+        console.log("[ObjectDetail] handleResourcesActionsOpen:", node);
+        setResGroupNode(node);
+        setResourcesActionsAnchor(e.currentTarget);
+    };
+    const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
+    const handleBatchResourceActionClick = (action) => {
+        console.log("[ObjectDetail] handleBatchResourceActionClick:", action, resGroupNode);
+        setPendingAction({action, batch: "resources", node: resGroupNode});
+        handleResourcesActionsClose();
+    };
+
+    // Individual resource actions handlers
+    const handleResourceMenuOpen = (node, rid, e) => {
+        console.log("[ObjectDetail] handleResourceMenuOpen:", node, rid);
+        setCurrentResourceId(rid);
+        setResGroupNode(node);
+        setResourceMenuAnchor(e.currentTarget);
+    };
+    const handleResourceMenuClose = () => setResourceMenuAnchor(null);
+    const handleResourceActionClick = (action) => {
+        console.log("[ObjectDetail] handleResourceActionClick:", action, currentResourceId);
+        setPendingAction({action, node: resGroupNode, rid: currentResourceId});
+        handleResourceMenuClose();
+    };
+
+    // Object action handler
+    const handleObjectActionClick = (action) => {
+        console.log("[ObjectDetail] handleObjectActionClick:", action);
+        setPendingAction({action});
+        setObjectMenuAnchor(null);
     };
 
     // Dialog confirm handler
     const handleDialogConfirm = () => {
+        console.log("[ObjectDetail] handleDialogConfirm called with pendingAction:", pendingAction);
         if (!pendingAction) return;
 
         if (pendingAction.batch === "nodes") {
@@ -889,128 +735,162 @@ const ObjectDetail = () => {
             postObjectAction(pendingAction);
         }
 
-        // Reset all dialog states
         setPendingAction(null);
-        setCheckboxes({failover: false});
-        setStopCheckbox(false);
-        setUnprovisionChecked(false);
-        setPurgeCheckboxes({
-            dataLoss: false,
-            configLoss: false,
-            serviceInterruption: false,
-        });
-        setConfirmDialogOpen(false);
-        setStopDialogOpen(false);
-        setUnprovisionDialogOpen(false);
-        setPurgeDialogOpen(false);
-        setSimpleDialogOpen(false);
     };
 
     // Selection helpers
-    const toggleNode = (node) =>
+    const toggleNode = (node) => {
+        console.log("[ObjectDetail] toggleNode:", node);
         setSelectedNodes((prev) =>
             prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
         );
+    };
 
     const toggleResource = (node, rid) => {
+        console.log("[ObjectDetail] toggleResource:", {node, rid});
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
             const next = current.includes(rid)
                 ? current.filter((r) => r !== rid)
                 : [...current, rid];
+            console.log("[ObjectDetail] toggleResource result:", {node, next});
             return {...prev, [node]: next};
         });
     };
 
     // Effect for configuring EventSource
     useEffect(() => {
+        if (!objectData) {
+            console.log(`[ObjectDetail] No object data, skipping EventSource for ${decodedObjectName}`);
+            return;
+        }
+        console.log(`[ObjectDetail] Setting up EventSource for ${decodedObjectName}`);
         const token = localStorage.getItem("authToken");
         if (token) {
-            console.log(`🔍 Starting EventSource for object: ${decodedObjectName}`);
             const filters = [
                 `ObjectStatusUpdated,path=${decodedObjectName}`,
                 `InstanceStatusUpdated,path=${decodedObjectName}`,
                 `ObjectDeleted,path=${decodedObjectName}`,
                 `InstanceMonitorUpdated,path=${decodedObjectName}`,
-                `InstanceConfigUpdated,path=${decodedObjectName}`
+                `InstanceConfigUpdated,path=${decodedObjectName}`,
             ];
             startEventReception(token, filters);
+        } else {
+            console.warn("[ObjectDetail] No auth token for EventSource");
         }
 
         return () => {
-            console.log(`🛑 Closing EventSource for object: ${decodedObjectName}`);
+            console.log(`[ObjectDetail] Cleaning up EventSource for ${decodedObjectName}`);
             closeEventSource();
         };
-    }, [decodedObjectName]);
+    }, [decodedObjectName, objectData]);
 
     // Effect for handling config updates
     useEffect(() => {
-        const unsubscribe = useEventStore.subscribe(
+        if (!objectData) {
+            console.log(`[ObjectDetail] No object data, skipping configUpdates subscription for ${decodedObjectName}`);
+            return;
+        }
+        console.log("[ObjectDetail] Setting up configUpdates subscription");
+        if (!isMounted.current) {
+            console.log("[ObjectDetail] Component unmounted, skipping subscription");
+            return;
+        }
+
+        const subscription = useEventStore.subscribe(
             (state) => state.configUpdates,
             async (updates) => {
-                const {name} = parseObjectPath(decodedObjectName);
-                const matchingUpdate = updates.find(u =>
-                    (u.name === name || u.fullName === decodedObjectName) &&
-                    u.type === 'InstanceConfigUpdated'
-                );
+                console.log("[ObjectDetail] Config updates received:", updates);
+                if (!isMounted.current) {
+                    console.log("[ObjectDetail] Component unmounted, ignoring config update");
+                    return;
+                }
+                if (isProcessingConfigUpdate.current) {
+                    console.log("[ObjectDetail] Config update processing already in progress, skipping");
+                    return;
+                }
+                isProcessingConfigUpdate.current = true;
+                try {
+                    const {name} = parseObjectPath(decodedObjectName);
+                    const matchingUpdate = updates.find(
+                        (u) =>
+                            (u.name === name || u.fullName === decodedObjectName) &&
+                            u.type === "InstanceConfigUpdated"
+                    );
 
-                if (matchingUpdate) {
-                    try {
-                        await fetchConfig(matchingUpdate.node);
-                        setConfigAccordionExpanded(true);
-                        openSnackbar("Configuration updated", "info");
-                    } catch (err) {
-                        console.error(`💥 Failed to fetch updated config:`, err);
-                        openSnackbar("Failed to load updated configuration", "error");
-                    } finally {
-                        clearConfigUpdate(decodedObjectName);
+                    if (matchingUpdate && matchingUpdate.node) {
+                        console.log("[ObjectDetail] Processing config update for node:", matchingUpdate.node);
+                        try {
+                            await fetchConfig(matchingUpdate.node);
+                            setConfigAccordionExpanded(true);
+                            openSnackbar("Configuration updated", "info");
+                        } catch (err) {
+                            console.error(`[ObjectDetail] Failed to fetch updated config:`, err);
+                            openSnackbar("Failed to load updated configuration", "error");
+                        } finally {
+                            clearConfigUpdate(decodedObjectName);
+                        }
+                    } else {
+                        console.log("[ObjectDetail] No valid node in config update, skipping fetchConfig");
                     }
+                } finally {
+                    isProcessingConfigUpdate.current = false;
                 }
             }
         );
 
-        return unsubscribe;
-    }, [decodedObjectName]);
+        console.log("[ObjectDetail] Subscription created:", typeof subscription);
+
+        return () => {
+            console.log("[ObjectDetail] Cleaning up configUpdates subscription");
+            if (typeof subscription === "function") {
+                subscription();
+            } else {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            }
+        };
+    }, [decodedObjectName, clearConfigUpdate, objectData]);
 
     // Initial load effects
     useEffect(() => {
+        if (!objectData) {
+            console.log(`[ObjectDetail] No object data, skipping initial config load for ${decodedObjectName}`);
+            setConfigError("No nodes available to fetch configuration.");
+            return;
+        }
+        console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
         const loadInitialConfig = async () => {
-            // Vérifier si objectInstanceStatus est disponible
-            if (!objectInstanceStatus[decodedObjectName]) {
-                console.log(`⏳ [Initial Load] Waiting for objectInstanceStatus for ${decodedObjectName}`);
-                return;
-            }
-
             const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
             if (initialNode) {
+                console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
                 try {
                     await fetchConfig(initialNode);
                 } catch (err) {
-                    console.error(`💥 [Initial Load] Failed to fetch config for ${decodedObjectName}:`, err);
+                    console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
                 }
             } else {
                 setConfigError("No nodes available to fetch configuration.");
-                console.warn(`🚫 [Initial Load] No initial node found for ${decodedObjectName}`);
+                console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
             }
         };
 
-        // Initial keys load
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            fetchKeys();
-        }
-
         loadInitialConfig();
-    }, [decodedObjectName, objectInstanceStatus]);
+    }, [decodedObjectName, objectData]);
 
     // Memoize data to prevent unnecessary re-renders
-    const memoizedObjectData = useMemo(() => objectData, [objectData]);
-    const memoizedNodes = useMemo(
-        () => Object.keys(memoizedObjectData || {}),
-        [memoizedObjectData]
-    );
+    const memoizedObjectData = useMemo(() => {
+        console.log("[ObjectDetail] Memoizing objectData:", objectData);
+        return objectData;
+    }, [objectData]);
+    const memoizedNodes = useMemo(() => {
+        console.log("[ObjectDetail] Memoizing nodes:", Object.keys(memoizedObjectData || {}));
+        return Object.keys(memoizedObjectData || {});
+    }, [memoizedObjectData]);
+
+    console.log("[ObjectDetail] Rendering with memoizedObjectData:", memoizedObjectData);
 
     if (!memoizedObjectData) {
+        console.log("[ObjectDetail] No object data, rendering empty state");
         return (
             <Box p={4}>
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
@@ -1022,646 +902,63 @@ const ObjectDetail = () => {
 
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
+    console.log("[ObjectDetail] showKeys:", showKeys, "kind:", kind);
 
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
             <Box sx={{width: "100%", maxWidth: "1400px"}}>
-                {/* HEADER */}
-                {globalStatus && (
-                    <Box
-                        sx={{
-                            p: 1,
-                            mb: 4,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                        }}
-                    >
-                        <Typography variant="h4" fontWeight="bold">
-                            {decodedObjectName}
-                        </Typography>
-                        <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                            <Tooltip title={getObjectStatus().avail || "unknown"}>
-                                <FiberManualRecordIcon
-                                    sx={{color: getColor(getObjectStatus().avail), fontSize: "1.2rem"}}
-                                />
-                            </Tooltip>
-                            {getObjectStatus().avail === "warn" && (
-                                <Tooltip title="warn">
-                                    <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            )}
-                            {getObjectStatus().frozen === "frozen" && (
-                                <Tooltip title="frozen">
-                                    <AcUnitIcon sx={{color: blue[300], fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            )}
-                            {getObjectStatus().globalExpect && (
-                                <Typography variant="caption">{getObjectStatus().globalExpect}</Typography>
-                            )}
-                            <IconButton
-                                onClick={(e) => setObjectMenuAnchor(e.currentTarget)}
-                                disabled={actionInProgress}
-                                aria-label="Object actions"
-                            >
-                                <Tooltip title="Actions">
-                                    <MoreVertIcon sx={{fontSize: "1.2rem"}}/>
-                                </Tooltip>
-                            </IconButton>
-                            <Menu
-                                anchorEl={objectMenuAnchor}
-                                open={Boolean(objectMenuAnchor)}
-                                onClose={() => setObjectMenuAnchor(null)}
-                            >
-                                {OBJECT_ACTIONS.map(({name, icon}) => {
-                                    const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
-                                    return (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => {
-                                                setPendingAction({action: name});
-                                                if (name === "freeze") {
-                                                    setCheckboxes({failover: false});
-                                                    setConfirmDialogOpen(true);
-                                                } else if (name === "stop") {
-                                                    setStopCheckbox(false);
-                                                    setStopDialogOpen(true);
-                                                } else if (name === "unprovision") {
-                                                    setUnprovisionChecked(false);
-                                                    setUnprovisionDialogOpen(true);
-                                                } else if (name === "purge") {
-                                                    setPurgeCheckboxes({
-                                                        dataLoss: false,
-                                                        configLoss: false,
-                                                        serviceInterruption: false,
-                                                    });
-                                                    setPurgeDialogOpen(true);
-                                                } else {
-                                                    setSimpleDialogOpen(true);
-                                                }
-                                                setObjectMenuAnchor(null);
-                                            }}
-                                            disabled={!isAllowed || actionInProgress}
-                                            sx={{
-                                                color: isAllowed ? 'inherit' : 'text.disabled',
-                                                '&.Mui-disabled': {
-                                                    opacity: 0.5
-                                                }
-                                            }}
-                                        >
-                                            <ListItemIcon
-                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}>
-                                                {icon}
-                                            </ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    );
-                                })}
-                            </Menu>
-                        </Box>
-                    </Box>
-                )}
-
-                {/* KEYS SECTION */}
-                {showKeys && (
-                    <Box
-                        sx={{
-                            mb: 4,
-                            p: 2,
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 1,
-                        }}
-                    >
-                        <Accordion
-                            expanded={keysAccordionExpanded}
-                            onChange={handleKeysAccordionChange}
-                            sx={{
-                                border: "none",
-                                boxShadow: "none",
-                                backgroundColor: "transparent",
-                                "&:before": {display: "none"},
-                                "& .MuiAccordionSummary-root": {
-                                    border: "none",
-                                    backgroundColor: "transparent",
-                                    minHeight: "auto",
-                                    "&.Mui-expanded": {minHeight: "auto"},
-                                    padding: 0,
-                                },
-                                "& .MuiAccordionDetails-root": {
-                                    border: "none",
-                                    backgroundColor: "transparent",
-                                    padding: 0,
-                                },
-                            }}
-                        >
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon/>}
-                                aria-controls="panel-keys-content"
-                                id="panel-keys-header"
-                            >
-                                <Typography variant="h6" fontWeight="medium">
-                                    Object Keys ({keys.length})
-                                </Typography>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
-                                    <Tooltip title="Add new key">
-                                        <IconButton
-                                            color="primary"
-                                            onClick={() => setCreateDialogOpen(true)}
-                                            disabled={actionLoading}
-                                            aria-label="Add new key"
-                                        >
-                                            <AddIcon/>
-                                        </IconButton>
-                                    </Tooltip>
-                                </Box>
-                                {keysLoading && <CircularProgress size={24}/>}
-                                {keysError && (
-                                    <Alert severity="error" sx={{mb: 2}}>
-                                        {keysError}
-                                    </Alert>
-                                )}
-                                {!keysLoading && !keysError && keys.length === 0 && (
-                                    <Typography color="textSecondary">No keys available.</Typography>
-                                )}
-                                {!keysLoading && !keysError && keys.length > 0 && (
-                                    <TableContainer component={Paper} sx={{boxShadow: "none"}}>
-                                        <Table sx={{minWidth: 650}} aria-label="keys table">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
-                                                    <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {keys.map((key) => (
-                                                    <TableRow key={key.name}>
-                                                        <TableCell component="th" scope="row">
-                                                            {key.name}
-                                                        </TableCell>
-                                                        <TableCell>{key.node}</TableCell>
-                                                        <TableCell>{key.size} bytes</TableCell>
-                                                        <TableCell>
-                                                            <Tooltip title="Edit">
-                                                                <span>
-                                                                    <IconButton
-                                                                        onClick={() => {
-                                                                            setKeyToUpdate(key.name);
-                                                                            setUpdateKeyName(key.name);
-                                                                            setUpdateDialogOpen(true);
-                                                                        }}
-                                                                        disabled={actionLoading}
-                                                                        aria-label={`Edit key ${key.name}`}
-                                                                    >
-                                                                        <EditIcon/>
-                                                                    </IconButton>
-                                                                </span>
-                                                            </Tooltip>
-                                                            <Tooltip title="Delete">
-                                                                <span>
-                                                                    <IconButton
-                                                                        onClick={() => {
-                                                                            setKeyToDelete(key.name);
-                                                                            setDeleteDialogOpen(true);
-                                                                        }}
-                                                                        disabled={actionLoading}
-                                                                        aria-label={`Delete key ${key.name}`}
-                                                                    >
-                                                                        <DeleteIcon/>
-                                                                    </IconButton>
-                                                                </span>
-                                                            </Tooltip>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                )}
-                            </AccordionDetails>
-                        </Accordion>
-                    </Box>
-                )}
-
-                {/* CONFIGURATION SECTION */}
-                <Box
-                    sx={{
-                        mb: 4,
-                        p: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        borderRadius: 1,
-                    }}
-                >
-                    <Accordion
-                        expanded={configAccordionExpanded}
-                        onChange={handleConfigAccordionChange}
-                        sx={{
-                            border: "none",
-                            boxShadow: "none",
-                            backgroundColor: "transparent",
-                            "&:before": {display: "none"},
-                            "& .MuiAccordionSummary-root": {
-                                border: "none",
-                                backgroundColor: "transparent",
-                                minHeight: "auto",
-                                "&.Mui-expanded": {minHeight: "auto"},
-                                padding: 0,
-                            },
-                            "& .MuiAccordionDetails-root": {
-                                border: "none",
-                                backgroundColor: "transparent",
-                                padding: 0,
-                            },
-                        }}
-                    >
-                        <AccordionSummary
-                            expandIcon={<ExpandMoreIcon/>}
-                            aria-controls="panel-config-content"
-                            id="panel-config-header"
-                        >
-                            <Typography variant="h6" fontWeight="medium">
-                                Configuration
-                            </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
-                                <Tooltip title="Upload a new configuration file">
-                                    <IconButton
-                                        color="primary"
-                                        onClick={() => setUpdateConfigDialogOpen(true)}
-                                        disabled={actionLoading}
-                                        aria-label="Upload new configuration file"
-                                    >
-                                        <UploadFileIcon/>
-                                    </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Manage configuration parameters (add, unset, delete)">
-                                    <IconButton
-                                        color="primary"
-                                        onClick={() => setManageParamsDialogOpen(true)}
-                                        disabled={actionLoading}
-                                        aria-label="Manage configuration parameters"
-                                    >
-                                        <EditIcon/>
-                                    </IconButton>
-                                </Tooltip>
-                            </Box>
-                            {configLoading && <CircularProgress size={24}/>}
-                            {configError && (
-                                <Alert severity="error" sx={{mb: 2}}>
-                                    {configError}
-                                </Alert>
-                            )}
-                            {!configLoading && !configError && configData === null && (
-                                <Typography color="textSecondary">
-                                    No configuration available.
-                                </Typography>
-                            )}
-                            {!configLoading && !configError && configData !== null && (
-                                <Box
-                                    sx={{
-                                        p: 2,
-                                        bgcolor: "grey.200",
-                                        borderRadius: 1,
-                                        maxWidth: "100%",
-                                        overflowX: "auto",
-                                        boxSizing: "border-box",
-                                        scrollbarWidth: "thin",
-                                        "&::-webkit-scrollbar": {
-                                            height: "8px",
-                                        },
-                                        "&::-webkit-scrollbar-thumb": {
-                                            backgroundColor: "grey.400",
-                                            borderRadius: "4px",
-                                        },
-                                    }}
-                                >
-                                    <Box
-                                        component="pre"
-                                        key={configData}
-                                        sx={{
-                                            whiteSpace: "pre-wrap",
-                                            fontFamily: "Monospace",
-                                            bgcolor: "inherit",
-                                            p: 1,
-                                            m: 0,
-                                            minWidth: "max-content",
-                                        }}
-                                    >
-                                        {configData}
-                                    </Box>
-                                </Box>
-                            )}
-                        </AccordionDetails>
-                    </Accordion>
-                </Box>
-
-                {/* DELETE KEY DIALOG */}
-                <Dialog
-                    open={deleteDialogOpen}
-                    onClose={() => setDeleteDialogOpen(false)}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirm Key Deletion</DialogTitle>
-                    <DialogContent>
-                        <Typography variant="body1">
-                            Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            color="error"
-                            onClick={handleDeleteKey}
-                            disabled={actionLoading}
-                        >
-                            Delete
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* CREATE KEY DIALOG */}
-                <Dialog
-                    open={createDialogOpen}
-                    onClose={() => setCreateDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle>Create New Key</DialogTitle>
-                    <DialogContent>
-                        <TextField
-                            autoFocus
-                            margin="dense"
-                            label="Key Name"
-                            fullWidth
-                            variant="outlined"
-                            value={newKeyName}
-                            onChange={(e) => setNewKeyName(e.target.value)}
-                            disabled={actionLoading}
-                        />
-                        <Box sx={{mt: 2}}>
-                            <input
-                                id="create-key-file-upload"
-                                type="file"
-                                hidden
-                                onChange={(e) => setNewKeyFile(e.target.files[0])}
-                                disabled={actionLoading}
-                            />
-                            <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    component="label"
-                                    htmlFor="create-key-file-upload"
-                                    disabled={actionLoading}
-                                >
-                                    Choose File
-                                </Button>
-                                <Typography
-                                    variant="body2"
-                                    color={newKeyFile ? "textPrimary" : "textSecondary"}
-                                >
-                                    {newKeyFile ? newKeyFile.name : "No file selected"}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleCreateKey}
-                            disabled={actionLoading || !newKeyName || !newKeyFile}
-                        >
-                            Create
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* UPDATE KEY DIALOG */}
-                <Dialog
-                    open={updateDialogOpen}
-                    onClose={() => setUpdateDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle>Update Key</DialogTitle>
-                    <DialogContent>
-                        <TextField
-                            autoFocus
-                            margin="dense"
-                            label="Key Name"
-                            fullWidth
-                            variant="outlined"
-                            value={updateKeyName}
-                            onChange={(e) => setUpdateKeyName(e.target.value)}
-                            disabled={actionLoading}
-                        />
-                        <Box sx={{mt: 2}}>
-                            <input
-                                id="update-key-file-upload"
-                                type="file"
-                                hidden
-                                onChange={(e) => setUpdateKeyFile(e.target.files[0])}
-                                disabled={actionLoading}
-                            />
-                            <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    component="label"
-                                    htmlFor="update-key-file-upload"
-                                    disabled={actionLoading}
-                                >
-                                    Choose File
-                                </Button>
-                                <Typography
-                                    variant="body2"
-                                    color={updateKeyFile ? "textPrimary" : "textSecondary"}
-                                >
-                                    {updateKeyFile ? updateKeyFile.name : "No file chosen"}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleUpdateKey}
-                            disabled={actionLoading || !updateKeyName || !updateKeyFile}
-                        >
-                            Update
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
+                <HeaderSection
+                    decodedObjectName={decodedObjectName}
+                    globalStatus={objectStatus[decodedObjectName]}
+                    actionInProgress={actionInProgress}
+                    objectMenuAnchor={objectMenuAnchor}
+                    setObjectMenuAnchor={setObjectMenuAnchor}
+                    handleObjectActionClick={handleObjectActionClick}
+                    getObjectStatus={getObjectStatus}
+                    getColor={getColor}
+                />
+                <ActionDialogManager
+                    pendingAction={pendingAction}
+                    handleConfirm={handleDialogConfirm}
+                    target={`object ${decodedObjectName}`}
+                    supportedActions={
+                        pendingAction?.batch === "nodes"
+                            ? INSTANCE_ACTIONS.map((action) => action.name)
+                            : pendingAction?.batch === "resources" || pendingAction?.rid
+                                ? RESOURCE_ACTIONS.map((action) => action.name)
+                                : OBJECT_ACTIONS.map((action) => action.name)
+                    }
+                    onClose={() => setPendingAction(null)}
+                />
+                <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                <ConfigSection
+                    decodedObjectName={decodedObjectName}
+                    configNode={configNode}
+                    setConfigNode={setConfigNode}
+                    openSnackbar={openSnackbar}
+                />
                 {/* UPDATE CONFIG DIALOG */}
-                <Dialog
+                <UpdateConfigDialog
                     open={updateConfigDialogOpen}
                     onClose={() => setUpdateConfigDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle>Update Configuration</DialogTitle>
-                    <DialogContent>
-                        <Box sx={{mt: 2}}>
-                            <input
-                                id="update-config-file-upload"
-                                type="file"
-                                hidden
-                                onChange={(e) => setNewConfigFile(e.target.files[0])}
-                                disabled={actionLoading}
-                            />
-                            <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    component="label"
-                                    htmlFor="update-config-file-upload"
-                                    disabled={actionLoading}
-                                >
-                                    Choose File
-                                </Button>
-                                <Typography
-                                    variant="body2"
-                                    color={newConfigFile ? "textPrimary" : "textSecondary"}
-                                >
-                                    {newConfigFile ? newConfigFile.name : "No file chosen"}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button
-                            onClick={() => setUpdateConfigDialogOpen(false)}
-                            disabled={actionLoading}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleUpdateConfig}
-                            disabled={actionLoading || !newConfigFile}
-                        >
-                            Update
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
+                    onConfirm={handleUpdateConfig}
+                    newConfigFile={newConfigFile}
+                    setNewConfigFile={setNewConfigFile}
+                    disabled={actionInProgress}
+                />
                 {/* MANAGE CONFIG PARAMETERS DIALOG */}
-                <Dialog
+                <ManageConfigParamsDialog
                     open={manageParamsDialogOpen}
                     onClose={() => setManageParamsDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle>Manage Configuration Parameters</DialogTitle>
-                    <DialogContent>
-                        <Typography variant="subtitle1" gutterBottom>
-                            Add parameters (one per line, e.g., section.param=value)
-                        </Typography>
-                        <TextField
-                            autoFocus
-                            margin="dense"
-                            label="Parameters to set"
-                            fullWidth
-                            variant="outlined"
-                            multiline
-                            rows={4}
-                            value={paramsToSet}
-                            onChange={(e) => setParamsToSet(e.target.value)}
-                            disabled={actionLoading}
-                            placeholder="section.param1=value1&#10;section.param2=value2"
-                        />
-                        <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Unset parameters (one key per line, e.g., section.param)
-                        </Typography>
-                        <TextField
-                            margin="dense"
-                            label="Parameter keys to unset"
-                            fullWidth
-                            variant="outlined"
-                            multiline
-                            rows={4}
-                            value={paramsToUnset}
-                            onChange={(e) => setParamsToUnset(e.target.value)}
-                            disabled={actionLoading}
-                            placeholder="section.param1&#10;section.param2"
-                            sx={{
-                                '& .MuiInputBase-root': {
-                                    padding: '8px',
-                                    lineHeight: '1.5',
-                                    minHeight: '100px',
-                                },
-                                '& .MuiInputBase-input': {
-                                    overflow: 'auto',
-                                    boxSizing: 'border-box',
-                                },
-                                '& .MuiInputLabel-root': {
-                                    backgroundColor: 'white',
-                                    padding: '0 4px',
-                                },
-                            }}
-                        />
-                        <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                            Delete sections (one key per line, e.g., section)
-                        </Typography>
-                        <TextField
-                            margin="dense"
-                            label="Section keys to delete"
-                            fullWidth
-                            variant="outlined"
-                            multiline
-                            rows={4}
-                            value={paramsToDelete}
-                            onChange={(e) => setParamsToDelete(e.target.value)}
-                            disabled={actionLoading}
-                            placeholder="section1&#10;section2"
-                            sx={{
-                                '& .MuiInputBase-root': {
-                                    padding: '8px',
-                                    lineHeight: '1.5',
-                                    minHeight: '100px',
-                                },
-                                '& .MuiInputBase-input': {
-                                    overflow: 'auto',
-                                    boxSizing: 'border-box',
-                                },
-                                '& .MuiInputLabel-root': {
-                                    backgroundColor: 'white',
-                                    padding: '0 4px',
-                                },
-                            }}
-                        />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button
-                            onClick={() => setManageParamsDialogOpen(false)}
-                            disabled={actionLoading}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleManageParamsSubmit}
-                            disabled={actionLoading || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
-                        >
-                            Apply
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
+                    onConfirm={handleManageParamsSubmit}
+                    paramsToSet={paramsToSet}
+                    setParamsToSet={setParamsToSet}
+                    paramsToUnset={paramsToUnset}
+                    setParamsToUnset={setParamsToUnset}
+                    paramsToDelete={paramsToDelete}
+                    setParamsToDelete={setParamsToDelete}
+                    disabled={actionInProgress}
+                />
                 {/* BATCH NODE ACTIONS */}
                 <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
                     <Button
@@ -1673,298 +970,87 @@ const ObjectDetail = () => {
                         Actions on Selected Nodes
                     </Button>
                 </Box>
-
                 {/* LIST OF NODES WITH THEIR RESOURCES */}
                 {memoizedNodes.map((node) => {
-                    const {resources = {}} = memoizedObjectData[node] || {};
-                    const {avail, frozen, state} = getNodeState(node);
-                    const resIds = Object.keys(resources);
-
+                    console.log("[ObjectDetail] Rendering NodeCard for node:", node);
                     return (
-                        <Box
+                        <NodeCard
                             key={node}
-                            sx={{
-                                mb: 5,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 2,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                borderRadius: 1,
-                                p: 2,
-                            }}
-                        >
-                            <Box sx={{p: 1}}>
-                                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                        <Checkbox
-                                            checked={selectedNodes.includes(node)}
-                                            onChange={() => toggleNode(node)}
-                                            aria-label={`Select node ${node}`}
-                                        />
-                                        <Typography variant="h6">{node}</Typography>
-                                    </Box>
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                        <Tooltip title={avail || "unknown"}>
-                                            <FiberManualRecordIcon
-                                                sx={{color: getColor(avail), fontSize: "1.2rem"}}
-                                            />
-                                        </Tooltip>
-                                        {avail === "warn" && (
-                                            <Tooltip title="warn">
-                                                <WarningAmberIcon
-                                                    sx={{color: orange[500], fontSize: "1.2rem"}}
-                                                />
-                                            </Tooltip>
-                                        )}
-                                        {frozen === "frozen" && (
-                                            <Tooltip title="frozen">
-                                                <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                                            </Tooltip>
-                                        )}
-                                        {state && <Typography variant="caption">{state}</Typography>}
-                                        <IconButton
-                                            onClick={(e) => {
-                                                setCurrentNode(node);
-                                                setIndividualNodeMenuAnchor(e.currentTarget);
-                                            }}
-                                            disabled={actionInProgress}
-                                            aria-label={`Node ${node} actions`}
-                                        >
-                                            <Tooltip title="Actions">
-                                                <MoreVertIcon/>
-                                            </Tooltip>
-                                        </IconButton>
-                                    </Box>
-                                </Box>
-                            </Box>
-
-                            {/* RESOURCES ACCORDION */}
-                            <Accordion
-                                expanded={expandedNodeResources[node] || false}
-                                onChange={handleNodeResourcesAccordionChange(node)}
-                                sx={{
-                                    border: "none",
-                                    boxShadow: "none",
-                                    backgroundColor: "transparent",
-                                    "&:before": {display: "none"},
-                                    "& .MuiAccordionSummary-root": {
-                                        border: "none",
-                                        backgroundColor: "transparent",
-                                        minHeight: "auto",
-                                        "&.Mui-expanded": {minHeight: "auto"},
-                                        padding: 0,
-                                    },
-                                    "& .MuiAccordionDetails-root": {
-                                        border: "none",
-                                        backgroundColor: "transparent",
-                                        padding: 0,
-                                    },
-                                }}
-                            >
-                                <AccordionSummary
-                                    expandIcon={<ExpandMoreIcon/>}
-                                    aria-controls={`panel-resources-${node}-content`}
-                                    id={`panel-resources-${node}-header`}
-                                >
-                                    <Box display="flex" alignItems="center" gap={2} width="100%">
-                                        <Typography variant="subtitle1" fontWeight="medium">
-                                            Resources ({resIds.length})
-                                        </Typography>
-                                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                            <Checkbox
-                                                checked={
-                                                    (selectedResourcesByNode[node]?.length || 0) === resIds.length &&
-                                                    resIds.length > 0
-                                                }
-                                                onChange={(e) => {
-                                                    const next = e.target.checked ? resIds : [];
-                                                    setSelectedResourcesByNode((prev) => ({
-                                                        ...prev,
-                                                        [node]: next,
-                                                    }));
-                                                }}
-                                                disabled={resIds.length === 0}
-                                                aria-label={`Select all resources for node ${node}`}
-                                            />
-                                            <IconButton
-                                                onClick={(e) => {
-                                                    handleResourcesActionsOpen(node, e);
-                                                    e.stopPropagation();
-                                                }}
-                                                disabled={!(selectedResourcesByNode[node] || []).length}
-                                                aria-label={`Resource actions for node ${node}`}
-                                            >
-                                                <Tooltip title="Actions">
-                                                    <MoreVertIcon/>
-                                                </Tooltip>
-                                            </IconButton>
-                                        </Box>
-                                    </Box>
-                                </AccordionSummary>
-                                <AccordionDetails>
-                                    <Box>
-                                        {resIds.length === 0 ? (
-                                            <Typography color="textSecondary">
-                                                No resources available.
-                                            </Typography>
-                                        ) : (
-                                            <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
-                                                {resIds.map((rid) => {
-                                                    const res = resources[rid] || {};
-                                                    const resourcePanelId = `resource-${node}-${rid}`;
-                                                    return (
-                                                        <Accordion
-                                                            key={rid}
-                                                            expanded={expandedResources[resourcePanelId] || false}
-                                                            onChange={handleAccordionChange(resourcePanelId)}
-                                                            sx={{
-                                                                mb: 1,
-                                                                border: "none",
-                                                                boxShadow: "none",
-                                                                backgroundColor: "transparent",
-                                                                "&:before": {display: "none"},
-                                                                "& .MuiAccordionSummary-root": {
-                                                                    border: "none",
-                                                                    backgroundColor: "transparent",
-                                                                    minHeight: "auto",
-                                                                    "&.Mui-expanded": {minHeight: "auto"},
-                                                                    padding: 0,
-                                                                },
-                                                                "& .MuiAccordionDetails-root": {
-                                                                    border: "none",
-                                                                    backgroundColor: "transparent",
-                                                                    padding: 0,
-                                                                },
-                                                            }}
-                                                        >
-                                                            <AccordionSummary
-                                                                expandIcon={<ExpandMoreIcon/>}
-                                                                aria-controls={`panel-${resourcePanelId}-content`}
-                                                                id={`panel-${resourcePanelId}-header`}
-                                                            >
-                                                                <Box
-                                                                    display="flex"
-                                                                    alignItems="center"
-                                                                    gap={2}
-                                                                    width="100%"
-                                                                >
-                                                                    <Checkbox
-                                                                        checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                                                                        onChange={() => toggleResource(node, rid)}
-                                                                        aria-label={`Select resource ${rid}`}
-                                                                    />
-                                                                    <Typography variant="body1">{rid}</Typography>
-                                                                    <Box flexGrow={1}/>
-                                                                    <Tooltip title={res.status || "unknown"}>
-                                                                        <FiberManualRecordIcon
-                                                                            sx={{
-                                                                                color: getColor(res.status),
-                                                                                fontSize: "1rem",
-                                                                            }}
-                                                                        />
-                                                                    </Tooltip>
-                                                                    <IconButton
-                                                                        onClick={(e) => {
-                                                                            handleResourceMenuOpen(node, rid, e);
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        disabled={actionInProgress}
-                                                                        aria-label={`Resource ${rid} actions`}
-                                                                    >
-                                                                        <Tooltip title="Actions">
-                                                                            <MoreVertIcon/>
-                                                                        </Tooltip>
-                                                                    </IconButton>
-                                                                </Box>
-                                                            </AccordionSummary>
-                                                            <AccordionDetails>
-                                                                <Box
-                                                                    sx={{
-                                                                        display: "flex",
-                                                                        flexDirection: "column",
-                                                                        gap: 1,
-                                                                    }}
-                                                                >
-                                                                    <Typography variant="body2">
-                                                                        <strong>Label:</strong> {res.label || "N/A"}
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Type:</strong> {res.type || "N/A"}
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Provisioned:</strong>
-                                                                        <Tooltip
-                                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}>
-                                                                            <FiberManualRecordIcon
-                                                                                sx={{
-                                                                                    color: parseProvisionedState(res.provisioned?.state)
-                                                                                        ? green[500]
-                                                                                        : red[500],
-                                                                                    fontSize: "1rem",
-                                                                                    ml: 1,
-                                                                                    verticalAlign: "middle",
-                                                                                }}
-                                                                            />
-                                                                        </Tooltip>
-                                                                    </Typography>
-                                                                    <Typography variant="body2">
-                                                                        <strong>Last Updated:</strong>{" "}
-                                                                        {res.provisioned?.mtime || "N/A"}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </AccordionDetails>
-                                                        </Accordion>
-                                                    );
-                                                })}
-                                            </Box>
-                                        )}
-                                    </Box>
-                                </AccordionDetails>
-                            </Accordion>
-                        </Box>
+                            node={node}
+                            nodeData={memoizedObjectData[node] || {}}
+                            selectedNodes={selectedNodes}
+                            toggleNode={toggleNode}
+                            selectedResourcesByNode={selectedResourcesByNode}
+                            toggleResource={toggleResource}
+                            actionInProgress={actionInProgress}
+                            individualNodeMenuAnchor={individualNodeMenuAnchor}
+                            setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                            setCurrentNode={setCurrentNode}
+                            handleResourcesActionsOpen={handleResourcesActionsOpen}
+                            handleResourceMenuOpen={handleResourceMenuOpen}
+                            expandedNodeResources={expandedNodeResources}
+                            handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                            expandedResources={expandedResources}
+                            handleAccordionChange={handleAccordionChange}
+                            getColor={getColor}
+                            getNodeState={getNodeState}
+                            parseProvisionedState={parseProvisionedState}
+                            setPendingAction={setPendingAction}
+                            setConfirmDialogOpen={setConfirmDialogOpen}
+                            setStopDialogOpen={setStopDialogOpen}
+                            setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                            setPurgeDialogOpen={setPurgeDialogOpen}
+                            setSimpleDialogOpen={setSimpleDialogOpen}
+                            setCheckboxes={setCheckboxes}
+                            setStopCheckbox={setStopCheckbox}
+                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                            setPurgeCheckboxes={setPurgeCheckboxes}
+                            setSelectedResourcesByNode={setSelectedResourcesByNode}
+                        />
                     );
                 })}
-
                 <Menu
                     anchorEl={nodesActionsAnchor}
                     open={Boolean(nodesActionsAnchor)}
                     onClose={handleNodesActionsClose}
                 >
-                    {NODE_ACTIONS.map(({name, icon}) => (
+                    {INSTANCE_ACTIONS.map(({name, icon}) => (
                         <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
-
                 <Menu
                     anchorEl={individualNodeMenuAnchor}
                     open={Boolean(individualNodeMenuAnchor)}
                     onClose={() => setIndividualNodeMenuAnchor(null)}
                 >
-                    {NODE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
+                    {INSTANCE_ACTIONS.map(({name, icon}) => (
+                        <MenuItem
+                            key={name}
+                            onClick={() => handleIndividualNodeActionClick(name)}
+                        >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
-
                 <Menu
                     anchorEl={resourcesActionsAnchor}
                     open={Boolean(resourcesActionsAnchor)}
                     onClose={handleResourcesActionsClose}
                 >
                     {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleBatchResourceActionClick(name)}>
+                        <MenuItem
+                            key={name}
+                            onClick={() => handleBatchResourceActionClick(name)}
+                        >
                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                         </MenuItem>
                     ))}
                 </Menu>
-
                 <Menu
                     anchorEl={resourceMenuAnchor}
                     open={Boolean(resourceMenuAnchor)}
@@ -1977,61 +1063,6 @@ const ObjectDetail = () => {
                         </MenuItem>
                     ))}
                 </Menu>
-
-                <FreezeDialog
-                    open={confirmDialogOpen}
-                    onClose={() => setConfirmDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={checkboxes.failover}
-                    setChecked={(checked) => setCheckboxes({failover: checked})}
-                    disabled={actionInProgress}
-                />
-
-                <StopDialog
-                    open={stopDialogOpen}
-                    onClose={() => setStopDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={stopCheckbox}
-                    setChecked={setStopCheckbox}
-                    disabled={actionInProgress}
-                />
-
-                <UnprovisionDialog
-                    open={unprovisionDialogOpen}
-                    onClose={() => setUnprovisionDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checked={unprovisionChecked}
-                    setChecked={setUnprovisionChecked}
-                    disabled={actionInProgress}
-                />
-
-                <PurgeDialog
-                    open={purgeDialogOpen}
-                    onClose={() => setPurgeDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    checkboxes={purgeCheckboxes}
-                    setCheckboxes={setPurgeCheckboxes}
-                    disabled={actionInProgress}
-                />
-
-                <SimpleConfirmDialog
-                    open={simpleDialogOpen}
-                    onClose={() => setSimpleDialogOpen(false)}
-                    onConfirm={handleDialogConfirm}
-                    action={pendingAction?.action || ""}
-                    target={
-                        pendingAction?.batch === "nodes"
-                            ? "selected nodes"
-                            : pendingAction?.node && !pendingAction?.rid
-                                ? `node ${pendingAction.node}`
-                                : pendingAction?.batch === "resources"
-                                    ? `selected resources on node ${pendingAction.node}`
-                                    : pendingAction?.rid
-                                        ? `resource ${pendingAction.rid} on node ${pendingAction.node}`
-                                        : "the object"
-                    }
-                />
-
                 {/* SNACKBAR */}
                 <Snackbar
                     open={snackbar.open}

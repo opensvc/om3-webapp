@@ -5,6 +5,7 @@ import * as useEventStoreModule from '../../hooks/useEventStore.js';
 import * as eventSourceManager from '../../eventSourceManager';
 import {BrowserRouter} from 'react-router-dom';
 
+// Mock NodeRow
 jest.mock('../NodeRow.jsx', () => (props) => (
     <tr>
         <td>
@@ -16,12 +17,28 @@ jest.mock('../NodeRow.jsx', () => (props) => (
         </td>
         <td>{props.nodename}</td>
         <td>
-            <button onClick={() => props.onAction(props.nodename, 'action/freeze')}>
+            <button onClick={() => props.onAction(props.nodename, 'freeze')}>
                 Trigger
             </button>
         </td>
     </tr>
 ));
+
+// Mock FreezeDialog
+jest.mock('../ActionDialogs', () => ({
+    ...jest.requireActual('../ActionDialogs'),
+    FreezeDialog: ({open, onClose, onConfirm}) => (
+        open ? (
+            <div role="dialog">
+                <h2>Confirm Freeze Action</h2>
+                <button onClick={onConfirm} aria-label="Confirm">
+                    Confirm
+                </button>
+                <button onClick={onClose}>Cancel</button>
+            </div>
+        ) : null
+    ),
+}));
 
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -40,8 +57,8 @@ describe('NodesTable', () => {
         jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
             selector({
                 nodeStatus: {
-                    'node-1': {state: 'idle'},
-                    'node-2': {state: 'busy'},
+                    'node-1': {state: 'idle', frozen_at: null},
+                    'node-2': {state: 'busy', frozen_at: null},
                 },
                 nodeStats: {
                     'node-1': {score: 42},
@@ -92,7 +109,7 @@ describe('NodesTable', () => {
     test('enables "Actions on selected nodes" button when a node is selected', async () => {
         renderWithRouter(<NodesTable/>);
         const checkboxes = await screen.findAllByRole('checkbox');
-        fireEvent.click(checkboxes[1]); // select node-1
+        fireEvent.click(checkboxes[1]); // select node-2
 
         const button = screen.getByRole('button', {name: /actions on selected nodes/i});
         expect(button).toBeEnabled();
@@ -102,12 +119,11 @@ describe('NodesTable', () => {
         renderWithRouter(<NodesTable/>);
         const triggerButtons = await screen.findAllByText('Trigger');
 
-        // Click the first Trigger button (e.g., for node-1)
-        fireEvent.click(triggerButtons[0]);
+        fireEvent.click(triggerButtons[0]); // Trigger for node-1
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-            expect(screen.getByText(/Confirm action\/freeze Action/i)).toBeInTheDocument();
+            expect(screen.getByText(/Confirm Freeze Action/i)).toBeInTheDocument();
         });
     });
 
@@ -119,14 +135,13 @@ describe('NodesTable', () => {
         renderWithRouter(<NodesTable/>);
         const triggerButtons = await screen.findAllByText('Trigger');
 
-        // Click the first Trigger button (e.g., for node-1)
-        fireEvent.click(triggerButtons[0]);
+        fireEvent.click(triggerButtons[0]); // Trigger for node-1
 
-        const confirmBtn = await screen.findByRole('button', {name: 'OK'});
+        const confirmBtn = await screen.findByRole('button', {name: 'Confirm'});
         fireEvent.click(confirmBtn);
 
         await waitFor(() => {
-            expect(screen.getByText(/✅ action\/freeze on node-1 succeeded/i)).toBeInTheDocument();
+            expect(screen.getByText(/✅ 'Freeze' succeeded on 1 node\(s\)/i)).toBeInTheDocument();
         });
     });
 });

@@ -453,6 +453,7 @@ describe('Objects Component', () => {
             );
         });
 
+        // Select the object
         await waitFor(() => {
             const checkbox = within(
                 screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
@@ -460,15 +461,26 @@ describe('Objects Component', () => {
             fireEvent.click(checkbox);
         });
 
+        // Open actions menu and select Delete
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Delete/i));
 
+        // Wait for DeleteDialog to appear
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByText(/Confirm Delete/i)).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+        // Check the required checkboxes
+        const configLossCheckbox = screen.getByLabelText(/Confirm configuration loss/i);
+        const clusterwideCheckbox = screen.getByLabelText(/Confirm clusterwide orchestration/i);
+        fireEvent.click(configLossCheckbox);
+        fireEvent.click(clusterwideCheckbox);
 
+        // Click Confirm button
+        fireEvent.click(screen.getByRole('button', {name: /Delete/i}));
+
+        // Verify the fetch call and object removal
         await waitFor(
             () => {
                 expect(global.fetch).toHaveBeenCalledWith(
@@ -586,10 +598,13 @@ describe('Objects Component', () => {
         fireEvent.click(screen.getByText(/Unprovision/i));
 
         await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
+            expect(screen.getByRole('dialog', {name: /Confirm Unprovision/i})).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByLabelText(/I understand that data will be lost/i));
+        // Check all three required checkboxes for object unprovision
+        fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
+        fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+        fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         expect(confirmButton).not.toBeDisabled();

@@ -17,19 +17,13 @@ import {
     TextField,
     Snackbar,
     Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    FormControlLabel,
     Collapse,
-    List,
-    ListItem,
     ListItemIcon,
     ListItemText,
     useMediaQuery,
     useTheme,
     Tooltip,
+    IconButton,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -45,6 +39,7 @@ import {
     Stop,
     PlayArrow,
 } from "@mui/icons-material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -54,35 +49,14 @@ import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {closeEventSource, startEventReception} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
-import {
-    FreezeDialog,
-    StopDialog,
-    UnprovisionDialog,
-    PurgeDialog,
-    SimpleConfirmDialog,
-} from "./ActionDialogs";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
-
-const AVAILABLE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart", icon: <RestartAlt/>},
-    {name: "freeze", icon: <AcUnit/>},
-    {name: "unfreeze", icon: <LockOpen/>},
-    {name: "delete", icon: <Delete/>},
-    {name: "provision", icon: <Settings/>},
-    {name: "unprovision", icon: <Block/>},
-    {name: "purge", icon: <CleaningServices/>},
-    {name: "switch", icon: <SwapHoriz/>},
-    {name: "giveback", icon: <Undo/>},
-    {name: "abort", icon: <Cancel/>},
-];
+import {OBJECT_ACTIONS} from "../constants/actions";
+import ActionDialogManager from "./ActionDialogManager";
 
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Read query parameters
     const queryParams = new URLSearchParams(location.search);
     const globalStates = ["all", "up", "down", "warn", "n/a"];
     const rawGlobalState = queryParams.get("globalState") || "all";
@@ -92,14 +66,14 @@ const Objects = () => {
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore(
-        (state) => state.objectInstanceStatus
-    );
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
 
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+    const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
     const [selectedKind, setSelectedKind] = useState(rawKind);
     const [selectedGlobalState, setSelectedGlobalState] = useState(
@@ -110,25 +84,13 @@ const Objects = () => {
         message: "",
         severity: "info",
     });
-    const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
-    const [stopDialogOpen, setStopDialogOpen] = useState(false);
-    const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
-    const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
-    const [simpleConfirmDialogOpen, setSimpleConfirmDialogOpen] = useState(false);
-    const [confirmationChecked, setConfirmationChecked] = useState(false);
-    const [purgeCheckboxes, setPurgeCheckboxes] = useState({
-        dataLoss: false,
-        configLoss: false,
-        serviceInterruption: false,
-    });
-    const [pendingAction, setPendingAction] = useState("");
+    const [pendingAction, setPendingAction] = useState(null);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
-    // Update URL when filters change
     useEffect(() => {
         const newQueryParams = new URLSearchParams();
         if (selectedGlobalState !== "all") {
@@ -149,7 +111,6 @@ const Objects = () => {
         });
     }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname]);
 
-    // Initialize filter states from URL
     useEffect(() => {
         setSelectedGlobalState(
             globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
@@ -159,7 +120,6 @@ const Objects = () => {
         setSearchQuery(rawSearchQuery);
     }, [location.search]);
 
-    // Objects and namespaces
     const objects = Object.keys(objectStatus).length
         ? objectStatus
         : daemon?.cluster?.object || {};
@@ -202,7 +162,6 @@ const Objects = () => {
         };
     };
 
-    // Filtering logic
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
         const {avail} = getObjectStatus(name);
@@ -228,10 +187,10 @@ const Objects = () => {
         const token = localStorage.getItem("authToken");
         if (token) {
             startEventReception(token, [
-                'ObjectStatusUpdated',
-                'InstanceStatusUpdated',
-                'ObjectDeleted',
-                'InstanceMonitorUpdated',
+                "ObjectStatusUpdated",
+                "InstanceStatusUpdated",
+                "ObjectDeleted",
+                "InstanceMonitorUpdated",
             ]);
         }
         return () => {
@@ -255,32 +214,38 @@ const Objects = () => {
         setActionsMenuAnchor(null);
     };
 
-    const handleActionClick = (action) => {
-        setPendingAction(action);
-        if (action === "freeze") {
-            setConfirmationChecked(false);
-            setConfirmationDialogOpen(true);
-        } else if (action === "stop") {
-            setConfirmationChecked(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setConfirmationChecked(false);
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
+    const handleRowMenuOpen = (event, objectName) => {
+        setRowMenuAnchor(event.currentTarget);
+        setCurrentObject(objectName);
+    };
+
+    const handleRowMenuClose = () => {
+        setRowMenuAnchor(null);
+        setCurrentObject(null);
+    };
+
+    const handleActionClick = (action, isSingleObject = false, objectName = null) => {
+        console.log("handleActionClick:", {action, isSingleObject, objectName});
+        setPendingAction({action, node: isSingleObject ? objectName : null});
+        if (isSingleObject) {
+            handleRowMenuClose();
         } else {
-            setSimpleConfirmDialogOpen(true);
+            handleActionsMenuClose();
         }
-        handleActionsMenuClose();
     };
 
     const handleExecuteActionOnSelected = async (action) => {
+        console.log("handleExecuteActionOnSelected:", {action, pendingAction, selectedObjects});
         const token = localStorage.getItem("authToken");
+        if (!token) {
+            setSnackbar({
+                open: true,
+                message: "Authentication token not found",
+                severity: "error",
+            });
+            return;
+        }
+
         setSnackbar({
             open: true,
             message: `Executing '${action}'...`,
@@ -289,25 +254,29 @@ const Objects = () => {
         let successCount = 0;
         let errorCount = 0;
 
-        const promises = selectedObjects.map(async (objectName) => {
+        const objectsToProcess = pendingAction.node
+            ? [pendingAction.node]
+            : selectedObjects;
+
+        const promises = objectsToProcess.map(async (objectName) => {
             const rawObj = objectStatus[objectName];
-            if (!rawObj) return;
+            if (!rawObj) {
+                errorCount++;
+                return;
+            }
 
             const parts = objectName.split("/");
             let name, kind, namespace;
 
             if (parts.length === 3) {
-                // Format: namespace/kind/name
                 namespace = parts[0];
                 kind = parts[1];
                 name = parts[2];
             } else if (parts.length === 2) {
-                // Format: kind/name (namespace = root)
                 namespace = "root";
                 kind = parts[0];
                 name = parts[1];
             } else {
-                // Format: name
                 namespace = "root";
                 name = parts[0];
                 kind = name === "cluster" ? "ccfg" : "svc";
@@ -318,8 +287,10 @@ const Objects = () => {
             if (
                 (action === "freeze" && obj.frozen === "frozen") ||
                 (action === "unfreeze" && obj.frozen === "unfrozen")
-            )
+            ) {
+                errorCount++;
                 return;
+            }
 
             const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
             try {
@@ -331,12 +302,12 @@ const Objects = () => {
                     },
                 });
                 if (!response.ok) {
-                    errorCount++;
-                    return;
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 successCount++;
                 if (action === "delete") removeObject(objectName);
-            } catch {
+            } catch (error) {
+                console.error(`Failed to execute ${action} on ${objectName}:`, error);
                 errorCount++;
             }
         });
@@ -349,22 +320,12 @@ const Objects = () => {
                     ? `✅ '${action}' succeeded on ${successCount} object(s).`
                     : successCount
                         ? `⚠️ '${action}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
-                        : `❌ '${action}' failed on all objects.`,
+                        : `❌ '${action}' failed on all ${objectsToProcess.length} object(s).`,
             severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
         });
 
         setSelectedObjects([]);
-        setConfirmationDialogOpen(false);
-        setStopDialogOpen(false);
-        setUnprovisionDialogOpen(false);
-        setPurgeDialogOpen(false);
-        setPurgeCheckboxes({
-            dataLoss: false,
-            configLoss: false,
-            serviceInterruption: false,
-        });
-        setSimpleConfirmDialogOpen(false);
-        setConfirmationChecked(false);
+        setPendingAction(null);
     };
 
     const handleObjectClick = (objectName) => {
@@ -430,6 +391,7 @@ const Objects = () => {
                             color="primary"
                             onClick={handleActionsMenuOpen}
                             disabled={!selectedObjects.length}
+                            aria-label="Actions on selected objects"
                         >
                             Actions on selected objects
                         </Button>
@@ -504,7 +466,7 @@ const Objects = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        {AVAILABLE_ACTIONS.map(({name, icon}) => {
+                        {OBJECT_ACTIONS.map(({name, icon}) => {
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (
                                 <MenuItem
@@ -512,13 +474,13 @@ const Objects = () => {
                                     onClick={() => handleActionClick(name)}
                                     disabled={!isAllowed}
                                     sx={{
-                                        color: isAllowed ? 'inherit' : 'text.disabled',
-                                        '&.Mui-disabled': {
-                                            opacity: 0.5
-                                        }
+                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        "&.Mui-disabled": {
+                                            opacity: 0.5,
+                                        },
                                     }}
                                 >
-                                    <ListItemIcon sx={{color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
                                         {icon}
                                     </ListItemIcon>
                                     <ListItemText>
@@ -536,13 +498,9 @@ const Objects = () => {
                             <TableRow>
                                 <TableCell>
                                     <Checkbox
-                                        checked={
-                                            selectedObjects.length === filteredObjectNames.length
-                                        }
+                                        checked={selectedObjects.length === filteredObjectNames.length}
                                         onChange={(e) =>
-                                            setSelectedObjects(
-                                                e.target.checked ? filteredObjectNames : []
-                                            )
+                                            setSelectedObjects(e.target.checked ? filteredObjectNames : [])
                                         }
                                     />
                                 </TableCell>
@@ -558,11 +516,26 @@ const Objects = () => {
                                             <strong>{node}</strong>
                                         </TableCell>
                                     ))}
+                                <TableCell>
+                                    <strong>Actions</strong>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect} = getObjectStatus(objectName);
+                                const isFrozen = frozen === "frozen";
+                                // Check if any node is frozen for this object
+                                const hasAnyNodeFrozen = allNodes.some((node) => {
+                                    const {frozen: nodeFrozen} = getNodeState(objectName, node);
+                                    return nodeFrozen === "frozen";
+                                });
+                                const filteredActions = OBJECT_ACTIONS.filter(
+                                    ({name}) =>
+                                        isActionAllowedForSelection(name, [objectName]) &&
+                                        (name !== "freeze" || !isFrozen) &&
+                                        (name !== "unfreeze" || hasAnyNodeFrozen)
+                                );
                                 return (
                                     <TableRow
                                         key={objectName}
@@ -630,11 +603,8 @@ const Objects = () => {
                                         </TableCell>
                                         {isWideScreen &&
                                             allNodes.map((node) => {
-                                                const {
-                                                    avail: nodeAvail,
-                                                    frozen: nodeFrozen,
-                                                    state: nodeState,
-                                                } = getNodeState(objectName, node);
+                                                const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState} =
+                                                    getNodeState(objectName, node);
                                                 return (
                                                     <TableCell key={node} align="center">
                                                         <Box
@@ -694,6 +664,38 @@ const Objects = () => {
                                                     </TableCell>
                                                 );
                                             })}
+                                        <TableCell>
+                                            <IconButton
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRowMenuOpen(e, objectName);
+                                                }}
+                                                aria-label={`More actions for object ${objectName}`}
+                                            >
+                                                <MoreVertIcon/>
+                                            </IconButton>
+                                            <Menu
+                                                anchorEl={rowMenuAnchor}
+                                                open={Boolean(rowMenuAnchor) && currentObject === objectName}
+                                                onClose={handleRowMenuClose}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                {filteredActions.map(({name, icon}) => (
+                                                    <MenuItem
+                                                        key={name}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleActionClick(name, true, objectName);
+                                                        }}
+                                                        sx={{display: "flex", alignItems: "center", gap: 1}}
+                                                        aria-label={`${name} action for object ${objectName}`}
+                                                    >
+                                                        <ListItemIcon>{icon}</ListItemIcon>
+                                                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                                                    </MenuItem>
+                                                ))}
+                                            </Menu>
+                                        </TableCell>
                                     </TableRow>
                                 );
                             })}
@@ -715,48 +717,12 @@ const Objects = () => {
                     </Alert>
                 </Snackbar>
 
-                <FreezeDialog
-                    open={confirmationDialogOpen}
-                    onClose={() => setConfirmationDialogOpen(false)}
-                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <StopDialog
-                    open={stopDialogOpen}
-                    onClose={() => setStopDialogOpen(false)}
-                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <UnprovisionDialog
-                    open={unprovisionDialogOpen}
-                    onClose={() => setUnprovisionDialogOpen(false)}
-                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checked={confirmationChecked}
-                    setChecked={setConfirmationChecked}
-                    disabled={false}
-                />
-
-                <PurgeDialog
-                    open={purgeDialogOpen}
-                    onClose={() => setPurgeDialogOpen(false)}
-                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    checkboxes={purgeCheckboxes}
-                    setCheckboxes={setPurgeCheckboxes}
-                    disabled={false}
-                />
-
-                <SimpleConfirmDialog
-                    open={simpleConfirmDialogOpen}
-                    onClose={() => setSimpleConfirmDialogOpen(false)}
-                    onConfirm={() => handleExecuteActionOnSelected(pendingAction)}
-                    action={pendingAction}
-                    target="the selected objects"
+                <ActionDialogManager
+                    pendingAction={pendingAction}
+                    handleConfirm={handleExecuteActionOnSelected}
+                    target={pendingAction?.node ? `object ${pendingAction.node}` : `${selectedObjects.length} objects`}
+                    supportedActions={OBJECT_ACTIONS.map(action => action.name)}
+                    onClose={() => setPendingAction(null)}
                 />
             </Box>
         </Box>

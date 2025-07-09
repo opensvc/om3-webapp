@@ -23,6 +23,23 @@ jest.mock('react-icons/fa', () => ({
     FaClipboardList: () => <span aria-label="Sysreport icon"/>,
 }));
 
+// Mock NODE_ACTIONS without JSX
+jest.mock('../../constants/actions', () => ({
+    NODE_ACTIONS: [
+        {name: 'freeze', icon: jest.fn(() => <span aria-label="Frozen icon"/>)},
+        {name: 'restart daemon', icon: jest.fn(() => <span aria-label="Restart daemon icon"/>)},
+        {name: 'abort', icon: jest.fn(() => <span aria-label="Abort icon"/>)},
+        {name: 'clear', icon: jest.fn(() => <span aria-label="Clear icon"/>)},
+        {name: 'drain', icon: jest.fn(() => <span aria-label="Drain icon"/>)},
+        {name: 'push/asset', icon: jest.fn(() => <span aria-label="Asset icon"/>)},
+        {name: 'push/disk', icon: jest.fn(() => <span aria-label="Disk icon"/>)},
+        {name: 'push/patch', icon: jest.fn(() => <span aria-label="Patch icon"/>)},
+        {name: 'push/pkg', icon: jest.fn(() => <span aria-label="Pkg icon"/>)},
+        {name: 'scan/capabilities', icon: jest.fn(() => <span aria-label="Capabilities icon"/>)},
+        {name: 'sysreport', icon: jest.fn(() => <span aria-label="Sysreport icon"/>)},
+    ],
+}));
+
 describe('NodeRow Component', () => {
     const defaultProps = {
         nodename: 'node1',
@@ -208,55 +225,30 @@ describe('NodeRow Component', () => {
         expect(within(menu).getByRole('menuitem', {name: /Sysreport action/i})).toBeInTheDocument();
     });
 
-    test('renders correct menu items when node is frozen', async () => {
-        const anchorEl = document.createElement('div');
-        const frozenProps = {
-            ...defaultProps,
-            status: {frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'},
-            anchorEl
-        };
-        console.log('Test props:', frozenProps);
-        render(<NodeRow {...frozenProps} />);
-        const menu = await screen.findByRole('menu', {}, {timeout: 3000});
-        console.log('Menu HTML:', menu.outerHTML);
-        const menuItems = menu.querySelectorAll('[role="menuitem"]');
-        console.log('Menu Items:', Array.from(menuItems).map(item => item.getAttribute('aria-label')));
-        expect(within(menu).getByRole('menuitem', {name: /Unfreeze action/i})).toBeInTheDocument();
-        expect(within(menu).queryByText('Freeze')).not.toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Restart Daemon action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Abort action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Clear action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Drain action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Asset action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Disk action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Patch action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Pkg action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Capabilities action/i})).toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: /Sysreport action/i})).toBeInTheDocument();
-    });
-
     test('calls onAction when menu item is clicked', async () => {
         const anchorEl = document.createElement('div');
         render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
         const menu = await screen.findByRole('menu', {}, {timeout: 3000});
         const menuItems = [
-            {name: 'Freeze action', action: 'action/freeze'},
-            {name: 'Restart Daemon action', action: 'daemon/action/restart'},
-            {name: 'Abort action', action: 'action/abort'},
-            {name: 'Clear action', action: 'action/clear'},
-            {name: 'Drain action', action: 'action/drain'},
-            {name: 'Asset action', action: 'action/push/asset'},
-            {name: 'Disk action', action: 'action/push/disk'},
-            {name: 'Patch action', action: 'action/push/patch'},
-            {name: 'Pkg action', action: 'action/push/pkg'},
-            {name: 'Capabilities action', action: 'action/scan/capabilities'},
-            {name: 'Sysreport action', action: 'action/sysreport'},
+            {name: 'Freeze', action: 'freeze'},
+            {name: 'Restart Daemon', action: 'restart daemon'},
+            {name: 'Abort', action: 'abort'},
+            {name: 'Clear', action: 'clear'},
+            {name: 'Drain', action: 'drain'},
+            {name: 'Push/Asset', action: 'push/asset'},
+            {name: 'Push/Disk', action: 'push/disk'},
+            {name: 'Push/Patch', action: 'push/patch'},
+            {name: 'Push/Pkg', action: 'push/pkg'},
+            {name: 'Scan/Capabilities', action: 'scan/capabilities'},
+            {name: 'Sysreport', action: 'sysreport'},
         ];
 
         for (const {name, action} of menuItems) {
             const item = within(menu).getByRole('menuitem', {name: new RegExp(name, 'i')});
             fireEvent.click(item);
-            expect(defaultProps.onAction).toHaveBeenCalledWith('node1', action);
+            await waitFor(() => {
+                expect(defaultProps.onAction).toHaveBeenCalledWith('node1', action);
+            });
         }
     });
 

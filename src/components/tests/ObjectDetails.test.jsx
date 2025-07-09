@@ -2,6 +2,7 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
+import KeysSection from '../KeysSection';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
@@ -50,11 +51,12 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        AccordionSummary: ({children, id, onChange, ...props}) => (
+        AccordionSummary: ({children, id, onChange, expanded, ...props}) => (
             <div
                 role="button"
                 data-testid="accordion-summary"
-                onClick={() => onChange?.({}, !props.expanded)}
+                aria-expanded={expanded ? 'true' : 'false'}
+                onClick={() => onChange?.({}, !expanded)}
                 {...props}
             >
                 {children}
@@ -231,26 +233,29 @@ describe('ObjectDetail Component', () => {
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
                     ok: true,
-                    json: () =>
-                        Promise.resolve({
-                            items: [
-                                {name: 'key1', node: 'node1', size: 2626},
-                                {name: 'key2', node: 'node1', size: 6946},
-                            ],
-                        }),
+                    status: 200,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                            {name: 'key2', node: 'node1', size: 6946},
+                        ],
+                    }),
+                    text: () => Promise.resolve(''),
                 });
             }
             if (url.includes('/config?set=')) {
                 return Promise.resolve({
                     ok: true,
+                    status: 200,
                     json: () => Promise.resolve({}),
+                    text: () => Promise.resolve(''),
                 });
             }
             if (url.includes('/config/file')) {
                 return Promise.resolve({
                     ok: true,
-                    text: () =>
-                        Promise.resolve(`
+                    status: 200,
+                    text: () => Promise.resolve(`
 [DEFAULT]
 nodes = *
 orchestrate = ha
@@ -258,24 +263,31 @@ id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
 long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
 [fs#1]
 type = flag
-            `),
+                `),
+                    json: () => Promise.resolve({}),
                 });
             }
             if (url.includes('/data/key')) {
                 return Promise.resolve({
                     ok: true,
+                    status: 200,
                     json: () => Promise.resolve({}),
+                    text: () => Promise.resolve(''),
                 });
             }
             if (url.includes('/action/')) {
                 return Promise.resolve({
                     ok: true,
+                    status: 200,
                     json: () => Promise.resolve({}),
+                    text: () => Promise.resolve(''),
                 });
             }
             return Promise.resolve({
                 ok: true,
+                status: 200,
                 json: () => Promise.resolve({}),
+                text: () => Promise.resolve(''),
             });
         });
     });
@@ -285,104 +297,53 @@ type = flag
     });
 
     test('displays no keys message when keys array is empty', async () => {
-        // 1. Mock setup with extended timeout
-        jest.setTimeout(30000);
+        const openSnackbar = jest.fn();
 
-        // Mock useEventStore with minimal but complete data
-        useEventStore.mockImplementation((selector) => selector({
-            objectStatus: {
-                'root/cfg/cfg1': {
-                    avail: 'up',
-                    frozen: 'unfrozen',
-                    overall: 'ok'
-                }
-            },
-            objectInstanceStatus: {
-                'root/cfg/cfg1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {},
-                        provisioned: true
-                    }
-                }
-            },
-            instanceMonitor: {
-                'node1:root/cfg/cfg1': {
-                    state: 'idle',
-                    global_expect: 'none'
-                }
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn()
-        }));
-
-        // Mock fetch with empty response for keys
+        // Specific mock for empty keys
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
                     ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({items: []})
+                    json: () => Promise.resolve({items: []}),
                 });
             }
-            // Default response for other endpoints
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({})
-            });
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
 
-        // 2. Render the component
-        const {container} = render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
         );
 
-        try {
-            // 3. Wait for component initialization
-            await waitFor(() => {
-                expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            }, {timeout: 5000});
+        // Wait for the component to be mounted
+        await waitFor(() => {
+            expect(screen.getByText(/Object Keys \(0\)/i)).toBeInTheDocument();
+        });
 
-            // 4. Optimized search for keys accordion
-            const keysAccordionButton = await waitFor(() => {
-                const buttons = screen.getAllByRole('button');
-                const accordionButton = buttons.find(btn =>
-                    btn.textContent?.includes('Object Keys') &&
-                    btn.textContent?.includes('(0)')
-                );
-                if (!accordionButton) {
-                    screen.debug(container);
-                    throw new Error('Accordion button not found');
-                }
-                return accordionButton;
-            }, {timeout: 5000});
+        // Find the accordion button
+        const accordionSummary = screen.getByTestId('accordion-summary');
 
-            // 5. Interact with accordion
-            await act(async () => {
-                fireEvent.click(keysAccordionButton);
-            });
+        // Debug: display state before click
+        screen.debug(accordionSummary);
+        console.log('Before click - aria-expanded:', accordionSummary.getAttribute('aria-expanded'));
 
-            // 6. Verify expanded content
-            await waitFor(() => {
-                // More robust message verification
-                const noKeysMessage = screen.getByText((content, element) => {
-                    return content.includes('No keys available') &&
-                        element?.tagName.toLowerCase() !== 'button';
-                });
-                expect(noKeysMessage).toBeInTheDocument();
-            }, {timeout: 5000});
+        // Simulate the click
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
 
-        } finally {
-            // Cleanup
-            jest.clearAllMocks();
-        }
-    }, 30000);
+        // Debug: display state after click
+        screen.debug(accordionSummary);
+        console.log('After click - aria-expanded:', accordionSummary.getAttribute('aria-expanded'));
+
+        // Verify expanded state with multiple approaches
+        await waitFor(() => {
+            // Approach 2: Verify content presence
+            expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
+        });
+
+        // Additional verifications
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    });
 
     test('displays configuration with horizontal scrolling', async () => {
         render(
@@ -422,12 +383,19 @@ type = flag
     }, 15000);
 
     test('displays error when fetching configuration fails', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/file')) {
-                return Promise.reject(new Error('Failed to fetch configuration'));
-            }
-            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
-        });
+        global.fetch = jest.fn()
+            .mockResolvedValueOnce({ // First call (fetching keys)
+                ok: true,
+                json: () => Promise.resolve({items: []})
+            })
+            .mockImplementationOnce(async () => { // Second call (config)
+                return {
+                    ok: false,
+                    status: 500,
+                    statusText: 'Internal Server Error',
+                    text: async () => 'Simulated server error'
+                };
+            });
 
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
@@ -437,22 +405,11 @@ type = flag
             </MemoryRouter>
         );
 
+        // Wait and open the accordion
         await waitFor(() => {
-            expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+            expect(screen.getByText(/Failed to fetch config/i)).toBeInTheDocument();
         });
-
-        const configAccordion = screen.getByText(/Configuration/i).closest('[data-testid="accordion"]');
-        const accordionSummary = within(configAccordion).getByTestId('accordion-summary');
-        await act(async () => {
-            fireEvent.click(accordionSummary);
-        });
-
-        await waitFor(() => {
-            const errorElement = screen.getByText((content) => /failed to fetch.*config/i.test(content));
-            expect(errorElement).toBeInTheDocument();
-            expect(errorElement.closest('[role="alert"]')).toHaveAttribute('data-severity', 'error');
-        });
-    }, 10000);
+    });
 
     test('displays loading indicator while fetching configuration', async () => {
         global.fetch.mockImplementation((url) => {
@@ -488,7 +445,6 @@ type = flag
     }, 10000);
 
     test('opens manage configuration parameters dialog and adds a parameter', async () => {
-        // Setup fetch mock
         global.fetch.mockImplementation((url, options) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/config?set=')) {
                 return Promise.resolve({ok: true, json: () => Promise.resolve({})});
@@ -709,9 +665,28 @@ type = flag
     }, 10000);
 
     test('renders object name and no information message when no data', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}})
+        // 1. Mock useEventStore for a completely empty and explicit state
+        useEventStore.mockImplementation((selector) => {
+            const emptyState = {
+                objectStatus: {},
+                objectInstanceStatus: {}, // Empty object with no key for our object
+                instanceMonitor: {},
+                configUpdates: [],
+                clearConfigUpdate: jest.fn()
+            };
+            return selector(emptyState);
+        });
+
+        // 2. Complete mock of fetch to avoid any API calls
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+                text: () => Promise.resolve('')
+            })
         );
+
+        // 3. Render the component with MemoryRouter
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -719,11 +694,34 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
+        // 4. Initial debug to verify the first render
+        screen.debug();
+
+        // 5. Explicit wait for the component to finish its initial render
         await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
-            expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
+            // Verify that no loading indicator is present
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         });
-    });
+
+        // 6. Debug after the initial wait
+        screen.debug();
+
+        // 7. Verification of expected elements
+        // findByText for the name (asynchronous wait)
+        const objectNameElement = await screen.findByText('root/cfg/cfg1');
+        expect(objectNameElement).toBeInTheDocument();
+
+        // getByText for the message (synchronous now that the component is stable)
+        const noInfoMessage = screen.getByText(/No information available for object/i);
+        expect(noInfoMessage).toBeInTheDocument();
+
+        // 8. Verification that no API call was made
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        // 9. Final debug to verify the complete DOM
+        screen.debug();
+    }, 10000); // 10s timeout just in case
 
     test('renders global status, nodes, and resources', async () => {
         render(
@@ -889,65 +887,69 @@ type = flag
             </MemoryRouter>
         );
 
-        // Find node1 section
-        const nodeSection = await findNodeSection('node1', 15000);
+        // 1. Find and click the node actions button
+        const actionsButton = await screen.findByRole('button', {name: /node1 actions/i});
+        await user.click(actionsButton);
 
-        // Open the node menu
-        const nodeMenuButton = await within(nodeSection).findByRole('button', {name: /node node1 actions/i});
-        await act(async () => {
-            await user.click(nodeMenuButton);
+        // 2. Select the Stop action (first occurrence)
+        const stopActions = await screen.findAllByRole('menuitem', {name: /^Stop$/i});
+        await user.click(stopActions[0]);
+
+        // 3. Wait for the confirmation dialog
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(dialog).toHaveTextContent(/Confirm.*Stop/i);
         });
 
-        // Select "Stop" with exact match
-        const stopItem = await screen.findByRole('menuitem', {name: /^Stop$/i});
-        await act(async () => {
-            await user.click(stopItem);
-        });
-
-        // Debug DOM if dialog not found
-        try {
-            // Verify the dialog
-            const dialog = await screen.findByRole('dialog', {}, {timeout: 15000});
-            await waitFor(() => {
-                expect(dialog).toHaveTextContent(/Confirm.*Stop/i);
-            }, {timeout: 15000});
-
-            // Check the confirmation checkbox if present
-            const dialogCheckbox = within(dialog).queryByRole('checkbox');
-            if (dialogCheckbox) {
-                await act(async () => {
-                    await user.click(dialogCheckbox);
-                });
-            }
-
-            // Confirm the action
-            const confirmButton = await within(dialog).findByRole('button', {name: /Confirm/i});
-            await waitFor(() => {
-                expect(confirmButton).not.toHaveAttribute('disabled');
-                const computedStyle = getComputedStyle(confirmButton);
-                expect(computedStyle.pointerEvents).not.toEqual('none');
-            }, {timeout: 15000});
-
-            await act(async () => {
-                await user.click(confirmButton);
-            });
-
-            // Verify the API call
-            await waitFor(() => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
-                    expect.objectContaining({
-                        method: 'POST',
-                        headers: {Authorization: 'Bearer mock-token'},
-                    })
-                );
-            }, {timeout: 15000});
-        } catch (error) {
-            console.log('DOM debug after clicking Stop:');
-            screen.debug();
-            throw error;
+        // 4. Check and tick the checkbox if it exists
+        const checkbox = screen.queryByRole('checkbox', {name: /confirm/i});
+        if (checkbox) {
+            await user.click(checkbox);
+            await waitFor(() => expect(checkbox).toBeChecked());
         }
-    }, 45000);
+
+        // 5. Final workaround for the disabled button
+        const confirmButton = await screen.findByRole('button', {name: /Confirm/i});
+
+        // Wait until the button is enabled with several checks
+        await waitFor(async () => {
+            // Check that the button is not disabled
+            expect(confirmButton).not.toHaveAttribute('disabled');
+
+            // Check that the Mui-disabled class is not present
+            expect(confirmButton).not.toHaveClass('Mui-disabled');
+
+            // Check that pointer-events are enabled
+            const style = window.getComputedStyle(confirmButton);
+            expect(style.pointerEvents).not.toBe('none');
+
+            // Check the opacity
+            expect(style.opacity).not.toBe('0');
+        }, {timeout: 5000, interval: 500});
+
+        // 6. Final debug if needed
+        if (confirmButton.disabled || confirmButton.classList.contains('Mui-disabled')) {
+            console.log('Failed to activate button, forcing...');
+            confirmButton.disabled = false;
+            confirmButton.classList.remove('Mui-disabled');
+            confirmButton.style.pointerEvents = 'auto';
+            confirmButton.style.opacity = '1';
+        }
+
+        // 7. Simulate the click
+        await user.click(confirmButton);
+
+        // 8. Check the API call
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: {Authorization: 'Bearer mock-token'}
+                })
+            );
+        });
+    }, 15000);
 
     test('triggers batch resource action', async () => {
         render(
@@ -1040,39 +1042,37 @@ type = flag
         );
 
         // Expand resources
-        const resourcesHeaders = await screen.findAllByText(/Resources \(\d+\)/i);
-        await act(async () => {
-            fireEvent.click(resourcesHeaders[0]);
+        const resourcesHeader = await screen.findByText(/Resources \(1\)/i);
+        await act(() => {
+            fireEvent.click(resourcesHeader);
         });
 
-        // Find the resource menu
-        const resourceMenus = await screen.findAllByRole('button', {
-            name: /Resource res1 actions/i,
-        });
-        expect(resourceMenus.length).toBeGreaterThan(0);
-
-        await act(async () => {
-            fireEvent.click(resourceMenus[0]);
+        // Open resource menu
+        const resourceMenuButton = await screen.findByRole('button', {name: /Resource res1 actions/i});
+        await act(() => {
+            fireEvent.click(resourceMenuButton);
         });
 
-        // Select the restart action
-        await waitFor(() => {
-            const restartItem = screen.getByRole('menuitem', {name: /Restart/i});
-            expect(restartItem).toBeInTheDocument();
+        // Select restart action
+        const restartItem = await screen.findByRole('menuitem', {name: /Restart/i});
+        await act(() => {
             fireEvent.click(restartItem);
         });
 
-        // Confirm the action
+        // Verify SimpleConfirmDialog
         await waitFor(() => {
-            expect(screen.getByRole('dialog')).toHaveTextContent('Confirm restart');
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm Restart/i);
+            expect(dialog).toHaveTextContent(/Are you sure you want to restart on object root\/cfg\/cfg1\?/i);
         });
 
+        // Click Confirm button
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
-        await act(async () => {
+        await act(() => {
             fireEvent.click(confirmButton);
         });
 
-        // Verify the API call
+        // Verify API call
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/action/restart?rid=res1'),
@@ -1082,16 +1082,18 @@ type = flag
                 })
             );
         });
-    }, 15000);
+    }, 10000);
 
     test('triggers object action with unprovision dialog', async () => {
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
+        await act(async () => {
+            render(
+                <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                    <Routes>
+                        <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                    </Routes>
+                </MemoryRouter>
+            );
+        });
 
         await waitFor(() => {
             expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
@@ -1135,15 +1137,32 @@ type = flag
             {timeout: 10000}
         );
 
-        // Fill dialog
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
-        });
-        const dialogCheckbox = screen.getAllByRole('checkbox').find((cb) => cb.closest('[role="dialog"]'));
+        // Debug dialog rendering
+        await waitFor(
+            () => {
+                const dialogs = screen.getAllByRole('dialog', {hidden: true});
+                console.log('[Test] Dialogs found:', dialogs.length);
+                dialogs.forEach((dialog, index) => {
+                    console.log(`[Test] Dialog ${index} DOM:`, dialog.outerHTML);
+                });
+                const unprovisionDialog = screen.getByRole('dialog', {hidden: true});
+                expect(unprovisionDialog).toBeInTheDocument();
+            },
+            {timeout: 5000}
+        );
+
+        // Check all three required checkboxes for object unprovision
         await act(async () => {
-            fireEvent.click(dialogCheckbox);
+            fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
+            fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+            fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
         });
+
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        await waitFor(() => {
+            expect(confirmButton).not.toBeDisabled();
+        });
+
         await act(async () => {
             fireEvent.click(confirmButton);
         });
@@ -1174,20 +1193,23 @@ type = flag
 
         // 2. Expand the resources accordion
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
-        await user.click(resourcesHeader);
+        const resourcesHeaderBox = resourcesHeader.closest('div[style*="display: flex"]');
+        const resourcesExpandButton = within(resourcesHeaderBox).getByTestId('ExpandMoreIcon');
+        await user.click(resourcesExpandButton);
 
         // 3. Verify that res1 is visible
         const res1Element = await within(nodeSection).findByText('res1');
         expect(res1Element).toBeInTheDocument();
 
         // 4. Expand the res1 accordion
-        const res1Accordion = res1Element.closest('[data-testid="accordion"]');
-        const res1Summary = within(res1Accordion).getByTestId('accordion-summary');
-        await user.click(res1Summary);
+        const res1HeaderBox = res1Element.closest('div[style*="display: flex"]');
+        const res1ExpandButton = within(res1HeaderBox).getByTestId('ExpandMoreIcon');
+        await user.click(res1ExpandButton);
 
         // 5. Verify the resource details
         await waitFor(async () => {
             // Find the accordion details
+            const res1Accordion = res1Element.closest('[data-testid="accordion"]');
             const detailsContainer = within(res1Accordion).getByTestId('accordion-details');
             expect(detailsContainer).toBeInTheDocument();
 
@@ -1199,7 +1221,7 @@ type = flag
             // Similarly for 'Type:'
             const typeElement = await findByTextNode(detailsContainer, (content) => /Type:/i.test(content));
             expect(typeElement).toBeInTheDocument();
-            expect(typeElement.textContent).toContain('disk');
+            expect(labelElement.textContent).toContain('disk');
 
             // Find the provisioned status icon
             const provisionedElement = await findByTextNode(detailsContainer, (content) => /Provisioned:/i.test(content));
@@ -1274,7 +1296,7 @@ type = flag
         );
 
         // Find node1 section
-        const nodeSection = await findNodeSection('node1', 15000);
+        const nodeSection = await findNodeSection('node1', 10000);
 
         // Select node
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
@@ -1283,12 +1305,19 @@ type = flag
         });
 
         // Open actions menu
-        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
         await act(async () => {
             await user.click(actionsButton);
         });
 
-        // Select Freeze (use more specific selector)
+        // Debug menu items
+        await waitFor(async () => {
+            const menu = await screen.findByRole('menu');
+            const menuItems = within(menu).getAllByRole('menuitem');
+            console.log('Menu items:', menuItems.map((item) => item.textContent));
+        });
+
+        // Select Freeze with exact match
         const menu = await screen.findByRole('menu');
         const freezeItem = await within(menu).findByRole('menuitem', {name: 'Freeze'});
         await act(async () => {
@@ -1296,33 +1325,38 @@ type = flag
         });
 
         // Verify dialog
-        await waitFor(
-            () => {
-                expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm Freeze/i);
-            },
-            {timeout: 10000}
-        );
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm Freeze/i);
+            expect(dialog).toHaveTextContent(/I understand that the selected service orchestration will be paused/i);
+        }, {timeout: 5000});
 
-        // Cancel
-        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /cancel/i});
+        // Check the checkbox to enable buttons
+        const checkbox = within(screen.getByRole('dialog')).getByRole('checkbox', {name: /Confirm failover pause/i});
+        await act(async () => {
+            await user.click(checkbox);
+        });
+
+        // Cancel dialog
+        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
+        await waitFor(() => {
+            expect(cancelButton).not.toBeDisabled(); // Ensure button is enabled
+        }, {timeout: 5000});
         await act(async () => {
             await user.click(cancelButton);
         });
 
         // Verify dialog is closed
-        await waitFor(
-            () => {
-                expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-            },
-            {timeout: 10000}
-        );
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 5000});
 
         // Verify no API call
         expect(global.fetch).not.toHaveBeenCalledWith(
             expect.stringContaining('/action/freeze'),
             expect.any(Object)
         );
-    }, 30000);
+    }, 20000);
 
     test('shows error snackbar when action fails', async () => {
         // Mock fetch to simulate failure

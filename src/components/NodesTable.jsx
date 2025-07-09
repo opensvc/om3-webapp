@@ -1,57 +1,73 @@
-import {useEffect, useState} from "react";
+import React, {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
+import {
+    Box,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Typography,
+    Button,
+    Menu,
+    MenuItem,
+    Checkbox,
+    Snackbar,
+    Alert,
+    useMediaQuery,
+    useTheme,
+    ListItemIcon,
+    ListItemText,
+    CircularProgress,
+} from "@mui/material";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource, startEventReception} from "../eventSourceManager";
-import {
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Typography, Button, CircularProgress, Box, Menu, MenuItem,
-    Checkbox, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions
-} from "@mui/material";
-import {blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 import {URL_NODE} from "../config/apiPath.js";
-import {
-    FaSnowflake, FaPlay, FaSync, FaStop, FaBroom, FaTint,
-    FaBox, FaHdd, FaPuzzlePiece, FaArchive, FaBrain, FaClipboardList
-} from "react-icons/fa";
+import {NODE_ACTIONS} from "../constants/actions";
+import ActionDialogManager from "./ActionDialogManager";
 
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
+    const navigate = useNavigate();
+    const theme = useTheme();
+    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [snackbar, setSnackbar] = useState({open: false, message: '', severity: 'info'});
-
-    const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
 
-    const navigate = useNavigate();
+
+    const handleAction = (action, nodename = null) => {
+        setPendingAction({action, node: nodename});
+        if (nodename) {
+            handleMenuClose(nodename);
+        } else {
+            handleActionsMenuClose();
+        }
+    };
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
             fetchNodes(token);
             startEventReception(token, [
-                'NodeStatusUpdated',
-                'NodeMonitorUpdated',
-                'NodeStatsUpdated'
+                "NodeStatusUpdated",
+                "NodeMonitorUpdated",
+                "NodeStatsUpdated",
             ]);
         }
         return () => {
             closeEventSource();
         };
     }, []);
-
-    const cellStyle = {
-        px: {xs: 0.25, sm: 0.5, md: 1},
-        py: {xs: 0.25, sm: 0.5},
-        fontSize: {xs: '0.7rem', sm: '0.8rem'},
-    };
 
     const handleLogout = () => {
         localStorage.removeItem("authToken");
@@ -74,41 +90,6 @@ const NodesTable = () => {
         }
     };
 
-    const handleTriggerAction = (nodename, action) => {
-        setPendingAction({nodes: [nodename], action});
-        setSimpleDialogOpen(true);
-    };
-
-    const handleExecuteActionOnSelected = (action) => {
-        setPendingAction({nodes: [...selectedNodes], action});
-        setSimpleDialogOpen(true);
-        setActionsMenuAnchor(null);
-    };
-
-    const postActionUrl = ({node, action}) => `${URL_NODE}/${node}/${action}`;
-
-    const postAction = async ({node, action}) => {
-        const token = localStorage.getItem("authToken");
-        setSnackbar({open: true, message: `Executing ${action} on ${node}...`, severity: "info"});
-
-        try {
-            const response = await fetch(postActionUrl({node, action}), {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-
-            if (!response.ok) throw new Error();
-
-            setSnackbar({open: true, message: `✅ ${action} on ${node} succeeded`, severity: "success"});
-        } catch (e) {
-            setSnackbar({open: true, message: `❌ ${action} on ${node} failed`, severity: "error"});
-        }
-
-        handleMenuClose(node);
-    };
-
     const handleActionsMenuOpen = (event) => {
         setActionsMenuAnchor(event.currentTarget);
     };
@@ -117,31 +98,125 @@ const NodesTable = () => {
         setActionsMenuAnchor(null);
     };
 
-    const handleConfirmAction = async () => {
-        if (pendingAction) {
-            for (const node of pendingAction.nodes) {
-                await postAction({node, action: pendingAction.action});
-            }
-            setSelectedNodes([]);
+    const postActionUrl = (node, action) => {
+        if (action === "restart daemon") {
+            return `${URL_NODE}/${node}/daemon/action/restart`;
         }
-        setSimpleDialogOpen(false);
+        return `${URL_NODE}/${node}/action/${action}`;
+    };
+
+    const handleDialogConfirm = async (action) => {
+        if (!pendingAction) return;
+
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setSnackbar({
+                open: true,
+                message: "Authentication token not found",
+                severity: "error",
+            });
+            return;
+        }
+
+        const actionLabel = action
+            .split(" ")
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+        setSnackbar({
+            open: true,
+            message: `Executing '${actionLabel}'...`,
+            severity: "info",
+        });
+        let successCount = 0;
+        let errorCount = 0;
+
+        const nodesToProcess = pendingAction.node
+            ? [pendingAction.node]
+            : selectedNodes;
+
+        const promises = nodesToProcess.map(async (node) => {
+            const isFrozen = !!nodeStatus[node]?.frozen_at && nodeStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z";
+            if (action === "freeze" && isFrozen) {
+                errorCount++;
+                return;
+            }
+            if (action === "unfreeze" && !isFrozen) {
+                errorCount++;
+                return;
+            }
+            const url = postActionUrl(node, action);
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to execute ${action} on ${node}:`, error);
+                errorCount++;
+            }
+        });
+
+        await Promise.all(promises);
+        setSnackbar({
+            open: true,
+            message:
+                successCount && !errorCount
+                    ? `✅ '${actionLabel}' succeeded on ${successCount} node(s).`
+                    : successCount
+                        ? `⚠️ '${actionLabel}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
+                        : `❌ '${actionLabel}' failed on all ${nodesToProcess.length} node(s).`,
+            severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
+        });
+
+        setSelectedNodes([]);
         setPendingAction(null);
     };
 
+    const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
+        if (selectedNodes.length === 0) return false;
+        return selectedNodes.some((nodename) => {
+            const isFrozen = !!nodeStatus[nodename]?.frozen_at && nodeStatus[nodename]?.frozen_at !== "0001-01-01T00:00:00Z";
+            if (name === "freeze" && isFrozen) return false;
+            if (name === "unfreeze" && !isFrozen) return false;
+            return true;
+        });
+    });
+
     return (
-        <Box sx={{minHeight: "100vh", bgcolor: "background.default", p: 2}}>
-            <Paper elevation={3} sx={{p: 2, borderRadius: 2, bgcolor: "background.paper"}}>
-                <Typography variant="h5" component="h1" gutterBottom align="center" sx={{mb: 3}}>
+        <Box
+            sx={{
+                minHeight: "100vh",
+                bgcolor: "background.default",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "flex-start",
+                p: 2,
+            }}
+        >
+            <Box
+                sx={{
+                    width: "100%",
+                    maxWidth: isWideScreen ? "1600px" : "1000px",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 3,
+                    boxShadow: 3,
+                    p: 3,
+                }}
+            >
+                <Typography variant="h4" gutterBottom align="center">
                     Node Status
                 </Typography>
 
-                <Box sx={{
-                    mb: 2,
-                    display: 'flex',
-                    flexDirection: {xs: 'column', sm: 'row'},
-                    alignItems: {xs: 'stretch', sm: 'center'},
-                    gap: 2
-                }}>
+                <Box sx={{mb: 2}}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -155,65 +230,56 @@ const NodesTable = () => {
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
                     >
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/freeze")}><FaSnowflake
-                            style={{marginRight: 8}}/> Freeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/unfreeze")}><FaPlay
-                            style={{marginRight: 8}}/> Unfreeze</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("daemon/action/restart")}><FaSync
-                            style={{marginRight: 8}}/> Restart Daemon</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/abort")}><FaStop
-                            style={{marginRight: 8}}/> Abort</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/clear")}><FaBroom
-                            style={{marginRight: 8}}/> Clear</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/drain")}><FaTint
-                            style={{marginRight: 8}}/> Drain</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/asset")}><FaBox
-                            style={{marginRight: 8}}/> Asset</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/disk")}><FaHdd
-                            style={{marginRight: 8}}/> Disk</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/patch")}><FaPuzzlePiece
-                            style={{marginRight: 8}}/> Patch</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/push/pkg")}><FaArchive
-                            style={{marginRight: 8}}/> Pkg</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/scan/capabilities")}><FaBrain
-                            style={{marginRight: 8}}/> Capabilities</MenuItem>
-                        <MenuItem onClick={() => handleExecuteActionOnSelected("action/sysreport")}><FaClipboardList
-                            style={{marginRight: 8}}/> Sysreport</MenuItem>
+                        {filteredMenuItems.map(({name, icon}) => (
+                            <MenuItem
+                                key={name}
+                                onClick={() => handleAction(name)}
+                                sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                }}
+                            >
+                                <ListItemIcon>{icon}</ListItemIcon>
+                                <ListItemText>
+                                    {name
+                                        .split(" ")
+                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                        .join(" ")
+                                    }
+                                </ListItemText>
+                            </MenuItem>
+                        ))}
                     </Menu>
                 </Box>
 
                 {Object.keys(nodeStatus).length === 0 ? (
                     <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
-                        <CircularProgress/>
+                        <CircularProgress aria-label="Loading nodes"/>
                     </Box>
                 ) : (
-                    <TableContainer component={Paper} elevation={0} sx={{overflowX: 'auto'}}>
+                    <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                         <Table sx={{minWidth: 900}} aria-label="nodes table">
-                            <TableHead>
-                                <TableRow sx={{bgcolor: blue[500]}}>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>
+                            <TableHead
+                                sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}
+                            >
+                                <TableRow>
+                                    <TableCell>
                                         <Checkbox
                                             checked={selectedNodes.length === Object.keys(nodeStatus).length}
                                             onChange={(e) =>
-                                                setSelectedNodes(
-                                                    e.target.checked ? Object.keys(nodeStatus) : []
-                                                )
+                                                setSelectedNodes(e.target.checked ? Object.keys(nodeStatus) : [])
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Name</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>State</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Score</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Load
-                                        (15m)</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Mem
-                                        Avail</TableCell>
-                                    <TableCell sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Swap
-                                        Avail</TableCell>
-                                    <TableCell
-                                        sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Version</TableCell>
-                                    <TableCell
-                                        sx={{...cellStyle, color: "white", fontWeight: "bold"}}>Action</TableCell>
+                                    <TableCell><strong>Name</strong></TableCell>
+                                    <TableCell><strong>State</strong></TableCell>
+                                    <TableCell><strong>Score</strong></TableCell>
+                                    <TableCell><strong>Load (15m)</strong></TableCell>
+                                    <TableCell><strong>Mem Avail</strong></TableCell>
+                                    <TableCell><strong>Swap Avail</strong></TableCell>
+                                    <TableCell><strong>Version</strong></TableCell>
+                                    <TableCell><strong>Actions</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -229,61 +295,37 @@ const NodesTable = () => {
                                         onSelect={handleSelectNode}
                                         onMenuOpen={handleMenuOpen}
                                         onMenuClose={handleMenuClose}
-                                        onAction={handleTriggerAction}
+                                        onAction={(nodename, action) => handleAction(action, nodename)}
                                         anchorEl={anchorEls[nodename]}
-                                        cellStyle={cellStyle}
                                     />
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
                 )}
-            </Paper>
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar({...snackbar, open: false})}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
-            >
-                <Alert
-                    onClose={() => setSnackbar({...snackbar, open: false})}
-                    severity={snackbar.severity}
-                    variant="filled"
-                    sx={{width: '100%'}}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
-            <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>
-                    Confirm {pendingAction?.action} Action
-                </DialogTitle>
-                <DialogContent sx={{padding: 3}}>
-                    <Typography>
-                        Are you sure you want to execute <strong>{pendingAction?.action}</strong> on
-                        {" "}
-                        <strong>
-                            {pendingAction?.nodes.length === 1
-                                ? pendingAction?.nodes[0]
-                                : `${pendingAction?.nodes.length} nodes`}
-                        </strong>
-                        ?
-                    </Typography>
-                </DialogContent>
-                <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-                    <Button onClick={() => setSimpleDialogOpen(false)} variant="outlined">
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleConfirmAction}
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={4000}
+                    onClose={() => setSnackbar({...snackbar, open: false})}
+                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+                >
+                    <Alert
+                        severity={snackbar.severity}
+                        onClose={() => setSnackbar({...snackbar, open: false})}
                     >
-                        OK
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
+
+                <ActionDialogManager
+                    pendingAction={pendingAction}
+                    handleConfirm={handleDialogConfirm}
+                    target={pendingAction?.node ? `node ${pendingAction.node}` : `${selectedNodes.length} nodes`}
+                    supportedActions={NODE_ACTIONS.map(action => action.name)}
+                    onClose={() => setPendingAction(null)}
+                />
+            </Box>
         </Box>
     );
 };

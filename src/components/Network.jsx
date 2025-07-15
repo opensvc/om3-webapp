@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from "react";
+import {useNavigate} from "react-router-dom";
 import {
     Box,
     Paper,
@@ -15,6 +16,7 @@ import {URL_NETWORK} from "../config/apiPath.js";
 
 const Network = () => {
     const [networks, setNetworks] = useState([]);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchNetworks = async () => {
@@ -59,8 +61,16 @@ const Network = () => {
                                 ? ((network.used / network.size) * 100).toFixed(1)
                                 : "N/A";
                             return (
-                                <TableRow key={network.name}>
-                                    <TableCell>{network.name}</TableCell>
+                                <TableRow
+                                    key={network.name}
+                                    onClick={() => navigate(`/network/${network.name}`)}
+                                    sx={{cursor: "pointer", "&:hover": {backgroundColor: "action.hover"}}}
+                                >
+                                    <TableCell>
+                                        <Typography>
+                                            {network.name}
+                                        </Typography>
+                                    </TableCell>
                                     <TableCell>{network.type}</TableCell>
                                     <TableCell align="center">{network.network}</TableCell>
                                     <TableCell align="center">{network.size}</TableCell>
@@ -70,6 +80,13 @@ const Network = () => {
                                 </TableRow>
                             );
                         })}
+                        {networks.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={7} align="center">
+                                    No networks available.
+                                </TableCell>
+                            </TableRow>
+                        )}
                     </TableBody>
                 </Table>
             </TableContainer>

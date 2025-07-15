@@ -1,6 +1,17 @@
 import {Link, useNavigate, useLocation} from "react-router-dom";
 import {AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, ListItemIcon, ListItemText} from "@mui/material";
-import {FaSignOutAlt, FaUser, FaBars, FaHome, FaList, FaHeartbeat, FaServer, FaDatabase, FaCubes} from "react-icons/fa";
+import {
+    FaSignOutAlt,
+    FaUser,
+    FaBars,
+    FaHome,
+    FaList,
+    FaHeartbeat,
+    FaServer,
+    FaDatabase,
+    FaCubes,
+    FaNetworkWired
+} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useEffect, useState} from "react";
@@ -23,6 +34,7 @@ const NavBar = () => {
         {path: "/heartbeats", name: "Heartbeats", icon: <FaHeartbeat/>},
         {path: "/nodes", name: "Nodes", icon: <FaServer/>},
         {path: "/storage-pools", name: "Pools", icon: <FaDatabase/>},
+        {path: "/network", name: "Networks", icon: <FaNetworkWired/>},
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
@@ -60,12 +72,20 @@ const NavBar = () => {
                 const pathParts = location.pathname.split("/").filter(Boolean);
                 const breadcrumbItems = [];
                 if (pathParts[0] !== "login" && pathParts.length > 1) {
-                    pathParts.forEach((part, index) => {
-                        const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-                        if (part !== "cluster") {
-                            breadcrumbItems.push({name: part, path: fullPath});
-                        }
-                    });
+                    if (pathParts[0] === "network" && pathParts.length === 2) {
+                        breadcrumbItems.push({name: "network", path: "/network"});
+                        breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
+                    } else if (pathParts[0] === "objects" && pathParts.length === 2) {
+                        breadcrumbItems.push({name: "Objects", path: "/objects"});
+                        breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
+                    } else {
+                        pathParts.forEach((part, index) => {
+                            const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                            if (part !== "cluster") {
+                                breadcrumbItems.push({name: part, path: fullPath});
+                            }
+                        });
+                    }
                 }
                 return breadcrumbItems;
             };
@@ -87,12 +107,22 @@ const NavBar = () => {
             });
 
             if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
-                pathParts.forEach((part, index) => {
-                    const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-                    if (part !== "cluster") {
-                        breadcrumbItems.push({name: part, path: fullPath});
-                    }
-                });
+                if (pathParts[0] === "network" && pathParts.length === 2) {
+                    breadcrumbItems.push({name: "network", path: "/network"});
+                    breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
+                } else if (pathParts[0] === "objects" && pathParts.length === 2) {
+                    breadcrumbItems.push({name: "Objects", path: "/objects"});
+                    breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
+                } else if (pathParts[0] === "network" && pathParts.length === 1) {
+                    breadcrumbItems.push({name: "network", path: "/network"});
+                } else {
+                    pathParts.forEach((part, index) => {
+                        const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                        if (part !== "cluster") {
+                            breadcrumbItems.push({name: part, path: fullPath});
+                        }
+                    });
+                }
             }
         }
 

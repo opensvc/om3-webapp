@@ -75,7 +75,7 @@ describe('Pools Component', () => {
         render(<Pools/>);
 
         await waitFor(() => {
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Erreur lors de la récupération des pools', expect.any(Error));
+            expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving pools', expect.any(Error));
             expect(screen.queryByText('pool1')).not.toBeInTheDocument();
             expect(screen.queryByText('pool2')).not.toBeInTheDocument();
         });

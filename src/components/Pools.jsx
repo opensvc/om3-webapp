@@ -28,7 +28,7 @@ const Pools = () => {
 
                 setPools(res.data.items || []);
             } catch (err) {
-                console.error("Erreur lors de la récupération des pools", err);
+                console.error("Error retrieving pools", err);
             }
         };
 

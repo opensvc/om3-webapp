@@ -28,7 +28,11 @@ const Network = () => {
                     }
                 });
 
-                setNetworks(res.data.items || []);
+                // Sort networks alphabetically by name
+                const sortedNetworks = (res.data.items || []).sort((a, b) =>
+                    a.name.localeCompare(b.name)
+                );
+                setNetworks(sortedNetworks);
             } catch (err) {
                 console.error("Error retrieving networks", err);
             }

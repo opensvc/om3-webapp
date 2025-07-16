@@ -111,7 +111,7 @@ const NavBar = () => {
                     breadcrumbItems.push({name: "network", path: "/network"});
                     breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
                 } else if (pathParts[0] === "objects" && pathParts.length === 2) {
-                    breadcrumbItems.push({name: "Objects", path: "/objects"});
+                    breadcrumbItems.push({name: "objects", path: "/objects"});
                     breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
                 } else if (pathParts[0] === "network" && pathParts.length === 1) {
                     breadcrumbItems.push({name: "network", path: "/network"});

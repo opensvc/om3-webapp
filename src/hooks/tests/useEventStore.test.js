@@ -2,7 +2,7 @@ import useEventStore from '../useEventStore.js';
 import {act} from 'react';
 
 describe('useEventStore', () => {
-    it('should initialize with default state', () => {
+    test('should initialize with default state', () => {
         const state = useEventStore.getState();
         expect(state.nodeStatus).toEqual({});
         expect(state.nodeMonitor).toEqual({});
@@ -12,7 +12,7 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({});
     });
 
-    it('should set node status correctly using setNodeStatuses', () => {
+    test('should set node status correctly using setNodeStatuses', () => {
         const {setNodeStatuses} = useEventStore.getState();
 
         act(() => {
@@ -23,7 +23,7 @@ describe('useEventStore', () => {
         expect(state.nodeStatus).toEqual({node1: {status: 'up'}});
     });
 
-    it('should set node monitors correctly using setNodeMonitors', () => {
+    test('should set node monitors correctly using setNodeMonitors', () => {
         const {setNodeMonitors} = useEventStore.getState();
 
         act(() => {
@@ -34,7 +34,7 @@ describe('useEventStore', () => {
         expect(state.nodeMonitor).toEqual({node1: {monitor: 'active'}});
     });
 
-    it('should set node stats correctly using setNodeStats', () => {
+    test('should set node stats correctly using setNodeStats', () => {
         const {setNodeStats} = useEventStore.getState();
 
         act(() => {
@@ -45,7 +45,7 @@ describe('useEventStore', () => {
         expect(state.nodeStats).toEqual({node1: {cpu: 80, memory: 75}});
     });
 
-    it('should set object statuses correctly using setObjectStatuses', () => {
+    test('should set object statuses correctly using setObjectStatuses', () => {
         const {setObjectStatuses} = useEventStore.getState();
 
         act(() => {
@@ -56,7 +56,7 @@ describe('useEventStore', () => {
         expect(state.objectStatus).toEqual({object1: {status: 'active'}});
     });
 
-    it('should set instance statuses correctly using setInstanceStatuses', () => {
+    test('should set instance statuses correctly using setInstanceStatuses', () => {
         const {setInstanceStatuses} = useEventStore.getState();
 
         act(() => {
@@ -67,7 +67,7 @@ describe('useEventStore', () => {
         expect(state.objectInstanceStatus).toEqual({object1: {node1: {status: 'active'}}});
     });
 
-    it('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
+    test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
         const {setHeartbeatStatuses} = useEventStore.getState();
 
         act(() => {
@@ -78,7 +78,7 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({node1: {heartbeat: 'alive'}});
     });
 
-    it('should remove object correctly using removeObject', () => {
+    test('should remove object correctly using removeObject', () => {
         const {setObjectStatuses, removeObject} = useEventStore.getState();
 
         // Set initial state
@@ -103,7 +103,7 @@ describe('useEventStore', () => {
         expect(state.objectStatus).toEqual({object2: {status: 'inactive'}});
     });
 
-    it('should not affect other properties when removing an object', () => {
+    test('should not affect other properties when removing an object', () => {
         const {setObjectStatuses, setNodeStatuses, removeObject} = useEventStore.getState();
 
         // Set initial state for multiple properties

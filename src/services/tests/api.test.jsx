@@ -11,7 +11,7 @@ describe("fetchDaemonStatus", () => {
         jest.clearAllMocks();
     });
 
-    it("calls fetch with correct URL and headers", async () => {
+    test("calls fetch with correct URL and headers", async () => {
         const mockData = {status: "ok"};
 
         fetch.mockResolvedValueOnce({
@@ -31,7 +31,7 @@ describe("fetchDaemonStatus", () => {
         expect(result).toEqual(mockData);
     });
 
-    it("throws error when response is not ok", async () => {
+    test("throws error when response is not ok", async () => {
         fetch.mockResolvedValueOnce({
             ok: false,
             status: 500,

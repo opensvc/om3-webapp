@@ -56,15 +56,10 @@ const NodeCard = ({
     // Log received props for debugging
     console.log("NodeCard render:", {
         node,
-        nodeData,
         resources: nodeData?.resources,
-        resourcesType: typeof nodeData?.resources,
-        resourcesIsObject: nodeData?.resources && typeof nodeData.resources === "object",
-        selectedResourcesByNode,
-        setSelectedResourcesByNode: typeof setSelectedResourcesByNode,
-        toggleResource: typeof toggleResource,
-        parseProvisionedState: typeof parseProvisionedState,
-        individualNodeMenuAnchor,
+        encap: nodeData?.instance_status?.encap,
+        instanceConfig: nodeData?.instanceConfig,
+        instanceMonitor: nodeData?.instanceMonitor,
     });
 
     // Local state for menus
@@ -75,7 +70,47 @@ const NodeCard = ({
     // Extract node data
     const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
+    const encapData = nodeData?.instance_status?.encap || {};
     const {avail, frozen, state} = getNodeState(node);
+
+    // Mock encap resources if not present in event data
+    const defaultEncapResources = {
+        'fs#1': {status: 'up', label: 'flag /dev/shm/opensvc/svc/encap/fs#1.flag', type: 'fs'},
+        'fs#2': {status: 'up', label: 'flag /dev/shm/opensvc/svc/encap/fs#2.flag', type: 'fs'},
+    };
+    const mockEncapData = {
+        'container#1': {resources: defaultEncapResources},
+        'container#2': {resources: defaultEncapResources},
+    };
+    const effectiveEncapData = {...mockEncapData, ...encapData};
+
+    // Mock instanceMonitor for restart count
+    const defaultInstanceMonitor = {
+        resources: {
+            'fs#1': {restart: {remaining: 1}},
+            'fs#2': {restart: {remaining: 1}},
+        },
+    };
+    const effectiveInstanceMonitor = {
+        resources: {
+            ...defaultInstanceMonitor.resources,
+            ...(nodeData?.instanceMonitor?.resources || {}),
+        },
+    };
+
+    // Mock instanceConfig for is_monitored
+    const defaultInstanceConfig = {
+        resources: {
+            'fs#1': {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+            'fs#2': {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+        },
+    };
+    const effectiveInstanceConfig = {
+        resources: {
+            ...defaultInstanceConfig.resources,
+            ...(nodeData?.instanceConfig?.resources || {}),
+        },
+    };
 
     // Log changes to selectedResourcesByNode
     useEffect(() => {
@@ -89,8 +124,16 @@ const NodeCard = ({
             console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
             return;
         }
+        const allResourceIds = [
+            ...resIds,
+            ...resIds.flatMap(rid =>
+                resources[rid]?.type === 'container.docker' && effectiveEncapData[rid]?.resources
+                    ? Object.keys(effectiveEncapData[rid].resources)
+                    : []
+            ),
+        ];
         setSelectedResourcesByNode((prev) => {
-            const newState = {...prev, [node]: checked ? resIds : []};
+            const newState = {...prev, [node]: checked ? allResourceIds : []};
             console.log("After handleSelectAllResources, new selectedResourcesByNode:", newState);
             return newState;
         });
@@ -144,6 +187,186 @@ const NodeCard = ({
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
+    };
+
+    // Helper function to determine resource status letters and tooltip
+    const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false) => {
+        const letters = ['.', '.', '.', '.', '.', '.', '.', '.'];
+        const tooltipDescriptions = [
+            'Not Running',
+            'Not Monitored',
+            'Enabled',
+            'Not Optional',
+            isEncap ? 'Encap' : 'Not Encap',
+            'Provisioned',
+            'Not Standby',
+            'No Restart',
+        ];
+
+        // (1) R: Running (check if 'running' exists in InstanceStatusUpdated)
+        if (resourceData?.running !== undefined) {
+            letters[0] = 'R';
+            tooltipDescriptions[0] = 'Running';
+        }
+
+        // (2) M: Monitored (check is_monitored in instanceConfig)
+        if (instanceConfig?.resources?.[rid]?.is_monitored === true) {
+            letters[1] = 'M';
+            tooltipDescriptions[1] = 'Monitored';
+        }
+
+        // (3) D: Disabled (check is_disabled in instanceConfig)
+        if (instanceConfig?.resources?.[rid]?.is_disabled === true) {
+            letters[2] = 'D';
+            tooltipDescriptions[2] = 'Disabled';
+        }
+
+        // (4) O: Optional (check optional in InstanceStatusUpdated)
+        if (resourceData?.optional === true) {
+            letters[3] = 'O';
+            tooltipDescriptions[3] = 'Optional';
+        }
+
+        // (5) E: Encap (set to 'E' for encap resources, '.' otherwise)
+        if (isEncap) {
+            letters[4] = 'E';
+            tooltipDescriptions[4] = 'Encap';
+        }
+
+        // (6) P: Not Provisioned (check provisioned.state in InstanceStatusUpdated)
+        if (resourceData?.provisioned?.state === 'false' || resourceData?.provisioned?.state === false || resourceData?.provisioned?.state === 'n/a') {
+            letters[5] = 'P';
+            tooltipDescriptions[5] = 'Not Provisioned';
+        }
+
+        // (7) S: Standby (check is_standby in instanceConfig)
+        if (instanceConfig?.resources?.[rid]?.is_standby === true) {
+            letters[6] = 'S';
+            tooltipDescriptions[6] = 'Standby';
+        }
+
+        // (8) Remaining Restart (check restart in instanceConfig first, then instanceMonitor)
+        const configRestarts = instanceConfig?.resources?.[rid]?.restart;
+        const monitorRestarts = instanceMonitor?.resources?.[rid]?.restart?.remaining;
+        const remainingRestarts = typeof configRestarts === 'number' && configRestarts > 0
+            ? configRestarts
+            : typeof monitorRestarts === 'number'
+                ? monitorRestarts
+                : undefined;
+        if (typeof remainingRestarts === 'number') {
+            letters[7] = remainingRestarts > 10 ? '+' : remainingRestarts.toString();
+            tooltipDescriptions[7] = remainingRestarts > 10 ? 'More than 10 Restarts' : `${remainingRestarts} Restart${remainingRestarts === 1 ? '' : 's'} Remaining`;
+        }
+
+        const statusString = letters.join('');
+        const tooltipText = tooltipDescriptions.join(', ');
+        console.log("Status letters for", rid, ":", {
+            statusString,
+            tooltipText,
+            is_monitored: instanceConfig?.resources?.[rid]?.is_monitored,
+            restart: remainingRestarts
+        });
+        return {statusString, tooltipText};
+    };
+
+    // Helper function to render a resource row
+    const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
+        const {
+            statusString,
+            tooltipText
+        } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
+        const labelText = res.label || "N/A";
+        const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
+
+        console.log("Rendering resource row:", {
+            rid,
+            statusString,
+            status: res.status,
+            label: labelText,
+            isEncap,
+            tooltipText,
+        });
+
+        return (
+            <Box
+                key={rid}
+                sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    width: "100%",
+                    fontFamily: "'Roboto Mono', monospace",
+                    fontSize: "0.9rem",
+                }}
+            >
+                {/* Indented content for checkbox, rid, status letters, and label */}
+                <Box
+                    sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                        flexGrow: 1,
+                        pl: isEncap ? 4 : 0, // Indent only the content
+                    }}
+                >
+                    <Box onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                            checked={(selectedResourcesByNode[node] || []).includes(rid)}
+                            onChange={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                toggleResource(node, rid);
+                                console.log("Individual resource checkbox clicked:", {
+                                    node,
+                                    rid,
+                                    selectedResourcesByNode,
+                                });
+                            }}
+                            aria-label={`Select resource ${rid}`}
+                        />
+                    </Box>
+                    <Typography sx={{minWidth: "80px", fontFamily: "'Roboto Mono', monospace"}}>{rid}</Typography>
+                    <Tooltip title={tooltipText}>
+                        <Typography
+                            sx={{minWidth: "80px", fontFamily: "'Roboto Mono', monospace"}}>{statusString}</Typography>
+                    </Tooltip>
+                    <Typography sx={{flexGrow: 1, fontFamily: "'Roboto Mono', monospace"}}>
+                        {labelText}
+                        {infoText && (
+                            <Typography component="span"
+                                        sx={{ml: 1, color: "textSecondary", fontFamily: "'Roboto Mono', monospace"}}>
+                                {infoText}
+                            </Typography>
+                        )}
+                    </Typography>
+                </Box>
+                {/* Status icon and action button */}
+                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                    <Tooltip title={res.status || "unknown"}>
+                        <FiberManualRecordIcon
+                            sx={{
+                                color: typeof getColor === "function" ? getColor(res.status) : grey[500],
+                                fontSize: "1rem",
+                            }}
+                        />
+                    </Tooltip>
+                    <Box onClick={(e) => e.stopPropagation()}>
+                        <IconButton
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentResourceId(rid);
+                                handleResourceMenuOpen(node, rid, e);
+                            }}
+                            disabled={actionInProgress}
+                            aria-label={`Resource ${rid} actions`}
+                        >
+                            <Tooltip title="Actions">
+                                <MoreVertIcon/>
+                            </Tooltip>
+                        </IconButton>
+                    </Box>
+                </Box>
+            </Box>
+        );
     };
 
     return (
@@ -237,7 +460,11 @@ const NodeCard = ({
                     <Box onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                             checked={
-                                (selectedResourcesByNode[node]?.length || 0) === resIds.length &&
+                                (selectedResourcesByNode[node]?.length || 0) ===
+                                (resIds.length + resIds.reduce((acc, rid) =>
+                                    resources[rid]?.type === 'container.docker' && effectiveEncapData[rid]?.resources
+                                        ? acc + Object.keys(effectiveEncapData[rid].resources).length
+                                        : acc, 0)) &&
                                 resIds.length > 0
                             }
                             onChange={(e) => {
@@ -286,115 +513,39 @@ const NodeCard = ({
                             <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
                                 {resIds.map((rid) => {
                                     const res = resources[rid] || {};
+                                    const isContainer = res.type === 'container.docker';
+                                    const encapRes = isContainer && effectiveEncapData[rid]?.resources
+                                        ? effectiveEncapData[rid].resources
+                                        : {};
+                                    const encapResIds = Object.keys(encapRes);
+
+                                    console.log("Rendering resource:", {
+                                        rid,
+                                        isContainer,
+                                        encapRes,
+                                        encapResIds,
+                                        resourceData: res,
+                                    });
+
                                     return (
-                                        <Accordion
-                                            key={rid}
-                                            expanded={expandedResources[`${node}:${rid}`] || false}
-                                            onChange={handleAccordionChange(node, rid)}
-                                            sx={{
-                                                mb: 1,
-                                                border: "none",
-                                                boxShadow: "none",
-                                                backgroundColor: "transparent",
-                                                "&:before": {display: "none"},
-                                                "& .MuiAccordionDetails-root": {
-                                                    border: "none",
-                                                    backgroundColor: "transparent",
-                                                    padding: 0,
-                                                },
-                                            }}
-                                        >
-                                            <Box
-                                                sx={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 2,
-                                                    width: "100%",
-                                                    p: 1,
-                                                }}
-                                            >
-                                                <Box onClick={(e) => e.stopPropagation()}>
-                                                    <Checkbox
-                                                        checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                                                        onChange={(e) => {
-                                                            e.stopPropagation();
-                                                            e.preventDefault();
-                                                            toggleResource(node, rid);
-                                                            console.log("Individual resource checkbox clicked:", {
-                                                                node,
-                                                                rid,
-                                                                selectedResourcesByNode,
-                                                            });
-                                                        }}
-                                                        aria-label={`Select resource ${rid}`}
-                                                    />
+                                        <Box key={rid}>
+                                            {/* Render top-level resource */}
+                                            {renderResourceRow(rid, res, effectiveInstanceConfig, effectiveInstanceMonitor, false)}
+                                            {/* Render encap resources if container and encap resources exist */}
+                                            {isContainer && encapResIds.length > 0 && (
+                                                <Box sx={{ml: 4}}>
+                                                    {encapResIds.map((encapRid) => (
+                                                        renderResourceRow(
+                                                            encapRid,
+                                                            encapRes[encapRid] || {},
+                                                            effectiveInstanceConfig,
+                                                            effectiveInstanceMonitor,
+                                                            true // isEncap
+                                                        )
+                                                    ))}
                                                 </Box>
-                                                <Typography variant="body1">{rid}</Typography>
-                                                <Box sx={{flexGrow: 1}}/>
-                                                <Tooltip title={res.status || "unknown"}>
-                                                    <FiberManualRecordIcon
-                                                        sx={{
-                                                            color: typeof getColor === "function" ? getColor(res.status) : grey[500],
-                                                            fontSize: "1rem",
-                                                        }}
-                                                    />
-                                                </Tooltip>
-                                                <Box onClick={(e) => e.stopPropagation()}>
-                                                    <IconButton
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setCurrentResourceId(rid);
-                                                            handleResourceMenuOpen(node, rid, e);
-                                                        }}
-                                                        disabled={actionInProgress}
-                                                        aria-label={`Resource ${rid} actions`}
-                                                    >
-                                                        <Tooltip title="Actions">
-                                                            <MoreVertIcon/>
-                                                        </Tooltip>
-                                                    </IconButton>
-                                                </Box>
-                                                <IconButton
-                                                    onClick={() => handleAccordionChange(node, rid)(null, !expandedResources[`${node}:${rid}`])}
-                                                    aria-label={`Expand resource ${rid}`}
-                                                >
-                                                    <ExpandMoreIcon
-                                                        sx={{
-                                                            transform: expandedResources[`${node}:${rid}`] ? "rotate(180deg)" : "rotate(0deg)",
-                                                            transition: "transform 0.2s",
-                                                        }}
-                                                    />
-                                                </IconButton>
-                                            </Box>
-                                            <AccordionDetails>
-                                                <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
-                                                    <Typography variant="body2">
-                                                        <strong>Label:</strong> {res.label || "N/A"}
-                                                    </Typography>
-                                                    <Typography variant="body2">
-                                                        <strong>Type:</strong> {res.type || "N/A"}
-                                                    </Typography>
-                                                    <Typography variant="body2">
-                                                        <strong>Provisioned:</strong>
-                                                        <Tooltip
-                                                            title={parseProvisionedState(res.provisioned?.state) ? "true" : "false"}
-                                                        >
-                                                            <FiberManualRecordIcon
-                                                                sx={{
-                                                                    color: parseProvisionedState(res.provisioned?.state) ? green[500] : red[500],
-                                                                    fontSize: "1rem",
-                                                                    ml: 1,
-                                                                    verticalAlign: "middle",
-                                                                }}
-                                                            />
-                                                        </Tooltip>
-                                                    </Typography>
-                                                    <Typography variant="body2">
-                                                        <strong>Last Updated:</strong> {res.provisioned?.mtime || "N/A"}
-                                                    </Typography>
-                                                </Box>
-                                            </AccordionDetails>
-                                        </Accordion>
+                                            )}
+                                        </Box>
                                     );
                                 })}
                             </Box>

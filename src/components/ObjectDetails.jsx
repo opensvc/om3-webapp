@@ -120,6 +120,9 @@ const ObjectDetail = () => {
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
 
+    // State for initial loading
+    const [initialLoading, setInitialLoading] = useState(true);
+
     // Debounce ref to prevent multiple fetchConfig calls
     const lastFetch = useRef({});
     // Ref to track subscription status
@@ -136,6 +139,7 @@ const ObjectDetail = () => {
         return () => {
             console.log(`[ObjectDetail] Unmounting component for ${decodedObjectName}`);
             isMounted.current = false;
+            closeEventSource();
         };
     }, [decodedObjectName]);
 
@@ -340,7 +344,7 @@ const ObjectDetail = () => {
                     headers: {Authorization: `Bearer ${token}`},
                     cache: "no-cache",
                 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000)),
             ]);
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
@@ -760,10 +764,6 @@ const ObjectDetail = () => {
 
     // Effect for configuring EventSource
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping EventSource for ${decodedObjectName}`);
-            return;
-        }
         console.log(`[ObjectDetail] Setting up EventSource for ${decodedObjectName}`);
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -783,14 +783,10 @@ const ObjectDetail = () => {
             console.log(`[ObjectDetail] Cleaning up EventSource for ${decodedObjectName}`);
             closeEventSource();
         };
-    }, [decodedObjectName, objectData]);
+    }, [decodedObjectName]);
 
     // Effect for handling config updates
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping configUpdates subscription for ${decodedObjectName}`);
-            return;
-        }
         console.log("[ObjectDetail] Setting up configUpdates subscription");
         if (!isMounted.current) {
             console.log("[ObjectDetail] Component unmounted, skipping subscription");
@@ -849,29 +845,31 @@ const ObjectDetail = () => {
                 console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
-    }, [decodedObjectName, clearConfigUpdate, objectData]);
+    }, [decodedObjectName, clearConfigUpdate]);
 
     // Initial load effects
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping initial config load for ${decodedObjectName}`);
-            setConfigError("No nodes available to fetch configuration.");
-            return;
-        }
-        console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
         const loadInitialConfig = async () => {
-            const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
-            if (initialNode) {
-                console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
-                try {
-                    await fetchConfig(initialNode);
-                } catch (err) {
-                    console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
+            console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
+            if (objectData) {
+                const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
+                if (initialNode) {
+                    console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
+                    try {
+                        await fetchConfig(initialNode);
+                    } catch (err) {
+                        console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
+                        setConfigError("Failed to load initial configuration.");
+                    }
+                } else {
+                    setConfigError("No nodes available to fetch configuration.");
+                    console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
                 }
             } else {
-                setConfigError("No nodes available to fetch configuration.");
-                console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
+                console.log("[ObjectDetail] No object data available, skipping config fetch");
+                setConfigError("No object data available.");
             }
+            setInitialLoading(false); // Always set to false after attempt
         };
 
         loadInitialConfig();
@@ -889,20 +887,41 @@ const ObjectDetail = () => {
 
     console.log("[ObjectDetail] Rendering with memoizedObjectData:", memoizedObjectData);
 
-    if (!memoizedObjectData) {
-        console.log("[ObjectDetail] No object data, rendering empty state");
+    // Render loading state only if no data is available during initial loading
+    if (initialLoading && !memoizedObjectData) {
         return (
-            <Box p={4}>
-                <Typography align="center" color="textSecondary" fontSize="1.2rem">
-                    No information available for object <code>{decodedObjectName}</code>.
-                </Typography>
+            <Box p={4} display="flex" justifyContent="center" alignItems="center">
+                <CircularProgress/>
+                <Typography ml={2}>Loading object data...</Typography>
             </Box>
         );
     }
 
+    // Render empty state with separate Typography for object name
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
     console.log("[ObjectDetail] showKeys:", showKeys, "kind:", kind);
+
+    if (!memoizedObjectData) {
+        console.log("[ObjectDetail] No object data, rendering empty state");
+        return (
+            <Box p={4}>
+                <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
+                <Typography align="center" color="textSecondary" fontSize="1.2rem">
+                    No information available for object.
+                </Typography>
+                {showKeys && memoizedObjectData && (
+                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                )}
+                <ConfigSection
+                    decodedObjectName={decodedObjectName}
+                    configNode={configNode}
+                    setConfigNode={setConfigNode}
+                    openSnackbar={openSnackbar}
+                />
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
@@ -930,7 +949,9 @@ const ObjectDetail = () => {
                     }
                     onClose={() => setPendingAction(null)}
                 />
-                <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                {showKeys && (
+                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                )}
                 <ConfigSection
                     decodedObjectName={decodedObjectName}
                     configNode={configNode}

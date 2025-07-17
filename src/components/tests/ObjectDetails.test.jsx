@@ -665,28 +665,27 @@ type = flag
     }, 10000);
 
     test('renders object name and no information message when no data', async () => {
-        // 1. Mock useEventStore for a completely empty and explicit state
+        // Mock useEventStore for an empty state
         useEventStore.mockImplementation((selector) => {
             const emptyState = {
                 objectStatus: {},
-                objectInstanceStatus: {}, // Empty object with no key for our object
+                objectInstanceStatus: {},
                 instanceMonitor: {},
                 configUpdates: [],
-                clearConfigUpdate: jest.fn()
+                clearConfigUpdate: jest.fn(),
             };
             return selector(emptyState);
         });
 
-        // 2. Complete mock of fetch to avoid any API calls
+        // Mock fetch to avoid API calls
         global.fetch = jest.fn().mockImplementation(() =>
             Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({}),
-                text: () => Promise.resolve('')
+                text: () => Promise.resolve(''),
             })
         );
 
-        // 3. Render the component with MemoryRouter
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -695,33 +694,25 @@ type = flag
             </MemoryRouter>
         );
 
-        // 4. Initial debug to verify the first render
-        screen.debug();
-
-        // 5. Explicit wait for the component to finish its initial render
+        // Wait for the initial loading to finish
         await waitFor(() => {
-            // Verify that no loading indicator is present
             expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         });
 
-        // 6. Debug after the initial wait
-        screen.debug();
-
-        // 7. Verification of expected elements
-        // findByText for the name (asynchronous wait)
+        // Check that the object name is rendered
         const objectNameElement = await screen.findByText('root/cfg/cfg1');
         expect(objectNameElement).toBeInTheDocument();
 
-        // getByText for the message (synchronous now that the component is stable)
+        // Check the no information message
         const noInfoMessage = screen.getByText(/No information available for object/i);
         expect(noInfoMessage).toBeInTheDocument();
 
-        // 8. Verification that no API call was made
+        // Ensure no API call was made
         expect(global.fetch).not.toHaveBeenCalled();
 
-        // 9. Final debug to verify the complete DOM
         screen.debug();
-    }, 10000); // 10s timeout just in case
+    }, 10000);
+
 
     test('renders global status, nodes, and resources', async () => {
         render(

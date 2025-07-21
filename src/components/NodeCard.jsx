@@ -18,7 +18,7 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import {green, red, orange, grey, blue} from "@mui/material/colors";
+import {grey, blue, orange} from "@mui/material/colors";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const NodeCard = ({
@@ -36,8 +36,6 @@ const NodeCard = ({
                       individualNodeMenuAnchor = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
-                      expandedResources = {},
-                      handleAccordionChange = () => console.warn("handleAccordionChange not provided"),
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
                       setPendingAction = () => console.warn("setPendingAction not provided"),
@@ -57,7 +55,7 @@ const NodeCard = ({
     console.log("NodeCard render:", {
         node,
         resources: nodeData?.resources,
-        encap: nodeData?.instance_status?.encap,
+        encap: nodeData?.encap,
         instanceConfig: nodeData?.instanceConfig,
         instanceMonitor: nodeData?.instanceMonitor,
     });
@@ -70,47 +68,11 @@ const NodeCard = ({
     // Extract node data
     const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
-    const encapData = nodeData?.instance_status?.encap || {};
+    const encapData = nodeData?.encap || {};
+    const effectiveInstanceConfig = nodeData.instanceConfig || {resources: {}};
+    const effectiveInstanceMonitor = nodeData.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
 
-    // Mock encap resources if not present in event data
-    const defaultEncapResources = {
-        'fs#1': {status: 'up', label: 'flag /dev/shm/opensvc/svc/encap/fs#1.flag', type: 'fs'},
-        'fs#2': {status: 'up', label: 'flag /dev/shm/opensvc/svc/encap/fs#2.flag', type: 'fs'},
-    };
-    const mockEncapData = {
-        'container#1': {resources: defaultEncapResources},
-        'container#2': {resources: defaultEncapResources},
-    };
-    const effectiveEncapData = {...mockEncapData, ...encapData};
-
-    // Mock instanceMonitor for restart count
-    const defaultInstanceMonitor = {
-        resources: {
-            'fs#1': {restart: {remaining: 1}},
-            'fs#2': {restart: {remaining: 1}},
-        },
-    };
-    const effectiveInstanceMonitor = {
-        resources: {
-            ...defaultInstanceMonitor.resources,
-            ...(nodeData?.instanceMonitor?.resources || {}),
-        },
-    };
-
-    // Mock instanceConfig for is_monitored
-    const defaultInstanceConfig = {
-        resources: {
-            'fs#1': {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-            'fs#2': {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-        },
-    };
-    const effectiveInstanceConfig = {
-        resources: {
-            ...defaultInstanceConfig.resources,
-            ...(nodeData?.instanceConfig?.resources || {}),
-        },
-    };
 
     // Log changes to selectedResourcesByNode
     useEffect(() => {
@@ -126,9 +88,9 @@ const NodeCard = ({
         }
         const allResourceIds = [
             ...resIds,
-            ...resIds.flatMap(rid =>
-                resources[rid]?.type === 'container.docker' && effectiveEncapData[rid]?.resources
-                    ? Object.keys(effectiveEncapData[rid].resources)
+            ...resIds.flatMap((rid) =>
+                resources[rid]?.type?.toLowerCase().includes("container") && encapData[rid]?.resources
+                    ? Object.keys(encapData[rid].resources)
                     : []
             ),
         ];
@@ -191,90 +153,93 @@ const NodeCard = ({
 
     // Helper function to determine resource status letters and tooltip
     const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false) => {
-        const letters = ['.', '.', '.', '.', '.', '.', '.', '.'];
+        const letters = [".", ".", ".", ".", ".", ".", ".", "."];
         const tooltipDescriptions = [
-            'Not Running',
-            'Not Monitored',
-            'Enabled',
-            'Not Optional',
-            isEncap ? 'Encap' : 'Not Encap',
-            'Provisioned',
-            'Not Standby',
-            'No Restart',
+            "Not Running",
+            "Not Monitored",
+            "Enabled",
+            "Not Optional",
+            isEncap ? "Encap" : "Not Encap",
+            "Provisioned",
+            "Not Standby",
+            "No Restart",
         ];
 
-        // (1) R: Running (check if 'running' exists in InstanceStatusUpdated)
         if (resourceData?.running !== undefined) {
-            letters[0] = 'R';
-            tooltipDescriptions[0] = 'Running';
+            letters[0] = "R";
+            tooltipDescriptions[0] = "Running";
         }
 
-        // (2) M: Monitored (check is_monitored in instanceConfig)
         if (instanceConfig?.resources?.[rid]?.is_monitored === true) {
-            letters[1] = 'M';
-            tooltipDescriptions[1] = 'Monitored';
+            letters[1] = "M";
+            tooltipDescriptions[1] = "Monitored";
         }
 
-        // (3) D: Disabled (check is_disabled in instanceConfig)
         if (instanceConfig?.resources?.[rid]?.is_disabled === true) {
-            letters[2] = 'D';
-            tooltipDescriptions[2] = 'Disabled';
+            letters[2] = "D";
+            tooltipDescriptions[2] = "Disabled";
         }
 
-        // (4) O: Optional (check optional in InstanceStatusUpdated)
         if (resourceData?.optional === true) {
-            letters[3] = 'O';
-            tooltipDescriptions[3] = 'Optional';
+            letters[3] = "O";
+            tooltipDescriptions[3] = "Optional";
         }
 
-        // (5) E: Encap (set to 'E' for encap resources, '.' otherwise)
         if (isEncap) {
-            letters[4] = 'E';
-            tooltipDescriptions[4] = 'Encap';
+            letters[4] = "E";
+            tooltipDescriptions[4] = "Encap";
         }
 
-        // (6) P: Not Provisioned (check provisioned.state in InstanceStatusUpdated)
-        if (resourceData?.provisioned?.state === 'false' || resourceData?.provisioned?.state === false || resourceData?.provisioned?.state === 'n/a') {
-            letters[5] = 'P';
-            tooltipDescriptions[5] = 'Not Provisioned';
+        if (
+            resourceData?.provisioned?.state === "false" ||
+            resourceData?.provisioned?.state === false ||
+            resourceData?.provisioned?.state === "n/a"
+        ) {
+            letters[5] = "P";
+            tooltipDescriptions[5] = "Not Provisioned";
         }
 
-        // (7) S: Standby (check is_standby in instanceConfig)
         if (instanceConfig?.resources?.[rid]?.is_standby === true) {
-            letters[6] = 'S';
-            tooltipDescriptions[6] = 'Standby';
+            letters[6] = "S";
+            tooltipDescriptions[6] = "Standby";
         }
 
-        // (8) Remaining Restart (check restart in instanceConfig first, then instanceMonitor)
         const configRestarts = instanceConfig?.resources?.[rid]?.restart;
         const monitorRestarts = instanceMonitor?.resources?.[rid]?.restart?.remaining;
-        const remainingRestarts = typeof configRestarts === 'number' && configRestarts > 0
-            ? configRestarts
-            : typeof monitorRestarts === 'number'
-                ? monitorRestarts
-                : undefined;
-        if (typeof remainingRestarts === 'number') {
-            letters[7] = remainingRestarts > 10 ? '+' : remainingRestarts.toString();
-            tooltipDescriptions[7] = remainingRestarts > 10 ? 'More than 10 Restarts' : `${remainingRestarts} Restart${remainingRestarts === 1 ? '' : 's'} Remaining`;
+        const remainingRestarts =
+            typeof configRestarts === "number" && configRestarts > 0
+                ? configRestarts
+                : typeof monitorRestarts === "number"
+                    ? monitorRestarts
+                    : undefined;
+        if (typeof remainingRestarts === "number") {
+            letters[7] = remainingRestarts > 10 ? "+" : remainingRestarts.toString();
+            tooltipDescriptions[7] =
+                remainingRestarts > 10
+                    ? "More than 10 Restarts"
+                    : `${remainingRestarts} Restart${remainingRestarts === 1 ? "" : "s"} Remaining`;
         }
 
-        const statusString = letters.join('');
-        const tooltipText = tooltipDescriptions.join(', ');
+        const statusString = letters.join("");
+        const tooltipText = tooltipDescriptions.join(", ");
         console.log("Status letters for", rid, ":", {
             statusString,
             tooltipText,
             is_monitored: instanceConfig?.resources?.[rid]?.is_monitored,
-            restart: remainingRestarts
+            restart: remainingRestarts,
         });
         return {statusString, tooltipText};
     };
 
     // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
-        const {
-            statusString,
-            tooltipText
-        } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
+        const {statusString, tooltipText} = getResourceStatusLetters(
+            rid,
+            res,
+            instanceConfig,
+            instanceMonitor,
+            isEncap
+        );
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
 
@@ -292,20 +257,21 @@ const NodeCard = ({
                 key={rid}
                 sx={{
                     display: "flex",
-                    alignItems: "center",
+                    flexDirection: {xs: "column", sm: "row"},
+                    alignItems: {xs: "flex-start", sm: "center"},
                     width: "100%",
                     fontFamily: "'Roboto Mono', monospace",
                     fontSize: "0.9rem",
+                    gap: {xs: 1, sm: 2},
                 }}
             >
-                {/* Indented content for checkbox, rid, status letters, and label */}
                 <Box
                     sx={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 2,
-                        flexGrow: 1,
-                        pl: isEncap ? 4 : 0, // Indent only the content
+                        gap: {xs: 1, sm: 2},
+                        width: "100%",
+                        pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
                     }}
                 >
                     <Box onClick={(e) => e.stopPropagation()}>
@@ -324,23 +290,157 @@ const NodeCard = ({
                             aria-label={`Select resource ${rid}`}
                         />
                     </Box>
-                    <Typography sx={{minWidth: "80px", fontFamily: "'Roboto Mono', monospace"}}>{rid}</Typography>
+                    <Typography
+                        sx={{
+                            minWidth: {xs: "60px", sm: "80px"},
+                            fontFamily: "'Roboto Mono', monospace",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {rid}
+                    </Typography>
+                    <Box
+                        sx={{
+                            display: {xs: "none", sm: "flex"},
+                            alignItems: "center",
+                            gap: 2,
+                            flexGrow: 0,
+                        }}
+                    >
+                        <Tooltip title={tooltipText}>
+                            <Typography
+                                sx={{
+                                    minWidth: {sm: "80px"},
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                {statusString}
+                            </Typography>
+                        </Tooltip>
+                        <Typography
+                            sx={{
+                                fontFamily: "'Roboto Mono', monospace",
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
+                            }}
+                        >
+                            {labelText}
+                            {infoText && (
+                                <Typography
+                                    component="span"
+                                    sx={{
+                                        ml: 1,
+                                        color: "textSecondary",
+                                        fontFamily: "'Roboto Mono', monospace",
+                                        whiteSpace: "normal",
+                                        wordBreak: "break-word",
+                                    }}
+                                >
+                                    {infoText}
+                                </Typography>
+                            )}
+                        </Typography>
+                    </Box>
+                    <Box
+                        sx={{
+                            display: {xs: "flex", sm: "none"},
+                            alignItems: "center",
+                            gap: 1,
+                            flexShrink: 0,
+                            marginLeft: "auto",
+                        }}
+                    >
+                        <Tooltip title={res.status || "unknown"}>
+                            <FiberManualRecordIcon
+                                sx={{
+                                    color: typeof getColor === "function" ? getColor(res.status) : grey[500],
+                                    fontSize: "1rem",
+                                }}
+                            />
+                        </Tooltip>
+                        <Box onClick={(e) => e.stopPropagation()}>
+                            <IconButton
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentResourceId(rid);
+                                    handleResourceMenuOpen(node, rid, e);
+                                }}
+                                disabled={actionInProgress}
+                                aria-label={`Resource ${rid} actions`}
+                            >
+                                <Tooltip title="Actions">
+                                    <MoreVertIcon/>
+                                </Tooltip>
+                            </IconButton>
+                        </Box>
+                    </Box>
+                </Box>
+                <Box
+                    sx={{
+                        pl: isEncap ? 4 : 2,
+                        display: {xs: "block", sm: "none"},
+                        width: "100%",
+                    }}
+                >
                     <Tooltip title={tooltipText}>
                         <Typography
-                            sx={{minWidth: "80px", fontFamily: "'Roboto Mono', monospace"}}>{statusString}</Typography>
+                            sx={{
+                                fontFamily: "'Roboto Mono', monospace",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            {statusString}
+                        </Typography>
                     </Tooltip>
-                    <Typography sx={{flexGrow: 1, fontFamily: "'Roboto Mono', monospace"}}>
+                </Box>
+                <Box
+                    sx={{
+                        pl: isEncap ? 4 : 2,
+                        display: {xs: "block", sm: "none"},
+                        width: "100%",
+                    }}
+                >
+                    <Typography
+                        sx={{
+                            fontFamily: "'Roboto Mono', monospace",
+                            whiteSpace: "normal",
+                            wordBreak: "break-word",
+                        }}
+                    >
                         {labelText}
                         {infoText && (
-                            <Typography component="span"
-                                        sx={{ml: 1, color: "textSecondary", fontFamily: "'Roboto Mono', monospace"}}>
+                            <Typography
+                                component="span"
+                                sx={{
+                                    ml: 1,
+                                    color: "textSecondary",
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                }}
+                            >
                                 {infoText}
                             </Typography>
                         )}
                     </Typography>
                 </Box>
-                {/* Status icon and action button */}
-                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                <Box
+                    sx={{
+                        display: {xs: "none", sm: "flex"},
+                        alignItems: "center",
+                        gap: 1,
+                        flexShrink: 0,
+                        flexGrow: 1,
+                        justifyContent: "flex-end",
+                    }}
+                >
                     <Tooltip title={res.status || "unknown"}>
                         <FiberManualRecordIcon
                             sx={{
@@ -380,6 +480,9 @@ const NodeCard = ({
                 borderColor: "divider",
                 borderRadius: 1,
                 p: 2,
+                width: "100%",
+                maxWidth: "1400px",
+                overflowX: "auto",
             }}
         >
             {/* Node header */}
@@ -461,10 +564,15 @@ const NodeCard = ({
                         <Checkbox
                             checked={
                                 (selectedResourcesByNode[node]?.length || 0) ===
-                                (resIds.length + resIds.reduce((acc, rid) =>
-                                    resources[rid]?.type === 'container.docker' && effectiveEncapData[rid]?.resources
-                                        ? acc + Object.keys(effectiveEncapData[rid].resources).length
-                                        : acc, 0)) &&
+                                (resIds.length +
+                                    resIds.reduce(
+                                        (acc, rid) =>
+                                            resources[rid]?.type?.toLowerCase().includes("container") &&
+                                            encapData[rid]?.resources
+                                                ? acc + Object.keys(encapData[rid].resources).length
+                                                : acc,
+                                        0
+                                    )) &&
                                 resIds.length > 0
                             }
                             onChange={(e) => {
@@ -513,10 +621,8 @@ const NodeCard = ({
                             <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
                                 {resIds.map((rid) => {
                                     const res = resources[rid] || {};
-                                    const isContainer = res.type === 'container.docker';
-                                    const encapRes = isContainer && effectiveEncapData[rid]?.resources
-                                        ? effectiveEncapData[rid].resources
-                                        : {};
+                                    const isContainer = res.type?.toLowerCase().includes("container") || false;
+                                    const encapRes = isContainer && encapData[rid]?.resources ? encapData[rid].resources : {};
                                     const encapResIds = Object.keys(encapRes);
 
                                     console.log("Rendering resource:", {
@@ -525,24 +631,50 @@ const NodeCard = ({
                                         encapRes,
                                         encapResIds,
                                         resourceData: res,
+                                        resourceType: res.type,
+                                        encapDataForRid: encapData[rid],
                                     });
 
                                     return (
                                         <Box key={rid}>
                                             {/* Render top-level resource */}
                                             {renderResourceRow(rid, res, effectiveInstanceConfig, effectiveInstanceMonitor, false)}
-                                            {/* Render encap resources if container and encap resources exist */}
+                                            {isContainer && !encapData[rid] && (
+                                                <Box sx={{ml: 4}}>
+                                                    <Typography color="textSecondary">
+                                                        No encapsulated data available for {rid}.
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                            {isContainer && encapData[rid] && !encapData[rid].resources && (
+                                                <Box sx={{ml: 4}}>
+                                                    <Typography color="textSecondary">
+                                                        Encapsulated data found for {rid}, but no resources defined.
+                                                    </Typography>
+                                                </Box>
+                                            )}
                                             {isContainer && encapResIds.length > 0 && (
                                                 <Box sx={{ml: 4}}>
-                                                    {encapResIds.map((encapRid) => (
-                                                        renderResourceRow(
+                                                    {encapResIds.map((encapRid) => {
+                                                        console.log("Rendering encap resource:", {
+                                                            encapRid,
+                                                            data: encapRes[encapRid],
+                                                        });
+                                                        return renderResourceRow(
                                                             encapRid,
                                                             encapRes[encapRid] || {},
                                                             effectiveInstanceConfig,
                                                             effectiveInstanceMonitor,
-                                                            true // isEncap
-                                                        )
-                                                    ))}
+                                                            true
+                                                        );
+                                                    })}
+                                                </Box>
+                                            )}
+                                            {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && (
+                                                <Box sx={{ml: 4}}>
+                                                    <Typography color="textSecondary">
+                                                        No encapsulated resources available for {rid}.
+                                                    </Typography>
                                                 </Box>
                                             )}
                                         </Box>

@@ -42,10 +42,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
-import {
-    UpdateConfigDialog,
-    ManageConfigParamsDialog,
-} from "./ActionDialogs";
+import {UpdateConfigDialog, ManageConfigParamsDialog} from "./ActionDialogs";
 import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
@@ -60,6 +57,7 @@ const ObjectDetail = () => {
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
+    const instanceConfig = useEventStore((s) => s.instanceConfig);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
 
@@ -150,7 +148,7 @@ const ObjectDetail = () => {
 
     // Initialize and update accordion states for nodes and resources
     useEffect(() => {
-        if (!objectData) return; // Skip if no data
+        if (!objectData) return;
         console.log("[ObjectDetail] Updating accordion states for nodes and resources");
         const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
         setExpandedNodeResources((prev) => {
@@ -852,7 +850,17 @@ const ObjectDetail = () => {
         const loadInitialConfig = async () => {
             console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
             if (objectData) {
-                const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
+                const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+                const initialNode = nodes.find((node) => {
+                    const hasValidEncapResources =
+                        objectData[node]?.encap &&
+                        Object.values(objectData[node].encap).some(
+                            (container) => container.resources && Object.keys(container.resources).length > 0
+                        );
+                    console.log(`[ObjectDetail] Checking node ${node} for valid encap resources:`, hasValidEncapResources);
+                    return hasValidEncapResources;
+                }) || nodes[0];
+
                 if (initialNode) {
                     console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
                     try {
@@ -869,7 +877,7 @@ const ObjectDetail = () => {
                 console.log("[ObjectDetail] No object data available, skipping config fetch");
                 setConfigError("No object data available.");
             }
-            setInitialLoading(false); // Always set to false after attempt
+            setInitialLoading(false);
         };
 
         loadInitialConfig();
@@ -878,8 +886,22 @@ const ObjectDetail = () => {
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
         console.log("[ObjectDetail] Memoizing objectData:", objectData);
-        return objectData;
-    }, [objectData]);
+        console.log("[ObjectDetail] instanceConfig state:", instanceConfig);
+        const enhancedObjectData = {};
+        if (objectData) {
+            Object.keys(objectData).forEach((node) => {
+                console.log(`[ObjectDetail] Node ${node} encap:`, objectData[node]?.encap);
+                enhancedObjectData[node] = {
+                    ...objectData[node],
+                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName] : {resources: {}},
+                    instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
+                };
+            });
+        }
+        console.log("[ObjectDetail] Enhanced memoizedObjectData:", enhancedObjectData);
+        return enhancedObjectData;
+    }, [objectData, instanceConfig, instanceMonitor, decodedObjectName]);
+
     const memoizedNodes = useMemo(() => {
         console.log("[ObjectDetail] Memoizing nodes:", Object.keys(memoizedObjectData || {}));
         return Object.keys(memoizedObjectData || {});

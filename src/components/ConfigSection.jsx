@@ -348,6 +348,8 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                 border: "1px solid",
                 borderColor: "divider",
                 borderRadius: 1,
+                width: "100%",
+                maxWidth: "1400px",
             }}
         >
             <Accordion

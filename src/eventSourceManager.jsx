@@ -31,9 +31,9 @@ const objectSpecificFilters = [
 function createQueryString(filters = defaultFilters, objectName = null) {
     let queryFilters = filters;
     if (objectName) {
-        queryFilters = objectSpecificFilters.map(filter => `${filter},path=${encodeURIComponent(objectName)}`);
+        queryFilters = objectSpecificFilters.map((filter) => `${filter},path=${encodeURIComponent(objectName)}`);
     }
-    return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
+    return `cache=true&${queryFilters.map((filter) => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 }
 
 export const createEventSource = (url, token) => {
@@ -55,6 +55,7 @@ export const createEventSource = (url, token) => {
         setNodeStats,
         setHeartbeatStatuses,
         setInstanceMonitors,
+        setInstanceConfig,
         removeObject,
         setConfigUpdated,
     } = useEventStore.getState();
@@ -67,6 +68,7 @@ export const createEventSource = (url, token) => {
     let nodeStatsBuffer = {};
     let heartbeatStatusBuffer = {};
     let instanceMonitorBuffer = {};
+    let instanceConfigBuffer = {};
     let configUpdatedBuffer = new Set();
     let flushTimeout = null;
 
@@ -86,14 +88,8 @@ export const createEventSource = (url, token) => {
         }
 
         if (Object.keys(instanceStatusBuffer).length > 0) {
-            const mergedInst = {...store.objectInstanceStatus};
-            for (const obj of Object.keys(instanceStatusBuffer)) {
-                mergedInst[obj] = {
-                    ...mergedInst[obj],
-                    ...instanceStatusBuffer[obj],
-                };
-            }
-            setInstanceStatuses(mergedInst);
+            console.log('[eventSourceManager] Flushing instanceStatusBuffer:', instanceStatusBuffer);
+            setInstanceStatuses(instanceStatusBuffer);
             instanceStatusBuffer = {};
         }
 
@@ -126,6 +122,12 @@ export const createEventSource = (url, token) => {
             const merged = {...store.instanceMonitor, ...instanceMonitorBuffer};
             setInstanceMonitors(merged);
             instanceMonitorBuffer = {};
+        }
+
+        if (Object.keys(instanceConfigBuffer).length > 0) {
+            const merged = {...store.instanceConfig, ...instanceConfigBuffer};
+            setInstanceConfig(merged);
+            instanceConfigBuffer = {};
         }
 
         if (configUpdatedBuffer.size > 0) {
@@ -200,13 +202,20 @@ export const createEventSource = (url, token) => {
 
     currentEventSource.addEventListener('InstanceStatusUpdated', (event) => {
         const parsed = JSON.parse(event.data);
+        console.log("[eventSourceManager] InstanceStatusUpdated event:", parsed);
+        console.log("[eventSourceManager] instStatus.encap:", parsed.instance_status?.encap);
         const name = parsed.path || parsed.labels?.path;
         const node = parsed.node;
         const instStatus = parsed.instance_status;
-        if (!name || !node || !instStatus) return;
+        if (!name || !node || !instStatus) {
+            console.error("[eventSourceManager] Invalid InstanceStatusUpdated event:", parsed);
+            return;
+        }
 
         const current = useEventStore.getState().objectInstanceStatus?.[name]?.[node];
-        if (!isEqual(current, instStatus)) {
+        if (!isEqual(current?.instance_status, instStatus)) {
+            console.log("[eventSourceManager] Updating instanceStatusBuffer for:", {name, node});
+            console.log("[eventSourceManager] instStatus:", instStatus);
             instanceStatusBuffer[name] = {
                 ...(instanceStatusBuffer[name] || {}),
                 [node]: instStatus,
@@ -257,13 +266,21 @@ export const createEventSource = (url, token) => {
 
     currentEventSource.addEventListener('InstanceConfigUpdated', (event) => {
         const parsed = JSON.parse(event.data);
+        console.log("[eventSourceManager] InstanceConfigUpdated event:", parsed);
         const name = parsed.path || parsed.labels?.path;
         const node = parsed.node;
+        const instConfig = parsed.instance_config;
         if (!name || !node) {
             console.warn('⚠️ InstanceConfigUpdated event missing name or node:', parsed);
             return;
         }
         configUpdatedBuffer.add(JSON.stringify({name, node}));
+        if (instConfig) {
+            instanceConfigBuffer[name] = {
+                ...(instanceConfigBuffer[name] || {}),
+                [node]: instConfig,
+            };
+        }
         scheduleFlush();
     });
 

@@ -1,6 +1,20 @@
 import useEventStore from '../useEventStore.js';
 import {act} from 'react';
 
+// Mock react-router-dom
+jest.mock('react-router-dom', () => ({
+    ...jest.requireActual('react-router-dom'),
+    useParams: jest.fn(),
+}));
+
+// Mock @mui/material
+jest.mock('@mui/material', () => ({
+    ...jest.requireActual('@mui/material'),
+    Typography: ({children, ...props}) => <span {...props}>{children}</span>,
+    Box: ({children, ...props}) => <div {...props}>{children}</div>,
+    CircularProgress: () => <div role="progressbar">Loading...</div>,
+}));
+
 describe('useEventStore', () => {
     test('should initialize with default state', () => {
         const state = useEventStore.getState();
@@ -64,7 +78,16 @@ describe('useEventStore', () => {
         });
 
         const state = useEventStore.getState();
-        expect(state.objectInstanceStatus).toEqual({object1: {node1: {status: 'active'}}});
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'active',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {}
+                }
+            }
+        });
     });
 
     test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
@@ -90,7 +113,7 @@ describe('useEventStore', () => {
         let state = useEventStore.getState();
         expect(state.objectStatus).toEqual({
             object1: {status: 'active'},
-            object2: {status: 'inactive'}
+            object2: {status: 'inactive'},
         });
 
         // Apply the removeObject action

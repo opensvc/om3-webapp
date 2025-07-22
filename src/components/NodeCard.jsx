@@ -73,7 +73,6 @@ const NodeCard = ({
     const effectiveInstanceMonitor = nodeData.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
 
-
     // Log changes to selectedResourcesByNode
     useEffect(() => {
         console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
@@ -213,11 +212,14 @@ const NodeCard = ({
                     ? monitorRestarts
                     : undefined;
         if (typeof remainingRestarts === "number") {
-            letters[7] = remainingRestarts > 10 ? "+" : remainingRestarts.toString();
+            // Display '.' when remainingRestarts is 0, otherwise show the number or '+' for >10
+            letters[7] = remainingRestarts === 0 ? "." : remainingRestarts > 10 ? "+" : remainingRestarts.toString();
             tooltipDescriptions[7] =
-                remainingRestarts > 10
-                    ? "More than 10 Restarts"
-                    : `${remainingRestarts} Restart${remainingRestarts === 1 ? "" : "s"} Remaining`;
+                remainingRestarts === 0
+                    ? "No Restart"
+                    : remainingRestarts > 10
+                        ? "More than 10 Restarts"
+                        : `${remainingRestarts} Restart${remainingRestarts === 1 ? "" : "s"} Remaining`;
         }
 
         const statusString = letters.join("");

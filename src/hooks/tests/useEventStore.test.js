@@ -16,6 +16,22 @@ jest.mock('@mui/material', () => ({
 }));
 
 describe('useEventStore', () => {
+    // Reset state before each test to avoid interference
+    beforeEach(() => {
+        act(() => {
+            useEventStore.setState({
+                nodeStatus: {},
+                nodeMonitor: {},
+                nodeStats: {},
+                objectStatus: {},
+                objectInstanceStatus: {},
+                heartbeatStatus: {},
+                instanceMonitor: {},
+                configUpdates: [],
+            });
+        });
+    });
+
     test('should initialize with default state', () => {
         const state = useEventStore.getState();
         expect(state.nodeStatus).toEqual({});
@@ -101,6 +117,17 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({node1: {heartbeat: 'alive'}});
     });
 
+    test('should set instance monitors correctly using setInstanceMonitors', () => {
+        const {setInstanceMonitors} = useEventStore.getState();
+
+        act(() => {
+            setInstanceMonitors({object1: {monitor: 'running'}});
+        });
+
+        const state = useEventStore.getState();
+        expect(state.instanceMonitor).toEqual({object1: {monitor: 'running'}});
+    });
+
     test('should remove object correctly using removeObject', () => {
         const {setObjectStatuses, removeObject} = useEventStore.getState();
 
@@ -149,5 +176,85 @@ describe('useEventStore', () => {
         state = useEventStore.getState();
         expect(state.objectStatus).toEqual({});
         expect(state.nodeStatus).toEqual({node1: {status: 'up'}});
+    });
+
+    test('should handle direct format updates in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            {name: 'service1', node: 'node1'},
+            {name: 'cluster', node: 'node2'},
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'root/svc/service1', node: 'node1'},
+            {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
+        ]);
+
+        // Test deduplication
+        act(() => {
+            setConfigUpdated([{name: 'service1', node: 'node1'}]); // Duplicate
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(2); // No new entries
+    });
+
+    test('should handle SSE format updates in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            {
+                kind: 'InstanceConfigUpdated',
+                data: {path: 'service1', node: 'node1', labels: {namespace: 'ns1'}},
+            },
+            {
+                kind: 'InstanceConfigUpdated',
+                data: {path: 'cluster', node: 'node2'}, // No namespace, defaults to root
+            },
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'ns1/svc/service1', node: 'node1'},
+            {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
+        ]);
+    });
+
+    test('should clear config updates correctly', () => {
+        const {setConfigUpdated, clearConfigUpdate} = useEventStore.getState();
+
+        // Set initial updates
+        act(() => {
+            setConfigUpdated([
+                {name: 'service1', node: 'node1'},
+                {name: 'service2', node: 'node2'},
+            ]);
+        });
+
+        // Clear one update
+        act(() => {
+            clearConfigUpdate('root/svc/service1');
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service2', fullName: 'root/svc/service2', node: 'node2'},
+        ]);
+
+        // Clear using short name
+        act(() => {
+            clearConfigUpdate('service2');
+        });
+
+        expect(useEventStore.getState().configUpdates).toEqual([]);
     });
 });

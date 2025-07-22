@@ -335,7 +335,9 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
     // Initial load effect
     useEffect(() => {
-        if (configNode) {
+        if (!configNode) {
+            setConfigError("No node available to fetch configuration.");
+        } else {
             fetchConfig(configNode);
         }
     }, [configNode, decodedObjectName]);
@@ -521,6 +523,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                         autoFocus
                         margin="dense"
                         label="Parameters to set"
+                        aria-label="Parameters to set"
                         fullWidth
                         variant="outlined"
                         multiline
@@ -536,6 +539,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     <TextField
                         margin="dense"
                         label="Parameter keys to unset"
+                        aria-label="Parameter keys to unset"
                         fullWidth
                         variant="outlined"
                         multiline
@@ -566,6 +570,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     <TextField
                         margin="dense"
                         label="Section keys to delete"
+                        aria-label="Section keys to delete"
                         fullWidth
                         variant="outlined"
                         multiline

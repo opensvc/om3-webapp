@@ -3,9 +3,11 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
 import KeysSection from '../KeysSection';
+import ConfigSection from '../ConfigSection';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
+import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
 
 // Helper to find text within a container
 const findByTextNode = async (container, text, options = {}) => {
@@ -30,10 +32,9 @@ const findByTextNode = async (container, text, options = {}) => {
 };
 
 // Improved findNodeSection helper
-const findNodeSection = async (nodeName, timeout = 20000) => {
+const findNodeSection = async (nodeName, timeout = 10000) => {
     try {
-        // Primary matcher: exact text in <span variant="h6">
-        let nodeElement = await screen.findByText(
+        const nodeElement = await screen.findByText(
             (content, element) => {
                 const hasText = content === nodeName;
                 const isTypography = element?.tagName.toLowerCase() === 'span' && element?.getAttribute('variant') === 'h6';
@@ -43,20 +44,17 @@ const findNodeSection = async (nodeName, timeout = 20000) => {
             {timeout}
         );
 
-        const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]') || nodeElement.parentElement;
+        const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
         if (!nodeSection) {
+            console.error(`Node section container not found for ${nodeName}`);
+            screen.debug();
             throw new Error(`Node section container not found for ${nodeName}`);
         }
+
         return nodeSection;
     } catch (error) {
-        console.error(`Primary matcher failed for ${nodeName}, trying fallback matcher`);
-        // Fallback: find any element with nodeName and log its structure
-        const allNodeElements = await screen.findAllByText(nodeName, {}, {timeout});
-        console.log(`All elements matching '${nodeName}':`, allNodeElements.map(el => ({
-            text: el.textContent,
-            tag: el.tagName,
-            attributes: Object.fromEntries([...el.attributes].map(attr => [attr.name, attr.value]))
-        })));
+        console.error(`Error in findNodeSection for ${nodeName}:`, error);
+        screen.debug();
         throw error;
     }
 };
@@ -123,18 +121,19 @@ jest.mock('@mui/material', () => {
         Checkbox: ({checked, onChange, ...props}) => (
             <input type="checkbox" checked={checked} onChange={onChange} {...props} />
         ),
-        IconButton: ({children, onClick, ...props}) => (
-            <button onClick={onClick} {...props}>
+        IconButton: ({children, onClick, disabled, ...props}) => (
+            <button onClick={onClick} disabled={disabled} {...props}>
                 {children}
             </button>
         ),
-        TextField: ({label, value, onChange, disabled, ...props}) => (
+        TextField: ({label, value, onChange, disabled, multiline, rows, ...props}) => (
             <input
-                type="text"
+                type={multiline ? 'text' : 'text'}
                 placeholder={label}
                 value={value}
                 onChange={onChange}
                 disabled={disabled}
+                {...(multiline ? {'data-multiline': true, rows} : {})}
                 {...props}
             />
         ),
@@ -160,47 +159,42 @@ jest.mock('@mui/material', () => {
                 {children}
             </span>
         ),
+        Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                data-variant={variant}
+                {...(component === 'label' ? {htmlFor} : {})}
+                {...props}
+            >
+                {children}
+            </button>
+        ),
     };
 });
 
+// Mock Material-UI icons
+jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon"/>);
+jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="UploadFileIcon"/>);
+jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon"/>);
+
+// Mock localStorage
+const mockLocalStorage = {
+    getItem: jest.fn((key) => 'mock-token'),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+};
+Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
+
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();
-
-    // Improved findNodeSection helper
-    const findNodeSection = async (nodeName, timeout = 10000) => {
-        try {
-            const nodeElement = await screen.findByText(
-                (content, element) => {
-                    const hasText = content === nodeName;
-                    const isTypography = element?.tagName.toLowerCase() === 'span' && element?.getAttribute('variant') === 'h6';
-                    return hasText && isTypography;
-                },
-                {},
-                {timeout}
-            );
-
-            const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
-            if (!nodeSection) {
-                console.error(`Node section container not found for ${nodeName}`);
-                screen.debug();
-                throw new Error(`Node section container not found for ${nodeName}`);
-            }
-
-            return nodeSection;
-        } catch (error) {
-            console.error(`Error in findNodeSection for ${nodeName}:`, error);
-            screen.debug();
-            throw error;
-        }
-    };
+    // Define mock functions for ConfigSection props
+    const setConfigNode = jest.fn();
+    const openSnackbar = jest.fn();
 
     beforeEach(() => {
         jest.setTimeout(30000);
         jest.clearAllMocks();
-
-        Storage.prototype.getItem = jest.fn((key) => 'mock-token');
-        Storage.prototype.setItem = jest.fn();
-        Storage.prototype.removeItem = jest.fn();
 
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
@@ -208,6 +202,8 @@ describe('ObjectDetail Component', () => {
 
         startEventReception.mockClear();
         configureEventSource.mockClear();
+        setConfigNode.mockClear();
+        openSnackbar.mockClear();
 
         const mockState = {
             objectStatus: {
@@ -314,7 +310,7 @@ describe('ObjectDetail Component', () => {
                     text: () => Promise.resolve(''),
                 });
             }
-            if (url.includes('/config?set=')) {
+            if (url.includes('/config?set=') || url.includes('/config?unset=') || url.includes('/config?delete=')) {
                 return Promise.resolve({
                     ok: true,
                     status: 200,
@@ -334,7 +330,7 @@ id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
 long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
 [fs#1]
 type = flag
-                `),
+                    `),
                     json: () => Promise.resolve({}),
                 });
             }
@@ -1252,7 +1248,7 @@ type = flag
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
@@ -1267,7 +1263,7 @@ type = flag
         // Find node1
         let nodeSection;
         try {
-            const nodeElement = await screen.findByText('node1', { selector: 'span[variant="h6"]' }, { timeout: 10000 });
+            const nodeElement = await screen.findByText('node1', {selector: 'span[variant="h6"]'}, {timeout: 10000});
             nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
             console.log('[Test] Node section found for node1');
         } catch (error) {
@@ -1284,24 +1280,24 @@ type = flag
         expect(nodeSection).toBeInTheDocument();
 
         // Find Resources header
-        const resourcesHeader = await within(nodeSection).findByText(/Resources.*\(/i, {}, { timeout: 5000 });
+        const resourcesHeader = await within(nodeSection).findByText(/Resources.*\(/i, {}, {timeout: 5000});
         expect(resourcesHeader).toBeInTheDocument();
 
         // Click expand button
         const resourcesHeaderBox = resourcesHeader.closest('div[style*="display: flex"]');
-        const resourcesExpandButton = await within(resourcesHeaderBox).findByTestId('ExpandMoreIcon', {}, { timeout: 5000 });
+        const resourcesExpandButton = await within(resourcesHeaderBox).findByTestId('ExpandMoreIcon', {}, {timeout: 5000});
         await user.click(resourcesExpandButton);
 
         // Verify accordion is expanded
         const accordion = resourcesHeader.closest('[data-testid="accordion"]');
         await waitFor(() => {
             expect(accordion).toHaveClass('expanded');
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         // Verify resources
-        const res1Element = await within(nodeSection).findByText('res1', {}, { timeout: 5000 });
+        const res1Element = await within(nodeSection).findByText('res1', {}, {timeout: 5000});
         expect(res1Element).toBeInTheDocument();
-        const res2Element = await within(nodeSection).findByText('res2', {}, { timeout: 5000 });
+        const res2Element = await within(nodeSection).findByText('res2', {}, {timeout: 5000});
         expect(res2Element).toBeInTheDocument();
     }, 30000);
 
@@ -1957,4 +1953,661 @@ type = flag
             {timeout: 5000}
         );
     }, 20000);
+    test('renders configuration section and fetches config', async () => {
+        // Mock fetch with a delay to simulate async behavior
+        global.fetch.mockImplementationOnce(() =>
+            new Promise((resolve) =>
+                setTimeout(() =>
+                        resolve({
+                            ok: true,
+                            status: 200,
+                            text: () => Promise.resolve(`
+[DEFAULT]
+nodes = *
+orchestrate = ha
+id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
+long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
+[fs#1]
+type = flag
+                    `),
+                        }),
+                    100 // 100ms delay
+                )
+            )
+        );
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        expect(screen.getByText(/Configuration/i)).toBeInTheDocument();
+
+        const accordionSummary = screen.getByTestId('accordion-summary');
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        // Check for progressbar during fetch
+        await waitFor(() => {
+            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        }, {timeout: 500});
+
+        // Wait for configuration data to appear
+        await waitFor(() => {
+            expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
+            expect(screen.getByText(/orchestrate = ha/i)).toBeInTheDocument();
+        }, {timeout: 1000});
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.objectContaining({
+                headers: {Authorization: 'Bearer mock-token'},
+                cache: 'no-cache',
+            })
+        );
+    });
+
+    test('displays error when fetching config fails', async () => {
+        global.fetch.mockImplementationOnce(() =>
+            Promise.resolve({
+                ok: false,
+                status: 500,
+                text: () => Promise.resolve('Server error'),
+            })
+        );
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Expand accordion
+        const accordionSummary = screen.getByTestId('accordion-summary');
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        // Verify error message
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: HTTP 500/i);
+        });
+    });
+
+    test('displays no configuration when configNode is missing', async () => {
+        global.fetch.mockClear(); // Clear any previous fetch mocks
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const accordionSummary = screen.getByTestId('accordion-summary');
+        expect(within(accordionSummary).getByText(/Configuration/i)).toBeInTheDocument();
+
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/No node available to fetch configuration/i)).toBeInTheDocument();
+        }, {timeout: 1000});
+
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('updates configuration file successfully', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const accordionSummary = screen.getByTestId('accordion-summary');
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
+        });
+
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        expect(screen.getByText('config.ini')).toBeInTheDocument();
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenNthCalledWith(1, 'Updating configuration…', 'info');
+            expect(openSnackbar).toHaveBeenNthCalledWith(2, 'Configuration updated successfully');
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+                expect.objectContaining({
+                    method: 'PUT',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: testFile,
+                })
+            );
+        }, {timeout: 1000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 1000});
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('handles update config with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open update config dialog
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        // Upload file
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        // Submit
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        // Verify console.warn (line 320-321)
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '⚠️ [handleUpdateConfig] No configNode available for root/cfg/cfg1'
+        );
+
+        // Verify API call
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        // Verify no fetchConfig call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('handles update config with missing file', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open update config dialog
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
+        });
+
+        // Verify Update button is disabled
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        expect(updateButton).toBeDisabled();
+
+        // Verify no API call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+    });
+
+    test('handles update config with missing token', async () => {
+        mockLocalStorage.getItem.mockReturnValueOnce(null);
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open update config dialog
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        // Upload file
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        // Submit
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        // Verify current component behavior (temporary)
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenNthCalledWith(1, 'Updating configuration…', 'info');
+            expect(openSnackbar).toHaveBeenNthCalledWith(2, 'Configuration updated successfully');
+        }, {timeout: 1000});
+
+        // Verify API call (since component proceeds)
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+    });
+
+    test('adds configuration parameters successfully', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter parameters
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
+        await act(async () => {
+            await user.type(paramInput, 'test.param1=value1\ntest.param2=value2');
+        });
+
+        // Submit
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        // Verify API calls
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=test.param1=value1`),
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+        }, {timeout: 1000});
+
+        // Verify dialog closed
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Verify fetchConfig called
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('handles add params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter parameters
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
+        await act(async () => {
+            await user.type(paramInput, 'test.param=value');
+        });
+
+        // Submit
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        // Verify console.warn (line 333)
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '⚠️ [handleAddParams] No configNode available for root/cfg/cfg1'
+        );
+
+        // Verify API call
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=test.param=value`),
+            expect.any(Object)
+        );
+
+        // Verify no fetchConfig call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('handles add params with invalid format', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter invalid parameter
+        const paramInput = screen.getByPlaceholderText(/section\.param1=value1/i);
+        await act(async () => {
+            await user.type(paramInput, 'test.param');
+        });
+
+        // Submit
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        // Verify error snackbar
+        expect(openSnackbar).toHaveBeenCalledWith(
+            'Invalid format for parameter: test.param. Use \'key=value\'.',
+            'error'
+        );
+
+        // Verify no API call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=`),
+            expect.any(Object)
+        );
+    });
+
+    test('handles unset params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter parameters to unset
+        const unsetInput = screen.getByLabelText(/Parameter keys to unset/i);
+        await act(async () => {
+            await user.type(unsetInput, 'test.param');
+        });
+
+        // Submit
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        // Verify console.warn
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '⚠️ [handleUnsetParams] No configNode available for root/cfg/cfg1'
+        );
+
+        // Verify API call
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=test.param`),
+            expect.any(Object)
+        );
+
+        // Verify no fetchConfig call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('handles delete params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter sections to delete
+        const deleteInput = screen.getByPlaceholderText(/section1/i);
+        await act(async () => {
+            await user.type(deleteInput, 'section1');
+        });
+
+        // Submit
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        // Verify console.warn (line 459-511)
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '⚠️ [handleDeleteParams] No configNode available for root/cfg/cfg1'
+        );
+
+        // Verify API call
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=section1`),
+            expect.any(Object)
+        );
+
+        // Verify no fetchConfig call
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('cancels manage params dialog', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        // Open manage params dialog
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        // Enter some parameters
+        const setInput = screen.getByPlaceholderText(/section\.param1=value1/i);
+        await act(async () => {
+            await user.type(setInput, 'test.param=value');
+        });
+
+        // Cancel
+        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
+        await act(async () => {
+            await user.click(cancelButton);
+        });
+
+        // Verify dialog closed
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Verify no API calls
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config`),
+            expect.any(Object)
+        );
+    });
+
+    test('handles parseObjectPath with various inputs', async () => {
+        // Test with full path
+        render(
+            <ConfigSection
+                decodedObjectName="ns1/svc/svc1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_NODE}/node1/instance/path/ns1/svc/svc1/config/file`),
+                expect.any(Object)
+            );
+        });
+
+        // Test with partial path
+        render(
+            <ConfigSection
+                decodedObjectName="svc/svc1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/svc/svc1/config/file`),
+                expect.any(Object)
+            );
+        });
+
+        // Test with single name
+        render(
+            <ConfigSection
+                decodedObjectName="cluster"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/ccfg/cluster/config/file`),
+                expect.any(Object)
+            );
+        });
+
+        // Test with invalid input
+        render(
+            <ConfigSection
+                decodedObjectName=""
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/svc//config/file`),
+                expect.any(Object)
+            );
+        });
+    });
 });

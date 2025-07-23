@@ -485,6 +485,7 @@ export const CreateKeyDialog = ({
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
                 disabled={disabled}
+                aria-label="Key name input"
             />
             <Box sx={{mt: 2}}>
                 <input
@@ -552,6 +553,7 @@ export const UpdateKeyDialog = ({
                 value={updateKeyName}
                 onChange={(e) => setUpdateKeyName(e.target.value)}
                 disabled={disabled}
+                aria-label="Key name input"
             />
             <Box sx={{mt: 2}}>
                 <input
@@ -682,7 +684,8 @@ export const ManageConfigParamsDialog = ({
                 onChange={(e) => setParamsToSet(e.target.value)}
                 disabled={disabled}
                 placeholder="section.param1=value1
-section.param2=value2"
+                section.param2=value2"
+                aria-label="Parameters to set input"
             />
             <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                 Unset parameters (one key per line, e.g., section.param)
@@ -697,8 +700,8 @@ section.param2=value2"
                 value={paramsToUnset}
                 onChange={(e) => setParamsToUnset(e.target.value)}
                 disabled={disabled}
-                placeholder="section.param1
-section.param2"
+                placeholder="section.param1&#10;section.param2"
+                aria-label="Parameters to unset input"
                 sx={{
                     "& .MuiInputBase-root": {
                         padding: "8px",
@@ -728,8 +731,8 @@ section.param2"
                 value={paramsToDelete}
                 onChange={(e) => setParamsToDelete(e.target.value)}
                 disabled={disabled}
-                placeholder="section1
-section2"
+                placeholder="section1&#10;section2"
+                aria-label="Sections to delete input"
                 sx={{
                     "& .MuiInputBase-root": {
                         padding: "8px",
@@ -756,7 +759,7 @@ section2"
                 color="primary"
                 onClick={onConfirm}
                 disabled={disabled || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
-                aria-label="Confirm manage config params action"
+                aria-label="Apply configuration changes"
             >
                 Apply
             </Button>

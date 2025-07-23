@@ -158,6 +158,7 @@ const NavBar = () => {
                 <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1}}>
                     <Button
                         onClick={handleMenuOpen}
+                        aria-label="Open navigation menu"
                         sx={{
                             color: "white",
                             minWidth: "auto",
@@ -172,10 +173,12 @@ const NavBar = () => {
                     >
                         <FaBars/>
                     </Button>
+                    <Typography id="navigation-menu-label" sx={{display: 'none'}}>Navigation menu</Typography>
                     <Menu
                         anchorEl={menuAnchor}
                         open={Boolean(menuAnchor)}
                         onClose={handleMenuClose}
+                        aria-labelledby="navigation-menu-label"
                         PaperProps={{
                             sx: {
                                 minWidth: 200,
@@ -233,6 +236,7 @@ const NavBar = () => {
                                 <Typography
                                     component={Link}
                                     to={item.path}
+                                    aria-label={`Navigate to ${decodeURIComponent(item.name)}`}
                                     sx={{
                                         color: "inherit",
                                         textDecoration: "none",

@@ -37,7 +37,7 @@ export const useOidc = () => {
 };
 
 // Cleanup function to dispose of UserManager events
-function cleanupUserManager(userManager: UserManager) {
+export function cleanupUserManager(userManager: UserManager) {
     if (!userManager) return;
     userManager.events.removeUserLoaded(() => {
     });

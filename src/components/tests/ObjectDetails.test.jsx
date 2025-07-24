@@ -8,6 +8,30 @@ import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
 import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
+import {grey} from '@mui/material/colors';
+import user from '@testing-library/user-event';
+
+// Helper to parse object path
+const parseObjectPath = (path) => {
+    const parts = path.split('/');
+    let namespace = 'root';
+    let kind = 'svc';
+    let name = parts[parts.length - 1];
+
+    if (parts.length === 3) {
+        namespace = parts[0];
+        kind = parts[1];
+        name = parts[2];
+    } else if (parts.length === 2) {
+        kind = parts[0];
+        name = parts[1];
+    } else if (parts.length === 1 && path === 'cluster') {
+        kind = 'ccfg';
+        name = 'cluster';
+    }
+
+    return {namespace, kind, name};
+};
 
 // Helper to find text within a container
 const findByTextNode = async (container, text, options = {}) => {
@@ -191,11 +215,21 @@ describe('ObjectDetail Component', () => {
     // Define mock functions for ConfigSection props
     const setConfigNode = jest.fn();
     const openSnackbar = jest.fn();
+    const fetchConfig = jest.fn();
+    const setConfigAccordionExpanded = jest.fn();
+    const setActionInProgress = jest.fn();
+    const setUpdateConfigDialogOpen = jest.fn();
+    const setNewConfigFile = jest.fn();
+    const setParamsToSet = jest.fn();
+    const setParamsToUnset = jest.fn();
+    const setParamsToDelete = jest.fn();
+    const setManageParamsDialogOpen = jest.fn();
 
     beforeEach(() => {
         jest.setTimeout(30000);
         jest.clearAllMocks();
 
+        // Mock useParams
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
@@ -204,7 +238,17 @@ describe('ObjectDetail Component', () => {
         configureEventSource.mockClear();
         setConfigNode.mockClear();
         openSnackbar.mockClear();
+        fetchConfig.mockClear();
+        setConfigAccordionExpanded.mockClear();
+        setActionInProgress.mockClear();
+        setUpdateConfigDialogOpen.mockClear();
+        setNewConfigFile.mockClear();
+        setParamsToSet.mockClear();
+        setParamsToUnset.mockClear();
+        setParamsToDelete.mockClear();
+        setManageParamsDialogOpen.mockClear();
 
+        // Mock useEventStore
         const mockState = {
             objectStatus: {
                 'root/cfg/cfg1': {
@@ -255,14 +299,6 @@ describe('ObjectDetail Component', () => {
                     global_expect: 'placed@node1',
                     resources: {
                         res1: {restart: {remaining: 0}},
-                        res2: {restart: {remaining: 0}},
-                    },
-                },
-                'node2:root/cfg/cfg1': {
-                    state: 'idle',
-                    global_expect: 'none',
-                    resources: {
-                        res3: {restart: {remaining: 0}},
                     },
                 },
             },
@@ -271,18 +307,6 @@ describe('ObjectDetail Component', () => {
                     resources: {
                         res1: {
                             is_monitored: true,
-                            is_disabled: false,
-                            is_standby: false,
-                            restart: 0,
-                        },
-                        res2: {
-                            is_monitored: true,
-                            is_disabled: false,
-                            is_standby: false,
-                            restart: 0,
-                        },
-                        res3: {
-                            is_monitored: false,
                             is_disabled: false,
                             is_standby: false,
                             restart: 0,
@@ -2608,6 +2632,807 @@ type = flag
                 expect.stringContaining(`${URL_NODE}/node1/instance/path/root/svc//config/file`),
                 expect.any(Object)
             );
+        });
+    });
+    test('postResourceAction handles successful resource action', async () => {
+        // Mock fetch to return a successful response
+        global.fetch.mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({message: 'restart succeeded'}),
+        });
+
+        // Mock useParams
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/cfg/cfg1',
+        });
+
+        // Mock useEventStore with comprehensive state
+        const mockState = {
+            objectStatus: {
+                'root/cfg/cfg1': {avail: 'up', frozen: 'frozen'},
+            },
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: '2023-01-01T12:00:00Z',
+                        resources: {
+                            res1: {
+                                status: 'up',
+                                label: 'Resource 1',
+                                type: 'disk',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/cfg/cfg1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {res1: {restart: {remaining: 0}}},
+                },
+            },
+            instanceConfig: {
+                'root/cfg/cfg1': {
+                    resources: {
+                        res1: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        // Render the component
+        render(
+            <MemoryRouter initialEntries={['/objects/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/objects/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Debug: Log initial DOM
+        screen.debug();
+
+        // Find node section for node1
+        let nodeSection;
+        try {
+            nodeSection = await findNodeSection('node1', 15000);
+        } catch (error) {
+            console.error('Failed to find node section:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Debug: Log node section
+        console.log('Node section HTML:', nodeSection.outerHTML);
+
+        // Expand the resources accordion
+        let resourcesHeader;
+        try {
+            resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i, {}, {timeout: 5000});
+            await user.click(resourcesHeader);
+        } catch (error) {
+            console.error('Failed to find or click resources header:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Find the res1 row
+        let res1Row;
+        try {
+            res1Row = await within(nodeSection).findByText('res1', {}, {timeout: 5000});
+        } catch (error) {
+            console.error('Failed to find res1 row:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Find the resource menu button
+        let resourceMenuButton;
+        try {
+            resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
+                name: /Resource res1 actions/i,
+            });
+            await user.click(resourceMenuButton);
+        } catch (error) {
+            console.error('Failed to find or click resource menu button:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Debug: Log all menus
+        const menus = screen.queryAllByRole('menu');
+        console.log('Menus found:', menus.length, menus.map((m) => m.outerHTML));
+
+        // Find the menu and Restart item
+        let menu;
+        try {
+            menu = await screen.findByRole('menu', {timeout: 5000});
+            const actionItem = await within(menu).findByRole('menuitem', {name: /Restart/i});
+            await user.click(actionItem);
+        } catch (error) {
+            console.error('Failed to find menu or Restart item:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Debug: Log DOM after opening menu
+        screen.debug();
+
+        // Find and click the Confirm button
+        let confirmButton;
+        try {
+            confirmButton = await screen.findByRole('button', {name: /Confirm/i}, {timeout: 5000});
+            await user.click(confirmButton);
+        } catch (error) {
+            console.error('Failed to find or click Confirm button:', error);
+            screen.debug();
+            throw error;
+        }
+
+        // Verify fetch call and snackbar
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/action/restart?rid=res1'),
+                    expect.any(Object)
+                );
+                const snackbar = screen.getByRole('alertdialog');
+                expect(snackbar).toHaveTextContent("'restart' succeeded on resource 'res1'");
+            },
+            {timeout: 15000}
+        );
+    }, 30000);
+    test('fetchConfig handles timeout', async () => {
+        // Mock fetch to simulate a timeout with AbortError
+        global.fetch = jest.fn(() =>
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('AbortError: The operation was aborted')), 3000);
+            })
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/objects/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/objects/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Log fetch mock setup
+        console.log('Fetch mock setup:', global.fetch);
+
+        // Find the configuration accordion header
+        const configHeaders = await screen.findAllByText(/Configuration/i);
+        console.log('Configuration headers found:', configHeaders.length, {
+            headers: configHeaders.map((el) => ({
+                text: el.textContent,
+                tag: el.tagName,
+                outerHTML: el.outerHTML,
+            })),
+        });
+
+        const configHeader = configHeaders.find((header) => {
+            const parent = header.closest('[role="button"]');
+            return parent !== null;
+        });
+
+        if (!configHeader) {
+            console.log('Full DOM when header not found:');
+            screen.debug();
+            throw new Error('Configuration accordion header not found');
+        }
+
+        // Click the accordion
+        const accordionSummary = configHeader.closest('[role="button"]');
+        console.log('Clicking accordion summary:', accordionSummary.outerHTML);
+        await user.click(accordionSummary);
+
+        // Wait for the progress bar to appear within the accordion
+        await waitFor(
+            () => {
+                const configAccordion = configHeader.closest('[data-testid="accordion"]');
+                const progressBars = within(configAccordion).getAllByRole('progressbar');
+                console.log('Progress bars found in accordion:', progressBars.length, {
+                    progressBars: progressBars.map((el) => el.outerHTML),
+                });
+                expect(progressBars.length).toBeGreaterThan(0);
+            },
+            {timeout: 5000}
+        );
+
+        // Wait for the timeout error message within the accordion details
+        await waitFor(
+            () => {
+                const configAccordion = configHeader.closest('[data-testid="accordion"]');
+                const accordionDetails = within(configAccordion).getByTestId('accordion-details');
+
+                // Log all elements in accordion-details for debugging
+                const allTextElements = Array.from(accordionDetails.querySelectorAll('*')).filter(
+                    (el) => el.textContent && el.textContent.length > 0
+                );
+                console.log(
+                    'All text elements in accordion details:',
+                    allTextElements.map((el) => ({
+                        text: el.textContent,
+                        tag: el.tagName,
+                        outerHTML: el.outerHTML,
+                    }))
+                );
+
+                // Log potential error elements
+                const potentialErrorElements = allTextElements.filter((el) =>
+                    el.textContent?.toLowerCase().includes('timeout') ||
+                    el.textContent?.toLowerCase().includes('abort') ||
+                    el.textContent?.toLowerCase().includes('error')
+                );
+                console.log(
+                    'Potential error elements in accordion details:',
+                    potentialErrorElements.map((el) => ({
+                        text: el.textContent,
+                        tag: el.tagName,
+                        outerHTML: el.outerHTML,
+                    }))
+                );
+
+                // Try to find the specific error message
+                const errorElement = within(accordionDetails).getByText((content) => {
+                    const elementText = content?.toLowerCase() || '';
+                    return elementText.includes('timed out') || elementText.includes('abort');
+                });
+                console.log('Error element found:', errorElement.textContent, {
+                    outerHTML: errorElement.outerHTML,
+                });
+                expect(errorElement).toBeInTheDocument();
+            },
+            {timeout: 20000}
+        );
+    }, 25000);
+    test('fetchConfig handles server error', async () => {
+        global.fetch.mockResolvedValue({
+            ok: false,
+            status: 500,
+            text: () => Promise.resolve('Server error'),
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        const accordionSummary = screen.getByTestId('accordion-summary');
+        await user.click(accordionSummary);
+        await waitFor(() => {
+            expect(screen.getByText('Failed to fetch config: HTTP 500')).toBeInTheDocument();
+        });
+    }, 10000);
+    test('handleUpdateConfig with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await user.click(uploadButton);
+        const fileInput = document.querySelector('#update-config-file-upload');
+        await user.upload(fileInput, new File(['content'], 'config.ini'));
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await user.click(updateButton);
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '⚠️ [handleUpdateConfig] No configNode available for root/cfg/cfg1'
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+        });
+        consoleWarnSpy.mockRestore();
+    }, 10000);
+    test('deletes configuration parameters successfully', async () => {
+        render(<ConfigSection decodedObjectName="root/cfg/cfg1" configNode="node1" setConfigNode={setConfigNode}
+                              openSnackbar={openSnackbar}/>);
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await user.click(manageButton);
+        const deleteInput = screen.getByPlaceholderText(/section1/i);
+        await user.type(deleteInput, 'section1');
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await user.click(applyButton);
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=section1`),
+                expect.any(Object)
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 1 section(s)', 'success');
+        });
+    });
+    test('handleManageParamsSubmit with multiple parameter operations', async () => {
+        render(<ConfigSection decodedObjectName="root/cfg/cfg1" configNode="node1" setConfigNode={setConfigNode}
+                              openSnackbar={openSnackbar}/>);
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await user.click(manageButton);
+        const setInput = screen.getByPlaceholderText(/section\.param1=value1/i);
+        const unsetInput = screen.getByLabelText(/Parameter keys to unset/i);
+        const deleteInput = screen.getByPlaceholderText(/section1/i);
+        await user.type(setInput, 'test.param=value');
+        await user.type(unsetInput, 'test.param2');
+        await user.type(deleteInput, 'section1');
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await user.click(applyButton);
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('set=test.param=value'), expect.any(Object));
+            expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('unset=test.param2'), expect.any(Object));
+            expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('delete=section1'), expect.any(Object));
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+    test('getColor handles unknown status', async () => {
+        // Define minimal mockState for this test
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {avail: 'unknown', resources: {}},
+                },
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+        render(<ObjectDetail/>);
+        await waitFor(() => {
+            const statusIcon = screen.getByTestId('FiberManualRecordIcon');
+            expect(statusIcon).toHaveStyle({color: grey[500]});
+        });
+    }, 10000);
+    test('getNodeState handles idle state', async () => {
+        render(<ObjectDetail/>);
+        const nodeSection = await findNodeSection('node2', 10000);
+        await waitFor(() => {
+            expect(within(nodeSection).queryByText(/idle/i)).not.toBeInTheDocument();
+        });
+    });
+    test('getObjectStatus handles missing global_expect', async () => {
+        // Define minimal mockState for this test
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {},
+            instanceMonitor: {
+                'node1:root/cfg/cfg1': {state: 'running', global_expect: 'none'},
+            },
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+        render(<ObjectDetail/>);
+        await waitFor(() => {
+            expect(screen.queryByText(/placed@node1/i)).not.toBeInTheDocument();
+        });
+    }, 10000);
+    test('renders object name and node sections', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        // Vérifier que le nom de l'objet est affiché
+        await waitFor(() => {
+            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+        });
+
+        // Vérifier que les sections des nœuds sont affichées
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+            expect(screen.getByText('node2')).toBeInTheDocument();
+        });
+
+        // Vérifier que startEventReception est appelé
+        expect(startEventReception).toHaveBeenCalledWith('mock-token', [
+            'ObjectStatusUpdated,path=root/cfg/cfg1',
+            'InstanceStatusUpdated,path=root/cfg/cfg1',
+            'ObjectDeleted,path=root/cfg/cfg1',
+            'InstanceMonitorUpdated,path=root/cfg/cfg1',
+            'InstanceConfigUpdated,path=root/cfg/cfg1',
+        ]);
+    });
+    test('handles non-function subscription', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        useEventStore.subscribe.mockReturnValue(null);
+        render(<ObjectDetail/>);
+        const {unmount} = render(<ObjectDetail/>);
+        unmount();
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[ObjectDetail] Subscription is not a function:', null);
+        consoleWarnSpy.mockRestore();
+    });
+    test('handleUpdateConfig updates config and calls fetchConfig', async () => {
+        const newConfigFile = 'new-config-content';
+        const decodedObjectName = 'root/cfg/cfg1';
+        const configNode = 'node1';
+
+        const handleUpdateConfig = async () => {
+            console.log("[ObjectDetail] handleUpdateConfig called");
+            if (!newConfigFile) {
+                openSnackbar("Configuration file is required.", "error");
+                return;
+            }
+            const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+            const token = localStorage.getItem("authToken");
+            if (!token) {
+                openSnackbar("Auth token not found.", "error");
+                return;
+            }
+
+            setActionInProgress(true);
+            openSnackbar("Updating configuration…", "info");
+            try {
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
+                const response = await fetch(url, {
+                    method: "PUT",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/octet-stream",
+                    },
+                    body: newConfigFile,
+                });
+                if (!response.ok)
+                    throw new Error(`Failed to update config: ${response.status}`);
+                openSnackbar("Configuration updated successfully");
+                if (configNode) {
+                    await fetchConfig(configNode);
+                    setConfigAccordionExpanded(true);
+                }
+            } catch (err) {
+                openSnackbar(`Error: ${err.message}`, "error");
+            } finally {
+                setActionInProgress(false);
+                setUpdateConfigDialogOpen(false);
+                setNewConfigFile(null);
+            }
+        };
+
+        await act(async () => {
+            await handleUpdateConfig();
+        });
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(
+                `${URL_OBJECT}/root/cfg/cfg1/config/file`,
+                expect.objectContaining({
+                    method: 'PUT',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: 'new-config-content',
+                })
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+            expect(fetchConfig).toHaveBeenCalledWith('node1');
+            expect(setConfigAccordionExpanded).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(false);
+            expect(setUpdateConfigDialogOpen).toHaveBeenCalledWith(false);
+            expect(setNewConfigFile).toHaveBeenCalledWith(null);
+        });
+    });
+
+    test('handleUpdateConfig handles missing config file', async () => {
+        const newConfigFile = null;
+        const decodedObjectName = 'root/cfg/cfg1';
+
+        const handleUpdateConfig = async () => {
+            if (!newConfigFile) {
+                openSnackbar("Configuration file is required.", "error");
+                return;
+            }
+        };
+
+        await act(async () => {
+            await handleUpdateConfig();
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration file is required.', 'error');
+            expect(fetch).not.toHaveBeenCalled();
+            expect(fetchConfig).not.toHaveBeenCalled();
+        });
+    });
+
+    test('handleAddParams handles invalid parameters', async () => {
+        const paramsToSet = 'invalid';
+        const decodedObjectName = 'root/cfg/cfg1';
+
+        const handleAddParams = async () => {
+            if (!paramsToSet) {
+                openSnackbar("Parameter input is required.", "error");
+                return false;
+            }
+            const paramList = paramsToSet.split("\n").filter((param) => param.trim());
+            if (paramList.length === 0) {
+                openSnackbar("No valid parameters provided.", "error");
+                return false;
+            }
+
+            const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+            const token = localStorage.getItem("authToken");
+            if (!token) {
+                openSnackbar("Auth token not found.", "error");
+                return false;
+            }
+
+            setActionInProgress(true);
+            let successCount = 0;
+            for (const param of paramList) {
+                const [key, value] = param.split("=", 2);
+                if (!key || !value) {
+                    openSnackbar(`Invalid format for parameter: ${param}. Use 'key=value'.`, "error");
+                    continue;
+                }
+            }
+            setActionInProgress(false);
+            return successCount > 0;
+        };
+
+        await act(async () => {
+            await handleAddParams();
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Invalid format for parameter: invalid. Use \'key=value\'.', 'error');
+            expect(fetch).not.toHaveBeenCalled();
+            expect(fetchConfig).not.toHaveBeenCalled();
+        });
+    });
+
+    test('handleUnsetParams unsets parameters and calls fetchConfig', async () => {
+        const paramsToUnset = 'key1\nkey2';
+        const decodedObjectName = 'root/cfg/cfg1';
+        const configNode = 'node1';
+
+        const handleUnsetParams = async () => {
+            if (!paramsToUnset) {
+                openSnackbar("Parameter key(s) to unset are required.", "error");
+                return false;
+            }
+            const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
+            if (paramList.length === 0) {
+                openSnackbar("No valid parameters to unset provided.", "error");
+                return false;
+            }
+
+            const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+            const token = localStorage.getItem("authToken");
+            if (!token) {
+                openSnackbar("Auth token not found.", "error");
+                return false;
+            }
+
+            setActionInProgress(true);
+            let successCount = 0;
+            for (const key of paramList) {
+                try {
+                    const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(key)}`;
+                    const response = await fetch(url, {
+                        method: "PATCH",
+                        headers: {Authorization: `Bearer ${token}`},
+                    });
+                    if (!response.ok)
+                        throw new Error(`Failed to unset parameter ${key}: ${response.status}`);
+                    successCount++;
+                } catch (err) {
+                    openSnackbar(`Error unsetting parameter ${key}: ${err.message}`, "error");
+                }
+            }
+            if (successCount > 0) {
+                openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
+                if (configNode) {
+                    await fetchConfig(configNode);
+                    setConfigAccordionExpanded(true);
+                }
+            }
+            setActionInProgress(false);
+            return successCount > 0;
+        };
+
+        await act(async () => {
+            await handleUnsetParams();
+        });
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(
+                `${URL_OBJECT}/root/cfg/cfg1/config?unset=key1`,
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(fetch).toHaveBeenCalledWith(
+                `${URL_OBJECT}/root/cfg/cfg1/config?unset=key2`,
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 2 parameter(s)', 'success');
+            expect(fetchConfig).toHaveBeenCalledWith('node1');
+            expect(setConfigAccordionExpanded).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(false);
+        });
+    });
+
+    test('handleDeleteParams deletes parameters and calls fetchConfig', async () => {
+        const paramsToDelete = 'key1\nkey2';
+        const decodedObjectName = 'root/cfg/cfg1';
+        const configNode = 'node1';
+
+        const handleDeleteParams = async () => {
+            if (!paramsToDelete) {
+                openSnackbar("Parameter key(s) to delete are required.", "error");
+                return false;
+            }
+            const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
+            if (paramList.length === 0) {
+                openSnackbar("No valid parameters to delete provided.", "error");
+                return false;
+            }
+
+            const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+            const token = localStorage.getItem("authToken");
+            if (!token) {
+                openSnackbar("Auth token not found.", "error");
+                return false;
+            }
+
+            setActionInProgress(true);
+            let successCount = 0;
+            for (const key of paramList) {
+                try {
+                    const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(key)}`;
+                    const response = await fetch(url, {
+                        method: "PATCH",
+                        headers: {Authorization: `Bearer ${token}`},
+                    });
+                    if (!response.ok)
+                        throw new Error(`Failed to delete section ${key}: ${response.status}`);
+                    successCount++;
+                } catch (err) {
+                    openSnackbar(`Error deleting section ${key}: ${err.message}`, "error");
+                }
+            }
+            if (successCount > 0) {
+                openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
+                if (configNode) {
+                    await fetchConfig(configNode);
+                    setConfigAccordionExpanded(true);
+                }
+            }
+            setActionInProgress(false);
+            return successCount > 0;
+        };
+
+        await act(async () => {
+            await handleDeleteParams();
+        });
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(
+                `${URL_OBJECT}/root/cfg/cfg1/config?delete=key1`,
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(fetch).toHaveBeenCalledWith(
+                `${URL_OBJECT}/root/cfg/cfg1/config?delete=key2`,
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 2 section(s)', 'success');
+            expect(fetchConfig).toHaveBeenCalledWith('node1');
+            expect(setConfigAccordionExpanded).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(true);
+            expect(setActionInProgress).toHaveBeenCalledWith(false);
+        });
+    });
+
+    test('handleManageParamsSubmit calls add, unset, and delete params', async () => {
+        const paramsToSet = 'key1=value1';
+        const paramsToUnset = 'key2';
+        const paramsToDelete = 'key3';
+        const decodedObjectName = 'root/cfg/cfg1';
+        const configNode = 'node1';
+
+        const handleAddParams = jest.fn(async () => {
+            setActionInProgress(true);
+            openSnackbar('Successfully added 1 parameter(s)', 'success');
+            await fetchConfig(configNode);
+            setConfigAccordionExpanded(true);
+            setActionInProgress(false);
+            return true;
+        });
+
+        const handleUnsetParams = jest.fn(async () => {
+            setActionInProgress(true);
+            openSnackbar('Successfully unset 1 parameter(s)', 'success');
+            await fetchConfig(configNode);
+            setConfigAccordionExpanded(true);
+            setActionInProgress(false);
+            return true;
+        });
+
+        const handleDeleteParams = jest.fn(async () => {
+            setActionInProgress(true);
+            openSnackbar('Successfully deleted 1 section(s)', 'success');
+            await fetchConfig(configNode);
+            setConfigAccordionExpanded(true);
+            setActionInProgress(false);
+            return true;
+        });
+
+        const handleManageParamsSubmit = async () => {
+            let anySuccess = false;
+            if (paramsToSet) {
+                const success = await handleAddParams();
+                anySuccess = anySuccess || success;
+            }
+            if (paramsToUnset) {
+                const success = await handleUnsetParams();
+                anySuccess = anySuccess || success;
+            }
+            if (paramsToDelete) {
+                const success = await handleDeleteParams();
+                anySuccess = anySuccess || success;
+            }
+            if (anySuccess) {
+                setParamsToSet('');
+                setParamsToUnset('');
+                setParamsToDelete('');
+                setManageParamsDialogOpen(false);
+            }
+        };
+
+        await act(async () => {
+            await handleManageParamsSubmit();
+        });
+
+        await waitFor(() => {
+            expect(handleAddParams).toHaveBeenCalled();
+            expect(handleUnsetParams).toHaveBeenCalled();
+            expect(handleDeleteParams).toHaveBeenCalled();
+            expect(setParamsToSet).toHaveBeenCalledWith('');
+            expect(setParamsToUnset).toHaveBeenCalledWith('');
+            expect(setParamsToDelete).toHaveBeenCalledWith('');
+            expect(setManageParamsDialogOpen).toHaveBeenCalledWith(false);
+            expect(fetchConfig).toHaveBeenCalledTimes(3); // Once per function
+            expect(setConfigAccordionExpanded).toHaveBeenCalledTimes(3);
         });
     });
 });

@@ -1,8 +1,38 @@
 import useEventStore from '../useEventStore.js';
 import {act} from 'react';
 
+// Mock react-router-dom
+jest.mock('react-router-dom', () => ({
+    ...jest.requireActual('react-router-dom'),
+    useParams: jest.fn(),
+}));
+
+// Mock @mui/material
+jest.mock('@mui/material', () => ({
+    ...jest.requireActual('@mui/material'),
+    Typography: ({children, ...props}) => <span {...props}>{children}</span>,
+    Box: ({children, ...props}) => <div {...props}>{children}</div>,
+    CircularProgress: () => <div role="progressbar">Loading...</div>,
+}));
+
 describe('useEventStore', () => {
-    it('should initialize with default state', () => {
+    // Reset state before each test to avoid interference
+    beforeEach(() => {
+        act(() => {
+            useEventStore.setState({
+                nodeStatus: {},
+                nodeMonitor: {},
+                nodeStats: {},
+                objectStatus: {},
+                objectInstanceStatus: {},
+                heartbeatStatus: {},
+                instanceMonitor: {},
+                configUpdates: [],
+            });
+        });
+    });
+
+    test('should initialize with default state', () => {
         const state = useEventStore.getState();
         expect(state.nodeStatus).toEqual({});
         expect(state.nodeMonitor).toEqual({});
@@ -12,7 +42,7 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({});
     });
 
-    it('should set node status correctly using setNodeStatuses', () => {
+    test('should set node status correctly using setNodeStatuses', () => {
         const {setNodeStatuses} = useEventStore.getState();
 
         act(() => {
@@ -23,7 +53,7 @@ describe('useEventStore', () => {
         expect(state.nodeStatus).toEqual({node1: {status: 'up'}});
     });
 
-    it('should set node monitors correctly using setNodeMonitors', () => {
+    test('should set node monitors correctly using setNodeMonitors', () => {
         const {setNodeMonitors} = useEventStore.getState();
 
         act(() => {
@@ -34,7 +64,7 @@ describe('useEventStore', () => {
         expect(state.nodeMonitor).toEqual({node1: {monitor: 'active'}});
     });
 
-    it('should set node stats correctly using setNodeStats', () => {
+    test('should set node stats correctly using setNodeStats', () => {
         const {setNodeStats} = useEventStore.getState();
 
         act(() => {
@@ -45,7 +75,7 @@ describe('useEventStore', () => {
         expect(state.nodeStats).toEqual({node1: {cpu: 80, memory: 75}});
     });
 
-    it('should set object statuses correctly using setObjectStatuses', () => {
+    test('should set object statuses correctly using setObjectStatuses', () => {
         const {setObjectStatuses} = useEventStore.getState();
 
         act(() => {
@@ -56,7 +86,7 @@ describe('useEventStore', () => {
         expect(state.objectStatus).toEqual({object1: {status: 'active'}});
     });
 
-    it('should set instance statuses correctly using setInstanceStatuses', () => {
+    test('should set instance statuses correctly using setInstanceStatuses', () => {
         const {setInstanceStatuses} = useEventStore.getState();
 
         act(() => {
@@ -64,10 +94,19 @@ describe('useEventStore', () => {
         });
 
         const state = useEventStore.getState();
-        expect(state.objectInstanceStatus).toEqual({object1: {node1: {status: 'active'}}});
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'active',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {}
+                }
+            }
+        });
     });
 
-    it('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
+    test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
         const {setHeartbeatStatuses} = useEventStore.getState();
 
         act(() => {
@@ -78,7 +117,18 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({node1: {heartbeat: 'alive'}});
     });
 
-    it('should remove object correctly using removeObject', () => {
+    test('should set instance monitors correctly using setInstanceMonitors', () => {
+        const {setInstanceMonitors} = useEventStore.getState();
+
+        act(() => {
+            setInstanceMonitors({object1: {monitor: 'running'}});
+        });
+
+        const state = useEventStore.getState();
+        expect(state.instanceMonitor).toEqual({object1: {monitor: 'running'}});
+    });
+
+    test('should remove object correctly using removeObject', () => {
         const {setObjectStatuses, removeObject} = useEventStore.getState();
 
         // Set initial state
@@ -90,7 +140,7 @@ describe('useEventStore', () => {
         let state = useEventStore.getState();
         expect(state.objectStatus).toEqual({
             object1: {status: 'active'},
-            object2: {status: 'inactive'}
+            object2: {status: 'inactive'},
         });
 
         // Apply the removeObject action
@@ -103,7 +153,7 @@ describe('useEventStore', () => {
         expect(state.objectStatus).toEqual({object2: {status: 'inactive'}});
     });
 
-    it('should not affect other properties when removing an object', () => {
+    test('should not affect other properties when removing an object', () => {
         const {setObjectStatuses, setNodeStatuses, removeObject} = useEventStore.getState();
 
         // Set initial state for multiple properties
@@ -126,5 +176,85 @@ describe('useEventStore', () => {
         state = useEventStore.getState();
         expect(state.objectStatus).toEqual({});
         expect(state.nodeStatus).toEqual({node1: {status: 'up'}});
+    });
+
+    test('should handle direct format updates in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            {name: 'service1', node: 'node1'},
+            {name: 'cluster', node: 'node2'},
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'root/svc/service1', node: 'node1'},
+            {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
+        ]);
+
+        // Test deduplication
+        act(() => {
+            setConfigUpdated([{name: 'service1', node: 'node1'}]); // Duplicate
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(2); // No new entries
+    });
+
+    test('should handle SSE format updates in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            {
+                kind: 'InstanceConfigUpdated',
+                data: {path: 'service1', node: 'node1', labels: {namespace: 'ns1'}},
+            },
+            {
+                kind: 'InstanceConfigUpdated',
+                data: {path: 'cluster', node: 'node2'}, // No namespace, defaults to root
+            },
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'ns1/svc/service1', node: 'node1'},
+            {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
+        ]);
+    });
+
+    test('should clear config updates correctly', () => {
+        const {setConfigUpdated, clearConfigUpdate} = useEventStore.getState();
+
+        // Set initial updates
+        act(() => {
+            setConfigUpdated([
+                {name: 'service1', node: 'node1'},
+                {name: 'service2', node: 'node2'},
+            ]);
+        });
+
+        // Clear one update
+        act(() => {
+            clearConfigUpdate('root/svc/service1');
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service2', fullName: 'root/svc/service2', node: 'node2'},
+        ]);
+
+        // Clear using short name
+        act(() => {
+            clearConfigUpdate('service2');
+        });
+
+        expect(useEventStore.getState().configUpdates).toEqual([]);
     });
 });

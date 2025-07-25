@@ -9,9 +9,10 @@ import {
     GridObjects,
     GridNamespaces,
     GridHeartbeats,
-    GridPools
+    GridPools,
+    GridNetworks
 } from "./ClusterStatGrids.jsx";
-import {URL_POOL} from "../config/apiPath.js";
+import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception} from "../eventSourceManager";
 
 const ClusterOverview = () => {
@@ -21,12 +22,14 @@ const ClusterOverview = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
 
     const [poolCount, setPoolCount] = useState(0);
+    const [networks, setNetworks] = useState([]);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
             startEventReception(token);
 
+            // Fetch pools
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
             })
@@ -37,6 +40,19 @@ const ClusterOverview = () => {
                 .catch((error) => {
                     console.error('Failed to fetch pools:', error.message);
                     setPoolCount(0);
+                });
+
+            // Fetch networks
+            axios.get(URL_NETWORK, {
+                headers: {Authorization: `Bearer ${token}`}
+            })
+                .then((res) => {
+                    const items = res.data?.items || [];
+                    setNetworks(items);
+                })
+                .catch((error) => {
+                    console.error('Failed to fetch networks:', error.message);
+                    setNetworks([]);
                 });
         }
     }, []);
@@ -124,7 +140,7 @@ const ClusterOverview = () => {
                 gap: 3,
                 alignItems: 'stretch'
             }}>
-                {/* Left side - 2x2 grid */}
+                {/* Left side - 2x3 grid */}
                 <Box sx={{
                     flex: 2,
                     display: 'grid',
@@ -166,6 +182,12 @@ const ClusterOverview = () => {
                         <GridPools
                             poolCount={poolCount}
                             onClick={() => navigate("/storage-pools")}
+                        />
+                    </Box>
+                    <Box>
+                        <GridNetworks
+                            networks={networks}
+                            onClick={() => navigate("/network")}
                         />
                     </Box>
                 </Box>

@@ -26,9 +26,13 @@ const Pools = () => {
                     }
                 });
 
-                setPools(res.data.items || []);
+                // Sort pools alphabetically by name
+                const sortedPools = (res.data.items || []).sort((a, b) =>
+                    a.name.localeCompare(b.name)
+                );
+                setPools(sortedPools);
             } catch (err) {
-                console.error("Erreur lors de la récupération des pools", err);
+                console.error("Error retrieving pools", err);
             }
         };
 

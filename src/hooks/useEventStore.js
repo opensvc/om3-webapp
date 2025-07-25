@@ -27,9 +27,62 @@ const useEventStore = create((set) => ({
         })),
 
     setInstanceStatuses: (instanceStatuses) =>
-        set(() => ({
-            objectInstanceStatus: {...instanceStatuses},
-        })),
+        set((state) => {
+            console.log("[useEventStore] setInstanceStatuses received:", instanceStatuses);
+            const newObjectInstanceStatus = {...state.objectInstanceStatus};
+
+            Object.keys(instanceStatuses).forEach((path) => {
+                if (!newObjectInstanceStatus[path]) {
+                    newObjectInstanceStatus[path] = {};
+                }
+
+                Object.keys(instanceStatuses[path]).forEach((node) => {
+                    const newStatus = instanceStatuses[path][node];
+                    console.log(`[useEventStore] Processing node ${node} for path ${path}:`, newStatus);
+
+                    // Merge data, preserving encap.resources if the new data has no valid resources
+                    const existingData = newObjectInstanceStatus[path][node] || {};
+                    const hasValidEncapResources =
+                        newStatus?.encap &&
+                        Object.values(newStatus.encap).some(
+                            (container) => container.resources && Object.keys(container.resources).length > 0
+                        );
+                    const existingHasValidEncapResources =
+                        existingData?.encap &&
+                        Object.values(existingData.encap).some(
+                            (container) => container.resources && Object.keys(container.resources).length > 0
+                        );
+
+                    // Preserve existing encapsulated resources if the new ones are empty
+                    const mergedEncap = newStatus?.encap
+                        ? Object.keys(newStatus.encap).reduce((acc, containerId) => {
+                            const existingContainer = existingData.encap?.[containerId] || {};
+                            const newContainer = newStatus.encap[containerId] || {};
+                            acc[containerId] = {
+                                ...existingContainer,
+                                ...newContainer,
+                                resources: newContainer.resources && Object.keys(newContainer.resources).length > 0
+                                    ? {...newContainer.resources}
+                                    : existingContainer.resources || {},
+                            };
+                            return acc;
+                        }, {})
+                        : existingData.encap || {};
+
+                    newObjectInstanceStatus[path][node] = {
+                        node,
+                        path,
+                        ...newStatus,
+                        encap: mergedEncap,
+                    };
+
+                    console.log(`[useEventStore] Updated node ${node} for path ${path}:`, newObjectInstanceStatus[path][node]);
+                });
+            });
+
+            console.log("[useEventStore] Final objectInstanceStatus:", newObjectInstanceStatus);
+            return {objectInstanceStatus: newObjectInstanceStatus};
+        }),
 
     setNodeStatuses: (nodeStatus) =>
         set(() => ({

@@ -14,6 +14,8 @@ import NavBar from './NavBar';
 import Namespaces from "./Namespaces";
 import Heartbeats from "./Heartbeats";
 import Pools from "./Pools";
+import Network from "./Network";
+import NetworkDetails from "./NetworkDetails";
 import WhoAmI from "./WhoAmI";
 import {OidcProvider} from "../context/OidcAuthContext.tsx";
 import {AuthProvider} from "../context/AuthProvider";
@@ -70,6 +72,8 @@ const App = () => {
                     <Route path="/heartbeats" element={<Heartbeats/>}/>
                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                     <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                    <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                    <Route path="/network/:networkName" element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                     <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
                     <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>

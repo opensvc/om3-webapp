@@ -364,7 +364,6 @@ const Heartbeats = () => {
                                             textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "LAST_AT"].includes(label)
                                                 ? "left"
                                                 : "center",
-                                            borderBottom: "2px solid #ccc",
                                         }}
                                     >
                                         {label}

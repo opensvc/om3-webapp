@@ -56,4 +56,4 @@ const isActionAllowedForSelection = (actionName, selectedObjects) => {
     return allowedActions.has(actionName);
 };
 
-export { extractNamespace, extractKind, isActionAllowedForSelection, ALLOWED_ACTIONS_BY_KIND };
+export {extractNamespace, extractKind, isActionAllowedForSelection, ALLOWED_ACTIONS_BY_KIND};

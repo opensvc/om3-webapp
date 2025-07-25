@@ -3,47 +3,21 @@ import {useParams} from "react-router-dom";
 import {
     Box,
     Typography,
-    Tooltip,
-    Divider,
     Snackbar,
     Alert,
     Menu,
     MenuItem,
-    IconButton,
-    FormControlLabel,
-    Checkbox,
     Button,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
     ListItemIcon,
     ListItemText,
     CircularProgress,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    TextField,
 } from "@mui/material";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DeleteIcon from "@mui/icons-material/Delete";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
 import {UpdateConfigDialog, ManageConfigParamsDialog} from "./ActionDialogs";
-import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";

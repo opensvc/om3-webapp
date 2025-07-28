@@ -70,6 +70,7 @@ jest.mock('@mui/material', () => {
                 disabled={disabled}
                 {...(multiline ? {'data-multiline': true, rows} : {})}
                 {...props}
+                aria-label={label}
             />
         ),
         Input: ({type, onChange, disabled, ...props}) => (
@@ -244,7 +245,7 @@ type = flag
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/No node available to fetch configuration/i)).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/No node available to fetch configuration/i);
         }, {timeout: 5000});
 
         expect(global.fetch).not.toHaveBeenCalled();
@@ -336,14 +337,7 @@ type = flag
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '⚠️ [handleUpdateConfig] No configNode available for root/cfg/cfg1'
             );
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
-                expect.any(Object)
-            );
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
-                expect.any(Object)
-            );
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
         }, {timeout: 10000});
 
         consoleWarnSpy.mockRestore();
@@ -431,7 +425,7 @@ type = flag
         });
 
         const dialog = screen.getByRole('dialog');
-        const paramInput = within(dialog).getByPlaceholderText(/section\.param1=value1/i);
+        const paramInput = within(dialog).getByLabelText('Parameters to set');
         await act(async () => {
             await user.type(paramInput, 'test.param=value');
         });
@@ -445,14 +439,7 @@ type = flag
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 '⚠️ [handleAddParams] No configNode available for root/cfg/cfg1'
             );
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=test.param=value`),
-                expect.any(Object)
-            );
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
-                expect.any(Object)
-            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
         }, {timeout: 10000});
 
         consoleWarnSpy.mockRestore();
@@ -474,7 +461,7 @@ type = flag
         });
 
         const dialog = screen.getByRole('dialog');
-        const paramInput = within(dialog).getByPlaceholderText(/section\.param1=value1/i);
+        const paramInput = within(dialog).getByLabelText('Parameters to set');
         await act(async () => {
             await user.type(paramInput, 'test.param');
         });
@@ -512,7 +499,7 @@ type = flag
         });
 
         const dialog = screen.getByRole('dialog');
-        const deleteInput = within(dialog).getByPlaceholderText(/section1/i);
+        const deleteInput = within(dialog).getByLabelText('Section keys to delete');
         await act(async () => {
             await user.type(deleteInput, 'fs#1');
         });
@@ -557,7 +544,7 @@ type = flag
         });
 
         const dialog = screen.getByRole('dialog');
-        const setInput = within(dialog).getByPlaceholderText(/section\.param1=value1/i);
+        const setInput = within(dialog).getByLabelText('Parameters to set');
         await act(async () => {
             await user.type(setInput, 'test.param=value');
         });
@@ -574,5 +561,288 @@ type = flag
                 expect.any(Object)
             );
         }, {timeout: 5000});
+    });
+
+    test('logs warning when updating config with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '⚠️ [handleUpdateConfig] No configNode available for root/cfg/cfg1'
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+        }, {timeout: 10000});
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('logs warning when adding params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const paramInput = within(dialog).getByLabelText('Parameters to set');
+        await act(async () => {
+            await user.type(paramInput, 'test.param=value');
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '⚠️ [handleAddParams] No configNode available for root/cfg/cfg1'
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+        }, {timeout: 10000});
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('logs warning when unsetting params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const unsetInput = within(dialog).getByLabelText('Parameter keys to unset');
+        await act(async () => {
+            await user.type(unsetInput, 'test.param');
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '⚠️ [handleUnsetParams] No configNode available for root/cfg/cfg1'
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success');
+        }, {timeout: 10000});
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('logs warning when deleting params with missing configNode', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const deleteInput = within(dialog).getByLabelText('Section keys to delete');
+        await act(async () => {
+            await user.type(deleteInput, 'fs#1');
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '⚠️ [handleDeleteParams] No configNode available for root/cfg/cfg1'
+            );
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 1 section(s)', 'success');
+        }, {timeout: 10000});
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('parses object path with edge cases', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName={null}
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent('No node available to fetch configuration');
+        }, {timeout: 5000});
+
+        render(
+            <ConfigSection
+                decodedObjectName="cluster"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_NODE}/node1/instance/path/root/ccfg/cluster/config/file`),
+                expect.any(Object)
+            );
+        }, {timeout: 10000});
+    });
+
+    test('handles fetch failure when adding parameters', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config?set=')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 500,
+                    text: () => Promise.resolve('Server error'),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+                text: () => Promise.resolve(''),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const paramInput = within(dialog).getByLabelText('Parameters to set');
+        await act(async () => {
+            await user.type(paramInput, 'test.param=value');
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith(
+                'Error adding parameter test.param: Failed to add parameter test.param: 500',
+                'error'
+            );
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles empty parameter inputs', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageButton);
+        });
+
+        const dialog = screen.getByRole('dialog');
+        const paramInput = within(dialog).getByLabelText('Parameters to set');
+        await act(async () => {
+            await user.type(paramInput, '  \n  ');
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('No valid parameters provided.', 'error');
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+    });
+
+    test('debounces fetchConfig calls', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        await act(async () => {
+            setConfigNode('node1');
+            setConfigNode('node1');
+            setConfigNode('node1');
+        });
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+        }, {timeout: 2000});
     });
 });

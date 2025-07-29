@@ -23,7 +23,7 @@ import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const NodeCard = ({
                       node,
-                      nodeData,
+                      nodeData = {},
                       selectedNodes = [],
                       toggleNode = () => console.warn("toggleNode not provided"),
                       selectedResourcesByNode = {},
@@ -42,15 +42,18 @@ const NodeCard = ({
                       setConfirmDialogOpen = () => console.warn("setConfirmDialogOpen not provided"),
                       setStopDialogOpen = () => console.warn("setStopDialogOpen not provided"),
                       setUnprovisionDialogOpen = () => console.warn("setUnprovisionDialogOpen not provided"),
-                      setPurgeDialogOpen = () => console.warn("setPurgeDialogOpen not provided"),
                       setSimpleDialogOpen = () => console.warn("setSimpleDialogOpen not provided"),
                       setCheckboxes = () => console.warn("setCheckboxes not provided"),
                       setStopCheckbox = () => console.warn("setStopCheckbox not provided"),
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
-                      setPurgeCheckboxes = () => console.warn("setPurgeCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                   }) => {
+    if (!node) {
+        console.error("Node name is required");
+        return null;
+    }
+
     // Log received props for debugging
     console.log("NodeCard render:", {
         node,
@@ -65,12 +68,12 @@ const NodeCard = ({
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
 
-    // Extract node data
+    // Extract node data with defaults
     const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
     const encapData = nodeData?.encap || {};
-    const effectiveInstanceConfig = nodeData.instanceConfig || {resources: {}};
-    const effectiveInstanceMonitor = nodeData.instanceMonitor || {resources: {}};
+    const effectiveInstanceConfig = nodeData?.instanceConfig || {resources: {}};
+    const effectiveInstanceMonitor = nodeData?.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
 
     // Log changes to selectedResourcesByNode
@@ -117,13 +120,6 @@ const NodeCard = ({
                 serviceInterruption: false,
             });
             setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
         } else {
             setSimpleDialogOpen(true);
         }
@@ -164,55 +160,64 @@ const NodeCard = ({
             "No Restart",
         ];
 
+        // Handle running state
         if (resourceData?.running !== undefined) {
-            letters[0] = "R";
-            tooltipDescriptions[0] = "Running";
+            letters[0] = resourceData.running ? "R" : ".";
+            tooltipDescriptions[0] = resourceData.running ? "Running" : "Not Running";
         }
 
-        if (instanceConfig?.resources?.[rid]?.is_monitored === true) {
+        // Handle monitored state
+        const isMonitored = instanceConfig?.resources?.[rid]?.is_monitored;
+        if (isMonitored === true || isMonitored === "true") {
             letters[1] = "M";
             tooltipDescriptions[1] = "Monitored";
         }
 
-        if (instanceConfig?.resources?.[rid]?.is_disabled === true) {
+        // Handle disabled state
+        const isDisabled = instanceConfig?.resources?.[rid]?.is_disabled;
+        if (isDisabled === true || isDisabled === "true") {
             letters[2] = "D";
             tooltipDescriptions[2] = "Disabled";
         }
 
-        if (resourceData?.optional === true) {
+        // Handle optional state
+        if (resourceData?.optional === true || resourceData?.optional === "true") {
             letters[3] = "O";
             tooltipDescriptions[3] = "Optional";
         }
 
+        // Handle encap state
         if (isEncap) {
             letters[4] = "E";
             tooltipDescriptions[4] = "Encap";
         }
 
-        if (
-            resourceData?.provisioned?.state === "false" ||
-            resourceData?.provisioned?.state === false ||
-            resourceData?.provisioned?.state === "n/a"
-        ) {
+        // Handle provisioned state
+        const provisionedState = resourceData?.provisioned?.state;
+        if (provisionedState === "false" || provisionedState === false || provisionedState === "n/a") {
             letters[5] = "P";
             tooltipDescriptions[5] = "Not Provisioned";
         }
 
-        if (instanceConfig?.resources?.[rid]?.is_standby === true) {
+        // Handle standby state
+        const isStandby = instanceConfig?.resources?.[rid]?.is_standby;
+        if (isStandby === true || isStandby === "true") {
             letters[6] = "S";
             tooltipDescriptions[6] = "Standby";
         }
 
+        // Handle restart count
         const configRestarts = instanceConfig?.resources?.[rid]?.restart;
         const monitorRestarts = instanceMonitor?.resources?.[rid]?.restart?.remaining;
-        const remainingRestarts =
-            typeof configRestarts === "number" && configRestarts > 0
-                ? configRestarts
-                : typeof monitorRestarts === "number"
-                    ? monitorRestarts
-                    : undefined;
+        let remainingRestarts;
+
+        if (typeof configRestarts === "number" && configRestarts > 0) {
+            remainingRestarts = configRestarts;
+        } else if (typeof monitorRestarts === "number") {
+            remainingRestarts = monitorRestarts;
+        }
+
         if (typeof remainingRestarts === "number") {
-            // Display '.' when remainingRestarts is 0, otherwise show the number or '+' for >10
             letters[7] = remainingRestarts === 0 ? "." : remainingRestarts > 10 ? "+" : remainingRestarts.toString();
             tooltipDescriptions[7] =
                 remainingRestarts === 0
@@ -227,7 +232,7 @@ const NodeCard = ({
         console.log("Status letters for", rid, ":", {
             statusString,
             tooltipText,
-            is_monitored: instanceConfig?.resources?.[rid]?.is_monitored,
+            is_monitored: isMonitored,
             restart: remainingRestarts,
         });
         return {statusString, tooltipText};
@@ -235,13 +240,15 @@ const NodeCard = ({
 
     // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
-        const {statusString, tooltipText} = getResourceStatusLetters(
-            rid,
-            res,
-            instanceConfig,
-            instanceMonitor,
-            isEncap
-        );
+        if (!res) {
+            console.error(`Resource data is null or undefined for ${rid}`);
+            return null;
+        }
+
+        const {
+            statusString,
+            tooltipText
+        } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
 
@@ -280,12 +287,11 @@ const NodeCard = ({
                         <Checkbox
                             checked={(selectedResourcesByNode[node] || []).includes(rid)}
                             onChange={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
                                 toggleResource(node, rid);
                                 console.log("Individual resource checkbox clicked:", {
                                     node,
                                     rid,
+                                    checked: e.target.checked,
                                     selectedResourcesByNode,
                                 });
                             }}
@@ -313,6 +319,7 @@ const NodeCard = ({
                     >
                         <Tooltip title={tooltipText}>
                             <Typography
+                                role="status"
                                 sx={{
                                     minWidth: {sm: "80px"},
                                     fontFamily: "'Roboto Mono', monospace",
@@ -320,6 +327,7 @@ const NodeCard = ({
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
                                 }}
+                                aria-label={`Resource ${rid} status: ${statusString}`}
                             >
                                 {statusString}
                             </Typography>
@@ -391,12 +399,14 @@ const NodeCard = ({
                 >
                     <Tooltip title={tooltipText}>
                         <Typography
+                            role="status"
                             sx={{
                                 fontFamily: "'Roboto Mono', monospace",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
                             }}
+                            aria-label={`Resource ${rid} status: ${statusString}`}
                         >
                             {statusString}
                         </Typography>
@@ -495,10 +505,12 @@ const NodeCard = ({
                             <Checkbox
                                 checked={selectedNodes.includes(node)}
                                 onChange={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
                                     toggleNode(node);
-                                    console.log("toggleNode called:", {node, selectedNodes});
+                                    console.log("Node checkbox clicked:", {
+                                        node,
+                                        checked: e.target.checked,
+                                        selectedNodes,
+                                    });
                                 }}
                                 aria-label={`Select node ${node}`}
                             />
@@ -578,8 +590,6 @@ const NodeCard = ({
                                 resIds.length > 0
                             }
                             onChange={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
                                 console.log("Select all checkbox clicked:", {node, checked: e.target.checked});
                                 handleSelectAllResources(e.target.checked);
                             }}
@@ -702,6 +712,7 @@ const NodeCard = ({
                             e.stopPropagation();
                             handleIndividualNodeActionClick(name);
                         }}
+                        aria-label={`Node ${node} ${name} action`}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -723,6 +734,7 @@ const NodeCard = ({
                             e.stopPropagation();
                             handleBatchResourceActionClick(name);
                         }}
+                        aria-label={`Batch resource ${name} action for node ${node}`}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -744,6 +756,7 @@ const NodeCard = ({
                             e.stopPropagation();
                             handleResourceActionClick(name);
                         }}
+                        aria-label={`Resource ${currentResourceId} ${name} action`}
                     >
                         <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                         <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>

@@ -144,4 +144,45 @@ describe('NodesTable', () => {
             expect(screen.getByText(/✅ 'Freeze' succeeded on 1 node\(s\)/i)).toBeInTheDocument();
         });
     });
+    test('handles partial success in handleDialogConfirm', async () => {
+        global.fetch = jest.fn((url) =>
+            url.includes('node-1')
+                ? Promise.resolve({ok: true, json: () => ({})})
+                : Promise.reject(new Error('HTTP error'))
+        );
+
+        renderWithRouter(<NodesTable/>);
+        const checkboxes = await screen.findAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]); // Select node-2
+        fireEvent.click(checkboxes[0]); // Select node-1
+
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        fireEvent.click(actionsButton);
+        const freezeMenuItem = screen.getByText(/Freeze/i);
+        fireEvent.click(freezeMenuItem);
+
+        const confirmBtn = await screen.findByRole('button', {name: 'Confirm'});
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/⚠️ 'Freeze' partially succeeded: 1 ok, 1 errors/i)).toBeInTheDocument();
+        });
+    });
+    test('selects all nodes using header checkbox', async () => {
+        renderWithRouter(<NodesTable/>);
+        const headerCheckbox = (await screen.findAllByRole('checkbox'))[0];
+        fireEvent.click(headerCheckbox);
+
+        const checkboxes = await screen.findAllByRole('checkbox');
+        expect(checkboxes[1]).toBeChecked(); // node-1
+        expect(checkboxes[2]).toBeChecked(); // node-2
+        expect(screen.getByRole('button', {name: /actions on selected nodes/i})).toBeEnabled();
+    });
+
+    test('handles useEffect cleanup on unmount', () => {
+        const closeEventSourceSpy = jest.spyOn(eventSourceManager, 'closeEventSource');
+        const {unmount} = renderWithRouter(<NodesTable/>);
+        unmount();
+        expect(closeEventSourceSpy).toHaveBeenCalled();
+    });
 });

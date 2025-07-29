@@ -24,6 +24,53 @@ import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
 import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
+// Helper function to filter resource actions based on type
+const getFilteredResourceActions = (resourceType) => {
+    console.log("getFilteredResourceActions called with resourceType:", resourceType);
+    if (!resourceType) {
+        console.log("No resource type provided, returning all actions");
+        return RESOURCE_ACTIONS;
+    }
+    const typePrefix = resourceType.split('.')[0].toLowerCase();
+    console.log("Resource type prefix:", typePrefix);
+    if (typePrefix === 'task') {
+        console.log("Type is task, returning only 'run' action");
+        return RESOURCE_ACTIONS.filter(action => action.name === 'run');
+    }
+    if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+        console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
+        return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
+    }
+    console.log("No special filtering, returning all actions");
+    return RESOURCE_ACTIONS;
+};
+
+// Helper function to get resource type for a given resource ID
+const getResourceType = (rid, nodeData) => {
+    if (!rid) {
+        console.warn("getResourceType called with undefined or null rid");
+        return '';
+    }
+    console.log(`getResourceType called for rid: ${rid}`);
+    // Check top-level resources
+    const topLevelType = nodeData?.resources?.[rid]?.type;
+    if (topLevelType) {
+        console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
+        return topLevelType;
+    }
+    // Check encapsulated resources
+    const encapData = nodeData?.encap || {};
+    for (const containerId of Object.keys(encapData)) {
+        const encapType = encapData[containerId]?.resources?.[rid]?.type;
+        if (encapType) {
+            console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
+            return encapType;
+        }
+    }
+    console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
+    return '';
+};
+
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
@@ -662,7 +709,10 @@ const ObjectDetail = () => {
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
     };
-    const handleResourceMenuClose = () => setResourceMenuAnchor(null);
+    const handleResourceMenuClose = () => {
+        setResourceMenuAnchor(null);
+        setCurrentResourceId(null);
+    };
     const handleResourceActionClick = (action) => {
         console.log("[ObjectDetail] handleResourceActionClick:", action, currentResourceId);
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
@@ -1070,15 +1120,40 @@ const ObjectDetail = () => {
                 </Menu>
                 <Menu
                     anchorEl={resourceMenuAnchor}
-                    open={Boolean(resourceMenuAnchor)}
+                    open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                     onClose={handleResourceMenuClose}
+                    onClick={(e) => e.stopPropagation()}
                 >
-                    {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleResourceActionClick(name)}>
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
+                    {(() => {
+                        if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
+                            console.error("Cannot render resource actions menu: missing currentResourceId or node data", {
+                                currentResourceId,
+                                resGroupNode,
+                                nodeData: memoizedObjectData[resGroupNode]
+                            });
+                            return [];
+                        }
+                        const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
+                        const filteredActions = getFilteredResourceActions(resourceType);
+                        console.log("Rendering resource actions menu:", {
+                            currentResourceId,
+                            resourceType,
+                            filteredActions: filteredActions.map(action => action.name),
+                        });
+                        return filteredActions.map(({name, icon}) => {
+                            console.log(`Rendering MenuItem for action: ${name}`);
+                            return (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleResourceActionClick(name)}
+                                    aria-label={`Resource ${currentResourceId} ${name} action`}
+                                >
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            );
+                        });
+                    })()}
                 </Menu>
                 {/* SNACKBAR */}
                 <Snackbar

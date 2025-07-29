@@ -144,6 +144,53 @@ const NodeCard = ({
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
+        setCurrentResourceId(null);
+    };
+
+    // Helper function to filter resource actions based on type
+    const getFilteredResourceActions = (resourceType) => {
+        console.log("getFilteredResourceActions called with resourceType:", resourceType);
+        if (!resourceType) {
+            console.log("No resource type provided, returning all actions");
+            return RESOURCE_ACTIONS;
+        }
+        const typePrefix = resourceType.split('.')[0].toLowerCase();
+        console.log("Resource type prefix:", typePrefix);
+        if (typePrefix === 'task') {
+            console.log("Type is task, returning only 'run' action");
+            return RESOURCE_ACTIONS.filter(action => action.name === 'run');
+        }
+        if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+            console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
+            return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
+        }
+        console.log("No special filtering, returning all actions");
+        return RESOURCE_ACTIONS;
+    };
+
+    // Helper function to get resource type for a given resource ID
+    const getResourceType = (rid) => {
+        if (!rid) {
+            console.warn("getResourceType called with undefined or null rid");
+            return '';
+        }
+        console.log(`getResourceType called for rid: ${rid}`);
+        // Check top-level resources
+        const topLevelType = resources[rid]?.type;
+        if (topLevelType) {
+            console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
+            return topLevelType;
+        }
+        // Check encapsulated resources
+        for (const containerId of Object.keys(encapData)) {
+            const encapType = encapData[containerId]?.resources?.[rid]?.type;
+            if (encapType) {
+                console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
+                return encapType;
+            }
+        }
+        console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
+        return '';
     };
 
     // Helper function to determine resource status letters and tooltip
@@ -251,12 +298,14 @@ const NodeCard = ({
         } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
+        const resourceType = res.type || "N/A";
 
         console.log("Rendering resource row:", {
             rid,
             statusString,
             status: res.status,
             label: labelText,
+            type: resourceType,
             isEncap,
             tooltipText,
         });
@@ -332,6 +381,17 @@ const NodeCard = ({
                                 {statusString}
                             </Typography>
                         </Tooltip>
+                        <Typography
+                            sx={{
+                                minWidth: {sm: "80px"},
+                                fontFamily: "'Roboto Mono', monospace",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            {resourceType}
+                        </Typography>
                         <Typography
                             sx={{
                                 fontFamily: "'Roboto Mono', monospace",
@@ -422,6 +482,24 @@ const NodeCard = ({
                     <Typography
                         sx={{
                             fontFamily: "'Roboto Mono', monospace",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {resourceType}
+                    </Typography>
+                </Box>
+                <Box
+                    sx={{
+                        pl: isEncap ? 4 : 2,
+                        display: {xs: "block", sm: "none"},
+                        width: "100%",
+                    }}
+                >
+                    <Typography
+                        sx={{
+                            fontFamily: "'Roboto Mono', monospace",
                             whiteSpace: "normal",
                             wordBreak: "break-word",
                         }}
@@ -470,6 +548,7 @@ const NodeCard = ({
                             }}
                             disabled={actionInProgress}
                             aria-label={`Resource ${rid} actions`}
+                            sx={{p: 0.5}}
                         >
                             <Tooltip title="Actions">
                                 <MoreVertIcon/>
@@ -745,23 +824,42 @@ const NodeCard = ({
             {/* Menu for individual resource actions */}
             <Menu
                 anchorEl={resourceMenuAnchor}
-                open={Boolean(resourceMenuAnchor)}
-                onClose={() => setResourceMenuAnchor(null)}
+                open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                onClose={() => {
+                    setResourceMenuAnchor(null);
+                    setCurrentResourceId(null);
+                }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {RESOURCE_ACTIONS.map(({name, icon}) => (
-                    <MenuItem
-                        key={name}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleResourceActionClick(name);
-                        }}
-                        aria-label={`Resource ${currentResourceId} ${name} action`}
-                    >
-                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                    </MenuItem>
-                ))}
+                {(() => {
+                    if (!currentResourceId) {
+                        console.error("No currentResourceId set, cannot render resource actions menu");
+                        return [];
+                    }
+                    const resourceType = getResourceType(currentResourceId);
+                    const filteredActions = getFilteredResourceActions(resourceType);
+                    console.log("Rendering resource actions menu:", {
+                        currentResourceId,
+                        resourceType,
+                        filteredActions: filteredActions.map(action => action.name),
+                    });
+                    return filteredActions.map(({name, icon}) => {
+                        console.log(`Rendering MenuItem for action: ${name}`);
+                        return (
+                            <MenuItem
+                                key={name}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleResourceActionClick(name);
+                                }}
+                                aria-label={`Resource ${currentResourceId} ${name} action`}
+                            >
+                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                            </MenuItem>
+                        );
+                    });
+                })()}
             </Menu>
         </Box>
     );

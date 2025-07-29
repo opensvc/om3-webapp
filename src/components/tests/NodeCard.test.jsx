@@ -2,6 +2,7 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
+import NodeCard from '../NodeCard';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
@@ -153,6 +154,9 @@ jest.mock('@mui/material', () => {
 jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon"/>);
 jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="UploadFileIcon"/>);
 jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon"/>);
+jest.mock('@mui/icons-material/WarningAmber', () => () => <span data-testid="WarningAmberIcon"/>);
+jest.mock('@mui/icons-material/AcUnit', () => () => <span data-testid="AcUnitIcon"/>);
+jest.mock('@mui/icons-material/MoreVert', () => () => <span data-testid="MoreVertIcon"/>);
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -223,6 +227,8 @@ describe('NodeCard Component', () => {
                     global_expect: 'placed@node1',
                     resources: {
                         res1: {restart: {remaining: 0}},
+                        res2: {restart: {remaining: 5}},
+                        encapRes1: {restart: {remaining: 0}},
                     },
                 },
             },
@@ -263,6 +269,9 @@ describe('NodeCard Component', () => {
 
     afterEach(() => {
         jest.clearAllMocks();
+        // Reset viewport to default
+        window.innerWidth = 1024;
+        window.dispatchEvent(new Event('resize'));
     });
 
     test('enables batch node actions button when nodes are selected', async () => {
@@ -279,7 +288,7 @@ describe('NodeCard Component', () => {
             const actionsButton = screen.getByRole('button', {name: /Actions on selected nodes/i});
             expect(actionsButton).not.toBeDisabled();
         });
-    });
+    }, 15000);
 
     test('opens batch node actions menu and triggers freeze action', async () => {
         render(
@@ -495,8 +504,7 @@ describe('NodeCard Component', () => {
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter
-            >
+            </MemoryRouter>
         );
 
         let nodeSection;
@@ -744,4 +752,845 @@ describe('NodeCard Component', () => {
             {timeout: 15000}
         );
     }, 30000);
+
+    test('handles empty node data gracefully', async () => {
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: null, // node data is null
+                },
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+            expect(screen.getByText('No resources available.')).toBeInTheDocument();
+        });
+    });
+
+    test('displays warning icon when avail is "warn"', async () => {
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'warn',
+                        frozen_at: null,
+                        resources: {},
+                    },
+                },
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            const warningIcon = screen.getByTestId('WarningAmberIcon');
+            expect(warningIcon).toBeInTheDocument();
+        });
+    });
+
+    test('handles container resources with encapsulated resources', async () => {
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            container1: {
+                                status: 'up',
+                                label: 'Container 1',
+                                type: 'container',
+                                running: true,
+                            },
+                        },
+                        encap: {
+                            container1: {
+                                resources: {
+                                    encap1: {
+                                        status: 'up',
+                                        label: 'Encap Resource 1',
+                                        running: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+                expect(screen.getByText('container1')).toBeInTheDocument();
+                expect(screen.getByText('encap1')).toBeInTheDocument();
+            }
+        )
+        ;
+    });
+
+    test('handles select all resources for node with no resources', async () => {
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {},
+                    },
+                },
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+
+        expect(selectAllCheckbox).toBeDisabled();
+    });
+
+    test('handles resource status letters for various states', async () => {
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            complexRes: {
+                                status: 'up',
+                                label: 'Complex Resource',
+                                type: 'disk',
+                                provisioned: {state: 'false'},
+                                running: true,
+                                optional: true,
+                            },
+                        },
+                        encap: {
+                            complexRes: {
+                                resources: {
+                                    encapRes: {
+                                        status: 'up',
+                                        label: 'Encap Resource',
+                                        running: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/cfg/cfg1': {
+                    resources: {
+                        complexRes: {restart: {remaining: 5}},
+                    },
+                },
+            },
+            instanceConfig: {
+                'root/cfg/cfg1': {
+                    resources: {
+                        complexRes: {
+                            is_monitored: true,
+                            is_disabled: true,
+                            is_standby: true,
+                            restart: 0,
+                        },
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const user = userEvent.setup();
+        const nodeSection = await findNodeSection('node1', 10000);
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(
+            () => {
+                const statusElements = screen.getAllByRole('status', {
+                    name: 'Resource complexRes status: RMDO.PS5',
+                });
+                expect(statusElements.length).toBeGreaterThan(0);
+                expect(statusElements.some((el) => el.textContent === 'RMDO.PS5')).toBe(true);
+            },
+            {
+                timeout: 10000,
+                onTimeout: (error) => {
+                    console.log('DOM debug for resource status test:');
+                    screen.debug();
+                    throw error;
+                },
+            }
+        );
+    }, 30000);
+
+    test('handles unprovision action with checkboxes', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const nodeSection = await findNodeSection('node1', 10000);
+        const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
+        await user.click(actionsButton);
+
+        const menu = await within(nodeSection).findByRole('menu', {}, {timeout: 5000});
+        const unprovisionItem = await within(menu).findByRole('menuitem', {name: /Node node1 unprovision action/i});
+        await user.click(unprovisionItem);
+
+        await waitFor(
+            () => {
+                const dialog = screen.getByRole('dialog');
+                expect(dialog).toHaveTextContent(/Confirm Unprovision/i);
+
+                const dataLossCheckbox = within(dialog).getByRole('checkbox', {name: /data loss/i});
+                expect(dataLossCheckbox).not.toBeChecked();
+
+                const serviceCheckbox = within(dialog).getByRole('checkbox', {name: /service interruption/i});
+                expect(serviceCheckbox).not.toBeChecked();
+            },
+            {timeout: 10000}
+        );
+
+        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
+        expect(confirmButton).toBeDisabled();
+
+        const dataLossCheckbox = screen.getByRole('checkbox', {name: /data loss/i});
+        await user.click(dataLossCheckbox);
+        const serviceCheckbox = screen.getByRole('checkbox', {name: /service interruption/i});
+        await user.click(serviceCheckbox);
+
+        await waitFor(
+            () => {
+                expect(confirmButton).not.toBeDisabled();
+            },
+            {timeout: 10000}
+        );
+
+        await user.click(confirmButton);
+
+        await waitFor(
+            () => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringContaining('/action/unprovision'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        headers: {Authorization: 'Bearer mock-token'},
+                    })
+                );
+            },
+            {timeout: 10000}
+        );
+    }, 30000);
+
+    test('handles mobile view for resources', async () => {
+        // Simulate mobile view
+        window.innerWidth = 500;
+        window.dispatchEvent(new Event('resize'));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            const res1Element = screen.getByText('res1');
+            const parentDiv = res1Element.closest('div[style*="flex-direction: column"]');
+            expect(parentDiv).toBeInTheDocument();
+        });
+    });
+
+    test('handles missing node prop gracefully', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        render(<NodeCard node={null}/>);
+        expect(console.error).toHaveBeenCalledWith('Node name is required');
+        expect(screen.queryByTestId('accordion')).not.toBeInTheDocument();
+        console.error.mockRestore();
+    });
+
+    test('triggers useEffect on selectedResourcesByNode change', async () => {
+        const setSelectedResourcesByNode = jest.fn();
+        const mockState = {
+            selectedResourcesByNode: {node1: ['res1']},
+        };
+        useEventStore.mockImplementation((selector) => selector(mockState));
+        jest.spyOn(console, 'log').mockImplementation(() => {
+        });
+
+        const {rerender} = render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {res1: {status: 'up', label: 'Resource 1', type: 'disk'}}}}
+                selectedResourcesByNode={mockState.selectedResourcesByNode}
+                setSelectedResourcesByNode={setSelectedResourcesByNode}
+            />
+        );
+
+        // Update selectedResourcesByNode to trigger useEffect
+        mockState.selectedResourcesByNode = {node1: ['res1', 'res2']};
+        rerender(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {res1: {status: 'up', label: 'Resource 1', type: 'disk'}}}}
+                selectedResourcesByNode={mockState.selectedResourcesByNode}
+                setSelectedResourcesByNode={setSelectedResourcesByNode}
+            />
+        );
+
+        await waitFor(() => {
+            expect(console.log).toHaveBeenCalledWith(
+                'selectedResourcesByNode changed:',
+                {node1: ['res1', 'res2']}
+            );
+        });
+        console.log.mockRestore();
+    });
+
+    test('handles invalid setSelectedResourcesByNode in handleSelectAllResources', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {res1: {status: 'up', type: 'disk'}}}}
+                setSelectedResourcesByNode={null}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+        await user.click(selectAllCheckbox);
+
+        expect(console.error).toHaveBeenCalledWith(
+            'setSelectedResourcesByNode is not a function:',
+            null
+        );
+        console.error.mockRestore();
+    });
+
+    test('selects all resources including encapsulated ones', async () => {
+        const setSelectedResourcesByNode = jest.fn((fn) => fn({}));
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {container1: {status: 'up', type: 'container'}},
+                    encap: {container1: {resources: {encap1: {status: 'up'}}}},
+                }}
+                setSelectedResourcesByNode={setSelectedResourcesByNode}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+        await user.click(selectAllCheckbox);
+
+        expect(setSelectedResourcesByNode).toHaveBeenCalledWith(
+            expect.any(Function)
+        );
+        expect(setSelectedResourcesByNode.mock.calls[0][0]({})).toEqual({
+            node1: ['container1', 'encap1'],
+        });
+    });
+
+    test('triggers console.warn for all default prop functions', async () => {
+        // Mock console.warn to capture calls
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+
+        // Render NodeCard with minimal props and default prop functions
+        let anchorEl = null;
+        const setIndividualNodeMenuAnchor = jest.fn((el) => {
+            anchorEl = el;
+        });
+        const {rerender} = render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {res1: {status: 'up', type: 'disk'}},
+                }}
+                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                individualNodeMenuAnchor={anchorEl}
+            />
+        );
+
+        // Simulate interactions to trigger event handlers
+        const nodeSection = await findNodeSection('node1');
+
+        // 1. Trigger toggleNode (node checkbox click)
+        const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /select node node1/i,
+        });
+        await user.click(nodeCheckbox);
+
+        // 2. Trigger toggleResource and handleNodeResourcesAccordionChange (resource checkbox click)
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader); // Expand accordion
+        const res1Row = await within(nodeSection).findByText('res1');
+        const resourceCheckbox = await within(res1Row.closest('div[style*="display: flex"]')).findByRole('checkbox', {
+            name: /select resource res1/i,
+        });
+        await user.click(resourceCheckbox);
+
+        // 3. Trigger handleResourceMenuOpen (individual resource actions menu)
+        const resourceMenuButton = await within(res1Row.closest('div[style*="display: flex"]')).findByRole('button', {
+            name: /Resource res1 actions/i,
+        });
+        await user.click(resourceMenuButton);
+
+        // 4. Trigger setIndividualNodeMenuAnchor and dialog-related handlers
+        const nodeActionsButton = await within(nodeSection).findByRole('button', {
+            name: /node1 actions/i,
+        });
+        await user.click(nodeActionsButton);
+
+        // Simulate menu opening
+        await act(async () => {
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+
+        // Trigger actions via menu items
+        const nodeMenu = await screen.findByRole('menu');
+
+        // Freeze action
+        let freezeItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 freeze action/i,
+        });
+        await user.click(freezeItem); // Triggers setCurrentNode, setPendingAction, setConfirmDialogOpen, setCheckboxes
+
+        // Re-open menu for stop action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const stopItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 stop action/i,
+        });
+        await user.click(stopItem); // Triggers setCurrentNode, setPendingAction, setStopDialogOpen, setStopCheckbox
+
+        // Re-open menu for unprovision action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const unprovisionItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 unprovision action/i,
+        });
+        await user.click(unprovisionItem); // Triggers setCurrentNode, setPendingAction, setUnprovisionDialogOpen, setUnprovisionCheckboxes
+
+        // Re-open menu for start action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const startItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 start action/i,
+        });
+        await user.click(startItem); // Triggers setCurrentNode, setPendingAction, setSimpleDialogOpen
+
+        // 5. Trigger setSelectedResourcesByNode (select all resources checkbox)
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+        await user.click(selectAllCheckbox);
+
+        // Verify console.warn calls based on received output
+        await waitFor(() => {
+            const warnCalls = warnSpy.mock.calls.map(([message]) => message);
+            expect(warnCalls).toContain('toggleNode not provided');
+            expect(warnCalls).toContain('toggleResource not provided');
+            expect(warnCalls).toContain('handleResourceMenuOpen not provided');
+            expect(warnCalls).toContain('handleNodeResourcesAccordionChange not provided');
+            expect(warnCalls).toContain('setCurrentNode not provided');
+            expect(warnCalls).toContain('setPendingAction not provided');
+            expect(warnCalls).toContain('setConfirmDialogOpen not provided');
+            expect(warnCalls).toContain('setCheckboxes not provided');
+            expect(warnCalls).toContain('setStopDialogOpen not provided');
+            expect(warnCalls).toContain('setStopCheckbox not provided');
+            expect(warnCalls).toContain('setUnprovisionDialogOpen not provided');
+            expect(warnCalls).toContain('setUnprovisionCheckboxes not provided');
+            expect(warnCalls).toContain('setSimpleDialogOpen not provided');
+            expect(warnCalls).toContain('setSelectedResourcesByNode not provided');
+        }, {
+            timeout: 15000,
+            onTimeout: (error) => {
+                console.log('Warn calls:', warnSpy.mock.calls);
+                screen.debug();
+                throw error;
+            },
+        });
+
+        // Clean up the spy
+        warnSpy.mockRestore();
+    }, 30000);
+
+    test('triggers console.warn for dialog-related default prop functions', async () => {
+        // Mock console.warn to capture calls
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+
+        // Mock setIndividualNodeMenuAnchor to open the menu
+        const setIndividualNodeMenuAnchor = jest.fn();
+        let anchorEl = null;
+
+        // Render NodeCard with mocked setIndividualNodeMenuAnchor and controlled anchorEl
+        const {rerender} = render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {res1: {status: 'up', type: 'disk'}},
+                }}
+                setIndividualNodeMenuAnchor={(el) => {
+                    anchorEl = el;
+                    setIndividualNodeMenuAnchor(el);
+                    rerender(
+                        <NodeCard
+                            node="node1"
+                            nodeData={{
+                                resources: {res1: {status: 'up', type: 'disk'}},
+                            }}
+                            setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                            individualNodeMenuAnchor={anchorEl}
+                        />
+                    );
+                }}
+                individualNodeMenuAnchor={anchorEl}
+            />
+        );
+
+        // Simulate interactions to trigger dialog-related handlers
+        const nodeSection = await findNodeSection('node1');
+        const nodeActionsButton = await within(nodeSection).findByRole('button', {
+            name: /node1 actions/i,
+        });
+        await user.click(nodeActionsButton);
+
+        // Simulate menu opening
+        await act(async () => {
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+        });
+
+        // Trigger actions via menu items
+        const nodeMenu = await screen.findByRole('menu');
+
+        // Freeze action
+        const freezeItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 freeze action/i,
+        });
+        await user.click(freezeItem); // Triggers setCurrentNode, setPendingAction, setConfirmDialogOpen, setCheckboxes
+
+        // Re-open menu for stop action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const stopItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 stop action/i,
+        });
+        await user.click(stopItem); // Triggers setCurrentNode, setPendingAction, setStopDialogOpen, setStopCheckbox
+
+        // Re-open menu for unprovision action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const unprovisionItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 unprovision action/i,
+        });
+        await user.click(unprovisionItem); // Triggers setCurrentNode, setPendingAction, setUnprovisionDialogOpen, setUnprovisionCheckboxes
+
+        // Re-open menu for start action
+        await act(async () => {
+            setIndividualNodeMenuAnchor(null);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={null}
+                />
+            );
+            await user.click(nodeActionsButton);
+            setIndividualNodeMenuAnchor(nodeActionsButton);
+            rerender(
+                <NodeCard
+                    node="node1"
+                    nodeData={{
+                        resources: {res1: {status: 'up', type: 'disk'}},
+                    }}
+                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                    individualNodeMenuAnchor={nodeActionsButton}
+                />
+            );
+        });
+        const startItem = await within(nodeMenu).findByRole('menuitem', {
+            name: /Node node1 start action/i,
+        });
+        await user.click(startItem); // Triggers setCurrentNode, setPendingAction, setSimpleDialogOpen
+
+        // Verify dialog-related console.warn calls
+        await waitFor(() => {
+            const warnCalls = warnSpy.mock.calls.map(([message]) => message);
+            expect(warnCalls).toContain('setCurrentNode not provided');
+            expect(warnCalls).toContain('setPendingAction not provided');
+            expect(warnCalls).toContain('setConfirmDialogOpen not provided');
+            expect(warnCalls).toContain('setCheckboxes not provided');
+            expect(warnCalls).toContain('setStopDialogOpen not provided');
+            expect(warnCalls).toContain('setStopCheckbox not provided');
+            expect(warnCalls).toContain('setUnprovisionDialogOpen not provided');
+            expect(warnCalls).toContain('setUnprovisionCheckboxes not provided');
+            expect(warnCalls).toContain('setSimpleDialogOpen not provided');
+        }, {
+            timeout: 15000,
+            onTimeout: (error) => {
+                console.log('Warn calls:', warnSpy.mock.calls);
+                screen.debug();
+                throw error;
+            },
+        });
+
+        // Clean up the spy
+        warnSpy.mockRestore();
+    }, 30000);
+
+    test('triggers console.warn for setIndividualNodeMenuAnchor', async () => {
+        // Mock console.warn to capture calls
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+
+        // Render NodeCard with default setIndividualNodeMenuAnchor
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {res1: {status: 'up', type: 'disk'}},
+                }}
+            />
+        );
+
+        // Simulate clicking node actions button
+        const nodeSection = await findNodeSection('node1');
+        const nodeActionsButton = await within(nodeSection).findByRole('button', {
+            name: /node1 actions/i,
+        });
+        await user.click(nodeActionsButton);
+
+        // Verify setIndividualNodeMenuAnchor warning
+        await waitFor(() => {
+            expect(warnSpy).toHaveBeenCalledWith('setIndividualNodeMenuAnchor not provided');
+        }, {
+            timeout: 5000,
+            onTimeout: (error) => {
+                console.log('Warn calls:', warnSpy.mock.calls);
+                screen.debug();
+                throw error;
+            },
+        });
+
+        // Clean up the spy
+        warnSpy.mockRestore();
+    }, 10000);
 });

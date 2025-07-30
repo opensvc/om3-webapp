@@ -101,7 +101,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onClick(`/namespaces?namespace=${namespace}`);
+                                    onClick(`/objects?namespace=${namespace}`);
                                 }}
                             />
                             <Box sx={{

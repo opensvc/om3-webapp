@@ -69,19 +69,19 @@ describe('HeaderSection Component', () => {
 
         // Mock useParams
         require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/cfg/cfg1',
+            objectName: 'root/svc/svc1',
         });
 
         // Mock useEventStore
         const mockState = {
             objectStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     avail: 'up',
                     frozen: 'frozen',
                 },
             },
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: '2023-01-01T12:00:00Z',
@@ -98,7 +98,7 @@ describe('HeaderSection Component', () => {
                 },
             },
             instanceMonitor: {
-                'node1:root/cfg/cfg1': {
+                'node1:root/svc/svc1': {
                     state: 'running',
                     global_expect: 'placed@node1',
                     resources: {
@@ -107,7 +107,7 @@ describe('HeaderSection Component', () => {
                 },
             },
             instanceConfig: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     resources: {
                         res1: {
                             is_monitored: true,
@@ -146,7 +146,7 @@ describe('HeaderSection Component', () => {
         const {useParams} = require('react-router-dom');
         const {Typography} = require('@mui/material');
         useParams.mockReturnValue({
-            objectName: 'root/cfg/cfg1',
+            objectName: 'root/svc/svc1',
         });
 
         const MockHeaderSection = () => {
@@ -162,7 +162,7 @@ describe('HeaderSection Component', () => {
         };
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<MockHeaderSection/>}/>
                 </Routes>
@@ -170,9 +170,9 @@ describe('HeaderSection Component', () => {
         );
 
         await waitFor(() => {
-            const objectNameElement = screen.getByText(/root\/cfg\/cfg1/i);
+            const objectNameElement = screen.getByText(/root\/svc\/svc1/i);
             expect(objectNameElement).toBeInTheDocument();
-            expect(objectNameElement).toHaveTextContent('root/cfg/cfg1');
+            expect(objectNameElement).toHaveTextContent('root/svc/svc1');
 
             const noInfoMessage = screen.getByText(/No information available for object/i);
             expect(noInfoMessage).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe('HeaderSection Component', () => {
 
     test('renders global status', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -197,7 +197,7 @@ describe('HeaderSection Component', () => {
     test('triggers object action with unprovision dialog', async () => {
         await act(async () => {
             render(
-                <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                     <Routes>
                         <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                     </Routes>
@@ -206,12 +206,12 @@ describe('HeaderSection Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('root/cfg/cfg1')).toBeInTheDocument();
+            expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
         });
 
         global.fetch.mockClear();
 
-        const headerSection = screen.getByText('root/cfg/cfg1').closest('div');
+        const headerSection = screen.getByText('root/svc/svc1').closest('div');
         const objectMenuButton = within(headerSection).getAllByRole('button').find((btn) =>
             btn.querySelector('svg[data-testid="MoreVertIcon"]')
         );
@@ -275,7 +275,7 @@ describe('HeaderSection Component', () => {
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/object/path/root/cfg/cfg1/action/unprovision'),
+                expect.stringContaining('/api/object/path/root/svc/svc1/action/unprovision'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'},
@@ -286,7 +286,7 @@ describe('HeaderSection Component', () => {
 
     test('displays global_expect from instanceMonitor', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -303,7 +303,7 @@ describe('HeaderSection Component', () => {
             objectStatus: {},
             objectInstanceStatus: {},
             instanceMonitor: {
-                'node1:root/cfg/cfg1': {state: 'running', global_expect: 'none'},
+                'node1:root/svc/svc1': {state: 'running', global_expect: 'none'},
             },
             instanceConfig: {},
             configUpdates: [],

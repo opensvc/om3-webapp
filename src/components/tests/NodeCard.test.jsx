@@ -174,18 +174,18 @@ describe('NodeCard Component', () => {
         jest.clearAllMocks();
 
         require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/cfg/cfg1',
+            objectName: 'root/svc/svc1',
         });
 
         const mockState = {
             objectStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     avail: 'up',
                     frozen: 'frozen',
                 },
             },
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: '2023-01-01T12:00:00Z',
@@ -222,7 +222,7 @@ describe('NodeCard Component', () => {
                 },
             },
             instanceMonitor: {
-                'node1:root/cfg/cfg1': {
+                'node1:root/svc/svc1': {
                     state: 'running',
                     global_expect: 'placed@node1',
                     resources: {
@@ -233,7 +233,7 @@ describe('NodeCard Component', () => {
                 },
             },
             instanceConfig: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     resources: {
                         res1: {
                             is_monitored: true,
@@ -276,7 +276,7 @@ describe('NodeCard Component', () => {
 
     test('enables batch node actions button when nodes are selected', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -292,7 +292,7 @@ describe('NodeCard Component', () => {
 
     test('opens batch node actions menu and triggers freeze action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -332,7 +332,7 @@ describe('NodeCard Component', () => {
 
     test('triggers individual node stop action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -367,7 +367,7 @@ describe('NodeCard Component', () => {
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/stop'),
+                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: {Authorization: 'Bearer mock-token'}
@@ -378,7 +378,7 @@ describe('NodeCard Component', () => {
 
     test('triggers batch resource action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -432,7 +432,7 @@ describe('NodeCard Component', () => {
 
             await waitFor(() => {
                 expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/action/start'),
+                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
                     expect.objectContaining({
                         method: 'POST',
                         headers: {Authorization: 'Bearer mock-token'},
@@ -448,7 +448,7 @@ describe('NodeCard Component', () => {
 
     test('triggers individual resource action', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -479,7 +479,7 @@ describe('NodeCard Component', () => {
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Restart/i);
-            expect(dialog).toHaveTextContent(/Are you sure you want to restart on object root\/cfg\/cfg1\?/i);
+            expect(dialog).toHaveTextContent(/Are you sure you want to restart on object root\/svc\/svc1\?/i);
         });
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
@@ -500,7 +500,7 @@ describe('NodeCard Component', () => {
 
     test('expands node and resource accordion', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -537,7 +537,7 @@ describe('NodeCard Component', () => {
 
     test('cancels freeze dialog', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -602,7 +602,7 @@ describe('NodeCard Component', () => {
         });
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -653,7 +653,7 @@ describe('NodeCard Component', () => {
 
     test('displays node state from instanceMonitor', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -667,7 +667,7 @@ describe('NodeCard Component', () => {
 
     test('displays global_expect from instanceMonitor', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -683,7 +683,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {avail: 'unknown', resources: {}},
                 },
             },
@@ -716,7 +716,7 @@ describe('NodeCard Component', () => {
         });
 
         render(
-            <MemoryRouter initialEntries={['/objects/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/objects/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/objects/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -757,7 +757,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: null, // node data is null
                 },
             },
@@ -769,7 +769,7 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -786,7 +786,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'warn',
                         frozen_at: null,
@@ -802,7 +802,7 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -819,7 +819,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: null,
@@ -853,7 +853,7 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -876,7 +876,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: null,
@@ -892,7 +892,7 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -911,7 +911,7 @@ describe('NodeCard Component', () => {
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: null,
@@ -940,14 +940,14 @@ describe('NodeCard Component', () => {
                 },
             },
             instanceMonitor: {
-                'node1:root/cfg/cfg1': {
+                'node1:root/svc/svc1': {
                     resources: {
                         complexRes: {restart: {remaining: 5}},
                     },
                 },
             },
             instanceConfig: {
-                'root/cfg/cfg1': {
+                'root/svc/svc1': {
                     resources: {
                         complexRes: {
                             is_monitored: true,
@@ -964,7 +964,7 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -997,7 +997,7 @@ describe('NodeCard Component', () => {
 
     test('handles unprovision action with checkboxes', async () => {
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -1063,7 +1063,7 @@ describe('NodeCard Component', () => {
         window.dispatchEvent(new Event('resize'));
 
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>

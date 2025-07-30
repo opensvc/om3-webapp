@@ -165,9 +165,48 @@ describe('ObjectDetail Component', () => {
                     avail: 'up',
                     frozen: 'frozen',
                 },
+                'root/svc/svc1': {
+                    avail: 'up',
+                    frozen: 'frozen',
+                },
             },
             objectInstanceStatus: {
                 'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: '2023-01-01T12:00:00Z',
+                        resources: {
+                            res1: {
+                                status: 'up',
+                                label: 'Resource 1',
+                                type: 'disk',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                            res2: {
+                                status: 'down',
+                                label: 'Resource 2',
+                                type: 'network',
+                                provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
+                                running: false,
+                            },
+                        },
+                    },
+                    node2: {
+                        avail: 'down',
+                        frozen_at: null,
+                        resources: {
+                            res3: {
+                                status: 'warn',
+                                label: 'Resource 3',
+                                type: 'compute',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: false,
+                            },
+                        },
+                    },
+                },
+                'root/svc/svc1': {
                     node1: {
                         avail: 'up',
                         frozen_at: '2023-01-01T12:00:00Z',
@@ -211,9 +250,26 @@ describe('ObjectDetail Component', () => {
                         res1: {restart: {remaining: 0}},
                     },
                 },
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {
+                        res1: {restart: {remaining: 0}},
+                    },
+                },
             },
             instanceConfig: {
                 'root/cfg/cfg1': {
+                    resources: {
+                        res1: {
+                            is_monitored: true,
+                            is_disabled: false,
+                            is_standby: false,
+                            restart: 0,
+                        },
+                    },
+                },
+                'root/svc/svc1': {
                     resources: {
                         res1: {
                             is_monitored: true,
@@ -320,8 +376,13 @@ type = flag
     }, 10000);
 
     test('renders global status, nodes, and resources', async () => {
+        // Update useParams to use svc instead of cfg to allow nodes rendering
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
@@ -329,7 +390,7 @@ type = flag
         );
 
         await waitFor(() => {
-            expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
+            expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
             expect(screen.getByText('node1')).toBeInTheDocument();
             expect(screen.getByText('node2')).toBeInTheDocument();
             expect(screen.getByText(/running/i)).toBeInTheDocument();
@@ -438,6 +499,7 @@ type = flag
 
         expect(mockSubscribe).toHaveBeenCalled();
     }, 10000);
+
     test('handles non-function subscription', async () => {
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
         useEventStore.subscribe.mockReturnValue(null);
@@ -521,6 +583,28 @@ type = flag
             expect(screen.getByText(
                 /this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890/i
             )).toBeInTheDocument();
+        }, {timeout: 5000, interval: 100});
+    }, 10000);
+
+    // New test to verify nodes are not rendered for cfg kind
+    test('does not render nodes for cfg kind', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/cfg/cfg1',
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
+            expect(screen.queryByText('node1')).not.toBeInTheDocument();
+            expect(screen.queryByText('node2')).not.toBeInTheDocument();
+            expect(screen.queryByText(/Actions on Selected Nodes/i)).not.toBeInTheDocument();
         }, {timeout: 5000, interval: 100});
     }, 10000);
 });

@@ -1026,135 +1026,140 @@ const ObjectDetail = () => {
                     setParamsToDelete={setParamsToDelete}
                     disabled={actionInProgress}
                 />
-                {/* BATCH NODE ACTIONS */}
-                <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                    <Button
-                        variant="outlined"
-                        onClick={handleNodesActionsOpen}
-                        disabled={selectedNodes.length === 0}
-                        aria-label="Actions on selected nodes"
-                    >
-                        Actions on Selected Nodes
-                    </Button>
-                </Box>
-                {/* LIST OF NODES WITH THEIR RESOURCES */}
-                {memoizedNodes.map((node) => {
-                    console.log("[ObjectDetail] Rendering NodeCard for node:", node);
-                    return (
-                        <NodeCard
-                            key={node}
-                            node={node}
-                            nodeData={memoizedObjectData[node] || {}}
-                            selectedNodes={selectedNodes}
-                            toggleNode={toggleNode}
-                            selectedResourcesByNode={selectedResourcesByNode}
-                            toggleResource={toggleResource}
-                            actionInProgress={actionInProgress}
-                            individualNodeMenuAnchor={individualNodeMenuAnchor}
-                            setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                            setCurrentNode={setCurrentNode}
-                            handleResourcesActionsOpen={handleResourcesActionsOpen}
-                            handleResourceMenuOpen={handleResourceMenuOpen}
-                            expandedNodeResources={expandedNodeResources}
-                            handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
-                            expandedResources={expandedResources}
-                            handleAccordionChange={handleAccordionChange}
-                            getColor={getColor}
-                            getNodeState={getNodeState}
-                            parseProvisionedState={parseProvisionedState}
-                            setPendingAction={setPendingAction}
-                            setConfirmDialogOpen={setConfirmDialogOpen}
-                            setStopDialogOpen={setStopDialogOpen}
-                            setUnprovisionDialogOpen={setUnprovisionDialogOpen}
-                            setPurgeDialogOpen={setPurgeDialogOpen}
-                            setSimpleDialogOpen={setSimpleDialogOpen}
-                            setCheckboxes={setCheckboxes}
-                            setStopCheckbox={setStopCheckbox}
-                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                            setPurgeCheckboxes={setPurgeCheckboxes}
-                            setSelectedResourcesByNode={setSelectedResourcesByNode}
-                        />
-                    );
-                })}
-                <Menu
-                    anchorEl={nodesActionsAnchor}
-                    open={Boolean(nodesActionsAnchor)}
-                    onClose={handleNodesActionsClose}
-                >
-                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={individualNodeMenuAnchor}
-                    open={Boolean(individualNodeMenuAnchor)}
-                    onClose={() => setIndividualNodeMenuAnchor(null)}
-                >
-                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleIndividualNodeActionClick(name)}
-                        >
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={resourcesActionsAnchor}
-                    open={Boolean(resourcesActionsAnchor)}
-                    onClose={handleResourcesActionsClose}
-                >
-                    {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleBatchResourceActionClick(name)}
-                        >
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={resourceMenuAnchor}
-                    open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
-                    onClose={handleResourceMenuClose}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {(() => {
-                        if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
-                            console.error("Cannot render resource actions menu: missing currentResourceId or node data", {
-                                currentResourceId,
-                                resGroupNode,
-                                nodeData: memoizedObjectData[resGroupNode]
-                            });
-                            return [];
-                        }
-                        const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
-                        const filteredActions = getFilteredResourceActions(resourceType);
-                        console.log("Rendering resource actions menu:", {
-                            currentResourceId,
-                            resourceType,
-                            filteredActions: filteredActions.map(action => action.name),
-                        });
-                        return filteredActions.map(({name, icon}) => {
-                            console.log(`Rendering MenuItem for action: ${name}`);
+                {/* Conditionally render nodes section only if kind is not sec, cfg, or usr */}
+                {!(["sec", "cfg", "usr"].includes(kind)) && (
+                    <>
+                        {/* BATCH NODE ACTIONS */}
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
+                            <Button
+                                variant="outlined"
+                                onClick={handleNodesActionsOpen}
+                                disabled={selectedNodes.length === 0}
+                                aria-label="Actions on selected nodes"
+                            >
+                                Actions on Selected Nodes
+                            </Button>
+                        </Box>
+                        {/* LIST OF NODES WITH THEIR RESOURCES */}
+                        {memoizedNodes.map((node) => {
+                            console.log("[ObjectDetail] Rendering NodeCard for node:", node);
                             return (
+                                <NodeCard
+                                    key={node}
+                                    node={node}
+                                    nodeData={memoizedObjectData[node] || {}}
+                                    selectedNodes={selectedNodes}
+                                    toggleNode={toggleNode}
+                                    selectedResourcesByNode={selectedResourcesByNode}
+                                    toggleResource={toggleResource}
+                                    actionInProgress={actionInProgress}
+                                    individualNodeMenuAnchor={individualNodeMenuAnchor}
+                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                                    setCurrentNode={setCurrentNode}
+                                    handleResourcesActionsOpen={handleResourcesActionsOpen}
+                                    handleResourceMenuOpen={handleResourceMenuOpen}
+                                    expandedNodeResources={expandedNodeResources}
+                                    handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                                    expandedResources={expandedResources}
+                                    handleAccordionChange={handleAccordionChange}
+                                    getColor={getColor}
+                                    getNodeState={getNodeState}
+                                    parseProvisionedState={parseProvisionedState}
+                                    setPendingAction={setPendingAction}
+                                    setConfirmDialogOpen={setConfirmDialogOpen}
+                                    setStopDialogOpen={setStopDialogOpen}
+                                    setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                                    setPurgeDialogOpen={setPurgeDialogOpen}
+                                    setSimpleDialogOpen={setSimpleDialogOpen}
+                                    setCheckboxes={setCheckboxes}
+                                    setStopCheckbox={setStopCheckbox}
+                                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                                    setPurgeCheckboxes={setPurgeCheckboxes}
+                                    setSelectedResourcesByNode={setSelectedResourcesByNode}
+                                />
+                            );
+                        })}
+                        <Menu
+                            anchorEl={nodesActionsAnchor}
+                            open={Boolean(nodesActionsAnchor)}
+                            onClose={handleNodesActionsClose}
+                        >
+                            {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={individualNodeMenuAnchor}
+                            open={Boolean(individualNodeMenuAnchor)}
+                            onClose={() => setIndividualNodeMenuAnchor(null)}
+                        >
+                            {INSTANCE_ACTIONS.map(({name, icon}) => (
                                 <MenuItem
                                     key={name}
-                                    onClick={() => handleResourceActionClick(name)}
-                                    aria-label={`Resource ${currentResourceId} ${name} action`}
+                                    onClick={() => handleIndividualNodeActionClick(name)}
                                 >
                                     <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                     <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                                 </MenuItem>
-                            );
-                        });
-                    })()}
-                </Menu>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={resourcesActionsAnchor}
+                            open={Boolean(resourcesActionsAnchor)}
+                            onClose={handleResourcesActionsClose}
+                        >
+                            {RESOURCE_ACTIONS.map(({name, icon}) => (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleBatchResourceActionClick(name)}
+                                >
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={resourceMenuAnchor}
+                            open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                            onClose={handleResourceMenuClose}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {(() => {
+                                if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
+                                    console.error("Cannot render resource actions menu: missing currentResourceId or node data", {
+                                        currentResourceId,
+                                        resGroupNode,
+                                        nodeData: memoizedObjectData[resGroupNode]
+                                    });
+                                    return [];
+                                }
+                                const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
+                                const filteredActions = getFilteredResourceActions(resourceType);
+                                console.log("Rendering resource actions menu:", {
+                                    currentResourceId,
+                                    resourceType,
+                                    filteredActions: filteredActions.map(action => action.name),
+                                });
+                                return filteredActions.map(({name, icon}) => {
+                                    console.log(`Rendering MenuItem for action: ${name}`);
+                                    return (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => handleResourceActionClick(name)}
+                                            aria-label={`Resource ${currentResourceId} ${name} action`}
+                                        >
+                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                        </MenuItem>
+                                    );
+                                });
+                            })()}
+                        </Menu>
+                    </>
+                )}
                 {/* SNACKBAR */}
                 <Snackbar
                     open={snackbar.open}

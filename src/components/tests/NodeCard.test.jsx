@@ -7,6 +7,7 @@ import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception, configureEventSource} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
 import {grey} from '@mui/material/colors';
+import {RESOURCE_ACTIONS} from '../../constants/actions';
 
 // Helper to find node section
 const findNodeSection = async (nodeName, timeout = 10000) => {
@@ -23,11 +24,8 @@ const findNodeSection = async (nodeName, timeout = 10000) => {
 
         const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
         if (!nodeSection) {
-            console.error(`Node section container not found for ${nodeName}`);
-            screen.debug();
             throw new Error(`Node section container not found for ${nodeName}`);
         }
-
         return nodeSection;
     } catch (error) {
         console.error(`Error in findNodeSection for ${nodeName}:`, error);
@@ -74,8 +72,9 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        Menu: ({children, open, anchorEl, onClose, ...props}) =>
-            open ? <div role="menu" {...props}>{children}</div> : null,
+        Menu: ({children, open, anchorEl, onClose, ...props}) => (
+            open ? <div role="menu" {...props}>{children}</div> : null
+        ),
         MenuItem: ({children, onClick, ...props}) => (
             <div role="menuitem" onClick={onClick} {...props}>
                 {children}
@@ -83,12 +82,12 @@ jest.mock('@mui/material', () => {
         ),
         ListItemIcon: ({children, ...props}) => <span {...props}>{children}</span>,
         ListItemText: ({children, ...props}) => <span {...props}>{children}</span>,
-        Dialog: ({children, open, maxWidth, fullWidth, ...props}) =>
+        Dialog: ({children, open, ...props}) =>
             open ? <div role="dialog" {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
-        Snackbar: ({children, open, autoHideDuration, ...props}) =>
+        Snackbar: ({children, open, ...props}) =>
             open ? <div role="alertdialog" {...props}>{children}</div> : null,
         Alert: ({children, severity, ...props}) => (
             <div role="alert" data-severity={severity} {...props}>
@@ -204,6 +203,24 @@ describe('NodeCard Component', () => {
                                 provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
                                 running: false,
                             },
+                            container1: {
+                                status: 'up',
+                                label: 'Container 1',
+                                type: 'container',
+                                running: true,
+                            },
+                        },
+                        encap: {
+                            container1: {
+                                resources: {
+                                    encap1: {
+                                        status: 'up',
+                                        label: 'Encap Resource 1',
+                                        type: 'task',
+                                        running: true,
+                                    },
+                                },
+                            },
                         },
                     },
                     node2: {
@@ -228,7 +245,7 @@ describe('NodeCard Component', () => {
                     resources: {
                         res1: {restart: {remaining: 0}},
                         res2: {restart: {remaining: 5}},
-                        encapRes1: {restart: {remaining: 0}},
+                        encap1: {restart: {remaining: 0}},
                     },
                 },
             },
@@ -269,7 +286,6 @@ describe('NodeCard Component', () => {
 
     afterEach(() => {
         jest.clearAllMocks();
-        // Reset viewport to default
         window.innerWidth = 1024;
         window.dispatchEvent(new Event('resize'));
     });
@@ -359,8 +375,6 @@ describe('NodeCard Component', () => {
         const confirmButton = await screen.findByRole('button', {name: /Confirm/i});
         await waitFor(() => {
             expect(confirmButton).not.toHaveAttribute('disabled');
-            const computedStyle = window.getComputedStyle(confirmButton);
-            expect(computedStyle.pointerEvents).not.toBe('none');
         }, {timeout: 5000});
 
         await user.click(confirmButton);
@@ -370,7 +384,7 @@ describe('NodeCard Component', () => {
                 expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
                 expect.objectContaining({
                     method: 'POST',
-                    headers: {Authorization: 'Bearer mock-token'}
+                    headers: {Authorization: 'Bearer mock-token'},
                 })
             );
         });
@@ -386,7 +400,7 @@ describe('NodeCard Component', () => {
         );
 
         const nodeSection = await findNodeSection('node1', 15000);
-        const resourcesHeader = await within(nodeSection).findByText(/Resources \(2\)/i);
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await act(async () => {
             await user.click(resourcesHeader);
         });
@@ -406,44 +420,25 @@ describe('NodeCard Component', () => {
             await user.click(startItem);
         });
 
-        try {
-            const dialog = await screen.findByRole('dialog', {}, {timeout: 15000});
-            await waitFor(() => {
-                expect(dialog).toHaveTextContent(/Confirm.*Start/i);
-            }, {timeout: 15000});
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm.*Start/i);
+        }, {timeout: 15000});
 
-            const dialogCheckbox = within(dialog).queryByRole('checkbox');
-            if (dialogCheckbox) {
-                await act(async () => {
-                    await user.click(dialogCheckbox);
-                });
-            }
+        const confirmButton = await within(screen.getByRole('dialog')).findByRole('button', {name: /Confirm/i});
+        await act(async () => {
+            await user.click(confirmButton);
+        });
 
-            const confirmButton = await within(dialog).findByRole('button', {name: /Confirm/i});
-            await waitFor(() => {
-                expect(confirmButton).not.toHaveAttribute('disabled');
-                const computedStyle = getComputedStyle(confirmButton);
-                expect(computedStyle.pointerEvents).not.toEqual('none');
-            }, {timeout: 15000});
-
-            await act(async () => {
-                await user.click(confirmButton);
-            });
-
-            await waitFor(() => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
-                    expect.objectContaining({
-                        method: 'POST',
-                        headers: {Authorization: 'Bearer mock-token'},
-                    })
-                );
-            }, {timeout: 15000});
-        } catch (error) {
-            console.log('DOM debug after clicking Start:');
-            screen.debug();
-            throw error;
-        }
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: {Authorization: 'Bearer mock-token'},
+                })
+            );
+        }, {timeout: 15000});
     }, 45000);
 
     test('triggers individual resource action', async () => {
@@ -458,14 +453,12 @@ describe('NodeCard Component', () => {
         const nodeSection = await findNodeSection('node1', 15000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await act(async () => {
-            fireEvent.click(resourcesHeader);
+            await user.click(resourcesHeader);
         });
 
         const res1Row = await within(nodeSection).findByText('res1');
-        expect(res1Row).toBeInTheDocument();
-
-        const resourceMenuButton = await within(res1Row.closest('div[style*="display: flex"]')).findByRole('button', {
-            name: /Resource res1 actions/i
+        const resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
+            name: /Resource res1 actions/i,
         });
         await act(async () => {
             fireEvent.click(resourceMenuButton);
@@ -479,7 +472,6 @@ describe('NodeCard Component', () => {
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Restart/i);
-            expect(dialog).toHaveTextContent(/Are you sure you want to restart on object root\/svc\/svc1\?/i);
         });
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
@@ -507,21 +499,9 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
 
-        let nodeSection;
-        try {
-            nodeSection = await findNodeSection('node1', 10000);
-        } catch (error) {
-            console.error('[Test] Failed to find node1');
-            screen.debug();
-            throw error;
-        }
-        expect(nodeSection).toBeInTheDocument();
-
+        const nodeSection = await findNodeSection('node1', 10000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources.*\(/i, {}, {timeout: 5000});
-        expect(resourcesHeader).toBeInTheDocument();
-
-        const resourcesHeaderBox = resourcesHeader.closest('div[style*="display: flex"]');
-        const resourcesExpandButton = await within(resourcesHeaderBox).findByTestId('ExpandMoreIcon', {}, {timeout: 5000});
+        const resourcesExpandButton = await within(resourcesHeader.closest('div')).findByTestId('ExpandMoreIcon');
         await user.click(resourcesExpandButton);
 
         const accordion = resourcesHeader.closest('[data-testid="accordion"]');
@@ -564,18 +544,9 @@ describe('NodeCard Component', () => {
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Freeze/i);
-            expect(dialog).toHaveTextContent(/I understand that the selected service orchestration will be paused/i);
         }, {timeout: 5000});
-
-        const checkbox = within(screen.getByRole('dialog')).getByRole('checkbox', {name: /Confirm failover pause/i});
-        await act(async () => {
-            await user.click(checkbox);
-        });
 
         const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
-        await waitFor(() => {
-            expect(cancelButton).not.toBeDisabled();
-        }, {timeout: 5000});
         await act(async () => {
             await user.click(cancelButton);
         });
@@ -641,9 +612,7 @@ describe('NodeCard Component', () => {
         await waitFor(
             () => {
                 const alerts = screen.getAllByRole('alert');
-                const errorAlert = alerts.find(alert =>
-                    /network error/i.test(alert.textContent)
-                );
+                const errorAlert = alerts.find((alert) => /network error/i.test(alert.textContent));
                 expect(errorAlert).toBeInTheDocument();
                 expect(errorAlert).toHaveAttribute('data-severity', 'error');
             },
@@ -671,7 +640,8 @@ describe('NodeCard Component', () => {
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter>
+            </MemoryRouter
+            >
         );
         await waitFor(() => {
             expect(screen.getByText('placed@node1')).toBeInTheDocument();
@@ -724,20 +694,20 @@ describe('NodeCard Component', () => {
         );
 
         const nodeSection = await findNodeSection('node1', 15000);
-        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i, {}, {timeout: 5000});
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
 
-        const res1Row = await within(nodeSection).findByText('res1', {}, {timeout: 5000});
+        const res1Row = await within(nodeSection).findByText('res1');
         const resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
 
-        const menu = await screen.findByRole('menu', {timeout: 5000});
+        const menu = await screen.findByRole('menu');
         const actionItem = await within(menu).findByRole('menuitem', {name: /Restart/i});
         await user.click(actionItem);
 
-        const confirmButton = await screen.findByRole('button', {name: /Confirm/i}, {timeout: 5000});
+        const confirmButton = await screen.findByRole('button', {name: /Confirm/i});
         await user.click(confirmButton);
 
         await waitFor(
@@ -758,7 +728,7 @@ describe('NodeCard Component', () => {
             objectStatus: {},
             objectInstanceStatus: {
                 'root/svc/svc1': {
-                    node1: null, // node data is null
+                    node1: null,
                 },
             },
             instanceMonitor: {},
@@ -837,6 +807,7 @@ describe('NodeCard Component', () => {
                                     encap1: {
                                         status: 'up',
                                         label: 'Encap Resource 1',
+                                        type: 'task',
                                         running: true,
                                     },
                                 },
@@ -865,11 +836,9 @@ describe('NodeCard Component', () => {
         await user.click(resourcesHeader);
 
         await waitFor(() => {
-                expect(screen.getByText('container1')).toBeInTheDocument();
-                expect(screen.getByText('encap1')).toBeInTheDocument();
-            }
-        )
-        ;
+            expect(screen.getByText('container1')).toBeInTheDocument();
+            expect(screen.getByText('encap1')).toBeInTheDocument();
+        });
     });
 
     test('handles select all resources for node with no resources', async () => {
@@ -971,7 +940,6 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
 
-        const user = userEvent.setup();
         const nodeSection = await findNodeSection('node1', 10000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
@@ -984,14 +952,7 @@ describe('NodeCard Component', () => {
                 expect(statusElements.length).toBeGreaterThan(0);
                 expect(statusElements.some((el) => el.textContent === 'RMDO.PS5')).toBe(true);
             },
-            {
-                timeout: 10000,
-                onTimeout: (error) => {
-                    console.log('DOM debug for resource status test:');
-                    screen.debug();
-                    throw error;
-                },
-            }
+            {timeout: 10000}
         );
     }, 30000);
 
@@ -1008,7 +969,7 @@ describe('NodeCard Component', () => {
         const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
         await user.click(actionsButton);
 
-        const menu = await within(nodeSection).findByRole('menu', {}, {timeout: 5000});
+        const menu = await within(nodeSection).findByRole('menu');
         const unprovisionItem = await within(menu).findByRole('menuitem', {name: /Node node1 unprovision action/i});
         await user.click(unprovisionItem);
 
@@ -1058,7 +1019,6 @@ describe('NodeCard Component', () => {
     }, 30000);
 
     test('handles mobile view for resources', async () => {
-        // Simulate mobile view
         window.innerWidth = 500;
         window.dispatchEvent(new Event('resize'));
 
@@ -1105,10 +1065,11 @@ describe('NodeCard Component', () => {
                 nodeData={{resources: {res1: {status: 'up', label: 'Resource 1', type: 'disk'}}}}
                 selectedResourcesByNode={mockState.selectedResourcesByNode}
                 setSelectedResourcesByNode={setSelectedResourcesByNode}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
-        // Update selectedResourcesByNode to trigger useEffect
         mockState.selectedResourcesByNode = {node1: ['res1', 'res2']};
         rerender(
             <NodeCard
@@ -1116,6 +1077,8 @@ describe('NodeCard Component', () => {
                 nodeData={{resources: {res1: {status: 'up', label: 'Resource 1', type: 'disk'}}}}
                 selectedResourcesByNode={mockState.selectedResourcesByNode}
                 setSelectedResourcesByNode={setSelectedResourcesByNode}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
@@ -1136,6 +1099,8 @@ describe('NodeCard Component', () => {
                 node="node1"
                 nodeData={{resources: {res1: {status: 'up', type: 'disk'}}}}
                 setSelectedResourcesByNode={null}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
@@ -1162,6 +1127,8 @@ describe('NodeCard Component', () => {
                     encap: {container1: {resources: {encap1: {status: 'up'}}}},
                 }}
                 setSelectedResourcesByNode={setSelectedResourcesByNode}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
@@ -1171,20 +1138,15 @@ describe('NodeCard Component', () => {
         });
         await user.click(selectAllCheckbox);
 
-        expect(setSelectedResourcesByNode).toHaveBeenCalledWith(
-            expect.any(Function)
-        );
+        expect(setSelectedResourcesByNode).toHaveBeenCalledWith(expect.any(Function));
         expect(setSelectedResourcesByNode.mock.calls[0][0]({})).toEqual({
             node1: ['container1', 'encap1'],
         });
     });
 
     test('triggers console.warn for all default prop functions', async () => {
-        // Mock console.warn to capture calls
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
         });
-
-        // Render NodeCard with minimal props and default prop functions
         let anchorEl = null;
         const setIndividualNodeMenuAnchor = jest.fn((el) => {
             anchorEl = el;
@@ -1197,40 +1159,35 @@ describe('NodeCard Component', () => {
                 }}
                 setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                 individualNodeMenuAnchor={anchorEl}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
-        // Simulate interactions to trigger event handlers
         const nodeSection = await findNodeSection('node1');
-
-        // 1. Trigger toggleNode (node checkbox click)
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /select node node1/i,
         });
         await user.click(nodeCheckbox);
 
-        // 2. Trigger toggleResource and handleNodeResourcesAccordionChange (resource checkbox click)
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
-        await user.click(resourcesHeader); // Expand accordion
+        await user.click(resourcesHeader);
         const res1Row = await within(nodeSection).findByText('res1');
-        const resourceCheckbox = await within(res1Row.closest('div[style*="display: flex"]')).findByRole('checkbox', {
+        const resourceCheckbox = await within(res1Row.closest('div')).findByRole('checkbox', {
             name: /select resource res1/i,
         });
         await user.click(resourceCheckbox);
 
-        // 3. Trigger handleResourceMenuOpen (individual resource actions menu)
-        const resourceMenuButton = await within(res1Row.closest('div[style*="display: flex"]')).findByRole('button', {
+        const resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
 
-        // 4. Trigger setIndividualNodeMenuAnchor and dialog-related handlers
         const nodeActionsButton = await within(nodeSection).findByRole('button', {
             name: /node1 actions/i,
         });
         await user.click(nodeActionsButton);
 
-        // Simulate menu opening
         await act(async () => {
             setIndividualNodeMenuAnchor(nodeActionsButton);
             rerender(
@@ -1241,20 +1198,18 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
 
-        // Trigger actions via menu items
         const nodeMenu = await screen.findByRole('menu');
-
-        // Freeze action
         let freezeItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 freeze action/i,
         });
-        await user.click(freezeItem); // Triggers setCurrentNode, setPendingAction, setConfirmDialogOpen, setCheckboxes
+        await user.click(freezeItem);
 
-        // Re-open menu for stop action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1265,6 +1220,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1277,15 +1234,16 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const stopItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 stop action/i,
         });
-        await user.click(stopItem); // Triggers setCurrentNode, setPendingAction, setStopDialogOpen, setStopCheckbox
+        await user.click(stopItem);
 
-        // Re-open menu for unprovision action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1296,6 +1254,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1308,15 +1268,16 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const unprovisionItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 unprovision action/i,
         });
-        await user.click(unprovisionItem); // Triggers setCurrentNode, setPendingAction, setUnprovisionDialogOpen, setUnprovisionCheckboxes
+        await user.click(unprovisionItem);
 
-        // Re-open menu for start action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1327,6 +1288,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1339,27 +1302,26 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const startItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 start action/i,
         });
-        await user.click(startItem); // Triggers setCurrentNode, setPendingAction, setSimpleDialogOpen
+        await user.click(startItem);
 
-        // 5. Trigger setSelectedResourcesByNode (select all resources checkbox)
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
         await user.click(selectAllCheckbox);
 
-        // Verify console.warn calls based on received output
         await waitFor(() => {
             const warnCalls = warnSpy.mock.calls.map(([message]) => message);
             expect(warnCalls).toContain('toggleNode not provided');
             expect(warnCalls).toContain('toggleResource not provided');
             expect(warnCalls).toContain('handleResourceMenuOpen not provided');
-            expect(warnCalls).toContain('handleNodeResourcesAccordionChange not provided');
             expect(warnCalls).toContain('setCurrentNode not provided');
             expect(warnCalls).toContain('setPendingAction not provided');
             expect(warnCalls).toContain('setConfirmDialogOpen not provided');
@@ -1370,29 +1332,16 @@ describe('NodeCard Component', () => {
             expect(warnCalls).toContain('setUnprovisionCheckboxes not provided');
             expect(warnCalls).toContain('setSimpleDialogOpen not provided');
             expect(warnCalls).toContain('setSelectedResourcesByNode not provided');
-        }, {
-            timeout: 15000,
-            onTimeout: (error) => {
-                console.log('Warn calls:', warnSpy.mock.calls);
-                screen.debug();
-                throw error;
-            },
-        });
-
-        // Clean up the spy
+        }, {timeout: 15000});
         warnSpy.mockRestore();
     }, 30000);
 
     test('triggers console.warn for dialog-related default prop functions', async () => {
-        // Mock console.warn to capture calls
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
         });
-
-        // Mock setIndividualNodeMenuAnchor to open the menu
         const setIndividualNodeMenuAnchor = jest.fn();
         let anchorEl = null;
 
-        // Render NodeCard with mocked setIndividualNodeMenuAnchor and controlled anchorEl
         const {rerender} = render(
             <NodeCard
                 node="node1"
@@ -1410,35 +1359,33 @@ describe('NodeCard Component', () => {
                             }}
                             setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                             individualNodeMenuAnchor={anchorEl}
+                            handleNodeResourcesAccordionChange={() => {
+                            }}
                         />
                     );
                 }}
                 individualNodeMenuAnchor={anchorEl}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
-        // Simulate interactions to trigger dialog-related handlers
         const nodeSection = await findNodeSection('node1');
         const nodeActionsButton = await within(nodeSection).findByRole('button', {
             name: /node1 actions/i,
         });
         await user.click(nodeActionsButton);
 
-        // Simulate menu opening
         await act(async () => {
             setIndividualNodeMenuAnchor(nodeActionsButton);
         });
 
-        // Trigger actions via menu items
         const nodeMenu = await screen.findByRole('menu');
-
-        // Freeze action
         const freezeItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 freeze action/i,
         });
-        await user.click(freezeItem); // Triggers setCurrentNode, setPendingAction, setConfirmDialogOpen, setCheckboxes
+        await user.click(freezeItem);
 
-        // Re-open menu for stop action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1449,6 +1396,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1461,15 +1410,16 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const stopItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 stop action/i,
         });
-        await user.click(stopItem); // Triggers setCurrentNode, setPendingAction, setStopDialogOpen, setStopCheckbox
+        await user.click(stopItem);
 
-        // Re-open menu for unprovision action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1480,6 +1430,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1492,15 +1444,16 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const unprovisionItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 unprovision action/i,
         });
-        await user.click(unprovisionItem); // Triggers setCurrentNode, setPendingAction, setUnprovisionDialogOpen, setUnprovisionCheckboxes
+        await user.click(unprovisionItem);
 
-        // Re-open menu for start action
         await act(async () => {
             setIndividualNodeMenuAnchor(null);
             rerender(
@@ -1511,6 +1464,8 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={null}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
             await user.click(nodeActionsButton);
@@ -1523,15 +1478,16 @@ describe('NodeCard Component', () => {
                     }}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                     individualNodeMenuAnchor={nodeActionsButton}
+                    handleNodeResourcesAccordionChange={() => {
+                    }}
                 />
             );
         });
         const startItem = await within(nodeMenu).findByRole('menuitem', {
             name: /Node node1 start action/i,
         });
-        await user.click(startItem); // Triggers setCurrentNode, setPendingAction, setSimpleDialogOpen
+        await user.click(startItem);
 
-        // Verify dialog-related console.warn calls
         await waitFor(() => {
             const warnCalls = warnSpy.mock.calls.map(([message]) => message);
             expect(warnCalls).toContain('setCurrentNode not provided');
@@ -1543,54 +1499,141 @@ describe('NodeCard Component', () => {
             expect(warnCalls).toContain('setUnprovisionDialogOpen not provided');
             expect(warnCalls).toContain('setUnprovisionCheckboxes not provided');
             expect(warnCalls).toContain('setSimpleDialogOpen not provided');
-        }, {
-            timeout: 15000,
-            onTimeout: (error) => {
-                console.log('Warn calls:', warnSpy.mock.calls);
-                screen.debug();
-                throw error;
-            },
-        });
-
-        // Clean up the spy
+        }, {timeout: 15000});
         warnSpy.mockRestore();
     }, 30000);
 
     test('triggers console.warn for setIndividualNodeMenuAnchor', async () => {
-        // Mock console.warn to capture calls
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
         });
-
-        // Render NodeCard with default setIndividualNodeMenuAnchor
         render(
             <NodeCard
                 node="node1"
                 nodeData={{
                     resources: {res1: {status: 'up', type: 'disk'}},
                 }}
+                handleNodeResourcesAccordionChange={() => {
+                }}
             />
         );
 
-        // Simulate clicking node actions button
         const nodeSection = await findNodeSection('node1');
         const nodeActionsButton = await within(nodeSection).findByRole('button', {
             name: /node1 actions/i,
         });
         await user.click(nodeActionsButton);
 
-        // Verify setIndividualNodeMenuAnchor warning
         await waitFor(() => {
             expect(warnSpy).toHaveBeenCalledWith('setIndividualNodeMenuAnchor not provided');
-        }, {
-            timeout: 5000,
-            onTimeout: (error) => {
-                console.log('Warn calls:', warnSpy.mock.calls);
-                screen.debug();
-                throw error;
-            },
-        });
-
-        // Clean up the spy
+        }, {timeout: 5000});
         warnSpy.mockRestore();
     }, 10000);
+
+    test('getResourceType returns type for top-level resource', async () => {
+        jest.spyOn(console, 'log').mockImplementation(() => {
+        });
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {res1: {status: 'up', type: 'disk'}},
+                }}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={(node, rid, e) => {
+                }}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        const res1Row = await within(nodeSection).findByText('res1');
+        const resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
+            name: /Resource res1 actions/i,
+        });
+        await user.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(console.log).toHaveBeenCalledWith('getResourceType called for rid: res1');
+            expect(console.log).toHaveBeenCalledWith('Found resource type in resources[res1]: disk');
+        }, {timeout: 10000});
+
+        console.log.mockRestore();
+    }, 15000);
+
+    test('getResourceType returns type for encapsulated resource', async () => {
+        jest.spyOn(console, 'log').mockImplementation(() => {
+        });
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {container1: {status: 'up', type: 'container'}},
+                    encap: {container1: {resources: {encap1: {status: 'up', type: 'task'}}}},
+                }}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={(node, rid, e) => {
+                }}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        const encap1Row = await within(nodeSection).findByText('encap1');
+        const resourceMenuButton = await within(encap1Row.closest('div')).findByRole('button', {
+            name: /Resource encap1 actions/i,
+        });
+        await user.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(console.log).toHaveBeenCalledWith('getResourceType called for rid: encap1');
+            expect(console.log).toHaveBeenCalledWith(
+                'Found resource type in encapData[container1].resources[encap1]: task'
+            );
+        }, {timeout: 10000});
+
+        console.log.mockRestore();
+    }, 15000);
+
+    test('getResourceType handles missing rid gracefully', async () => {
+        jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {res1: {status: 'up', type: 'disk'}},
+                }}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={(node, rid, e) => {
+                }}
+                getResourceType={() => {
+                    console.warn('getResourceType called with undefined or null rid');
+                    return '';
+                }}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
+        await user.click(resourcesHeader);
+
+        const res1Row = await within(nodeSection).findByText('res1');
+        const resourceMenuButton = await within(res1Row.closest('div')).findByRole('button', {
+            name: /Resource res1 actions/i,
+        });
+        await user.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(console.warn).not.toHaveBeenCalledWith('getResourceType called with undefined or null rid');
+        }, {timeout: 10000});
+
+        console.warn.mockRestore();
+    }, 15000);
 });

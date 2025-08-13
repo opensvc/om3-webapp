@@ -17,7 +17,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
-import {UpdateConfigDialog, ManageConfigParamsDialog} from "./ActionDialogs";
+import {ManageConfigParamsDialog} from "./ActionDialogs";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
@@ -52,13 +52,11 @@ const getResourceType = (rid, nodeData) => {
         return '';
     }
     console.log(`getResourceType called for rid: ${rid}`);
-    // Check top-level resources
     const topLevelType = nodeData?.resources?.[rid]?.type;
     if (topLevelType) {
         console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
         return topLevelType;
     }
-    // Check encapsulated resources
     const encapData = nodeData?.encap || {};
     for (const containerId of Object.keys(encapData)) {
         const encapType = encapData[containerId]?.resources?.[rid]?.type;
@@ -87,8 +85,6 @@ const ObjectDetail = () => {
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
-    const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
-    const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [paramsToSet, setParamsToSet] = useState("");
     const [paramsToUnset, setParamsToUnset] = useState("");
@@ -385,232 +381,6 @@ const ObjectDetail = () => {
                 setConfigLoading(false);
                 console.log("[ObjectDetail] fetchConfig completed");
             }
-        }
-    };
-
-    // Update configuration for the object
-    const handleUpdateConfig = async () => {
-        console.log("[ObjectDetail] handleUpdateConfig called");
-        if (!newConfigFile) {
-            openSnackbar("Configuration file is required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionInProgress(true);
-        openSnackbar("Updating configuration…", "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
-            const response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream",
-                },
-                body: newConfigFile,
-            });
-            if (!response.ok)
-                throw new Error(`Failed to update config: ${response.status}`);
-            openSnackbar("Configuration updated successfully");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleUpdateConfig: No configNode available`);
-            }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionInProgress(false);
-            setUpdateConfigDialogOpen(false);
-            setNewConfigFile(null);
-        }
-    };
-
-    // Add configuration parameters
-    const handleAddParams = async () => {
-        console.log("[ObjectDetail] handleAddParams called with paramsToSet:", paramsToSet);
-        if (!paramsToSet) {
-            openSnackbar("Parameter input is required.", "error");
-            return false;
-        }
-        const paramList = paramsToSet.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const param of paramList) {
-            const [key, value] = param.split("=", 2);
-            if (!key || !value) {
-                openSnackbar(`Invalid format for parameter: ${param}. Use 'key=value'.`, "error");
-                continue;
-            }
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to add parameter ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error adding parameter ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully added ${successCount} parameter(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleAddParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Unset configuration parameters
-    const handleUnsetParams = async () => {
-        console.log("[ObjectDetail] handleUnsetParams called with paramsToUnset:", paramsToUnset);
-        if (!paramsToUnset) {
-            openSnackbar("Parameter key(s) to unset are required.", "error");
-            return false;
-        }
-        const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to unset provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const key of paramList) {
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(key)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to unset parameter ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error unsetting parameter ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleUnsetParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Delete configuration parameters
-    const handleDeleteParams = async () => {
-        console.log("[ObjectDetail] handleDeleteParams called with paramsToDelete:", paramsToDelete);
-        if (!paramsToDelete) {
-            openSnackbar("Parameter key(s) to delete are required.", "error");
-            return false;
-        }
-        const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to delete provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const key of paramList) {
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(key)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to delete section ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error deleting section ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleDeleteParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Handle manage parameters dialog submission
-    const handleManageParamsSubmit = async () => {
-        console.log("[ObjectDetail] handleManageParamsSubmit called");
-        let anySuccess = false;
-        if (paramsToSet) {
-            const success = await handleAddParams();
-            anySuccess = anySuccess || success;
-        }
-        if (paramsToUnset) {
-            const success = await handleUnsetParams();
-            anySuccess = anySuccess || success;
-        }
-        if (paramsToDelete) {
-            const success = await handleDeleteParams();
-            anySuccess = anySuccess || success;
-        }
-        if (anySuccess) {
-            setParamsToSet("");
-            setParamsToUnset("");
-            setParamsToDelete("");
-            setManageParamsDialogOpen(false);
         }
     };
 
@@ -964,6 +734,7 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
                 />
             </Box>
         );
@@ -1003,21 +774,12 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
                 />
-                {/* UPDATE CONFIG DIALOG */}
-                <UpdateConfigDialog
-                    open={updateConfigDialogOpen}
-                    onClose={() => setUpdateConfigDialogOpen(false)}
-                    onConfirm={handleUpdateConfig}
-                    newConfigFile={newConfigFile}
-                    setNewConfigFile={setNewConfigFile}
-                    disabled={actionInProgress}
-                />
-                {/* MANAGE CONFIG PARAMETERS DIALOG */}
                 <ManageConfigParamsDialog
                     open={manageParamsDialogOpen}
                     onClose={() => setManageParamsDialogOpen(false)}
-                    onConfirm={handleManageParamsSubmit}
+                    onConfirm={() => setManageParamsDialogOpen(false)} // Use ConfigSection's handleManageParamsSubmit via dialog
                     paramsToSet={paramsToSet}
                     setParamsToSet={setParamsToSet}
                     paramsToUnset={paramsToUnset}
@@ -1026,10 +788,8 @@ const ObjectDetail = () => {
                     setParamsToDelete={setParamsToDelete}
                     disabled={actionInProgress}
                 />
-                {/* Conditionally render nodes section only if kind is not sec, cfg, or usr */}
                 {!(["sec", "cfg", "usr"].includes(kind)) && (
                     <>
-                        {/* BATCH NODE ACTIONS */}
                         <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
                             <Button
                                 variant="outlined"
@@ -1040,7 +800,6 @@ const ObjectDetail = () => {
                                 Actions on Selected Nodes
                             </Button>
                         </Box>
-                        {/* LIST OF NODES WITH THEIR RESOURCES */}
                         {memoizedNodes.map((node) => {
                             console.log("[ObjectDetail] Rendering NodeCard for node:", node);
                             return (
@@ -1160,14 +919,18 @@ const ObjectDetail = () => {
                         </Menu>
                     </>
                 )}
-                {/* SNACKBAR */}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={5000}
                     onClose={closeSnackbar}
                     anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                 >
-                    <Alert onClose={closeSnackbar} severity={snackbar.severity} variant="filled">
+                    <Alert
+                        onClose={closeSnackbar}
+                        severity={snackbar.severity}
+                        variant="filled"
+                        aria-label={snackbar.severity === "error" ? "error alert" : `${snackbar.severity} alert`}
+                    >
                         {snackbar.message}
                     </Alert>
                 </Snackbar>

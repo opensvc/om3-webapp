@@ -15,10 +15,20 @@ import {
     DialogActions,
     Button,
     TextField,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Paper,
+    Autocomplete,
+    Grid,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
+import InfoIcon from "@mui/icons-material/Info";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 
 const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackbar}) => {
@@ -30,12 +40,21 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
-    const [paramsToSet, setParamsToSet] = useState("");
-    const [paramsToUnset, setParamsToUnset] = useState("");
-    const [paramsToDelete, setParamsToDelete] = useState("");
+    const [paramsToSet, setParamsToSet] = useState([]); // Array of {section, option, value, id, isIndexed?, prefix?}
+    const [paramsToUnset, setParamsToUnset] = useState([]); // Array of {section, option}
+    const [paramsToDelete, setParamsToDelete] = useState([]); // Array of sections
     const [actionLoading, setActionLoading] = useState(false);
+    // State for keywords
+    const [keywordsData, setKeywordsData] = useState(null);
+    const [keywordsLoading, setKeywordsLoading] = useState(false);
+    const [keywordsError, setKeywordsError] = useState(null);
+    const [keywordsDialogOpen, setKeywordsDialogOpen] = useState(false);
+    // State for existing parameters
+    const [existingParams, setExistingParams] = useState(null);
+    const [existingParamsLoading, setExistingParamsLoading] = useState(false);
+    const [existingParamsError, setExistingParamsError] = useState(null);
 
-    // Debounce ref to prevent multiple fetchConfig calls
+    // Debounce ref to prevent multiple fetch calls
     const lastFetch = useRef({});
 
     // Helper function to parse object path
@@ -102,6 +121,104 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         }
     };
 
+    // Fetch keywords for the object
+    const fetchKeywords = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken") || '';
+
+        setKeywordsLoading(true);
+        setKeywordsError(null);
+
+        // Set a timeout for the fetch operation (60 seconds)
+        const timeout = 60000;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            controller.abort();
+        }, timeout);
+
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/keywords`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`},
+                cache: "no-cache",
+                signal: controller.signal,
+            });
+
+            // Clear the timeout
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            // Log response headers and size for debugging
+            console.debug('Response headers:', [...response.headers.entries()]);
+            const contentLength = response.headers.get('Content-Length');
+            console.debug('Response content length:', contentLength || 'Unknown');
+
+            // Parse the response as JSON
+            const data = await response.json();
+            console.debug('Parsed keywords data:', data);
+
+            // Validate data
+            if (!data || !data.items) {
+                throw new Error('Invalid response format: missing items');
+            }
+
+            // Deduplicate keywordsData by section and option
+            const seen = new Set();
+            const uniqueKeywords = data.items.filter(item => {
+                const key = `${item.section || 'default'}.${item.option}`;
+                if (seen.has(key)) {
+                    console.debug(`Duplicate keyword found: ${key}`);
+                    return false;
+                }
+                seen.add(key);
+                return true;
+            });
+
+            setKeywordsData(uniqueKeywords);
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                setKeywordsError('Request timed out after 60 seconds');
+                console.error('Fetch keywords timed out');
+            } else {
+                setKeywordsError(`Failed to fetch keywords: ${err.message}`);
+                console.error('Fetch keywords error:', err);
+            }
+        } finally {
+            clearTimeout(timeoutId);
+            setKeywordsLoading(false);
+        }
+    };
+
+    // Fetch existing parameters for the object
+    const fetchExistingParams = async () => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken") || '';
+
+        setExistingParamsLoading(true);
+        setExistingParamsError(null);
+
+        try {
+            const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config`, {
+                headers: {Authorization: `Bearer ${token}`},
+                cache: "no-cache",
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            setExistingParams(data.items || []);
+        } catch (err) {
+            setExistingParamsError(`Failed to fetch existing parameters: ${err.message}`);
+        } finally {
+            setExistingParamsLoading(false);
+        }
+    };
+
     // Update configuration for the object
     const handleUpdateConfig = async () => {
         if (!newConfigFile) {
@@ -146,13 +263,8 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
     // Add configuration parameters
     const handleAddParams = async () => {
-        if (!paramsToSet) {
+        if (!paramsToSet.length) {
             openSnackbar("Parameter input is required.", "error");
-            return false;
-        }
-        const paramList = paramsToSet.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters provided.", "error");
             return false;
         }
 
@@ -165,15 +277,41 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
         setActionLoading(true);
         let successCount = 0;
-        for (const param of paramList) {
-            const [key, value] = param.split("=", 2);
-            if (!key || !value) {
-                openSnackbar(`Invalid format for parameter: ${param}. Use 'key=value'.`, "error");
-                continue;
-            }
+        for (const param of paramsToSet) {
+            const {section, option, value, isIndexed, prefix} = param;
             try {
+                // Validate against keywordsData
+                const keyword = keywordsData?.find(k => k.option === option);
+                if (!keyword) {
+                    openSnackbar(`Invalid parameter: ${section ? `${section}.` : ''}${option}`, "error");
+                    continue;
+                }
+                // Require section/index for non-DEFAULT keywords
+                if (keyword.section !== "DEFAULT" && !section) {
+                    openSnackbar(`Section${isIndexed ? ' index' : ''} is required for parameter: ${option}`, "error");
+                    continue;
+                }
+                // For indexed parameters, validate index is a non-negative integer
+                if (isIndexed) {
+                    if (!/^\d+$/.test(section)) {
+                        openSnackbar(`Invalid index for ${option}: must be a non-negative integer`, "error");
+                        continue;
+                    }
+                }
+                // Basic validation based on converter
+                if (keyword.converter === "converters.TListLowercase" && value.includes(",")) {
+                    const values = value.split(",").map(v => v.trim().toLowerCase());
+                    if (values.some(v => !v)) {
+                        openSnackbar(`Invalid value for ${option}: must be comma-separated lowercase strings`, "error");
+                        continue;
+                    }
+                }
+
+                // Construct real section
+                const real_section = isIndexed ? `${prefix}#${section}` : section;
+
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(
-                    key
+                    real_section ? `${real_section}.${option}` : option
                 )}=${encodeURIComponent(value)}`;
                 const response = await fetch(url, {
                     method: "PATCH",
@@ -182,16 +320,17 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     },
                 });
                 if (!response.ok)
-                    throw new Error(`Failed to add parameter ${key}: ${response.status}`);
+                    throw new Error(`Failed to add parameter ${option}: ${response.status}`);
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error adding parameter ${key}: ${err.message}`, "error");
+                openSnackbar(`Error adding parameter ${option}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
             openSnackbar(`Successfully added ${successCount} parameter(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
+                await fetchExistingParams(); // Refresh existing params
                 setConfigAccordionExpanded(true);
             } else {
                 console.warn(`⚠️ [handleAddParams] No configNode available for ${decodedObjectName}`);
@@ -203,13 +342,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
     // Unset configuration parameters
     const handleUnsetParams = async () => {
-        if (!paramsToUnset) {
-            openSnackbar("Parameter key(s) to unset are required.", "error");
-            return false;
-        }
-        const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to unset provided.", "error");
+        if (!paramsToUnset.length) {
             return false;
         }
 
@@ -222,10 +355,11 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
         setActionLoading(true);
         let successCount = 0;
-        for (const key of paramList) {
+        for (const param of paramsToUnset) {
+            const {section, option} = param;
             try {
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(
-                    key
+                    section ? `${section}.${option}` : option
                 )}`;
                 const response = await fetch(url, {
                     method: "PATCH",
@@ -234,16 +368,17 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     },
                 });
                 if (!response.ok)
-                    throw new Error(`Failed to unset parameter ${key}: ${response.status}`);
+                    throw new Error(`Failed to unset parameter ${option}: ${response.status}`);
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error unsetting parameter ${key}: ${err.message}`, "error");
+                openSnackbar(`Error unsetting parameter ${option}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
             openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
+                await fetchExistingParams(); // Refresh existing params
                 setConfigAccordionExpanded(true);
             } else {
                 console.warn(`⚠️ [handleUnsetParams] No configNode available for ${decodedObjectName}`);
@@ -255,13 +390,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
     // Delete configuration parameters
     const handleDeleteParams = async () => {
-        if (!paramsToDelete) {
-            openSnackbar("Parameter key(s) to delete are required.", "error");
-            return false;
-        }
-        const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to delete provided.", "error");
+        if (!paramsToDelete.length) {
             return false;
         }
 
@@ -274,11 +403,9 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
 
         setActionLoading(true);
         let successCount = 0;
-        for (const key of paramList) {
+        for (const section of paramsToDelete) {
             try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(
-                    key
-                )}`;
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(section)}`;
                 const response = await fetch(url, {
                     method: "PATCH",
                     headers: {
@@ -286,16 +413,17 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     },
                 });
                 if (!response.ok)
-                    throw new Error(`Failed to delete section ${key}: ${response.status}`);
+                    throw new Error(`Failed to delete section ${section}: ${response.status}`);
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error deleting section ${key}: ${err.message}`, "error");
+                openSnackbar(`Error deleting section ${section}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
             openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
             if (configNode) {
                 await fetchConfig(configNode);
+                await fetchExistingParams(); // Refresh existing params
                 setConfigAccordionExpanded(true);
             } else {
                 console.warn(`⚠️ [handleDeleteParams] No configNode available for ${decodedObjectName}`);
@@ -308,22 +436,26 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     // Handle manage parameters dialog submission
     const handleManageParamsSubmit = async () => {
         let anySuccess = false;
-        if (paramsToSet) {
+        if (paramsToSet.length) {
             const success = await handleAddParams();
             anySuccess = anySuccess || success;
         }
-        if (paramsToUnset) {
+        if (paramsToUnset.length) {
             const success = await handleUnsetParams();
             anySuccess = anySuccess || success;
         }
-        if (paramsToDelete) {
+        if (paramsToDelete.length) {
             const success = await handleDeleteParams();
             anySuccess = anySuccess || success;
         }
+        if (!paramsToSet.length && !paramsToUnset.length && !paramsToDelete.length) {
+            openSnackbar("No selection made", "error");
+            return;
+        }
         if (anySuccess) {
-            setParamsToSet("");
-            setParamsToUnset("");
-            setParamsToDelete("");
+            setParamsToSet([]);
+            setParamsToUnset([]);
+            setParamsToDelete([]);
             setManageParamsDialogOpen(false);
         }
     };
@@ -331,6 +463,49 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     // Handle accordion expansion
     const handleConfigAccordionChange = (event, isExpanded) => {
         setConfigAccordionExpanded(isExpanded);
+    };
+
+    // Handle keywords dialog opening
+    const handleOpenKeywordsDialog = () => {
+        setKeywordsDialogOpen(true);
+        fetchKeywords();
+    };
+
+    // Handle manage params dialog opening
+    const handleOpenManageParamsDialog = () => {
+        setManageParamsDialogOpen(true);
+        fetchKeywords();
+        fetchExistingParams();
+    };
+
+    // Get unique sections from keywords
+    const getUniqueSections = () => {
+        if (!keywordsData) return [];
+        const sections = new Set(keywordsData.map(keyword => keyword.section).filter(Boolean));
+        return ["", ...Array.from(sections)];
+    };
+
+    // Get unique sections from existing parameters
+    const getExistingSections = () => {
+        if (!existingParams) return [];
+        const sections = new Set(existingParams.map(param => {
+            const parts = param.keyword.split(".");
+            return parts.length > 1 ? parts[0] : "";
+        }).filter(Boolean));
+        return Array.from(sections);
+    };
+
+    // Get existing parameters for unset
+    const getExistingKeywords = () => {
+        if (!existingParams) return [];
+        return existingParams.map(param => {
+            const parts = param.keyword.split(".");
+            return {
+                section: parts.length > 1 ? parts[0] : "",
+                option: parts.length > 1 ? parts.slice(1).join(".") : param.keyword,
+                value: param.value,
+            };
+        });
     };
 
     // Initial load effect
@@ -400,11 +575,21 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                         <Tooltip title="Manage configuration parameters (add, unset, delete)">
                             <IconButton
                                 color="primary"
-                                onClick={() => setManageParamsDialogOpen(true)}
+                                onClick={handleOpenManageParamsDialog}
                                 disabled={actionLoading}
                                 aria-label="Manage configuration parameters"
                             >
                                 <EditIcon/>
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="View available configuration keywords">
+                            <IconButton
+                                color="primary"
+                                onClick={handleOpenKeywordsDialog}
+                                disabled={actionLoading}
+                                aria-label="View configuration keywords"
+                            >
+                                <InfoIcon/>
                             </IconButton>
                         </Tooltip>
                     </Box>
@@ -511,89 +696,220 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             <Dialog
                 open={manageParamsDialogOpen}
                 onClose={() => setManageParamsDialogOpen(false)}
-                maxWidth="sm"
+                maxWidth="md"
                 fullWidth
             >
                 <DialogTitle>Manage Configuration Parameters</DialogTitle>
                 <DialogContent>
+                    {(keywordsLoading || existingParamsLoading) && <CircularProgress size={24}/>}
+                    {keywordsError && (
+                        <Alert severity="error" sx={{mb: 2}}>
+                            {keywordsError}
+                        </Alert>
+                    )}
+                    {existingParamsError && (
+                        <Alert severity="error" sx={{mb: 2}}>
+                            {existingParamsError}
+                        </Alert>
+                    )}
                     <Typography variant="subtitle1" gutterBottom>
-                        Add parameters (one per line, e.g., section.param=value)
+                        Add parameters
                     </Typography>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Parameters to set"
-                        aria-label="Parameters to set"
-                        fullWidth
-                        variant="outlined"
-                        multiline
-                        rows={4}
-                        value={paramsToSet}
-                        onChange={(e) => setParamsToSet(e.target.value)}
-                        disabled={actionLoading}
-                        placeholder="section.param1=value1&#10;section.param2=value2"
+                    <Autocomplete
+                        multiple
+                        options={keywordsData || []}
+                        value={paramsToSet.map(p => keywordsData?.find(k => k.option === p.option) || p)}
+                        getOptionLabel={(option) => `${option.section ? `${option.section}.` : ''}${option.option}`}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Select parameters to set"
+                                placeholder="Select parameters"
+                                helperText="Select a parameter and enter its value below"
+                                InputLabelProps={{'aria-label': 'Select parameters to set'}}
+                            />
+                        )}
+                        onChange={(event, newValue) => {
+                            // Preserve existing paramsToSet values
+                            const newParams = [];
+                            const seen = new Set();
+                            const existingParamsMap = new Map(
+                                paramsToSet.map(p => [p.option, p])
+                            );
+
+                            newValue.forEach((param, index) => {
+                                const key = param.option;
+                                if (!seen.has(key)) {
+                                    seen.add(key);
+                                    const existingParam = existingParamsMap.get(key);
+                                    const isIndexed = !!param.section && param.section !== "DEFAULT";
+                                    const prefix = isIndexed ? param.section : undefined;
+                                    const section = isIndexed ? "" : (param.section === "DEFAULT" ? "DEFAULT" : param.section || "");
+                                    newParams.push({
+                                        section,
+                                        option: param.option,
+                                        value: existingParam ? existingParam.value : "",
+                                        id: existingParam ? existingParam.id : `${key}-${index}`,
+                                        isIndexed,
+                                        prefix,
+                                    });
+                                }
+                            });
+
+                            setParamsToSet(newParams);
+                        }}
+                        disabled={actionLoading || keywordsLoading}
+                        sx={{mb: 2}}
                     />
+                    {paramsToSet.length > 0 && (
+                        <Grid container spacing={2} sx={{mb: 2}}>
+                            <Grid item xs={12}>
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={2.5}>
+                                        <Typography variant="body2" fontWeight="bold">Section</Typography>
+                                    </Grid>
+                                    <Grid item xs={3}>
+                                        <Typography variant="body2" fontWeight="bold">Parameter</Typography>
+                                    </Grid>
+                                    <Grid item xs={2.5}>
+                                        <Typography variant="body2" fontWeight="bold">Value</Typography>
+                                    </Grid>
+                                    <Grid item xs={4}>
+                                        <Typography variant="body2" fontWeight="bold">Description</Typography>
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                            {paramsToSet.map((param, index) => {
+                                const keyword = keywordsData?.find(k => k.option === param.option);
+                                return (
+                                    <Grid item xs={12} key={param.id}>
+                                        <Grid container spacing={2} alignItems="center">
+                                            <Grid item xs={2.5}>
+                                                {param.isIndexed ? (
+                                                    <TextField
+                                                        fullWidth
+                                                        label="Index"
+                                                        value={param.section}
+                                                        onChange={(e) => {
+                                                            const newParams = [...paramsToSet];
+                                                            newParams[index].section = e.target.value;
+                                                            setParamsToSet(newParams);
+                                                        }}
+                                                        disabled={actionLoading}
+                                                        size="small"
+                                                        placeholder="e.g. 1"
+                                                        type="number"
+                                                        inputProps={{min: 0, step: 1}}
+                                                        InputLabelProps={{'aria-label': 'Index'}}
+                                                    />
+                                                ) : param.section === "DEFAULT" ? (
+                                                    <Typography>DEFAULT</Typography>
+                                                ) : (
+                                                    <TextField
+                                                        fullWidth
+                                                        label="Section"
+                                                        value={param.section}
+                                                        onChange={(e) => {
+                                                            const newParams = [...paramsToSet];
+                                                            newParams[index].section = e.target.value;
+                                                            setParamsToSet(newParams);
+                                                        }}
+                                                        disabled={actionLoading}
+                                                        size="small"
+                                                        placeholder="e.g., fs#1, ip#1"
+                                                        InputLabelProps={{'aria-label': 'Section'}}
+                                                    />
+                                                )}
+                                            </Grid>
+                                            <Grid item xs={3}>
+                                                <Tooltip title={keyword?.text || ""}>
+                                                    <Typography sx={{
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        whiteSpace: "nowrap"
+                                                    }}>
+                                                        {param.option}
+                                                    </Typography>
+                                                </Tooltip>
+                                            </Grid>
+                                            <Grid item xs={2.5}>
+                                                <TextField
+                                                    fullWidth
+                                                    label="Value"
+                                                    value={param.value}
+                                                    onChange={(e) => {
+                                                        const newParams = [...paramsToSet];
+                                                        newParams[index].value = e.target.value;
+                                                        setParamsToSet(newParams);
+                                                    }}
+                                                    disabled={actionLoading}
+                                                    size="small"
+                                                    InputLabelProps={{'aria-label': 'Value'}}
+                                                />
+                                            </Grid>
+                                            <Grid item xs={4}>
+                                                <Typography
+                                                    variant="caption"
+                                                    color="textSecondary"
+                                                    sx={{
+                                                        whiteSpace: "normal",
+                                                        maxHeight: "60px",
+                                                        overflowY: "auto",
+                                                        display: "block",
+                                                    }}
+                                                    title={keyword?.text || ""}
+                                                >
+                                                    {keyword?.text || "N/A"}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    </Grid>
+                                );
+                            })}
+                        </Grid>
+                    )}
                     <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                        Unset parameters (one key per line, e.g., section.param)
+                        Unset parameters
                     </Typography>
-                    <TextField
-                        margin="dense"
-                        label="Parameter keys to unset"
-                        aria-label="Parameter keys to unset"
-                        fullWidth
-                        variant="outlined"
-                        multiline
-                        rows={4}
+                    <Autocomplete
+                        multiple
+                        options={getExistingKeywords()}
                         value={paramsToUnset}
-                        onChange={(e) => setParamsToUnset(e.target.value)}
-                        disabled={actionLoading}
-                        placeholder="section.param1&#10;section.param2"
-                        sx={{
-                            "& .MuiInputBase-root": {
-                                padding: "8px",
-                                lineHeight: "1.5",
-                                minHeight: "100px",
-                            },
-                            "& .MuiInputBase-input": {
-                                overflow: "auto",
-                                boxSizing: "border-box",
-                            },
-                            "& .MuiInputLabel-root": {
-                                backgroundColor: "white",
-                                padding: "0 4px",
-                            },
+                        getOptionLabel={(option) => `${option.section ? `${option.section}.` : ''}${option.option}`}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Select parameters to unset"
+                                placeholder="Select parameters"
+                                helperText="Select existing parameters to remove their values"
+                                InputLabelProps={{'aria-label': 'Select parameters to unset'}}
+                            />
+                        )}
+                        onChange={(event, newValue) => {
+                            setParamsToUnset(newValue);
                         }}
+                        disabled={actionLoading || existingParamsLoading}
+                        sx={{mb: 2}}
                     />
                     <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                        Delete sections (one key per line, e.g., section)
+                        Delete sections
                     </Typography>
-                    <TextField
-                        margin="dense"
-                        label="Section keys to delete"
-                        aria-label="Section keys to delete"
-                        fullWidth
-                        variant="outlined"
-                        multiline
-                        rows={4}
+                    <Autocomplete
+                        multiple
+                        options={getExistingSections()}
                         value={paramsToDelete}
-                        onChange={(e) => setParamsToDelete(e.target.value)}
-                        disabled={actionLoading}
-                        placeholder="section1&#10;section2"
-                        sx={{
-                            "& .MuiInputBase-root": {
-                                padding: "8px",
-                                lineHeight: "1.5",
-                                minHeight: "100px",
-                            },
-                            "& .MuiInputBase-input": {
-                                overflow: "auto",
-                                boxSizing: "border-box",
-                            },
-                            "& .MuiInputLabel-root": {
-                                backgroundColor: "white",
-                                padding: "0 4px",
-                            },
-                        }}
+                        getOptionLabel={(option) => option}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Select sections to delete"
+                                placeholder="Select sections"
+                                helperText="Select existing sections to delete"
+                                InputLabelProps={{'aria-label': 'Select sections to delete'}}
+                            />
+                        )}
+                        onChange={(event, newValue) => setParamsToDelete(newValue)}
+                        disabled={actionLoading || existingParamsLoading}
                     />
                 </DialogContent>
                 <DialogActions>
@@ -607,10 +923,67 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                         variant="contained"
                         onClick={handleManageParamsSubmit}
                         disabled={
-                            actionLoading || (!paramsToSet && !paramsToUnset && !paramsToDelete)
+                            actionLoading
                         }
                     >
                         Apply
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* KEYWORDS DIALOG */}
+            <Dialog
+                open={keywordsDialogOpen}
+                onClose={() => setKeywordsDialogOpen(false)}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>Configuration Keywords</DialogTitle>
+                <DialogContent>
+                    {keywordsLoading && <CircularProgress size={24}/>}
+                    {keywordsError && (
+                        <Alert severity="error" sx={{mb: 2}}>
+                            {keywordsError}
+                        </Alert>
+                    )}
+                    {!keywordsLoading && !keywordsError && keywordsData === null && (
+                        <Typography color="textSecondary">No keywords available.</Typography>
+                    )}
+                    {!keywordsLoading && !keywordsError && keywordsData !== null && (
+                        <TableContainer component={Paper}>
+                            <Table aria-label="configuration keywords table">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Keyword</TableCell>
+                                        <TableCell>Description</TableCell>
+                                        <TableCell>Default</TableCell>
+                                        <TableCell>Type</TableCell>
+                                        <TableCell>Section</TableCell>
+                                        <TableCell>Scopable</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {keywordsData.map((keyword, index) => (
+                                        <TableRow key={`${keyword.section || 'default'}.${keyword.option}-${index}`}>
+                                            <TableCell>{keyword.option}</TableCell>
+                                            <TableCell>{keyword.text || "N/A"}</TableCell>
+                                            <TableCell>{keyword.default || "None"}</TableCell>
+                                            <TableCell>{keyword.converter || "N/A"}</TableCell>
+                                            <TableCell>{keyword.section || "N/A"}</TableCell>
+                                            <TableCell>{keyword.scopable ? "Yes" : "No"}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => setKeywordsDialogOpen(false)}
+                        disabled={keywordsLoading}
+                    >
+                        Close
                     </Button>
                 </DialogActions>
             </Dialog>

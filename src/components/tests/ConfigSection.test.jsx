@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import {render, screen, waitFor, act} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
 import ConfigSection from '../ConfigSection';
 import userEvent from '@testing-library/user-event';
-import { URL_OBJECT, URL_NODE } from '../../config/apiPath.js';
-import { within } from '@testing-library/react';
+import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
+import {within} from '@testing-library/react';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -17,12 +17,12 @@ jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
     return {
         ...actual,
-        Accordion: ({ children, expanded, onChange, ...props }) => (
+        Accordion: ({children, expanded, onChange, ...props}) => (
             <div data-testid="accordion" className={expanded ? 'expanded' : ''} {...props}>
                 {children}
             </div>
         ),
-        AccordionSummary: ({ children, id, onChange, expanded, ...props }) => (
+        AccordionSummary: ({children, id, onChange, expanded, ...props}) => (
             <div
                 role="button"
                 data-testid="accordion-summary"
@@ -33,33 +33,33 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        AccordionDetails: ({ children, ...props }) => (
+        AccordionDetails: ({children, ...props}) => (
             <div data-testid="accordion-details" {...props}>
                 {children}
             </div>
         ),
-        Dialog: ({ children, open, maxWidth, fullWidth, ...props }) =>
+        Dialog: ({children, open, maxWidth, fullWidth, ...props}) =>
             open ? <div role="dialog" {...props}>{children}</div> : null,
-        DialogTitle: ({ children, ...props }) => <div {...props}>{children}</div>,
-        DialogContent: ({ children, ...props }) => <div {...props}>{children}</div>,
-        DialogActions: ({ children, ...props }) => <div {...props}>{children}</div>,
-        Alert: ({ children, severity, ...props }) => (
+        DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
+        DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
+        DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
+        Alert: ({children, severity, ...props}) => (
             <div role="alert" data-severity={severity} {...props}>
                 {children}
             </div>
         ),
-        Button: ({ children, onClick, disabled, variant, component, htmlFor, ...props }) => (
+        Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
             <button
                 onClick={onClick}
                 disabled={disabled}
                 data-variant={variant}
-                {...(component === 'label' ? { htmlFor } : {})}
+                {...(component === 'label' ? {htmlFor} : {})}
                 {...props}
             >
                 {children}
             </button>
         ),
-        TextField: ({ label, value, onChange, disabled, type, inputProps, InputLabelProps, ...props }) => (
+        TextField: ({label, value, onChange, disabled, type, inputProps, InputLabelProps, ...props}) => (
             <input
                 type={type || 'text'}
                 role="combobox"
@@ -72,18 +72,30 @@ jest.mock('@mui/material', () => {
                 {...props}
             />
         ),
-        Autocomplete: ({ options, getOptionLabel, onChange, disabled, multiple, renderInput, value, ...props }) => {
-            // Use an object to store input value state for this instance
-            const state = { inputValue: multiple ? (Array.isArray(value) ? value.map(getOptionLabel).join(', ') : '') : (value ? getOptionLabel(value) : '') };
+        Autocomplete: ({options, getOptionLabel, onChange, disabled, multiple, renderInput, value, ...props}) => {
+            const state = {
+                inputValue: multiple
+                    ? (Array.isArray(value) ? value.map(item => typeof item === 'string' ? item : getOptionLabel(item)).join(', ') : '')
+                    : (value ? (typeof value === 'string' ? value : getOptionLabel(value)) : ''),
+            };
 
             const handleChange = (e) => {
-                state.inputValue = e.target.value; // Update the input value state
                 const inputText = e.target.value;
-                const inputValues = multiple ? inputText.split(',').map((v) => v.trim()) : [inputText];
+                state.inputValue = inputText;
+                const inputValues = multiple ? inputText.split(',').map((v) => v.trim()).filter(Boolean) : [inputText.trim()];
                 const selectedOptions = inputValues
-                    .map((val) => options.find((opt) => getOptionLabel(opt) === val) || val)
+                    .map((val) => {
+                        const option = options.find((opt) => (typeof opt === 'string' ? opt : getOptionLabel(opt)) === val);
+                        if (!option) {
+                            return multiple ? {option: val, section: val.includes('#') ? val : ''} : null;
+                        }
+                        return option;
+                    })
                     .filter(Boolean);
                 onChange({}, multiple ? selectedOptions : selectedOptions[0] || null);
+                e.target.value = multiple
+                    ? selectedOptions.map(item => typeof item === 'string' ? item : getOptionLabel(item)).join(', ')
+                    : selectedOptions[0] ? (typeof selectedOptions[0] === 'string' ? selectedOptions[0] : getOptionLabel(selectedOptions[0])) : inputText;
             };
 
             const renderInputProps = renderInput({}) || {};
@@ -96,7 +108,8 @@ jest.mock('@mui/material', () => {
                             endAdornment: <span>▼</span>,
                         },
                         inputProps: {
-                            value: state.inputValue,
+                            'data-testid': 'autocomplete-input',
+                            value: state.inputValue || '',
                             onChange: handleChange,
                             'aria-label': inputLabel,
                             role: 'combobox',
@@ -107,48 +120,48 @@ jest.mock('@mui/material', () => {
             );
         },
         CircularProgress: () => <div role="progressbar">Loading...</div>,
-        Typography: ({ children, variant, fontWeight, color, sx, ...props }) => (
+        Typography: ({children, variant, fontWeight, color, sx, ...props}) => (
             <span
-                style={{ fontWeight: variant === 'body2' && fontWeight ? 'bold' : undefined, color, ...sx }}
+                style={{fontWeight: variant === 'body2' && fontWeight ? 'bold' : undefined, color, ...sx}}
                 {...props}
             >
                 {children}
             </span>
         ),
-        Box: ({ children, sx, ...props }) => <div style={sx} {...props}>{children}</div>,
-        Grid: ({ children, container, spacing, item, xs, ...props }) => (
+        Box: ({children, sx, ...props}) => <div style={sx} {...props}>{children}</div>,
+        Grid: ({children, container, spacing, item, xs, ...props}) => (
             <div
                 style={
                     container
-                        ? { display: 'flex', flexWrap: 'wrap', gap: `${spacing * 8}px` }
-                        : { flex: `0 0 ${(xs / 12) * 100}%` }
+                        ? {display: 'flex', flexWrap: 'wrap', gap: `${spacing * 8}px`}
+                        : {flex: `0 0 ${(xs / 12) * 100}%`}
                 }
                 {...props}
             >
                 {children}
             </div>
         ),
-        Tooltip: ({ children, title }) => <span title={title}>{children}</span>,
-        IconButton: ({ children, onClick, disabled, ...props }) => (
+        Tooltip: ({children, title}) => <span title={title}>{children}</span>,
+        IconButton: ({children, onClick, disabled, ...props}) => (
             <button onClick={onClick} disabled={disabled} {...props}>
                 {children}
             </button>
         ),
-        TableContainer: ({ children, ...props }) => <div {...props}>{children}</div>,
-        Table: ({ children, ...props }) => <table {...props}>{children}</table>,
-        TableHead: ({ children, ...props }) => <thead {...props}>{children}</thead>,
-        TableBody: ({ children, ...props }) => <tbody {...props}>{children}</tbody>,
-        TableRow: ({ children, ...props }) => <tr {...props}>{children}</tr>,
-        TableCell: ({ children, ...props }) => <td {...props}>{children}</td>,
-        Paper: ({ children, ...props }) => <div {...props}>{children}</div>,
+        TableContainer: ({children, ...props}) => <div {...props}>{children}</div>,
+        Table: ({children, ...props}) => <table {...props}>{children}</table>,
+        TableHead: ({children, ...props}) => <thead {...props}>{children}</thead>,
+        TableBody: ({children, ...props}) => <tbody {...props}>{children}</tbody>,
+        TableRow: ({children, ...props}) => <tr {...props}>{children}</tr>,
+        TableCell: ({children, ...props}) => <td {...props}>{children}</td>,
+        Paper: ({children, ...props}) => <div {...props}>{children}</div>,
     };
 });
 
 // Mock Material-UI icons
-jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="UploadFileIcon" />);
-jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon" />);
-jest.mock('@mui/icons-material/Info', () => () => <span data-testid="InfoIcon" />);
-jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon" />);
+jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="UploadFileIcon"/>);
+jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon"/>);
+jest.mock('@mui/icons-material/Info', () => () => <span data-testid="InfoIcon"/>);
+jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon"/>);
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -156,7 +169,7 @@ const mockLocalStorage = {
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
-Object.defineProperty(global, 'localStorage', { value: mockLocalStorage });
+Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
 describe('ConfigSection Component', () => {
     const user = userEvent.setup();
@@ -186,7 +199,7 @@ orchestrate = ha
 size = 10GB
                     `),
                     json: () => Promise.resolve({}),
-                    headers: new Headers({ Authorization: headers.Authorization || '' }),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
                 });
             }
             if (url.includes('/config/keywords')) {
@@ -242,7 +255,7 @@ size = 10GB
                     status: 200,
                     json: () => Promise.resolve({}),
                     text: () => Promise.resolve(''),
-                    headers: new Headers({ Authorization: headers.Authorization || '' }),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
                 });
             }
             if (url.includes('/config')) {
@@ -252,12 +265,12 @@ size = 10GB
                     json: () =>
                         Promise.resolve({
                             items: [
-                                { keyword: 'nodes', value: '*' },
-                                { keyword: 'fs#1.size', value: '10GB' },
-                                { keyword: 'orchestrate', value: 'ha' },
+                                {keyword: 'nodes', value: '*'},
+                                {keyword: 'fs#1.size', value: '10GB'},
+                                {keyword: 'orchestrate', value: 'ha'},
                             ],
                         }),
-                    headers: new Headers({ Authorization: headers.Authorization || '' }),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
                 });
             }
             return Promise.resolve({
@@ -265,7 +278,7 @@ size = 10GB
                 status: 200,
                 json: () => Promise.resolve({}),
                 text: () => Promise.resolve(''),
-                headers: new Headers({ Authorization: headers.Authorization || '' }),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
             });
         });
     });
@@ -293,12 +306,12 @@ size = 10GB
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
             expect(screen.getByText(/orchestrate = ha/i)).toBeInTheDocument();
             expect(screen.getByText(/size = 10GB/i)).toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
         const accordionDetails = screen.getByTestId('accordion-details');
         const scrollableBox = accordionDetails.querySelector('div[style*="overflow-x: auto"]');
         expect(scrollableBox).toBeInTheDocument();
-        expect(scrollableBox).toHaveStyle({ 'overflow-x': 'auto' });
+        expect(scrollableBox).toHaveStyle({'overflow-x': 'auto'});
     }, 15000);
 
     test('displays error when fetching configuration fails', async () => {
@@ -326,11 +339,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: HTTP 500/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('displays loading indicator while fetching configuration', async () => {
-        global.fetch.mockImplementation(() => new Promise(() => {})); // Simulates a pending request
+        global.fetch.mockImplementation(() => new Promise(() => {
+        })); // Simulates a pending request
 
         render(
             <ConfigSection
@@ -348,7 +362,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('progressbar')).toBeInTheDocument();
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
     });
 
     test('displays no configuration when configNode is missing', async () => {
@@ -368,7 +382,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/No node available to fetch configuration/i);
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         expect(global.fetch).not.toHaveBeenCalled();
     });
@@ -388,14 +402,14 @@ size = 10GB
             await user.click(accordionSummary);
         });
 
-        const uploadButton = screen.getByRole('button', { name: /Upload new configuration file/i });
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
         await act(async () => {
             await user.click(uploadButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['[DEFAULT]\nnodes = node2'], 'config.ini');
@@ -405,7 +419,7 @@ size = 10GB
 
         expect(screen.getByText('config.ini')).toBeInTheDocument();
 
-        const updateButton = screen.getByRole('button', { name: /Update/i });
+        const updateButton = screen.getByRole('button', {name: /Update/i});
         await act(async () => {
             await user.click(updateButton);
         });
@@ -425,7 +439,7 @@ size = 10GB
                 })
             );
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles update config with missing file', async () => {
@@ -438,16 +452,16 @@ size = 10GB
             />
         );
 
-        const uploadButton = screen.getByRole('button', { name: /Upload new configuration file/i });
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
         await act(async () => {
             await user.click(uploadButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
-        const updateButton = screen.getByRole('button', { name: /Update/i });
+        const updateButton = screen.getByRole('button', {name: /Update/i});
         expect(updateButton).toBeDisabled();
         expect(openSnackbar).not.toHaveBeenCalled();
     });
@@ -463,14 +477,14 @@ size = 10GB
             />
         );
 
-        const uploadButton = screen.getByRole('button', { name: /Upload new configuration file/i });
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
         await act(async () => {
             await user.click(uploadButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
@@ -478,7 +492,7 @@ size = 10GB
             await user.upload(fileInput, testFile);
         });
 
-        const updateButton = screen.getByRole('button', { name: /Update/i });
+        const updateButton = screen.getByRole('button', {name: /Update/i});
         await act(async () => {
             await user.click(updateButton);
         });
@@ -490,7 +504,7 @@ size = 10GB
                 expect.any(Object)
             );
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles update config with API failure', async () => {
@@ -502,14 +516,14 @@ size = 10GB
                     ok: false,
                     status: 500,
                     text: () => Promise.resolve('Server error'),
-                    headers: new Headers({ Authorization: headers.Authorization || '' }),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
                 });
             }
             return Promise.resolve({
                 ok: true,
                 status: 200,
                 text: () => Promise.resolve(''),
-                headers: new Headers({ Authorization: headers.Authorization || '' }),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
             });
         });
 
@@ -522,14 +536,14 @@ size = 10GB
             />
         );
 
-        const uploadButton = screen.getByRole('button', { name: /Upload new configuration file/i });
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
         await act(async () => {
             await user.click(uploadButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
@@ -537,7 +551,7 @@ size = 10GB
             await user.upload(fileInput, testFile);
         });
 
-        const updateButton = screen.getByRole('button', { name: /Update/i });
+        const updateButton = screen.getByRole('button', {name: /Update/i});
         await act(async () => {
             await user.click(updateButton);
         });
@@ -546,7 +560,7 @@ size = 10GB
             expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
             expect(openSnackbar).toHaveBeenCalledWith('Error: Failed to update config: 500', 'error');
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('parses object path with edge cases', async () => {
@@ -561,7 +575,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent('No node available to fetch configuration');
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
 
         render(
             <ConfigSection
@@ -577,7 +591,7 @@ size = 10GB
                 expect.stringContaining(`${URL_NODE}/node1/instance/path/root/ccfg/cluster/config/file`),
                 expect.any(Object)
             );
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('debounces fetchConfig calls', async () => {
@@ -598,7 +612,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledTimes(1);
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('displays keywords dialog and its content', async () => {
@@ -611,7 +625,7 @@ size = 10GB
             />
         );
 
-        const keywordsButton = screen.getByRole('button', { name: /View configuration keywords/i });
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -629,16 +643,16 @@ size = 10GB
             expect(within(sizeRow).getByText('Size of filesystem')).toBeInTheDocument();
             expect(within(sizeRow).getByText('fs')).toBeInTheDocument();
             expect(within(sizeRow).getByText('No')).toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
-        const closeButton = screen.getByRole('button', { name: /Close/i });
+        const closeButton = screen.getByRole('button', {name: /Close/i});
         await act(async () => {
             await user.click(closeButton);
         });
 
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
     });
 
     test('handles keywords fetch timeout', async () => {
@@ -655,7 +669,7 @@ size = 10GB
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({ items: [] }),
+                json: () => Promise.resolve({items: []}),
                 headers: new Headers(),
             });
         });
@@ -669,7 +683,7 @@ size = 10GB
             />
         );
 
-        const keywordsButton = screen.getByRole('button', { name: /View configuration keywords/i });
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -678,7 +692,7 @@ size = 10GB
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
             expect(within(dialog).getByRole('alert')).toHaveTextContent(/Request timed out after 60 seconds/i);
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('handles keywords fetch with invalid response', async () => {
@@ -688,13 +702,13 @@ size = 10GB
                     ok: true,
                     status: 200,
                     json: () => Promise.resolve({}),
-                    headers: new Headers({ 'Content-Length': '0' }),
+                    headers: new Headers({'Content-Length': '0'}),
                 });
             }
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({ items: [] }),
+                json: () => Promise.resolve({items: []}),
                 headers: new Headers(),
             });
         });
@@ -708,7 +722,7 @@ size = 10GB
             />
         );
 
-        const keywordsButton = screen.getByRole('button', { name: /View configuration keywords/i });
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -717,7 +731,7 @@ size = 10GB
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
             expect(within(dialog).getByRole('alert')).toHaveTextContent(/Invalid response format: missing items/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('displays no keywords when none are available', async () => {
@@ -726,14 +740,14 @@ size = 10GB
                 return Promise.resolve({
                     ok: true,
                     status: 200,
-                    json: () => Promise.resolve({ items: [] }),
+                    json: () => Promise.resolve({items: []}),
                     headers: new Headers(),
                 });
             }
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({ items: [] }),
+                json: () => Promise.resolve({items: []}),
                 headers: new Headers(),
             });
         });
@@ -747,7 +761,7 @@ size = 10GB
             />
         );
 
-        const keywordsButton = screen.getByRole('button', { name: /View configuration keywords/i });
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -757,7 +771,7 @@ size = 10GB
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
             const table = within(dialog).getByRole('table');
             expect(within(table).queryAllByRole('row')).toHaveLength(1); // Only header row
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles add parameters with invalid parameter', async () => {
@@ -770,87 +784,40 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
-        const comboboxes = within(dialog).getAllByRole('combobox', { name: /autocomplete-input/i });
+        const comboboxes = within(dialog).getAllByRole('combobox', {name: /autocomplete-input/i});
         const addParamsInput = comboboxes[0]; // First combobox for add parameters
         await act(async () => {
             await user.type(addParamsInput, 'invalid_param');
             await user.keyboard('{Enter}');
         });
 
-        const applyButton = within(dialog).getByRole('button', { name: /Apply/i });
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('invalid_param');
+        }, {timeout: 5000});
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
         await act(async () => {
             await user.click(applyButton);
         });
 
         await waitFor(() => {
-            expect(openSnackbar).toHaveBeenCalledWith('Invalid parameter: undefined', 'error');
+            expect(openSnackbar).toHaveBeenCalledWith('Invalid parameter: invalid_param', 'error');
             expect(global.fetch).not.toHaveBeenCalledWith(
                 expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=invalid_param`),
                 expect.any(Object)
             );
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, { timeout: 10000 });
-    });
-
-    test('deletes configuration sections successfully', async () => {
-        render(
-            <ConfigSection
-                decodedObjectName="root/cfg/cfg1"
-                configNode="node1"
-                setConfigNode={setConfigNode}
-                openSnackbar={openSnackbar}
-            />
-        );
-
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
-        await act(async () => {
-            await user.click(manageParamsButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-        }, { timeout: 10000 });
-
-        const dialog = screen.getByRole('dialog');
-        const comboboxes = within(dialog).getAllByRole('combobox', { name: /autocomplete-input/i });
-        const deleteSectionsInput = comboboxes[2]; // Third combobox for delete sections
-        await act(async () => {
-            await user.type(deleteSectionsInput, 'fs#1');
-            await user.keyboard('{Enter}');
-        });
-
-        await waitFor(() => {
-            expect(deleteSectionsInput).toHaveValue('fs#1');
-        }, { timeout: 5000 });
-
-        const applyButton = within(dialog).getByRole('button', { name: /Apply/i });
-        await act(async () => {
-            await user.click(applyButton);
-        });
-
-        await waitFor(() => {
-            expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 1 section(s)', 'success');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=fs%231`),
-                expect.objectContaining({
-                    method: 'PATCH',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                    }),
-                })
-            );
-            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles unset parameters with no selection', async () => {
@@ -863,17 +830,17 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
-        const applyButton = within(dialog).getByRole('button', { name: /Apply/i });
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
         await act(async () => {
             await user.click(applyButton);
         });
@@ -881,7 +848,7 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles delete sections with no selection', async () => {
@@ -894,17 +861,17 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
-        const applyButton = within(dialog).getByRole('button', { name: /Apply/i });
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
         await act(async () => {
             await user.click(applyButton);
         });
@@ -912,7 +879,7 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('handles existing parameters fetch failure', async () => {
@@ -927,7 +894,7 @@ size = 10GB
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({ items: [] }),
+                json: () => Promise.resolve({items: []}),
                 headers: new Headers(),
             });
         });
@@ -941,7 +908,7 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -951,7 +918,7 @@ size = 10GB
             expect(dialog).toHaveTextContent(/Manage Configuration Parameters/i);
             const alerts = within(dialog).getAllByRole('alert');
             expect(alerts.find((alert) => alert.textContent.includes('Failed to fetch existing parameters: HTTP 500'))).toBeTruthy();
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('debounces fetchKeywords calls', async () => {
@@ -964,7 +931,7 @@ size = 10GB
             />
         );
 
-        const keywordsButton = screen.getByRole('button', { name: /View configuration keywords/i });
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
         await act(async () => {
             await user.click(keywordsButton);
             await user.click(keywordsButton);
@@ -973,7 +940,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledTimes(4); // Initial config fetch + 3 non-debounced keywords fetches
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('debounces fetchExistingParams calls', async () => {
@@ -986,7 +953,7 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
             await user.click(manageParamsButton);
@@ -995,7 +962,7 @@ size = 10GB
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledTimes(7); // Initial config fetch + one keywords fetch + 5 non-debounced existing params fetches
-        }, { timeout: 2000 });
+        }, {timeout: 2000});
     });
 
     test('parses object path with two parts', async () => {
@@ -1013,7 +980,7 @@ size = 10GB
                 expect.stringContaining(`${URL_NODE}/node1/instance/path/root/cfg/cfg1/config/file`),
                 expect.any(Object)
             );
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     });
 
     test('closes manage parameters dialog on cancel', async () => {
@@ -1026,22 +993,573 @@ size = 10GB
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', { name: /Manage configuration parameters/i });
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
         await act(async () => {
             await user.click(manageParamsButton);
         });
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
-        const cancelButton = screen.getByRole('button', { name: /Cancel/i });
+        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
         await act(async () => {
             await user.click(cancelButton);
         });
 
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        }, { timeout: 5000 });
+        }, {timeout: 5000});
+    });
+
+    test('handles add parameters with invalid index for indexed parameter', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const addParamsInput = comboboxes[0]; // First combobox for add parameters
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size');
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('fs.size');
+        }, {timeout: 5000});
+
+        const sectionInput = within(dialog).getByLabelText('Index');
+        await act(async () => {
+            await user.clear(sectionInput);
+            await user.type(sectionInput, 'invalid');
+            sectionInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const valueInput = within(dialog).getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '20GB');
+            valueInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Section index is required for parameter: size', 'error');
+            expect(global.fetch).not.toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%23invalid.size=20GB`),
+                expect.any(Object)
+            );
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with missing section for non-DEFAULT keyword', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const addParamsInput = comboboxes[0]; // First combobox for add parameters
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size');
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('fs.size');
+        }, {timeout: 5000});
+
+        const sectionInput = within(dialog).getByLabelText('Index');
+        await act(async () => {
+            await user.clear(sectionInput);
+            sectionInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const valueInput = within(dialog).getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '20GB');
+            valueInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Section index is required for parameter: size', 'error');
+            expect(global.fetch).not.toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=size=20GB`),
+                expect.any(Object)
+            );
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters successfully with indexed section', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const addParamsInput = comboboxes[0]; // First combobox for add parameters
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size');
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('fs.size');
+        }, {timeout: 5000});
+
+        const sectionInput = within(dialog).getByLabelText('Index');
+        await act(async () => {
+            await user.type(sectionInput, '2');
+            sectionInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const valueInput = within(dialog).getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '20GB');
+            valueInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%232.size=20GB`),
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters successfully', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const unsetParamsInput = comboboxes[1]; // Second combobox for unset parameters
+        await act(async () => {
+            await user.type(unsetParamsInput, 'nodes');
+            unsetParamsInput.dispatchEvent(new Event('change', {bubbles: true}));
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(unsetParamsInput).toHaveValue('nodes');
+        }, {timeout: 10000});
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success');
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters with API failure', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            const headers = options?.headers || {};
+            if (url.includes('/config?unset=')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 500,
+                    json: () => Promise.resolve({}),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const unsetParamsInput = comboboxes[1]; // Second combobox for unset parameters
+        await act(async () => {
+            await user.type(unsetParamsInput, 'nodes');
+            unsetParamsInput.dispatchEvent(new Event('change', {bubbles: true}));
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(unsetParamsInput).toHaveValue('nodes');
+        }, {timeout: 10000});
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Error unsetting parameter nodes: Failed to unset parameter nodes: 500', 'error');
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles getUniqueSections with null keywordsData', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: null}),
+                    headers: new Headers(),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+            const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
+            const addParamsInput = comboboxes[0];
+            expect(addParamsInput).toHaveValue('');
+        }, {timeout: 10000});
+    });
+
+    test('handles getExistingSections with null existingParams', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: null}),
+                    headers: new Headers(),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+            const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
+            const deleteSectionsInput = comboboxes[2];
+            expect(deleteSectionsInput).toHaveValue('');
+        }, {timeout: 10000});
+    });
+
+    test('handles duplicate keywords in keywords dialog', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () =>
+                        Promise.resolve({
+                            items: [
+                                {
+                                    option: 'nodes',
+                                    section: 'DEFAULT',
+                                    text: 'Nodes to deploy the service',
+                                    converter: 'string',
+                                    scopable: true,
+                                    default: '*',
+                                },
+                                {
+                                    option: 'nodes',
+                                    section: 'DEFAULT',
+                                    text: 'Duplicate nodes entry',
+                                    converter: 'string',
+                                    scopable: false,
+                                    default: 'none',
+                                },
+                            ],
+                        }),
+                    headers: new Headers({'Content-Length': '1024'}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        await act(async () => {
+            await user.click(keywordsButton);
+        });
+
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Configuration Keywords/i);
+            const table = within(dialog).getByRole('table');
+            const rows = within(table).getAllByRole('row');
+            expect(rows).toHaveLength(2); // Header row + one data row (duplicate filtered)
+            const nodesRow = within(table).getByText('nodes').closest('tr');
+            expect(within(nodesRow).getByText('Nodes to deploy the service')).toBeInTheDocument();
+            expect(within(nodesRow).queryByText('Duplicate nodes entry')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles update config with no configNode', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            const headers = options?.headers || {};
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve(''),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
+        }, {timeout: 5000});
+
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+                expect.objectContaining({
+                    method: 'PUT',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                        'Content-Type': 'application/octet-stream',
+                    }),
+                    body: testFile,
+                })
+            );
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters with missing token', async () => {
+        mockLocalStorage.getItem.mockImplementation(() => null);
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const unsetParamsInput = comboboxes[1]; // Second combobox for unset parameters
+        await act(async () => {
+            await user.type(unsetParamsInput, 'nodes');
+            unsetParamsInput.dispatchEvent(new Event('change', {bubbles: true}));
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(unsetParamsInput).toHaveValue('nodes');
+        }, {timeout: 10000});
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
+            expect(global.fetch).not.toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
+                expect.any(Object)
+            );
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
     });
 });

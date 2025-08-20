@@ -29,7 +29,7 @@ export const FreezeDialog = ({open, onClose, onConfirm, checked, setChecked, dis
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
@@ -62,12 +62,12 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
-                color="error"
+                color="primary"
                 disabled={!checked || disabled}
                 onClick={onConfirm}
                 aria-label="Confirm stop action"
@@ -95,12 +95,12 @@ export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, di
             />
         </DialogContent>
         <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={disabled} variant="outlined">
+            <Button onClick={onClose} disabled={false} variant="outlined">
                 Cancel
             </Button>
             <Button
                 variant="contained"
-                color="error"
+                color="primary"
                 disabled={!checked || disabled}
                 onClick={onConfirm}
                 aria-label="Confirm restart action"
@@ -128,7 +128,7 @@ export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disa
             />
         </DialogContent>
         <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={disabled} variant="outlined">
+            <Button onClick={onClose} disabled={false} variant="outlined">
                 Cancel
             </Button>
             <Button
@@ -161,7 +161,7 @@ export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disa
             />
         </DialogContent>
         <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={disabled} variant="outlined">
+            <Button onClick={onClose} disabled={false} variant="outlined">
                 Cancel
             </Button>
             <Button
@@ -228,12 +228,12 @@ export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setChec
                 />
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} disabled={disabled}>
+                <Button onClick={onClose} disabled={false}>
                     Cancel
                 </Button>
                 <Button
                     variant="contained"
-                    color="error"
+                    color="primary"
                     disabled={
                         !checkboxes.dataLoss ||
                         !checkboxes.serviceInterruption ||
@@ -296,12 +296,12 @@ export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
-                color="error"
+                color="primary"
                 disabled={
                     !checkboxes.dataLoss ||
                     !checkboxes.configLoss ||
@@ -348,12 +348,12 @@ export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxe
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
-                color="error"
+                color="primary"
                 disabled={!checkboxes.configLoss || !checkboxes.clusterwide || disabled}
                 onClick={onConfirm}
                 aria-label="Confirm delete action"
@@ -414,7 +414,7 @@ export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, d
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
@@ -446,14 +446,15 @@ export const DeleteKeyDialog = ({
             </Typography>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
-                color="error"
+                color="primary"
                 onClick={onConfirm}
                 disabled={disabled}
+                aria-label="Confirm delete key action"
             >
                 Delete
             </Button>
@@ -484,6 +485,7 @@ export const CreateKeyDialog = ({
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
                 disabled={disabled}
+                aria-label="Key name input"
             />
             <Box sx={{mt: 2}}>
                 <input
@@ -512,13 +514,15 @@ export const CreateKeyDialog = ({
             </Box>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
+                color="primary"
                 onClick={onConfirm}
                 disabled={disabled || !newKeyName || !newKeyFile}
+                aria-label="Confirm create key action"
             >
                 Create
             </Button>
@@ -549,6 +553,7 @@ export const UpdateKeyDialog = ({
                 value={updateKeyName}
                 onChange={(e) => setUpdateKeyName(e.target.value)}
                 disabled={disabled}
+                aria-label="Key name input"
             />
             <Box sx={{mt: 2}}>
                 <input
@@ -577,13 +582,15 @@ export const UpdateKeyDialog = ({
             </Box>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
+                color="primary"
                 onClick={onConfirm}
                 disabled={disabled || !updateKeyName || !updateKeyFile}
+                aria-label="Confirm update key action"
             >
                 Update
             </Button>
@@ -630,13 +637,15 @@ export const UpdateConfigDialog = ({
             </Box>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
+                color="primary"
                 onClick={onConfirm}
                 disabled={disabled || !newConfigFile}
+                aria-label="Confirm update config action"
             >
                 Update
             </Button>
@@ -674,7 +683,9 @@ export const ManageConfigParamsDialog = ({
                 value={paramsToSet}
                 onChange={(e) => setParamsToSet(e.target.value)}
                 disabled={disabled}
-                placeholder="section.param1=value1&#10;section.param2=value2"
+                placeholder="section.param1=value1
+                section.param2=value2"
+                aria-label="Parameters to set input"
             />
             <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
                 Unset parameters (one key per line, e.g., section.param)
@@ -690,6 +701,7 @@ export const ManageConfigParamsDialog = ({
                 onChange={(e) => setParamsToUnset(e.target.value)}
                 disabled={disabled}
                 placeholder="section.param1&#10;section.param2"
+                aria-label="Parameters to unset input"
                 sx={{
                     "& .MuiInputBase-root": {
                         padding: "8px",
@@ -720,6 +732,7 @@ export const ManageConfigParamsDialog = ({
                 onChange={(e) => setParamsToDelete(e.target.value)}
                 disabled={disabled}
                 placeholder="section1&#10;section2"
+                aria-label="Sections to delete input"
                 sx={{
                     "& .MuiInputBase-root": {
                         padding: "8px",
@@ -738,16 +751,15 @@ export const ManageConfigParamsDialog = ({
             />
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
+            <Button onClick={onClose} disabled={false}>
                 Cancel
             </Button>
             <Button
                 variant="contained"
+                color="primary"
                 onClick={onConfirm}
-                disabled={
-                    disabled ||
-                    (!paramsToSet && !paramsToUnset && !paramsToDelete)
-                }
+                disabled={disabled || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
+                aria-label="Apply configuration changes"
             >
                 Apply
             </Button>
@@ -765,8 +777,15 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) 
             </Typography>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="contained" onClick={onConfirm} aria-label={`Confirm ${action} action`}>
+            <Button onClick={onClose} disabled={false}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                onClick={onConfirm}
+                aria-label={`Confirm ${action} action`}
+            >
                 Confirm
             </Button>
         </DialogActions>

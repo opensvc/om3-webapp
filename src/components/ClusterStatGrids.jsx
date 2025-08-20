@@ -94,14 +94,14 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                 label={namespace}
                                 size="small"
                                 sx={{
-                                    backgroundColor: 'default', // Utilise la couleur par défaut de MUI
+                                    backgroundColor: 'default',
                                     cursor: 'pointer',
                                     minWidth: "fit-content",
-                                    px: 1.5 // Padding horizontal pour centrer le texte
+                                    px: 1.5
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onClick(`/namespaces?namespace=${namespace}`);
+                                    onClick(`/objects?namespace=${namespace}`);
                                 }}
                             />
                             <Box sx={{
@@ -241,5 +241,52 @@ export const GridPools = ({poolCount, onClick}) => (
         title="Pools"
         value={poolCount}
         onClick={onClick}
+    />
+);
+
+export const GridNetworks = ({networks, onClick}) => (
+    <StatCard
+        title="Networks"
+        value={networks.length}
+        subtitle={
+            <Box sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                pt: 1,
+                maxHeight: '400px',
+                overflowY: 'auto',
+                justifyContent: 'flex-start'
+            }}>
+                {networks.map((network) => {
+                    const usagePercentage = network.size
+                        ? ((network.used / network.size) * 100).toFixed(1)
+                        : 0;
+                    const isLowStorage = network.size ? ((network.free / network.size) * 100) < 10 : false;
+                    return (
+                        <Box key={network.name} sx={{
+                            position: 'relative',
+                            display: 'inline-flex',
+                            flexShrink: 0,
+                            margin: "4px"
+                        }}>
+                            <Chip
+                                label={`${network.name} (${usagePercentage}% used)`}
+                                size="small"
+                                sx={{
+                                    backgroundColor: isLowStorage ? 'red' : 'default',
+                                    color: isLowStorage ? 'white' : 'inherit',
+                                    cursor: 'pointer',
+                                    minWidth: "fit-content",
+                                    px: 1.5
+                                }}
+                            />
+                        </Box>
+                    );
+                })}
+            </Box>
+        }
+        onClick={() => onClick()}
+        dynamicHeight
     />
 );

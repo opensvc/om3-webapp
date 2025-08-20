@@ -3,55 +3,71 @@ import {useParams} from "react-router-dom";
 import {
     Box,
     Typography,
-    Tooltip,
-    Divider,
     Snackbar,
     Alert,
     Menu,
     MenuItem,
-    IconButton,
-    FormControlLabel,
-    Checkbox,
     Button,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
     ListItemIcon,
     ListItemText,
     CircularProgress,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    TextField,
 } from "@mui/material";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DeleteIcon from "@mui/icons-material/Delete";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
-import {
-    UpdateConfigDialog,
-    ManageConfigParamsDialog,
-} from "./ActionDialogs";
-import {isActionAllowedForSelection, extractKind} from "../utils/objectUtils";
+import {ManageConfigParamsDialog} from "./ActionDialogs";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
 import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+
+// Helper function to filter resource actions based on type
+const getFilteredResourceActions = (resourceType) => {
+    console.log("getFilteredResourceActions called with resourceType:", resourceType);
+    if (!resourceType) {
+        console.log("No resource type provided, returning all actions");
+        return RESOURCE_ACTIONS;
+    }
+    const typePrefix = resourceType.split('.')[0].toLowerCase();
+    console.log("Resource type prefix:", typePrefix);
+    if (typePrefix === 'task') {
+        console.log("Type is task, returning only 'run' action");
+        return RESOURCE_ACTIONS.filter(action => action.name === 'run');
+    }
+    if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+        console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
+        return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
+    }
+    console.log("No special filtering, returning all actions");
+    return RESOURCE_ACTIONS;
+};
+
+// Helper function to get resource type for a given resource ID
+const getResourceType = (rid, nodeData) => {
+    if (!rid) {
+        console.warn("getResourceType called with undefined or null rid");
+        return '';
+    }
+    console.log(`getResourceType called for rid: ${rid}`);
+    const topLevelType = nodeData?.resources?.[rid]?.type;
+    if (topLevelType) {
+        console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
+        return topLevelType;
+    }
+    const encapData = nodeData?.encap || {};
+    for (const containerId of Object.keys(encapData)) {
+        const encapType = encapData[containerId]?.resources?.[rid]?.type;
+        if (encapType) {
+            console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
+            return encapType;
+        }
+    }
+    console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
+    return '';
+};
 
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -60,6 +76,7 @@ const ObjectDetail = () => {
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
+    const instanceConfig = useEventStore((s) => s.instanceConfig);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
 
@@ -68,8 +85,6 @@ const ObjectDetail = () => {
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
-    const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
-    const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [paramsToSet, setParamsToSet] = useState("");
     const [paramsToUnset, setParamsToUnset] = useState("");
@@ -120,6 +135,9 @@ const ObjectDetail = () => {
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
 
+    // State for initial loading
+    const [initialLoading, setInitialLoading] = useState(true);
+
     // Debounce ref to prevent multiple fetchConfig calls
     const lastFetch = useRef({});
     // Ref to track subscription status
@@ -136,6 +154,7 @@ const ObjectDetail = () => {
         return () => {
             console.log(`[ObjectDetail] Unmounting component for ${decodedObjectName}`);
             isMounted.current = false;
+            closeEventSource();
         };
     }, [decodedObjectName]);
 
@@ -146,7 +165,7 @@ const ObjectDetail = () => {
 
     // Initialize and update accordion states for nodes and resources
     useEffect(() => {
-        if (!objectData) return; // Skip if no data
+        if (!objectData) return;
         console.log("[ObjectDetail] Updating accordion states for nodes and resources");
         const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
         setExpandedNodeResources((prev) => {
@@ -340,7 +359,7 @@ const ObjectDetail = () => {
                     headers: {Authorization: `Bearer ${token}`},
                     cache: "no-cache",
                 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000)),
             ]);
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
@@ -362,232 +381,6 @@ const ObjectDetail = () => {
                 setConfigLoading(false);
                 console.log("[ObjectDetail] fetchConfig completed");
             }
-        }
-    };
-
-    // Update configuration for the object
-    const handleUpdateConfig = async () => {
-        console.log("[ObjectDetail] handleUpdateConfig called");
-        if (!newConfigFile) {
-            openSnackbar("Configuration file is required.", "error");
-            return;
-        }
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setActionInProgress(true);
-        openSnackbar("Updating configuration…", "info");
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config/file`;
-            const response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/octet-stream",
-                },
-                body: newConfigFile,
-            });
-            if (!response.ok)
-                throw new Error(`Failed to update config: ${response.status}`);
-            openSnackbar("Configuration updated successfully");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleUpdateConfig: No configNode available`);
-            }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-        } finally {
-            setActionInProgress(false);
-            setUpdateConfigDialogOpen(false);
-            setNewConfigFile(null);
-        }
-    };
-
-    // Add configuration parameters
-    const handleAddParams = async () => {
-        console.log("[ObjectDetail] handleAddParams called with paramsToSet:", paramsToSet);
-        if (!paramsToSet) {
-            openSnackbar("Parameter input is required.", "error");
-            return false;
-        }
-        const paramList = paramsToSet.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const param of paramList) {
-            const [key, value] = param.split("=", 2);
-            if (!key || !value) {
-                openSnackbar(`Invalid format for parameter: ${param}. Use 'key=value'.`, "error");
-                continue;
-            }
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to add parameter ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error adding parameter ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully added ${successCount} parameter(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleAddParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Unset configuration parameters
-    const handleUnsetParams = async () => {
-        console.log("[ObjectDetail] handleUnsetParams called with paramsToUnset:", paramsToUnset);
-        if (!paramsToUnset) {
-            openSnackbar("Parameter key(s) to unset are required.", "error");
-            return false;
-        }
-        const paramList = paramsToUnset.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to unset provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const key of paramList) {
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(key)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to unset parameter ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error unsetting parameter ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleUnsetParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Delete configuration parameters
-    const handleDeleteParams = async () => {
-        console.log("[ObjectDetail] handleDeleteParams called with paramsToDelete:", paramsToDelete);
-        if (!paramsToDelete) {
-            openSnackbar("Parameter key(s) to delete are required.", "error");
-            return false;
-        }
-        const paramList = paramsToDelete.split("\n").filter((param) => param.trim());
-        if (paramList.length === 0) {
-            openSnackbar("No valid parameters to delete provided.", "error");
-            return false;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return false;
-        }
-
-        setActionInProgress(true);
-        let successCount = 0;
-        for (const key of paramList) {
-            try {
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?delete=${encodeURIComponent(key)}`;
-                const response = await fetch(url, {
-                    method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                if (!response.ok)
-                    throw new Error(`Failed to delete section ${key}: ${response.status}`);
-                successCount++;
-            } catch (err) {
-                openSnackbar(`Error deleting section ${key}: ${err.message}`, "error");
-            }
-        }
-        if (successCount > 0) {
-            openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
-            if (configNode) {
-                await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
-            } else {
-                console.warn(`[ObjectDetail] handleDeleteParams: No configNode available`);
-            }
-        }
-        setActionInProgress(false);
-        return successCount > 0;
-    };
-
-    // Handle manage parameters dialog submission
-    const handleManageParamsSubmit = async () => {
-        console.log("[ObjectDetail] handleManageParamsSubmit called");
-        let anySuccess = false;
-        if (paramsToSet) {
-            const success = await handleAddParams();
-            anySuccess = anySuccess || success;
-        }
-        if (paramsToUnset) {
-            const success = await handleUnsetParams();
-            anySuccess = anySuccess || success;
-        }
-        if (paramsToDelete) {
-            const success = await handleDeleteParams();
-            anySuccess = anySuccess || success;
-        }
-        if (anySuccess) {
-            setParamsToSet("");
-            setParamsToUnset("");
-            setParamsToDelete("");
-            setManageParamsDialogOpen(false);
         }
     };
 
@@ -686,7 +479,10 @@ const ObjectDetail = () => {
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
     };
-    const handleResourceMenuClose = () => setResourceMenuAnchor(null);
+    const handleResourceMenuClose = () => {
+        setResourceMenuAnchor(null);
+        setCurrentResourceId(null);
+    };
     const handleResourceActionClick = (action) => {
         console.log("[ObjectDetail] handleResourceActionClick:", action, currentResourceId);
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
@@ -760,10 +556,6 @@ const ObjectDetail = () => {
 
     // Effect for configuring EventSource
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping EventSource for ${decodedObjectName}`);
-            return;
-        }
         console.log(`[ObjectDetail] Setting up EventSource for ${decodedObjectName}`);
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -783,14 +575,10 @@ const ObjectDetail = () => {
             console.log(`[ObjectDetail] Cleaning up EventSource for ${decodedObjectName}`);
             closeEventSource();
         };
-    }, [decodedObjectName, objectData]);
+    }, [decodedObjectName]);
 
     // Effect for handling config updates
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping configUpdates subscription for ${decodedObjectName}`);
-            return;
-        }
         console.log("[ObjectDetail] Setting up configUpdates subscription");
         if (!isMounted.current) {
             console.log("[ObjectDetail] Component unmounted, skipping subscription");
@@ -849,29 +637,41 @@ const ObjectDetail = () => {
                 console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
-    }, [decodedObjectName, clearConfigUpdate, objectData]);
+    }, [decodedObjectName, clearConfigUpdate]);
 
     // Initial load effects
     useEffect(() => {
-        if (!objectData) {
-            console.log(`[ObjectDetail] No object data, skipping initial config load for ${decodedObjectName}`);
-            setConfigError("No nodes available to fetch configuration.");
-            return;
-        }
-        console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
         const loadInitialConfig = async () => {
-            const initialNode = Object.keys(objectInstanceStatus[decodedObjectName] || {})[0];
-            if (initialNode) {
-                console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
-                try {
-                    await fetchConfig(initialNode);
-                } catch (err) {
-                    console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
+            console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
+            if (objectData) {
+                const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+                const initialNode = nodes.find((node) => {
+                    const hasValidEncapResources =
+                        objectData[node]?.encap &&
+                        Object.values(objectData[node].encap).some(
+                            (container) => container.resources && Object.keys(container.resources).length > 0
+                        );
+                    console.log(`[ObjectDetail] Checking node ${node} for valid encap resources:`, hasValidEncapResources);
+                    return hasValidEncapResources;
+                }) || nodes[0];
+
+                if (initialNode) {
+                    console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
+                    try {
+                        await fetchConfig(initialNode);
+                    } catch (err) {
+                        console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
+                        setConfigError("Failed to load initial configuration.");
+                    }
+                } else {
+                    setConfigError("No nodes available to fetch configuration.");
+                    console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
                 }
             } else {
-                setConfigError("No nodes available to fetch configuration.");
-                console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
+                console.log("[ObjectDetail] No object data available, skipping config fetch");
+                setConfigError("No object data available.");
             }
+            setInitialLoading(false);
         };
 
         loadInitialConfig();
@@ -880,8 +680,22 @@ const ObjectDetail = () => {
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
         console.log("[ObjectDetail] Memoizing objectData:", objectData);
-        return objectData;
-    }, [objectData]);
+        console.log("[ObjectDetail] instanceConfig state:", instanceConfig);
+        const enhancedObjectData = {};
+        if (objectData) {
+            Object.keys(objectData).forEach((node) => {
+                console.log(`[ObjectDetail] Node ${node} encap:`, objectData[node]?.encap);
+                enhancedObjectData[node] = {
+                    ...objectData[node],
+                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName] : {resources: {}},
+                    instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
+                };
+            });
+        }
+        console.log("[ObjectDetail] Enhanced memoizedObjectData:", enhancedObjectData);
+        return enhancedObjectData;
+    }, [objectData, instanceConfig, instanceMonitor, decodedObjectName]);
+
     const memoizedNodes = useMemo(() => {
         console.log("[ObjectDetail] Memoizing nodes:", Object.keys(memoizedObjectData || {}));
         return Object.keys(memoizedObjectData || {});
@@ -889,20 +703,42 @@ const ObjectDetail = () => {
 
     console.log("[ObjectDetail] Rendering with memoizedObjectData:", memoizedObjectData);
 
-    if (!memoizedObjectData) {
-        console.log("[ObjectDetail] No object data, rendering empty state");
+    // Render loading state only if no data is available during initial loading
+    if (initialLoading && !memoizedObjectData) {
         return (
-            <Box p={4}>
-                <Typography align="center" color="textSecondary" fontSize="1.2rem">
-                    No information available for object <code>{decodedObjectName}</code>.
-                </Typography>
+            <Box p={4} display="flex" justifyContent="center" alignItems="center">
+                <CircularProgress/>
+                <Typography ml={2}>Loading object data...</Typography>
             </Box>
         );
     }
 
+    // Render empty state with separate Typography for object name
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
     console.log("[ObjectDetail] showKeys:", showKeys, "kind:", kind);
+
+    if (!memoizedObjectData) {
+        console.log("[ObjectDetail] No object data, rendering empty state");
+        return (
+            <Box p={4}>
+                <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
+                <Typography align="center" color="textSecondary" fontSize="1.2rem">
+                    No information available for object.
+                </Typography>
+                {showKeys && memoizedObjectData && (
+                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                )}
+                <ConfigSection
+                    decodedObjectName={decodedObjectName}
+                    configNode={configNode}
+                    setConfigNode={setConfigNode}
+                    openSnackbar={openSnackbar}
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
+                />
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
@@ -930,27 +766,20 @@ const ObjectDetail = () => {
                     }
                     onClose={() => setPendingAction(null)}
                 />
-                <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                {showKeys && (
+                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                )}
                 <ConfigSection
                     decodedObjectName={decodedObjectName}
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
                 />
-                {/* UPDATE CONFIG DIALOG */}
-                <UpdateConfigDialog
-                    open={updateConfigDialogOpen}
-                    onClose={() => setUpdateConfigDialogOpen(false)}
-                    onConfirm={handleUpdateConfig}
-                    newConfigFile={newConfigFile}
-                    setNewConfigFile={setNewConfigFile}
-                    disabled={actionInProgress}
-                />
-                {/* MANAGE CONFIG PARAMETERS DIALOG */}
                 <ManageConfigParamsDialog
                     open={manageParamsDialogOpen}
                     onClose={() => setManageParamsDialogOpen(false)}
-                    onConfirm={handleManageParamsSubmit}
+                    onConfirm={() => setManageParamsDialogOpen(false)} // Use ConfigSection's handleManageParamsSubmit via dialog
                     paramsToSet={paramsToSet}
                     setParamsToSet={setParamsToSet}
                     paramsToUnset={paramsToUnset}
@@ -959,118 +788,149 @@ const ObjectDetail = () => {
                     setParamsToDelete={setParamsToDelete}
                     disabled={actionInProgress}
                 />
-                {/* BATCH NODE ACTIONS */}
-                <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                    <Button
-                        variant="outlined"
-                        onClick={handleNodesActionsOpen}
-                        disabled={selectedNodes.length === 0}
-                        aria-label="Actions on selected nodes"
-                    >
-                        Actions on Selected Nodes
-                    </Button>
-                </Box>
-                {/* LIST OF NODES WITH THEIR RESOURCES */}
-                {memoizedNodes.map((node) => {
-                    console.log("[ObjectDetail] Rendering NodeCard for node:", node);
-                    return (
-                        <NodeCard
-                            key={node}
-                            node={node}
-                            nodeData={memoizedObjectData[node] || {}}
-                            selectedNodes={selectedNodes}
-                            toggleNode={toggleNode}
-                            selectedResourcesByNode={selectedResourcesByNode}
-                            toggleResource={toggleResource}
-                            actionInProgress={actionInProgress}
-                            individualNodeMenuAnchor={individualNodeMenuAnchor}
-                            setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                            setCurrentNode={setCurrentNode}
-                            handleResourcesActionsOpen={handleResourcesActionsOpen}
-                            handleResourceMenuOpen={handleResourceMenuOpen}
-                            expandedNodeResources={expandedNodeResources}
-                            handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
-                            expandedResources={expandedResources}
-                            handleAccordionChange={handleAccordionChange}
-                            getColor={getColor}
-                            getNodeState={getNodeState}
-                            parseProvisionedState={parseProvisionedState}
-                            setPendingAction={setPendingAction}
-                            setConfirmDialogOpen={setConfirmDialogOpen}
-                            setStopDialogOpen={setStopDialogOpen}
-                            setUnprovisionDialogOpen={setUnprovisionDialogOpen}
-                            setPurgeDialogOpen={setPurgeDialogOpen}
-                            setSimpleDialogOpen={setSimpleDialogOpen}
-                            setCheckboxes={setCheckboxes}
-                            setStopCheckbox={setStopCheckbox}
-                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                            setPurgeCheckboxes={setPurgeCheckboxes}
-                            setSelectedResourcesByNode={setSelectedResourcesByNode}
-                        />
-                    );
-                })}
-                <Menu
-                    anchorEl={nodesActionsAnchor}
-                    open={Boolean(nodesActionsAnchor)}
-                    onClose={handleNodesActionsClose}
-                >
-                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={individualNodeMenuAnchor}
-                    open={Boolean(individualNodeMenuAnchor)}
-                    onClose={() => setIndividualNodeMenuAnchor(null)}
-                >
-                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleIndividualNodeActionClick(name)}
+                {!(["sec", "cfg", "usr"].includes(kind)) && (
+                    <>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
+                            <Button
+                                variant="outlined"
+                                onClick={handleNodesActionsOpen}
+                                disabled={selectedNodes.length === 0}
+                                aria-label="Actions on selected nodes"
+                            >
+                                Actions on Selected Nodes
+                            </Button>
+                        </Box>
+                        {memoizedNodes.map((node) => {
+                            console.log("[ObjectDetail] Rendering NodeCard for node:", node);
+                            return (
+                                <NodeCard
+                                    key={node}
+                                    node={node}
+                                    nodeData={memoizedObjectData[node] || {}}
+                                    selectedNodes={selectedNodes}
+                                    toggleNode={toggleNode}
+                                    selectedResourcesByNode={selectedResourcesByNode}
+                                    toggleResource={toggleResource}
+                                    actionInProgress={actionInProgress}
+                                    individualNodeMenuAnchor={individualNodeMenuAnchor}
+                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                                    setCurrentNode={setCurrentNode}
+                                    handleResourcesActionsOpen={handleResourcesActionsOpen}
+                                    handleResourceMenuOpen={handleResourceMenuOpen}
+                                    expandedNodeResources={expandedNodeResources}
+                                    handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                                    expandedResources={expandedResources}
+                                    handleAccordionChange={handleAccordionChange}
+                                    getColor={getColor}
+                                    getNodeState={getNodeState}
+                                    parseProvisionedState={parseProvisionedState}
+                                    setPendingAction={setPendingAction}
+                                    setConfirmDialogOpen={setConfirmDialogOpen}
+                                    setStopDialogOpen={setStopDialogOpen}
+                                    setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                                    setPurgeDialogOpen={setPurgeDialogOpen}
+                                    setSimpleDialogOpen={setSimpleDialogOpen}
+                                    setCheckboxes={setCheckboxes}
+                                    setStopCheckbox={setStopCheckbox}
+                                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                                    setPurgeCheckboxes={setPurgeCheckboxes}
+                                    setSelectedResourcesByNode={setSelectedResourcesByNode}
+                                />
+                            );
+                        })}
+                        <Menu
+                            anchorEl={nodesActionsAnchor}
+                            open={Boolean(nodesActionsAnchor)}
+                            onClose={handleNodesActionsClose}
                         >
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={resourcesActionsAnchor}
-                    open={Boolean(resourcesActionsAnchor)}
-                    onClose={handleResourcesActionsClose}
-                >
-                    {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={() => handleBatchResourceActionClick(name)}
+                            {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={individualNodeMenuAnchor}
+                            open={Boolean(individualNodeMenuAnchor)}
+                            onClose={() => setIndividualNodeMenuAnchor(null)}
                         >
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                <Menu
-                    anchorEl={resourceMenuAnchor}
-                    open={Boolean(resourceMenuAnchor)}
-                    onClose={handleResourceMenuClose}
-                >
-                    {RESOURCE_ACTIONS.map(({name, icon}) => (
-                        <MenuItem key={name} onClick={() => handleResourceActionClick(name)}>
-                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-                {/* SNACKBAR */}
+                            {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleIndividualNodeActionClick(name)}
+                                >
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={resourcesActionsAnchor}
+                            open={Boolean(resourcesActionsAnchor)}
+                            onClose={handleResourcesActionsClose}
+                        >
+                            {RESOURCE_ACTIONS.map(({name, icon}) => (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleBatchResourceActionClick(name)}
+                                >
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                        <Menu
+                            anchorEl={resourceMenuAnchor}
+                            open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                            onClose={handleResourceMenuClose}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {(() => {
+                                if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
+                                    console.error("Cannot render resource actions menu: missing currentResourceId or node data", {
+                                        currentResourceId,
+                                        resGroupNode,
+                                        nodeData: memoizedObjectData[resGroupNode]
+                                    });
+                                    return [];
+                                }
+                                const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
+                                const filteredActions = getFilteredResourceActions(resourceType);
+                                console.log("Rendering resource actions menu:", {
+                                    currentResourceId,
+                                    resourceType,
+                                    filteredActions: filteredActions.map(action => action.name),
+                                });
+                                return filteredActions.map(({name, icon}) => {
+                                    console.log(`Rendering MenuItem for action: ${name}`);
+                                    return (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => handleResourceActionClick(name)}
+                                            aria-label={`Resource ${currentResourceId} ${name} action`}
+                                        >
+                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                        </MenuItem>
+                                    );
+                                });
+                            })()}
+                        </Menu>
+                    </>
+                )}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={5000}
                     onClose={closeSnackbar}
                     anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                 >
-                    <Alert onClose={closeSnackbar} severity={snackbar.severity} variant="filled">
+                    <Alert
+                        onClose={closeSnackbar}
+                        severity={snackbar.severity}
+                        variant="filled"
+                        aria-label={snackbar.severity === "error" ? "error alert" : `${snackbar.severity} alert`}
+                    >
                         {snackbar.message}
                     </Alert>
                 </Snackbar>

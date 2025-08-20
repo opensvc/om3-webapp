@@ -6,3 +6,5 @@ export const URL_CLUSTER_STATUS = '/api/cluster/status';
 export const URL_POOL = '/api/pool';
 export const URL_OBJECT = '/api/object/path';
 export const URL_NODE = '/api/node/name';
+export const URL_NETWORK = "/api/network";
+export const URL_NETWORK_IP = "/api/network/ip";

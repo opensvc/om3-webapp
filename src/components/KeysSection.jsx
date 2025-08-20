@@ -34,7 +34,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
     const [keysError, setKeysError] = useState(null);
-    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(false);
+    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(true);
 
     // State for key actions
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

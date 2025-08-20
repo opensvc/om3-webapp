@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import '@testing-library/jest-dom';
-import {GridNodes, GridObjects, GridNamespaces, GridHeartbeats, GridPools} from '../ClusterStatGrids.jsx';
+import {GridNodes, GridObjects, GridNamespaces, GridHeartbeats, GridPools, GridNetworks} from '../ClusterStatGrids.jsx';
 
 describe('ClusterStatGrids', () => {
     const mockOnClick = jest.fn();
@@ -241,5 +241,92 @@ describe('ClusterStatGrids', () => {
 
         fireEvent.click(screen.getByText('Down 1'));
         expect(mockOnClick).toHaveBeenCalledWith('down');
+    });
+
+    test('GridHeartbeats renders correctly for single node', () => {
+        const stateCount = {running: 3, stopped: 0, failed: 0, warning: 0, unknown: 0};
+        render(
+            <GridHeartbeats
+                heartbeatCount={3}
+                beatingCount={3}
+                nonBeatingCount={0}
+                stateCount={stateCount}
+                nodeCount={1}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.getByText('Heartbeats')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+        const beatingChipLabel = screen.getByText('Beating 3');
+        expect(beatingChipLabel).toBeInTheDocument();
+        expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
+
+        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
+        expect(beatingChip).toHaveStyle('background-color: green');
+        expect(beatingChip).toHaveAttribute('title', 'Healthy (Single Node)');
+
+        fireEvent.click(beatingChipLabel);
+        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+    });
+
+    test('GridNetworks renders correctly with networks and handles click', () => {
+        const mockNetworks = [
+            {name: 'network1', size: 100, used: 50, free: 50}, // 50% free
+            {name: 'network2', size: 200, used: 182, free: 18} // 9% free (<10%)
+        ];
+
+        render(
+            <GridNetworks
+                networks={mockNetworks}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.getByText('Networks')).toBeInTheDocument();
+        expect(screen.getByText('2')).toBeInTheDocument();
+        expect(screen.getByText('network1 (50.0% used)')).toBeInTheDocument();
+        expect(screen.getByText('network2 (91.0% used)')).toBeInTheDocument();
+
+        const network1Chip = screen.getByText('network1 (50.0% used)').closest('.MuiChip-root');
+        const network2Chip = screen.getByText('network2 (91.0% used)').closest('.MuiChip-root');
+        expect(network1Chip).not.toHaveStyle('background-color: red');
+        expect(network2Chip).toHaveStyle('background-color: red');
+
+        const card = screen.getByText('Networks').closest('div');
+        fireEvent.click(card);
+        expect(mockOnClick).toHaveBeenCalled();
+    });
+
+    test('GridNetworks handles empty networks array', () => {
+        render(
+            <GridNetworks
+                networks={[]}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.getByText('Networks')).toBeInTheDocument();
+        expect(screen.getByText('0')).toBeInTheDocument();
+    });
+
+    test('GridNetworks handles network with zero size', () => {
+        const mockNetworks = [
+            {name: 'network1', size: 0, used: 0, free: 0}
+        ];
+
+        render(
+            <GridNetworks
+                networks={mockNetworks}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.getByText('Networks')).toBeInTheDocument();
+        expect(screen.getByText('1')).toBeInTheDocument();
+        expect(screen.getByText('network1 (0% used)')).toBeInTheDocument();
+
+        const networkChip = screen.getByText('network1 (0% used)').closest('.MuiChip-root');
+        expect(networkChip).not.toHaveStyle('background-color: red');
     });
 });

@@ -36,6 +36,8 @@ describe('OidcCallback Component', () => {
         events: {
             addUserLoaded: jest.fn(),
             addAccessTokenExpiring: jest.fn(),
+            addAccessTokenExpired: jest.fn(),
+            addSilentRenewError: jest.fn(),
         },
     };
     const mockRecreateUserManager = jest.fn();
@@ -58,7 +60,7 @@ describe('OidcCallback Component', () => {
             userManager: null,
             recreateUserManager: mockRecreateUserManager,
         });
-        oidcConfiguration.mockReturnValue({some: 'config'});
+        oidcConfiguration.mockResolvedValue({some: 'config'});
         console.error = jest.fn();
         console.log = jest.fn();
     });
@@ -72,17 +74,18 @@ describe('OidcCallback Component', () => {
         useAuthInfo.mockReturnValue(mockAuthInfo);
         render(<OidcCallback/>);
         await waitFor(() => {
-
             expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
             expect(oidcConfiguration).toHaveBeenCalledWith(mockAuthInfo);
-            expect(console.log).toHaveBeenCalledWith('OidcCallback recreate user manager');
+            expect(console.log).toHaveBeenCalledWith('Initializing UserManager with authInfo');
         });
     });
 
-    test('does not call recreateUserManager when authInfo is null', () => {
+    test('does not call recreateUserManager when authInfo is null', async () => {
         render(<OidcCallback/>);
-        expect(mockRecreateUserManager).not.toHaveBeenCalled();
-        expect(oidcConfiguration).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockRecreateUserManager).not.toHaveBeenCalled();
+            expect(oidcConfiguration).not.toHaveBeenCalled();
+        });
     });
 
     test('calls signinRedirectCallback when userManager exists', async () => {
@@ -95,7 +98,7 @@ describe('OidcCallback Component', () => {
 
         await waitFor(() => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
-            expect(console.log).toHaveBeenCalledWith('OidcCallback signinRedirectCallback');
+            expect(console.log).toHaveBeenCalledWith('Handling signinRedirectCallback');
         });
     });
 
@@ -126,8 +129,7 @@ describe('OidcCallback Component', () => {
             expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled();
             expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled();
             expect(mockNavigate).toHaveBeenCalledWith('/');
-            expect(console.log).toHaveBeenCalledWith('user: ', 'testuser', 'expires_at:', 1234567890);
-            expect(console.log).toHaveBeenCalledWith('OidcCallback signinRedirectCallback navigate /');
+            expect(console.log).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
         });
     });
 
@@ -145,8 +147,8 @@ describe('OidcCallback Component', () => {
             expect(localStorage.getItem('authToken')).toBeNull();
             expect(localStorage.getItem('tokenExpiration')).toBeNull();
             expect(mockAuthDispatch).not.toHaveBeenCalled();
-            expect(mockNavigate).not.toHaveBeenCalled();
-            expect(console.error).toHaveBeenCalledWith('OidcCallback signinRedirectCallback failed:', error);
+            expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
+            expect(console.error).toHaveBeenCalledWith('signinRedirectCallback failed:', error);
         });
     });
 
@@ -172,12 +174,12 @@ describe('OidcCallback Component', () => {
         });
         expect(localStorage.getItem('authToken')).toBe('mock-access-token');
         expect(localStorage.getItem('tokenExpiration')).toBe('1234567890');
-        expect(console.log).toHaveBeenCalledWith('🎉 user loaded renewed!');
+        expect(console.log).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
 
         const addAccessTokenExpiringCallback = mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0];
         addAccessTokenExpiringCallback();
 
-        expect(console.log).toHaveBeenCalledWith('⚠️ Access token is about to expire...');
+        expect(console.log).toHaveBeenCalledWith('Access token is about to expire, attempting silent renew...');
     });
 
     test('re-runs effect when authInfo changes', async () => {
@@ -185,14 +187,14 @@ describe('OidcCallback Component', () => {
         const {rerender} = render(<OidcCallback/>);
         await waitFor(() => {
             expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
-        })
+        });
         useAuthInfo.mockReturnValue({different: 'auth-info'});
-        oidcConfiguration.mockReturnValue({different: 'config'});
+        oidcConfiguration.mockResolvedValue({different: 'config'});
         rerender(<OidcCallback/>);
 
         await waitFor(() => {
             expect(mockRecreateUserManager).toHaveBeenCalledWith({different: 'config'});
-        })
+        });
         expect(oidcConfiguration).toHaveBeenCalledWith({different: 'auth-info'});
     });
 

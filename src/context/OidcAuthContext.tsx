@@ -1,24 +1,31 @@
-import React, {createContext, useContext, useState} from "react";
+import React, {createContext, useContext, useState, useEffect} from "react";
 import {UserManager, UserManagerSettings} from "oidc-client-ts";
 
 export interface OidcContextType {
-    userManager: UserManager;
+    userManager: UserManager | null;
     recreateUserManager: (settings: UserManagerSettings) => void;
 }
 
 const OidcContext = createContext<OidcContextType | null>(null);
 
 export const OidcProvider = ({children}: { children: React.ReactNode }) => {
-    // Store the UserManager instance in state
-    const [userManager, setUserManager] = useState(null as unknown as UserManager);
+    const [userManager, setUserManager] = useState<UserManager | null>(null);
 
     const recreateUserManager = (settings: UserManagerSettings) => {
+        console.log("Recreating UserManager with settings:", settings);
         // Clean up the old UserManager instance
         cleanupUserManager(userManager);
         // Create and set a new UserManager
         const newUserManager = new UserManager(settings);
         setUserManager(newUserManager);
     };
+
+    // Cleanup on component unmount
+    useEffect(() => {
+        return () => {
+            cleanupUserManager(userManager);
+        };
+    }, [userManager]);
 
     return (
         <OidcContext.Provider value={{userManager, recreateUserManager}}>
@@ -37,8 +44,9 @@ export const useOidc = () => {
 };
 
 // Cleanup function to dispose of UserManager events
-export function cleanupUserManager(userManager: UserManager) {
+export function cleanupUserManager(userManager: UserManager | null) {
     if (!userManager) return;
+    console.log("Cleaning up UserManager events");
     userManager.events.removeUserLoaded(() => {
     });
     userManager.events.removeUserUnloaded(() => {

@@ -63,6 +63,7 @@ describe('OidcCallback Component', () => {
         oidcConfiguration.mockResolvedValue({some: 'config'});
         console.error = jest.fn();
         console.log = jest.fn();
+        console.warn = jest.fn();
     });
 
     test('renders loading text', () => {
@@ -223,5 +224,49 @@ describe('OidcCallback Component', () => {
         await waitFor(() => {
             expect(newUserManager.signinRedirectCallback).toHaveBeenCalled();
         });
+    });
+
+    // New test for addAccessTokenExpired event
+    test('handles access token expired event', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.signinRedirectCallback.mockResolvedValue(mockUser);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalledWith(expect.any(Function));
+        });
+
+        const addAccessTokenExpiredCallback = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
+        addAccessTokenExpiredCallback();
+
+        expect(console.warn).toHaveBeenCalledWith('Access token expired, redirecting to /auth-choice');
+        expect(localStorage.getItem('authToken')).toBeNull();
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
+    });
+
+    test('handles silent renew error event', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.signinRedirectCallback.mockResolvedValue(mockUser);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalledWith(expect.any(Function));
+        });
+
+        const addSilentRenewErrorCallback = mockUserManager.events.addSilentRenewError.mock.calls[0][0];
+        const error = new Error('Silent renew error');
+        addSilentRenewErrorCallback(error);
+
+        expect(console.error).toHaveBeenCalledWith('Silent renew failed:', error);
+        expect(localStorage.getItem('authToken')).toBeNull();
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
 });

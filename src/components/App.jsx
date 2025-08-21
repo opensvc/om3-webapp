@@ -21,12 +21,18 @@ import {OidcProvider} from "../context/OidcAuthContext.tsx";
 import {AuthProvider} from "../context/AuthProvider";
 
 const isTokenValid = (token) => {
-    if (!token) return false;
+    if (!token) {
+        console.log("No token found in localStorage");
+        return false;
+    }
 
     try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         const now = Date.now() / 1000;
-        return payload.exp > now;
+        const expiration = payload.exp;
+        const isValid = expiration > now;
+        console.log(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
+        return isValid;
     } catch (error) {
         console.error("Error while verifying token:", error);
         return false;
@@ -39,6 +45,7 @@ const ProtectedRoute = ({children}) => {
     if (!isTokenValid(token)) {
         console.log("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");
+        localStorage.removeItem("tokenExpiration");
         return <Navigate to="/auth-choice" replace/>;
     }
 
@@ -47,19 +54,18 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     console.log("App init");
-    const [token, setToken] = useState(localStorage.getItem("authToken") || null);
+    const [token, setToken] = useState(localStorage.getItem("authToken"));
 
     useEffect(() => {
         const checkTokenChange = () => {
             const newToken = localStorage.getItem("authToken");
-            if (newToken !== token) {
-                setToken(newToken);
-            }
+            console.log("Storage event: newToken=", newToken);
+            setToken(newToken);
         };
 
         window.addEventListener("storage", checkTokenChange);
         return () => window.removeEventListener("storage", checkTokenChange);
-    }, [token]);
+    }, []);
 
     return (
         <AuthProvider>

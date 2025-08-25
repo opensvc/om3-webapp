@@ -449,6 +449,28 @@ const ObjectDetail = () => {
     const handleBatchNodeActionClick = (action) => {
         console.log("[ObjectDetail] handleBatchNodeActionClick:", action);
         setPendingAction({action, batch: "nodes"});
+        if (action === "freeze") {
+            setCheckboxes({failover: false});
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(false);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes({
+                dataLoss: false,
+                configLoss: false,
+                serviceInterruption: false,
+            });
+            setPurgeDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
         handleNodesActionsClose();
     };
 
@@ -456,6 +478,28 @@ const ObjectDetail = () => {
     const handleIndividualNodeActionClick = (action) => {
         console.log("[ObjectDetail] handleIndividualNodeActionClick:", action, currentNode);
         setPendingAction({action, node: currentNode});
+        if (action === "freeze") {
+            setCheckboxes({failover: false});
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(false);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes({
+                dataLoss: false,
+                configLoss: false,
+                serviceInterruption: false,
+            });
+            setPurgeDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
         setIndividualNodeMenuAnchor(null);
     };
 
@@ -469,6 +513,7 @@ const ObjectDetail = () => {
     const handleBatchResourceActionClick = (action) => {
         console.log("[ObjectDetail] handleBatchResourceActionClick:", action, resGroupNode);
         setPendingAction({action, batch: "resources", node: resGroupNode});
+        setSimpleDialogOpen(true);
         handleResourcesActionsClose();
     };
 
@@ -486,6 +531,7 @@ const ObjectDetail = () => {
     const handleResourceActionClick = (action) => {
         console.log("[ObjectDetail] handleResourceActionClick:", action, currentResourceId);
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
+        setSimpleDialogOpen(true);
         handleResourceMenuClose();
     };
 
@@ -493,6 +539,28 @@ const ObjectDetail = () => {
     const handleObjectActionClick = (action) => {
         console.log("[ObjectDetail] handleObjectActionClick:", action);
         setPendingAction({action});
+        if (action === "freeze") {
+            setCheckboxes({failover: false});
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(false);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes({
+                dataLoss: false,
+                serviceInterruption: false,
+            });
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes({
+                dataLoss: false,
+                configLoss: false,
+                serviceInterruption: false,
+            });
+            setPurgeDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
         setObjectMenuAnchor(null);
     };
 
@@ -532,6 +600,11 @@ const ObjectDetail = () => {
         }
 
         setPendingAction(null);
+        setConfirmDialogOpen(false);
+        setStopDialogOpen(false);
+        setUnprovisionDialogOpen(false);
+        setPurgeDialogOpen(false);
+        setSimpleDialogOpen(false);
     };
 
     // Selection helpers
@@ -603,7 +676,7 @@ const ObjectDetail = () => {
                     const matchingUpdate = updates.find(
                         (u) =>
                             (u.name === name || u.fullName === decodedObjectName) &&
-                            u.type === "InstanceConfigUpdated"
+                            u.node
                     );
 
                     if (matchingUpdate && matchingUpdate.node) {
@@ -638,6 +711,47 @@ const ObjectDetail = () => {
             }
         };
     }, [decodedObjectName, clearConfigUpdate]);
+
+    // Effect for handling instance config updates
+    useEffect(() => {
+        console.log("[ObjectDetail] Setting up instanceConfig subscription");
+        if (!isMounted.current) {
+            console.log("[ObjectDetail] Component unmounted, skipping subscription");
+            return;
+        }
+
+        const subscription = useEventStore.subscribe(
+            (state) => state.instanceConfig,
+            (newConfig) => {
+                console.log("[ObjectDetail] instanceConfig updated:", newConfig);
+                if (!isMounted.current) {
+                    console.log("[ObjectDetail] Component unmounted, ignoring instanceConfig update");
+                    return;
+                }
+                const config = newConfig[decodedObjectName];
+                if (config && configNode) {
+                    console.log("[ObjectDetail] Processing instanceConfig update for node:", configNode);
+                    try {
+                        // Update NodeCard with the new instanceConfig
+                        setConfigAccordionExpanded(true);
+                        openSnackbar("Instance configuration updated", "info");
+                    } catch (err) {
+                        console.error(`[ObjectDetail] Failed to process instanceConfig update:`, err);
+                        openSnackbar("Failed to process instance configuration update", "error");
+                    }
+                }
+            }
+        );
+
+        return () => {
+            console.log("[ObjectDetail] Cleaning up instanceConfig subscription");
+            if (typeof subscription === "function") {
+                subscription();
+            } else {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            }
+        };
+    }, [decodedObjectName, configNode]);
 
     // Initial load effects
     useEffect(() => {
@@ -687,7 +801,7 @@ const ObjectDetail = () => {
                 console.log(`[ObjectDetail] Node ${node} encap:`, objectData[node]?.encap);
                 enhancedObjectData[node] = {
                     ...objectData[node],
-                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName] : {resources: {}},
+                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName][node] || {resources: {}} : {resources: {}},
                     instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
                 };
             });
@@ -764,7 +878,14 @@ const ObjectDetail = () => {
                                 ? RESOURCE_ACTIONS.map((action) => action.name)
                                 : OBJECT_ACTIONS.map((action) => action.name)
                     }
-                    onClose={() => setPendingAction(null)}
+                    onClose={() => {
+                        setPendingAction(null);
+                        setConfirmDialogOpen(false);
+                        setStopDialogOpen(false);
+                        setUnprovisionDialogOpen(false);
+                        setPurgeDialogOpen(false);
+                        setSimpleDialogOpen(false);
+                    }}
                 />
                 {showKeys && (
                     <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>

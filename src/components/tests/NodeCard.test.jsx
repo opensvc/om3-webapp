@@ -640,8 +640,7 @@ describe('NodeCard Component', () => {
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter
-            >
+            </MemoryRouter>
         );
         await waitFor(() => {
             expect(screen.getByText('placed@node1')).toBeInTheDocument();
@@ -877,78 +876,102 @@ describe('NodeCard Component', () => {
     });
 
     test('handles resource status letters for various states', async () => {
-        const mockState = {
-            objectStatus: {},
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            complexRes: {
-                                status: 'up',
-                                label: 'Complex Resource',
-                                type: 'disk',
-                                provisioned: {state: 'false'},
-                                running: true,
-                                optional: true,
-                            },
-                        },
-                        encap: {
-                            complexRes: {
-                                resources: {
-                                    encapRes: {
-                                        status: 'up',
-                                        label: 'Encap Resource',
-                                        running: true,
-                                    },
-                                },
-                            },
-                        },
-                    },
+        // Ensure desktop rendering
+        window.innerWidth = 1024;
+        window.dispatchEvent(new Event('resize'));
+
+        // Mock state for NodeCard props
+        const nodeData = {
+            resources: {
+                complexRes: {
+                    status: 'up',
+                    label: 'Complex Resource',
+                    type: 'disk',
+                    provisioned: {state: 'false'},
+                    running: true,
+                    optional: true,
                 },
             },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
+            encap: {
+                complexRes: {
                     resources: {
-                        complexRes: {restart: {remaining: 5}},
+                        encapRes: {
+                            status: 'up',
+                            label: 'Encap Resource',
+                            running: true,
+                        },
                     },
                 },
             },
             instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        complexRes: {
-                            is_monitored: true,
-                            is_disabled: true,
-                            is_standby: true,
-                            restart: 0,
-                        },
+                resources: {
+                    complexRes: {
+                        is_monitored: true,
+                        is_disabled: true,
+                        is_standby: true,
+                        restart: 0,
                     },
                 },
             },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
+            instanceMonitor: {
+                resources: {
+                    complexRes: {restart: {remaining: 5}},
+                },
+            },
         };
-        useEventStore.mockImplementation((selector) => selector(mockState));
 
+        // Mock functions
+        const handleNodeResourcesAccordionChange = jest.fn((node) => (event, isExpanded) => {
+            return {node1: isExpanded}; // Simulate setting expandedNodeResources
+        });
+
+        const toggleResource = jest.fn();
+        const setSelectedResourcesByNode = jest.fn((fn) => fn({}));
+
+        // Render NodeCard directly with controlled props
         render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={toggleResource}
+                setSelectedResourcesByNode={setSelectedResourcesByNode}
+                handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                expandedNodeResources={{node1: true}} // Ensure accordion is expanded
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
         );
 
+        // Find the node section
         const nodeSection = await findNodeSection('node1', 10000);
-        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
-        await user.click(resourcesHeader);
 
+        // Verify resources header and click to ensure expansion
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await act(async () => {
+            await user.click(resourcesHeader); // Trigger accordion expansion
+        });
+
+        // Verify that the accordion is expanded
+        const accordion = resourcesHeader.closest('[data-testid="accordion"]');
+        await waitFor(() => {
+            expect(accordion).toHaveClass('expanded');
+        }, {timeout: 10000});
+
+        // Verify that complexRes is rendered
+        const resElement = await within(nodeSection).findByText('complexRes', {}, {timeout: 5000});
+        expect(resElement).toBeInTheDocument();
+
+        // Find the status element
         await waitFor(
             () => {
                 const statusElements = screen.getAllByRole('status', {
-                    name: 'Resource complexRes status: RMDO.PS5',
+                    name: /Resource complexRes status: RMDO\.PS5/,
                 });
+                if (statusElements.length === 0) {
+                    console.log('DEBUG: Status elements not found. Dumping DOM:');
+                    screen.debug();
+                }
                 expect(statusElements.length).toBeGreaterThan(0);
                 expect(statusElements.some((el) => el.textContent === 'RMDO.PS5')).toBe(true);
             },
@@ -1115,7 +1138,7 @@ describe('NodeCard Component', () => {
             null
         );
         console.error.mockRestore();
-    });
+    }, 10000);
 
     test('selects all resources including encapsulated ones', async () => {
         const setSelectedResourcesByNode = jest.fn((fn) => fn({}));

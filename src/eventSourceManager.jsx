@@ -55,6 +55,7 @@ export const createEventSource = (url, token) => {
         setNodeStats,
         setHeartbeatStatuses,
         setInstanceMonitors,
+        setInstanceConfig,
         removeObject,
         setConfigUpdated,
     } = useEventStore.getState();
@@ -67,6 +68,7 @@ export const createEventSource = (url, token) => {
     let nodeStatsBuffer = {};
     let heartbeatStatusBuffer = {};
     let instanceMonitorBuffer = {};
+    let instanceConfigBuffer = {};
     let configUpdatedBuffer = new Set();
     let flushTimeout = null;
 
@@ -126,6 +128,15 @@ export const createEventSource = (url, token) => {
             const merged = {...store.instanceMonitor, ...instanceMonitorBuffer};
             setInstanceMonitors(merged);
             instanceMonitorBuffer = {};
+        }
+
+        if (Object.keys(instanceConfigBuffer).length > 0) {
+            for (const path of Object.keys(instanceConfigBuffer)) {
+                for (const node of Object.keys(instanceConfigBuffer[path])) {
+                    setInstanceConfig(path, node, instanceConfigBuffer[path][node]);
+                }
+            }
+            instanceConfigBuffer = {};
         }
 
         if (configUpdatedBuffer.size > 0) {
@@ -238,6 +249,7 @@ export const createEventSource = (url, token) => {
         }
         delete objectStatusBuffer[name];
         delete instanceStatusBuffer[name];
+        delete instanceConfigBuffer[name];
         removeObject(name);
         scheduleFlush();
     });
@@ -259,9 +271,16 @@ export const createEventSource = (url, token) => {
         const parsed = JSON.parse(event.data);
         const name = parsed.path || parsed.labels?.path;
         const node = parsed.node;
+        const instance_config = parsed.instance_config;
         if (!name || !node) {
             console.warn('⚠️ InstanceConfigUpdated event missing name or node:', parsed);
             return;
+        }
+        if (instance_config) {
+            instanceConfigBuffer[name] = {
+                ...(instanceConfigBuffer[name] || {}),
+                [node]: instance_config,
+            };
         }
         configUpdatedBuffer.add(JSON.stringify({name, node}));
         scheduleFlush();

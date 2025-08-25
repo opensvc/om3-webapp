@@ -1562,4 +1562,163 @@ size = 10GB
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
+
+    test('handles delete sections with missing token', async () => {
+        mockLocalStorage.getItem.mockImplementation(() => null);
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const deleteSectionsInput = comboboxes[2]; // Third combobox for delete sections
+        await act(async () => {
+            await user.type(deleteSectionsInput, 'fs#1');
+            deleteSectionsInput.dispatchEvent(new Event('change', {bubbles: true}));
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(deleteSectionsInput).toHaveValue('fs#1');
+        }, {timeout: 10000});
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
+            expect(global.fetch).not.toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=fs%231`),
+                expect.any(Object)
+            );
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with non-indexed section', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            const headers = options?.headers || {};
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () =>
+                        Promise.resolve({
+                            items: [
+                                {
+                                    option: 'timeout',
+                                    section: 'task',
+                                    text: 'Task timeout duration',
+                                    converter: 'string',
+                                    scopable: false,
+                                    default: '30s',
+                                },
+                            ],
+                        }),
+                    headers: new Headers({Authorization: headers.Authorization || '', 'Content-Length': '1024'}),
+                });
+            }
+            if (url.includes('/config?set=') || url.includes('/config?unset=') || url.includes('/config?delete=')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                    text: () => Promise.resolve(''),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
+                });
+            }
+            if (url.includes('/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: []}),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+            />
+        );
+
+        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+        const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
+        const addParamsInput = comboboxes[0]; // First combobox for add parameters
+        await act(async () => {
+            await user.type(addParamsInput, 'task.timeout');
+            await user.keyboard('{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('task.timeout');
+        }, {timeout: 5000});
+
+        const sectionInput = within(dialog).getByLabelText('Section');
+        await act(async () => {
+            await user.clear(sectionInput);
+            await user.type(sectionInput, 'task');
+            sectionInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const valueInput = within(dialog).getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '60s');
+            valueInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+
+        const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=task.timeout=60s`),
+                expect.objectContaining({
+                    method: 'PATCH',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer mock-token',
+                    }),
+                })
+            );
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
 });

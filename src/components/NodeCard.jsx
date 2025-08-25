@@ -18,7 +18,7 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import {grey, blue, orange} from "@mui/material/colors";
+import {grey, blue, orange, red} from "@mui/material/colors";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 const NodeCard = ({
@@ -46,6 +46,7 @@ const NodeCard = ({
                       setCheckboxes = () => console.warn("setCheckboxes not provided"),
                       setStopCheckbox = () => console.warn("setStopCheckbox not provided"),
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
+                      setPurgeCheckboxes = () => console.warn("setPurgeCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                   }) => {
@@ -61,6 +62,7 @@ const NodeCard = ({
         encap: nodeData?.encap,
         instanceConfig: nodeData?.instanceConfig,
         instanceMonitor: nodeData?.instanceMonitor,
+        provisioned: nodeData?.provisioned,
     });
 
     // Local state for menus
@@ -75,6 +77,7 @@ const NodeCard = ({
     const effectiveInstanceConfig = nodeData?.instanceConfig || {resources: {}};
     const effectiveInstanceMonitor = nodeData?.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
+    const isInstanceNotProvisioned = nodeData?.provisioned === "false" || nodeData?.provisioned === false;
 
     // Log changes to selectedResourcesByNode
     useEffect(() => {
@@ -299,6 +302,7 @@ const NodeCard = ({
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
         const resourceType = res.type || "N/A";
+        const isResourceNotProvisioned = res?.provisioned?.state === "false" || res?.provisioned?.state === false || res?.provisioned?.state === "n/a";
 
         console.log("Rendering resource row:", {
             rid,
@@ -308,6 +312,7 @@ const NodeCard = ({
             type: resourceType,
             isEncap,
             tooltipText,
+            isResourceNotProvisioned,
         });
 
         return (
@@ -433,6 +438,14 @@ const NodeCard = ({
                                 }}
                             />
                         </Tooltip>
+                        {isResourceNotProvisioned && (
+                            <Tooltip title="Not Provisioned">
+                                <WarningAmberIcon
+                                    sx={{color: red[500], fontSize: "1rem"}}
+                                    aria-label={`Resource ${rid} is not provisioned`}
+                                />
+                            </Tooltip>
+                        )}
                         <Box onClick={(e) => e.stopPropagation()}>
                             <IconButton
                                 onClick={(e) => {
@@ -539,6 +552,14 @@ const NodeCard = ({
                             }}
                         />
                     </Tooltip>
+                    {isResourceNotProvisioned && (
+                        <Tooltip title="Not Provisioned">
+                            <WarningAmberIcon
+                                sx={{color: red[500], fontSize: "1rem"}}
+                                aria-label={`Resource ${rid} is not provisioned`}
+                            />
+                        </Tooltip>
+                    )}
                     <Box onClick={(e) => e.stopPropagation()}>
                         <IconButton
                             onClick={(e) => {
@@ -613,6 +634,14 @@ const NodeCard = ({
                         {frozen === "frozen" && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
+                            </Tooltip>
+                        )}
+                        {isInstanceNotProvisioned && (
+                            <Tooltip title="Not Provisioned">
+                                <WarningAmberIcon
+                                    sx={{color: red[500], fontSize: "1.2rem"}}
+                                    aria-label={`Instance on node ${node} is not provisioned`}
+                                />
                             </Tooltip>
                         )}
                         {state && <Typography variant="caption">{state}</Typography>}

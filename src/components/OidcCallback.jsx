@@ -18,6 +18,22 @@ const OidcCallback = () => {
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
     };
 
+    const handleTokenExpired = () => {
+        console.warn('Access token expired, redirecting to /auth-choice');
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        navigate('/auth-choice');
+    };
+
+    const handleSilentRenewError = (error) => {
+        console.error('Silent renew failed:', error);
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        navigate('/auth-choice');
+    };
+
     useEffect(() => {
         const initializeUserManager = async () => {
             if (authInfo && !userManager) {
@@ -49,18 +65,8 @@ const OidcCallback = () => {
                     userManager.events.addAccessTokenExpiring(() => {
                         console.log('Access token is about to expire, attempting silent renew...');
                     });
-                    userManager.events.addAccessTokenExpired(() => {
-                        console.warn('Access token expired, redirecting to /auth-choice');
-                        localStorage.removeItem('authToken');
-                        localStorage.removeItem('tokenExpiration');
-                        navigate('/auth-choice');
-                    });
-                    userManager.events.addSilentRenewError((error) => {
-                        console.error('Silent renew failed:', error);
-                        localStorage.removeItem('authToken');
-                        localStorage.removeItem('tokenExpiration');
-                        navigate('/auth-choice');
-                    });
+                    userManager.events.addAccessTokenExpired(handleTokenExpired);
+                    userManager.events.addSilentRenewError(handleSilentRenewError);
 
                     navigate('/');
                 })

@@ -4,12 +4,14 @@ import {UserManager, UserManagerSettings} from "oidc-client-ts";
 export interface OidcContextType {
     userManager: UserManager | null;
     recreateUserManager: (settings: UserManagerSettings) => void;
+    isInitialized: boolean;
 }
 
 const OidcContext = createContext<OidcContextType | null>(null);
 
 export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     const [userManager, setUserManager] = useState<UserManager | null>(null);
+    const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
     const recreateUserManager = (settings: UserManagerSettings) => {
         console.log("Recreating UserManager with settings:", settings);
@@ -18,6 +20,7 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
         // Create and set a new UserManager
         const newUserManager = new UserManager(settings);
         setUserManager(newUserManager);
+        setIsInitialized(true);
     };
 
     // Cleanup on component unmount
@@ -28,7 +31,7 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     }, [userManager]);
 
     return (
-        <OidcContext.Provider value={{userManager, recreateUserManager}}>
+        <OidcContext.Provider value={{userManager, recreateUserManager, isInitialized}}>
             {children}
         </OidcContext.Provider>
     );

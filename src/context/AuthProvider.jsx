@@ -24,6 +24,8 @@ const authReducer = (state, action) => {
                 isAuthenticated: true,
             };
         case Logout:
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('tokenExpiration');
             return {
                 ...state,
                 user: null,
@@ -31,6 +33,12 @@ const authReducer = (state, action) => {
                 accessToken: null,
             };
         case SetAccessToken:
+            if (action.data) {
+                localStorage.setItem('authToken', action.data);
+            } else {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('tokenExpiration');
+            }
             return {
                 ...state,
                 accessToken: action.data,
@@ -58,12 +66,12 @@ export const AuthProvider = ({children}) => {
     const [auth, dispatch] = useReducer(authReducer, initialState);
     const refreshTimeout = useRef(null);
 
-    // Schedule a token refresh before it expires
+    // Schedule a token refresh before it expires (only for non-OIDC tokens)
     const scheduleRefresh = (token) => {
         if (refreshTimeout.current) {
             clearTimeout(refreshTimeout.current);
         }
-        if (!token) return;
+        if (!token || auth.authChoice === 'openid') return; // Don't schedule refresh for OIDC tokens
 
         const payload = decodeToken(token);
         if (!payload?.exp) return;
@@ -89,17 +97,19 @@ export const AuthProvider = ({children}) => {
         }
     };
 
-    // On every token change, reschedule the refresh
+    // On every token change, reschedule the refresh (only for non-OIDC tokens)
     useEffect(() => {
-        const token = auth.accessToken ?? localStorage.getItem('authToken');
-        scheduleRefresh(token);
+        if (auth.authChoice !== 'openid') {
+            const token = auth.accessToken ?? localStorage.getItem('authToken');
+            scheduleRefresh(token);
+        }
 
         return () => {
             if (refreshTimeout.current) {
                 clearTimeout(refreshTimeout.current);
             }
         };
-    }, [auth.accessToken]);
+    }, [auth.accessToken, auth.authChoice]);
 
     return (
         <AuthContext.Provider value={auth}>

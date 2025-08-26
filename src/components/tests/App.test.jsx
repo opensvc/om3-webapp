@@ -31,11 +31,64 @@ jest.mock('../ObjectDetails', () => () => <div data-testid="object-details">Obje
 jest.mock('../AuthChoice.jsx', () => () => <div data-testid="auth-choice">AuthChoice</div>);
 jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
+
+// Mock AuthInfo hook
+jest.mock('../../hooks/AuthInfo.jsx', () => () => ({
+    openid: {
+        issuer: 'https://test-issuer.com',
+        client_id: 'test-client'
+    }
+}));
+
+// Mock OIDC configuration
+jest.mock('../../config/oidcConfiguration.js', () => jest.fn(() => Promise.resolve({
+    client_id: 'test-client',
+    authority: 'https://test-issuer.com',
+    scope: 'openid profile email'
+})));
+
+// Mock AuthProvider with proper context values
+const mockAuthDispatch = jest.fn();
+const mockAuthState = {
+    user: null,
+    isAuthenticated: false,
+    authChoice: null,
+    authInfo: null,
+    accessToken: null,
+};
+
 jest.mock('../../context/AuthProvider', () => ({
     AuthProvider: ({children}) => <div>{children}</div>,
+    useAuth: () => mockAuthState,
+    useAuthDispatch: () => mockAuthDispatch,
+    SetAccessToken: 'SetAccessToken',
+    SetAuthChoice: 'SetAuthChoice',
+    Login: 'Login',
 }));
+
+// Mock OidcAuthContext with proper hooks
+const mockUserManager = {
+    getUser: jest.fn(() => Promise.resolve(null)),
+    events: {
+        addUserLoaded: jest.fn(),
+        addAccessTokenExpiring: jest.fn(),
+        addAccessTokenExpired: jest.fn(),
+        addSilentRenewError: jest.fn(),
+        removeUserLoaded: jest.fn(),
+        removeAccessTokenExpired: jest.fn(),
+        removeSilentRenewError: jest.fn(),
+    }
+};
+
+const mockRecreateUserManager = jest.fn();
+
 jest.mock('../../context/OidcAuthContext.tsx', () => ({
     OidcProvider: ({children}) => <div>{children}</div>,
+    useOidc: () => ({
+        userManager: mockUserManager,
+        recreateUserManager: mockRecreateUserManager,
+        isInitialized: true,
+    }),
 }));
 
 // Mock localStorage
@@ -51,16 +104,29 @@ jest.spyOn(console, 'log').mockImplementation(() => {
 });
 jest.spyOn(console, 'error').mockImplementation(() => {
 });
+jest.spyOn(console, 'warn').mockImplementation(() => {
+});
 
 describe('App Component', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockLocalStorage.getItem.mockReturnValue(null);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authChoice') return null;
+            return null;
+        });
+        // Reset auth state
+        mockAuthState.authChoice = null;
+        mockAuthState.accessToken = null;
+        mockAuthState.isAuthenticated = false;
     });
 
     test('renders NavBar and redirects from / to /cluster', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/']}>
@@ -76,7 +142,11 @@ describe('App Component', () => {
 
     test('renders protected route /cluster with valid token', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -91,7 +161,11 @@ describe('App Component', () => {
 
     test('redirects from protected route /cluster to /auth-choice with invalid token', async () => {
         const invalidToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 - 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(invalidToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return invalidToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -106,6 +180,42 @@ describe('App Component', () => {
     });
 
     test('redirects from protected route /cluster to /auth-choice with no token', async () => {
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
+        }, {timeout: 2000});
+    });
+
+    test('renders protected route with OIDC token', async () => {
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('cluster')).toBeInTheDocument();
+        }, {timeout: 2000});
+    });
+
+    test('redirects OIDC user with no token to /auth-choice', async () => {
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authChoice') return 'openid';
+            return null; // no token
+        });
+
         render(
             <MemoryRouter initialEntries={['/cluster']}>
                 <App/>
@@ -155,7 +265,11 @@ describe('App Component', () => {
 
     test('renders protected route /nodes with valid token', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/nodes']}>
@@ -170,7 +284,11 @@ describe('App Component', () => {
 
     test('renders protected route /objects/:objectName with valid token', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/objects/test-object']}>
@@ -209,7 +327,11 @@ describe('App Component', () => {
     });
 
     test('handles invalid token format gracefully', async () => {
-        mockLocalStorage.getItem.mockReturnValue('invalid-token');
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'invalid-token';
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -225,7 +347,11 @@ describe('App Component', () => {
 
     test('redirects unknown routes to /', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         render(
             <MemoryRouter initialEntries={['/unknown']}>
@@ -241,7 +367,11 @@ describe('App Component', () => {
     test('does not render blank page', async () => {
         // Mock a valid token to access protected routes
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockReturnValue(validToken);
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'basic';
+            return null;
+        });
 
         const {container} = render(
             <MemoryRouter initialEntries={['/']}>
@@ -264,6 +394,26 @@ describe('App Component', () => {
             expect(container.textContent?.trim().length).toBeGreaterThan(0);
 
             // Specifically verify Cluster component is rendered (default route)
+            expect(screen.getByTestId('cluster')).toBeInTheDocument();
+        }, {timeout: 2000});
+    });
+
+    test('initializes OIDC UserManager on startup with existing token', async () => {
+        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return validToken;
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
         }, {timeout: 2000});
     });

@@ -87,7 +87,17 @@ jest.mock('@mui/material', () => {
                     .map((val) => {
                         const option = options.find((opt) => (typeof opt === 'string' ? opt : getOptionLabel(opt)) === val);
                         if (!option) {
-                            return multiple ? {option: val, section: val.includes('#') ? val : ''} : null;
+                            if (multiple) {
+                                if (options.length > 0 && typeof options[0] === 'object') {
+                                    // For object-based options, create a temp object
+                                    return {option: val, section: val.includes('.') ? val.split('.')[0] : ''};
+                                } else {
+                                    // For string-based options, return the string value
+                                    return val;
+                                }
+                            } else {
+                                return null;
+                            }
                         }
                         return option;
                     })
@@ -165,7 +175,7 @@ jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="Expan
 
 // Mock localStorage
 const mockLocalStorage = {
-    getItem: jest.fn((key) => 'mock-token'),
+    getItem: jest.fn(),
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
@@ -179,6 +189,7 @@ describe('ConfigSection Component', () => {
     beforeEach(() => {
         jest.setTimeout(30000);
         jest.clearAllMocks();
+        mockLocalStorage.getItem.mockImplementation((key) => 'mock-token');
 
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
@@ -285,6 +296,7 @@ size = 10GB
 
     afterEach(() => {
         jest.clearAllMocks();
+        jest.resetAllMocks();
     });
 
     test('displays configuration with horizontal scrolling', async () => {
@@ -793,6 +805,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByRole('combobox', {name: /autocomplete-input/i});
         const addParamsInput = comboboxes[0]; // First combobox for add parameters
@@ -839,6 +855,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const applyButton = within(dialog).getByRole('button', {name: /Apply/i});
         await act(async () => {
@@ -868,6 +888,10 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
@@ -1031,6 +1055,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
         const addParamsInput = comboboxes[0]; // First combobox for add parameters
@@ -1090,6 +1118,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
         const addParamsInput = comboboxes[0]; // First combobox for add parameters
@@ -1146,6 +1178,10 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
@@ -1209,6 +1245,10 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialog = screen.getByRole('dialog');
@@ -1535,6 +1575,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
         const unsetParamsInput = comboboxes[1]; // Second combobox for unset parameters
@@ -1583,6 +1627,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
         const deleteSectionsInput = comboboxes[2]; // Third combobox for delete sections
@@ -1611,7 +1659,7 @@ size = 10GB
         }, {timeout: 10000});
     });
 
-    test('handles add parameters with non-indexed section', async () => {
+    test('handles add parameters with indexed section', async () => {
         global.fetch.mockImplementation((url, options) => {
             const headers = options?.headers || {};
             if (url.includes('/config/keywords')) {
@@ -1677,6 +1725,10 @@ size = 10GB
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
         }, {timeout: 10000});
 
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const comboboxes = within(dialog).getAllByTestId('autocomplete-input');
         const addParamsInput = comboboxes[0]; // First combobox for add parameters
@@ -1689,10 +1741,10 @@ size = 10GB
             expect(addParamsInput).toHaveValue('task.timeout');
         }, {timeout: 5000});
 
-        const sectionInput = within(dialog).getByLabelText('Section');
+        const sectionInput = within(dialog).getByLabelText('Index');
         await act(async () => {
             await user.clear(sectionInput);
-            await user.type(sectionInput, 'task');
+            await user.type(sectionInput, '1');
             sectionInput.dispatchEvent(new Event('change', {bubbles: true}));
         });
 
@@ -1710,7 +1762,7 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=task.timeout=60s`),
+                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=task%231.timeout=60s`),
                 expect.objectContaining({
                     method: 'PATCH',
                     headers: expect.objectContaining({

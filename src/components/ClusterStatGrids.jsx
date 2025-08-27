@@ -11,33 +11,37 @@ export const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
     />
 );
 
-export const GridObjects = ({objectCount, statusCount, onClick}) => (
-    <StatCard
-        title="Objects"
-        value={objectCount}
-        subtitle={
-            <Box sx={{display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap"}}>
-                {['up', 'warn', 'down'].map((status) => (
-                    statusCount[status] > 0 && (
-                        <StatusChip
-                            key={status}
-                            status={status}
-                            count={statusCount[status]}
-                            onClick={() => onClick(status)}
-                        />
-                    )
-                ))}
-            </Box>
-        }
-        onClick={() => onClick()}
-    />
-);
+export const GridObjects = ({objectCount, statusCount, onClick}) => {
+    console.log("GridObjects rendering with statusCount:", statusCount);
+    return (
+        <StatCard
+            title="Objects"
+            value={objectCount}
+            subtitle={
+                <Box sx={{display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap"}}>
+                    {['up', 'warn', 'down', 'unprovisioned'].map((status) => (
+                        (statusCount[status] || 0) > 0 && (
+                            <StatusChip
+                                key={status}
+                                status={status}
+                                count={statusCount[status] || 0}
+                                onClick={() => onClick(status)}
+                            />
+                        )
+                    ))}
+                </Box>
+            }
+            onClick={() => onClick()}
+        />
+    );
+};
 
 const StatusChip = ({status, count, onClick}) => {
     const colors = {
         up: 'green',
         warn: 'orange',
-        down: 'red'
+        down: 'red',
+        unprovisioned: 'red'
     };
 
     return (
@@ -45,7 +49,7 @@ const StatusChip = ({status, count, onClick}) => {
             label={`${status.charAt(0).toUpperCase() + status.slice(1)} ${count}`}
             size="small"
             sx={{
-                backgroundColor: colors[status],
+                backgroundColor: colors[status] || 'grey',
                 color: 'white',
                 cursor: 'pointer',
             }}
@@ -60,7 +64,8 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
             up: 'green',
             warn: 'orange',
             down: 'red',
-            'n/a': 'grey'
+            'n/a': 'grey',
+            unprovisioned: 'red'
         };
         return colors[status] || 'grey';
     };
@@ -112,7 +117,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                 gap: 0.5,
                                 flexWrap: 'wrap'
                             }}>
-                                {['up', 'warn', 'down', 'n/a'].map((stat) => (
+                                {['up', 'warn', 'down', 'n/a', 'unprovisioned'].map((stat) => (
                                     (status[stat] || 0) > 0 && (
                                         <Box
                                             key={stat}

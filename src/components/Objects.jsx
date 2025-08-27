@@ -58,7 +58,7 @@ const Objects = () => {
     const navigate = useNavigate();
 
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "n/a"];
+    const globalStates = ["all", "up", "down", "warn", "n/a", "unprovisioned"];
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -134,7 +134,7 @@ const Objects = () => {
         const validStatuses = ["up", "down", "warn"];
         const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
         const frozen = obj?.frozen;
-        const provisioned = obj?.provisioned; // Extract provisioned status
+        const provisioned = obj?.provisioned;
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
         for (const node of nodes) {
@@ -165,9 +165,12 @@ const Objects = () => {
 
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
-        const {avail} = getObjectStatus(name);
+        const {avail, provisioned} = getObjectStatus(name);
         const matchesGlobalState =
-            selectedGlobalState === "all" || avail === selectedGlobalState;
+            selectedGlobalState === "all" ||
+            (selectedGlobalState === "unprovisioned"
+                ? provisioned === "false" || provisioned === false
+                : avail === selectedGlobalState);
         return (
             (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
             (selectedKind === "all" || extractKind(name) === selectedKind) &&
@@ -430,6 +433,9 @@ const Objects = () => {
                                             {option === "n/a" && (
                                                 <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>
                                             )}
+                                            {option === "unprovisioned" && (
+                                                <WarningAmberIcon sx={{color: red[500], fontSize: 18}}/>
+                                            )}
                                             {option === "all"
                                                 ? "All"
                                                 : option.charAt(0).toUpperCase() + option.slice(1)}
@@ -526,7 +532,7 @@ const Objects = () => {
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect, provisioned} = getObjectStatus(objectName);
                                 const isFrozen = frozen === "frozen";
-                                const isNotProvisioned = provisioned === "false" || provisioned === false; // Check if not provisioned
+                                const isNotProvisioned = provisioned === "false" || provisioned === false;
                                 const hasAnyNodeFrozen = allNodes.some((node) => {
                                     const {frozen: nodeFrozen} = getNodeState(objectName, node);
                                     return nodeFrozen === "frozen";

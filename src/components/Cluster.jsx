@@ -69,7 +69,7 @@ const ClusterOverview = () => {
     });
 
     const namespaces = new Set();
-    const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0};
+    const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
     const objectsPerNamespace = {};
     const statusPerNamespace = {};
 
@@ -78,6 +78,8 @@ const ClusterOverview = () => {
         return parts.length === 3 ? parts[0] : "root";
     };
 
+    console.log("Full objectStatus data:", JSON.stringify(objectStatus, null, 2));
+
     Object.entries(objectStatus).forEach(([objectPath, status]) => {
         const ns = extractNamespace(objectPath);
         namespaces.add(ns);
@@ -85,7 +87,7 @@ const ClusterOverview = () => {
 
         const s = status?.avail?.toLowerCase() || "n/a";
         if (!statusPerNamespace[ns]) {
-            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
+            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
         }
         if (s === "up" || s === "down" || s === "warn" || s === "n/a") {
             statusPerNamespace[ns][s]++;
@@ -94,7 +96,19 @@ const ClusterOverview = () => {
             statusPerNamespace[ns]["n/a"]++;
             statusCount["n/a"]++;
         }
+
+        // Count unprovisioned objects
+        const provisioned = status?.provisioned;
+        const isUnprovisioned = provisioned === "false" || provisioned === false;
+        console.log(`Object ${objectPath}: provisioned = ${provisioned}, isUnprovisioned = ${isUnprovisioned}`);
+        if (isUnprovisioned) {
+            statusPerNamespace[ns].unprovisioned++;
+            statusCount.unprovisioned++;
+        }
     });
+
+    console.log("Final statusCount:", statusCount);
+    console.log("Final statusPerNamespace:", statusPerNamespace);
 
     const namespaceCount = namespaces.size;
 

@@ -48,7 +48,7 @@ const isTokenValid = (token) => {
     }
 };
 
-// Composant pour gérer l'initialisation OIDC
+// Component to handle OIDC initialization
 const OidcInitializer = ({children}) => {
     const {userManager, recreateUserManager, isInitialized} = useOidc();
     const authDispatch = useAuthDispatch();
@@ -78,7 +78,7 @@ const OidcInitializer = ({children}) => {
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
     };
 
-    // Initialiser OIDC au démarrage si on a un token et que l'auth choice est OIDC
+    // Initialize OIDC on startup if we have a token and auth choice is OIDC
     useEffect(() => {
         const initializeOidcOnStartup = async () => {
             const savedToken = localStorage.getItem('authToken');
@@ -90,7 +90,7 @@ const OidcInitializer = ({children}) => {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
 
-                    // Mettre à jour l'état d'authentification
+                    // Update authentication state
                     authDispatch({type: SetAuthChoice, data: 'openid'});
                     authDispatch({type: SetAccessToken, data: savedToken});
                 } catch (error) {
@@ -102,17 +102,17 @@ const OidcInitializer = ({children}) => {
         initializeOidcOnStartup();
     }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
 
-    // Configurer les événements OIDC une fois que le UserManager est créé
+    // Set up OIDC event listeners once the UserManager is created
     useEffect(() => {
         if (userManager && auth.authChoice === 'openid') {
             console.log("Setting up OIDC event listeners");
 
-            // Nettoyer les anciens listeners
+            // Remove old listeners
             userManager.events.removeUserLoaded(onUserRefreshed);
             userManager.events.removeAccessTokenExpired(handleTokenExpired);
             userManager.events.removeSilentRenewError(handleSilentRenewError);
 
-            // Ajouter les nouveaux listeners
+            // Add new listeners
             userManager.events.addUserLoaded(onUserRefreshed);
             userManager.events.addAccessTokenExpiring(() => {
                 console.log('Access token is about to expire, attempting silent renew...');
@@ -120,7 +120,7 @@ const OidcInitializer = ({children}) => {
             userManager.events.addAccessTokenExpired(handleTokenExpired);
             userManager.events.addSilentRenewError(handleSilentRenewError);
 
-            // Vérifier si on a un utilisateur existant
+            // Check for existing user
             userManager.getUser().then(user => {
                 if (user && !user.expired) {
                     console.log("Found existing valid user:", user.profile.preferred_username);
@@ -135,7 +135,7 @@ const OidcInitializer = ({children}) => {
         }
     }, [userManager, auth.authChoice]);
 
-    // Sauvegarder le choix d'auth dans localStorage
+    // Save auth choice to localStorage
     useEffect(() => {
         if (auth.authChoice) {
             localStorage.setItem('authChoice', auth.authChoice);
@@ -149,7 +149,7 @@ const ProtectedRoute = ({children}) => {
     const token = localStorage.getItem("authToken");
     const authChoice = localStorage.getItem('authChoice');
 
-    // Pour OIDC, on fait confiance au UserManager pour gérer l'expiration
+    // For OIDC, rely on UserManager to handle expiration
     if (authChoice === 'openid') {
         if (!token) {
             console.log("No OIDC token found, redirecting to /auth-choice");
@@ -158,7 +158,7 @@ const ProtectedRoute = ({children}) => {
         return children;
     }
 
-    // Pour les autres méthodes d'auth, on vérifie la validité du token
+    // For other auth methods, validate the token
     if (!isTokenValid(token)) {
         console.log("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");

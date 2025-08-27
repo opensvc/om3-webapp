@@ -13,7 +13,7 @@ import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AcUnitIcon from '@mui/icons-material/AcUnit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {orange, blue} from '@mui/material/colors';
+import {orange, blue, red} from '@mui/material/colors';
 import {OBJECT_ACTIONS} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 
@@ -27,6 +27,8 @@ const HeaderSection = ({
                            getObjectStatus,
                            getColor,
                        }) => {
+    const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
+
     return (
         globalStatus && (
             <Box
@@ -55,6 +57,12 @@ const HeaderSection = ({
                     {getObjectStatus().frozen === 'frozen' && (
                         <Tooltip title="frozen">
                             <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>
+                        </Tooltip>
+                    )}
+                    {isNotProvisioned && (
+                        <Tooltip title="Not Provisioned">
+                            <WarningAmberIcon sx={{color: red[500], fontSize: '1.2rem'}}
+                                              aria-label="Object is not provisioned"/>
                         </Tooltip>
                     )}
                     {getObjectStatus().globalExpect && (

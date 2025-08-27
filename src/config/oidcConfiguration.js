@@ -26,10 +26,13 @@ const initData = {
  */
 function filterScopes(allowedScopes) {
     if (!Array.isArray(allowedScopes) || allowedScopes.length === 0) {
+        console.warn("No allowed scopes provided, using default scopes");
         return DEFAULT_SCOPES.join(" ");
     }
 
-    return DEFAULT_SCOPES.filter(scope => allowedScopes.includes(scope)).join(" ");
+    const filteredScopes = DEFAULT_SCOPES.filter(scope => allowedScopes.includes(scope));
+    console.log("Filtered scopes:", filteredScopes);
+    return filteredScopes.join(" ");
 }
 
 async function oidcConfiguration(authInfo) {
@@ -47,12 +50,14 @@ async function oidcConfiguration(authInfo) {
         if (!url.pathname.endsWith("/")) {
             url.pathname += "/";
         }
-        url.pathname += '.well-known/openid-configuration'
+        url.pathname += '.well-known/openid-configuration';
+        console.log("Fetching OIDC configuration from:", url.toString());
         const response = await fetch(url);
 
         if (response.ok) {
             const wellKnown = await response.json();
-            scopesSupported = wellKnown.scopes_supported;
+            scopesSupported = wellKnown.scopes_supported || DEFAULT_SCOPES;
+            console.log("OIDC well-known configuration fetched:", wellKnown);
         } else {
             console.warn("Failed to fetch .well-known/openid-configuration:", response.status);
         }
@@ -64,7 +69,7 @@ async function oidcConfiguration(authInfo) {
     const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"));
 
     const finalScope = filterScopes(scopesSupported);
-    return {
+    const config = {
         ...initData,
         authority: authInfo.openid.issuer,
         client_id: authInfo.openid.client_id,
@@ -73,6 +78,8 @@ async function oidcConfiguration(authInfo) {
         silent_redirect_uri: `${baseUrl}/auth-callback`,
         post_logout_redirect_uri: `${baseUrl}/`,
     };
+    console.log("Final OIDC configuration:", config);
+    return config;
 }
 
 export default oidcConfiguration;

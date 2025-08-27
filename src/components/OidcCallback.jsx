@@ -1,60 +1,83 @@
 import React, {useEffect} from 'react';
 import {useNavigate} from 'react-router-dom';
-
-import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login,} from "../context/AuthProvider.jsx";
+import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login} from "../context/AuthProvider.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 
 const OidcCallback = () => {
     const {userManager, recreateUserManager} = useOidc();
-    const authDispatch = useAuthDispatch()
+    const authDispatch = useAuthDispatch();
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
 
     const onUserRefreshed = (user) => {
-        authDispatch({type: SetAccessToken, data: user.access_token})
+        console.log("User refreshed:", user.profile.preferred_username, "expires_at:", user.expires_at);
+        authDispatch({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
-        localStorage.setItem('tokenExpiration', user.expires_at)
-        console.log("user: ", user.profile.preferred_username, "expires_at:", user.expires_at);
-    }
+        localStorage.setItem('tokenExpiration', user.expires_at.toString());
+    };
+
+    const handleTokenExpired = () => {
+        console.warn('Access token expired, redirecting to /auth-choice');
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        navigate('/auth-choice');
+    };
+
+    const handleSilentRenewError = (error) => {
+        console.error('Silent renew failed:', error);
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        navigate('/auth-choice');
+    };
 
     useEffect(() => {
-        if (authInfo && !userManager) {
-            (async () => {
+        const initializeUserManager = async () => {
+            if (authInfo && !userManager) {
+                console.log("Initializing UserManager with authInfo");
                 try {
-                    console.log("OidcCallback recreate user manager")
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
                 } catch (error) {
                     console.error("Failed to initialize OIDC config:", error);
+                    navigate('/auth-choice');
                 }
-            })();
-        } else if (userManager) {
-            console.log("OidcCallback signinRedirectCallback")
+            }
+        };
+
+        initializeUserManager();
+    }, [authInfo, userManager, recreateUserManager, navigate]);
+
+    useEffect(() => {
+        if (userManager) {
+            console.log("Handling signinRedirectCallback");
             userManager.signinRedirectCallback()
                 .then((user) => {
-                    onUserRefreshed(user)
+                    onUserRefreshed(user);
                     authDispatch({type: SetAuthChoice, data: "openid"});
                     authDispatch({type: Login, data: user.profile.preferred_username});
-                    console.log("OidcCallback signinRedirectCallback subscribes events.addUserLoaded")
-                    userManager.events.addUserLoaded(user => {
-                        console.log("🎉 user loaded renewed!")
-                        onUserRefreshed(user)
-                    })
+
+                    // Subscribe to events
+                    userManager.events.addUserLoaded(onUserRefreshed);
                     userManager.events.addAccessTokenExpiring(() => {
-                        console.log('⚠️ Access token is about to expire...');
+                        console.log('Access token is about to expire, attempting silent renew...');
                     });
-                    console.log("OidcCallback signinRedirectCallback navigate /")
+                    userManager.events.addAccessTokenExpired(handleTokenExpired);
+                    userManager.events.addSilentRenewError(handleSilentRenewError);
+
                     navigate('/');
                 })
                 .catch((err) => {
-                    console.error("OidcCallback signinRedirectCallback failed:", err)
+                    console.error("signinRedirectCallback failed:", err);
+                    navigate('/auth-choice');
                 });
         }
-    }, [authInfo, userManager]);
+    }, [userManager, authDispatch, navigate]);
 
     return <>Logging ...</>;
-}
+};
 
 export default OidcCallback;

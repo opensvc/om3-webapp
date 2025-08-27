@@ -8,16 +8,20 @@ const useEventStore = create((set) => ({
     objectInstanceStatus: {},
     heartbeatStatus: {},
     instanceMonitor: {},
+    instanceConfig: {},
     configUpdates: [],
     removeObject: (objectName) =>
         set((state) => {
             const newObjectStatus = {...state.objectStatus};
             const newObjectInstanceStatus = {...state.objectInstanceStatus};
+            const newInstanceConfig = {...state.instanceConfig};
             delete newObjectStatus[objectName];
             delete newObjectInstanceStatus[objectName];
+            delete newInstanceConfig[objectName];
             return {
                 objectStatus: newObjectStatus,
                 objectInstanceStatus: newObjectInstanceStatus,
+                instanceConfig: newInstanceConfig,
             };
         }),
 
@@ -109,17 +113,44 @@ const useEventStore = create((set) => ({
             instanceMonitor: {...instanceMonitor},
         })),
 
+    setInstanceConfig: (path, node, config) =>
+        set((state) => {
+            console.log("[useEventStore] setInstanceConfig called with:", {path, node, config});
+            const newInstanceConfig = {...state.instanceConfig};
+            if (!newInstanceConfig[path]) {
+                newInstanceConfig[path] = {};
+            }
+            newInstanceConfig[path][node] = {...config};
+            console.log("[useEventStore] Updated instanceConfig:", newInstanceConfig);
+            return {instanceConfig: newInstanceConfig};
+        }),
+
     setConfigUpdated: (updates) => {
         const normalizedUpdates = updates.map((update) => {
-            // Handle direct format {name, node}
-            if (update.name && update.node) {
+            // Handle direct object format {name, node}
+            if (typeof update === 'object' && update !== null && update.name && update.node) {
                 const namespace = "root";
                 const kind = update.name === "cluster" ? "ccfg" : "svc";
                 const fullName = `${namespace}/${kind}/${update.name}`;
                 return {name: update.name, fullName, node: update.node};
             }
+            // Handle stringified JSON format
+            if (typeof update === 'string') {
+                try {
+                    const parsed = JSON.parse(update);
+                    if (parsed.name && parsed.node) {
+                        const namespace = "root";
+                        const kind = parsed.name === "cluster" ? "ccfg" : "svc";
+                        const fullName = `${namespace}/${kind}/${parsed.name}`;
+                        return {name: parsed.name, fullName, node: parsed.node};
+                    }
+                } catch (e) {
+                    console.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
+                    return null;
+                }
+            }
             // Handle SSE format with kind: "InstanceConfigUpdated"
-            if (update.kind === "InstanceConfigUpdated") {
+            if (typeof update === 'object' && update.kind === "InstanceConfigUpdated") {
                 const name = update.data?.path || "";
                 const namespace = update.data?.labels?.namespace || "root";
                 const kind = name === "cluster" ? "ccfg" : "svc";

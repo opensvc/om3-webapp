@@ -17,28 +17,153 @@ import Pools from "./Pools";
 import Network from "./Network";
 import NetworkDetails from "./NetworkDetails";
 import WhoAmI from "./WhoAmI";
-import {OidcProvider} from "../context/OidcAuthContext.tsx";
-import {AuthProvider} from "../context/AuthProvider";
+import {OidcProvider, useOidc} from "../context/OidcAuthContext.tsx";
+import {
+    AuthProvider,
+    useAuth,
+    useAuthDispatch,
+    SetAccessToken,
+    SetAuthChoice,
+    Login as LoginAction
+} from "../context/AuthProvider";
+import oidcConfiguration from "../config/oidcConfiguration.js";
+import useAuthInfo from "../hooks/AuthInfo.jsx";
 
 const isTokenValid = (token) => {
-    if (!token) return false;
+    if (!token) {
+        console.log("No token found in localStorage");
+        return false;
+    }
 
     try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         const now = Date.now() / 1000;
-        return payload.exp > now;
+        const expiration = payload.exp;
+        const isValid = expiration > now;
+        console.log(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
+        return isValid;
     } catch (error) {
         console.error("Error while verifying token:", error);
         return false;
     }
 };
 
+// Composant pour gérer l'initialisation OIDC
+const OidcInitializer = ({children}) => {
+    const {userManager, recreateUserManager, isInitialized} = useOidc();
+    const authDispatch = useAuthDispatch();
+    const auth = useAuth();
+    const authInfo = useAuthInfo();
+
+    const handleTokenExpired = () => {
+        console.warn('Access token expired, redirecting to /auth-choice');
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        window.location.href = '/auth-choice';
+    };
+
+    const handleSilentRenewError = (error) => {
+        console.error('Silent renew failed:', error);
+        authDispatch({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        window.location.href = '/auth-choice';
+    };
+
+    const onUserRefreshed = (user) => {
+        console.log("User refreshed:", user.profile.preferred_username, "expires_at:", user.expires_at);
+        authDispatch({type: SetAccessToken, data: user.access_token});
+        localStorage.setItem('authToken', user.access_token);
+        localStorage.setItem('tokenExpiration', user.expires_at.toString());
+    };
+
+    // Initialiser OIDC au démarrage si on a un token et que l'auth choice est OIDC
+    useEffect(() => {
+        const initializeOidcOnStartup = async () => {
+            const savedToken = localStorage.getItem('authToken');
+            const savedAuthChoice = auth.authChoice || localStorage.getItem('authChoice');
+
+            if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
+                console.log("Initializing OIDC UserManager on app startup");
+                try {
+                    const config = await oidcConfiguration(authInfo);
+                    recreateUserManager(config);
+
+                    // Mettre à jour l'état d'authentification
+                    authDispatch({type: SetAuthChoice, data: 'openid'});
+                    authDispatch({type: SetAccessToken, data: savedToken});
+                } catch (error) {
+                    console.error("Failed to initialize OIDC on startup:", error);
+                }
+            }
+        };
+
+        initializeOidcOnStartup();
+    }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
+
+    // Configurer les événements OIDC une fois que le UserManager est créé
+    useEffect(() => {
+        if (userManager && auth.authChoice === 'openid') {
+            console.log("Setting up OIDC event listeners");
+
+            // Nettoyer les anciens listeners
+            userManager.events.removeUserLoaded(onUserRefreshed);
+            userManager.events.removeAccessTokenExpired(handleTokenExpired);
+            userManager.events.removeSilentRenewError(handleSilentRenewError);
+
+            // Ajouter les nouveaux listeners
+            userManager.events.addUserLoaded(onUserRefreshed);
+            userManager.events.addAccessTokenExpiring(() => {
+                console.log('Access token is about to expire, attempting silent renew...');
+            });
+            userManager.events.addAccessTokenExpired(handleTokenExpired);
+            userManager.events.addSilentRenewError(handleSilentRenewError);
+
+            // Vérifier si on a un utilisateur existant
+            userManager.getUser().then(user => {
+                if (user && !user.expired) {
+                    console.log("Found existing valid user:", user.profile.preferred_username);
+                    onUserRefreshed(user);
+                    authDispatch({type: LoginAction, data: user.profile.preferred_username});
+                } else if (user && user.expired) {
+                    console.log("Found expired user, will attempt silent renew");
+                }
+            }).catch(err => {
+                console.error("Error getting user:", err);
+            });
+        }
+    }, [userManager, auth.authChoice]);
+
+    // Sauvegarder le choix d'auth dans localStorage
+    useEffect(() => {
+        if (auth.authChoice) {
+            localStorage.setItem('authChoice', auth.authChoice);
+        }
+    }, [auth.authChoice]);
+
+    return children;
+};
+
 const ProtectedRoute = ({children}) => {
     const token = localStorage.getItem("authToken");
+    const authChoice = localStorage.getItem('authChoice');
 
+    // Pour OIDC, on fait confiance au UserManager pour gérer l'expiration
+    if (authChoice === 'openid') {
+        if (!token) {
+            console.log("No OIDC token found, redirecting to /auth-choice");
+            return <Navigate to="/auth-choice" replace/>;
+        }
+        return children;
+    }
+
+    // Pour les autres méthodes d'auth, on vérifie la validité du token
     if (!isTokenValid(token)) {
         console.log("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");
+        localStorage.removeItem("tokenExpiration");
+        localStorage.removeItem("authChoice");
         return <Navigate to="/auth-choice" replace/>;
     }
 
@@ -47,41 +172,43 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     console.log("App init");
-    const [token, setToken] = useState(localStorage.getItem("authToken") || null);
+    const [token, setToken] = useState(localStorage.getItem("authToken"));
 
     useEffect(() => {
         const checkTokenChange = () => {
             const newToken = localStorage.getItem("authToken");
-            if (newToken !== token) {
-                setToken(newToken);
-            }
+            console.log("Storage event: newToken=", newToken);
+            setToken(newToken);
         };
 
         window.addEventListener("storage", checkTokenChange);
         return () => window.removeEventListener("storage", checkTokenChange);
-    }, [token]);
+    }, []);
 
     return (
         <AuthProvider>
             <OidcProvider>
-                <NavBar/>
-                <Routes>
-                    <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                    <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
-                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                    <Route path="/heartbeats" element={<Heartbeats/>}/>
-                    <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                    <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                    <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                    <Route path="/network/:networkName" element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
-                    <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                    <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                    <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                    <Route path="/auth-callback" element={<OidcCallback/>}/>
-                    <Route path="/auth-choice" element={<AuthChoice/>}/>
-                    <Route path="/auth/login" element={<Login/>}/>
-                    <Route path="*" element={<Navigate to="/"/>}/>
-                </Routes>
+                <OidcInitializer>
+                    <NavBar/>
+                    <Routes>
+                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                        <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                        <Route path="/heartbeats" element={<Heartbeats/>}/>
+                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                        <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                        <Route path="/network/:networkName"
+                               element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
+                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                        <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                        <Route path="/auth-callback" element={<OidcCallback/>}/>
+                        <Route path="/auth-choice" element={<AuthChoice/>}/>
+                        <Route path="/auth/login" element={<Login/>}/>
+                        <Route path="*" element={<Navigate to="/"/>}/>
+                    </Routes>
+                </OidcInitializer>
             </OidcProvider>
         </AuthProvider>
     );

@@ -358,6 +358,10 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         for (const param of paramsToUnset) {
             const {section, option} = param;
             try {
+                console.debug('Unsetting parameter:', {section, option});
+                if (!option) {
+                    throw new Error(`Parameter option is undefined`);
+                }
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(
                     section ? `${section}.${option}` : option
                 )}`;
@@ -371,7 +375,8 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     throw new Error(`Failed to unset parameter ${option}: ${response.status}`);
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error unsetting parameter ${option}: ${err.message}`, "error");
+                console.error('Error in handleUnsetParams:', err, {param});
+                openSnackbar(`Error unsetting parameter ${param.option || 'unknown'}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
@@ -886,7 +891,21 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                             />
                         )}
                         onChange={(event, newValue) => {
-                            setParamsToUnset(newValue);
+                            console.debug('Unset params onChange:', newValue); // Debug log
+                            // Ensure newValue contains objects with section and option
+                            const formattedParams = newValue.map((item, index) => {
+                                if (typeof item === 'string') {
+                                    // Handle case where item is a string (from test input)
+                                    const parts = item.split('.');
+                                    return {
+                                        section: parts.length > 1 ? parts[0] : '',
+                                        option: parts.length > 1 ? parts.slice(1).join('.') : item,
+                                        id: `unset-${item}-${index}`, // Unique ID for React key
+                                    };
+                                }
+                                return {...item, id: `unset-${item.option}-${index}`};
+                            });
+                            setParamsToUnset(formattedParams);
                         }}
                         disabled={actionLoading || existingParamsLoading}
                         sx={{mb: 2}}
@@ -922,9 +941,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     <Button
                         variant="contained"
                         onClick={handleManageParamsSubmit}
-                        disabled={
-                            actionLoading
-                        }
+                        disabled={actionLoading}
                     >
                         Apply
                     </Button>

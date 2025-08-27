@@ -134,6 +134,7 @@ const Objects = () => {
         const validStatuses = ["up", "down", "warn"];
         const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
         const frozen = obj?.frozen;
+        const provisioned = obj?.provisioned; // Extract provisioned status
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
         for (const node of nodes) {
@@ -144,7 +145,7 @@ const Objects = () => {
                 break;
             }
         }
-        return {avail, frozen, globalExpect};
+        return {avail, frozen, globalExpect, provisioned};
     };
 
     const getNodeState = (objectName, node) => {
@@ -523,9 +524,9 @@ const Objects = () => {
                         </TableHead>
                         <TableBody>
                             {filteredObjectNames.map((objectName) => {
-                                const {avail, frozen, globalExpect} = getObjectStatus(objectName);
+                                const {avail, frozen, globalExpect, provisioned} = getObjectStatus(objectName);
                                 const isFrozen = frozen === "frozen";
-                                // Check if any node is frozen for this object
+                                const isNotProvisioned = provisioned === "false" || provisioned === false; // Check if not provisioned
                                 const hasAnyNodeFrozen = allNodes.some((node) => {
                                     const {frozen: nodeFrozen} = getNodeState(objectName, node);
                                     return nodeFrozen === "frozen";
@@ -580,6 +581,14 @@ const Objects = () => {
                                                         <FiberManualRecordIcon
                                                             sx={{color: grey[500]}}
                                                             aria-label="Object status is n/a"
+                                                        />
+                                                    </Tooltip>
+                                                )}
+                                                {isNotProvisioned && (
+                                                    <Tooltip title="Not Provisioned">
+                                                        <WarningAmberIcon
+                                                            sx={{color: red[500], fontSize: "1.2rem"}}
+                                                            aria-label="Object is not provisioned"
                                                         />
                                                     </Tooltip>
                                                 )}
@@ -721,7 +730,7 @@ const Objects = () => {
                     pendingAction={pendingAction}
                     handleConfirm={handleExecuteActionOnSelected}
                     target={pendingAction?.node ? `object ${pendingAction.node}` : `${selectedObjects.length} objects`}
-                    supportedActions={OBJECT_ACTIONS.map(action => action.name)}
+                    supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
                     onClose={() => setPendingAction(null)}
                 />
             </Box>

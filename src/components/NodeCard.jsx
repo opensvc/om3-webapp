@@ -77,7 +77,7 @@ const NodeCard = ({
     const effectiveInstanceConfig = nodeData?.instanceConfig || {resources: {}};
     const effectiveInstanceMonitor = nodeData?.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
-    const isInstanceNotProvisioned = nodeData?.provisioned === "false" || nodeData?.provisioned === false;
+    const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
     // Log changes to selectedResourcesByNode
     useEffect(() => {
@@ -94,7 +94,7 @@ const NodeCard = ({
         const allResourceIds = [
             ...resIds,
             ...resIds.flatMap((rid) =>
-                resources[rid]?.type?.toLowerCase().includes("container") && encapData[rid]?.resources
+                resources[rid]?.type?.toLowerCase().includes("container") && encapData[rid]?.resources && resources[rid]?.status !== "down"
                     ? Object.keys(encapData[rid].resources)
                     : []
             ),
@@ -197,7 +197,7 @@ const NodeCard = ({
     };
 
     // Helper function to determine resource status letters and tooltip
-    const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false) => {
+    const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false, encapData = {}) => {
         const letters = [".", ".", ".", ".", ".", ".", ".", "."];
         const tooltipDescriptions = [
             "Not Running",
@@ -243,10 +243,18 @@ const NodeCard = ({
         }
 
         // Handle provisioned state
-        const provisionedState = resourceData?.provisioned?.state;
+        let provisionedState = resourceData?.provisioned?.state;
+        // For container resources (even at top level), check encapData if available
+        const isContainer = resourceData?.type?.toLowerCase().includes("container");
+        if (isContainer && encapData[rid]?.provisioned !== undefined) {
+            provisionedState = encapData[rid].provisioned;
+            console.log(`Using encapData provisioned state for container ${rid}:`, provisionedState);
+        }
         if (provisionedState === "false" || provisionedState === false || provisionedState === "n/a") {
             letters[5] = "P";
             tooltipDescriptions[5] = "Not Provisioned";
+        } else if (provisionedState === "true" || provisionedState === true) {
+            tooltipDescriptions[5] = "Provisioned";
         }
 
         // Handle standby state
@@ -284,6 +292,8 @@ const NodeCard = ({
             tooltipText,
             is_monitored: isMonitored,
             restart: remainingRestarts,
+            provisionedState,
+            isContainer,
         });
         return {statusString, tooltipText};
     };
@@ -295,14 +305,22 @@ const NodeCard = ({
             return null;
         }
 
-        const {
-            statusString,
-            tooltipText
-        } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
+        const {statusString, tooltipText} = getResourceStatusLetters(
+            rid,
+            res,
+            instanceConfig,
+            instanceMonitor,
+            isEncap,
+            encapData
+        );
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
         const resourceType = res.type || "N/A";
-        const isResourceNotProvisioned = res?.provisioned?.state === "false" || res?.provisioned?.state === false || res?.provisioned?.state === "n/a";
+        const isContainer = resourceType.toLowerCase().includes("container");
+        const provisionedState = isContainer && encapData[rid]?.provisioned !== undefined
+            ? encapData[rid].provisioned
+            : res?.provisioned?.state;
+        const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
 
         console.log("Rendering resource row:", {
             rid,
@@ -313,6 +331,8 @@ const NodeCard = ({
             isEncap,
             tooltipText,
             isResourceNotProvisioned,
+            provisionedState,
+            isContainer,
         });
 
         return (
@@ -690,7 +710,8 @@ const NodeCard = ({
                                     resIds.reduce(
                                         (acc, rid) =>
                                             resources[rid]?.type?.toLowerCase().includes("container") &&
-                                            encapData[rid]?.resources
+                                            encapData[rid]?.resources &&
+                                            resources[rid]?.status !== "down"
                                                 ? acc + Object.keys(encapData[rid].resources).length
                                                 : acc,
                                         0
@@ -753,6 +774,7 @@ const NodeCard = ({
                                         resourceData: res,
                                         resourceType: res.type,
                                         encapDataForRid: encapData[rid],
+                                        status: res.status,
                                     });
 
                                     return (
@@ -773,7 +795,7 @@ const NodeCard = ({
                                                     </Typography>
                                                 </Box>
                                             )}
-                                            {isContainer && encapResIds.length > 0 && (
+                                            {isContainer && encapResIds.length > 0 && res.status !== "down" && (
                                                 <Box sx={{ml: 4}}>
                                                     {encapResIds.map((encapRid) => {
                                                         console.log("Rendering encap resource:", {

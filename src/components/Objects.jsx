@@ -160,6 +160,7 @@ const Objects = () => {
                     ? "frozen"
                     : "unfrozen",
             state: monitor.state !== "idle" ? monitor.state : null,
+            provisioned: instanceStatus[node]?.provisioned,
         };
     };
 
@@ -618,8 +619,14 @@ const Objects = () => {
                                         </TableCell>
                                         {isWideScreen &&
                                             allNodes.map((node) => {
-                                                const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState} =
+                                                const {
+                                                    avail: nodeAvail,
+                                                    frozen: nodeFrozen,
+                                                    state: nodeState,
+                                                    provisioned: nodeProvisioned
+                                                } =
                                                     getNodeState(objectName, node);
+                                                const isNodeNotProvisioned = nodeProvisioned === "false" || nodeProvisioned === false;
                                                 return (
                                                     <TableCell key={node} align="center">
                                                         <Box
@@ -651,6 +658,17 @@ const Objects = () => {
                                                                             <WarningAmberIcon
                                                                                 sx={{color: orange[500]}}
                                                                                 aria-label={`Node ${node} has warning`}
+                                                                            />
+                                                                        </Tooltip>
+                                                                    )}
+                                                                    {isNodeNotProvisioned && (
+                                                                        <Tooltip title="Not Provisioned">
+                                                                            <WarningAmberIcon
+                                                                                sx={{
+                                                                                    color: red[500],
+                                                                                    fontSize: "1.2rem"
+                                                                                }}
+                                                                                aria-label={`Node ${node} is not provisioned`}
                                                                             />
                                                                         </Tooltip>
                                                                     )}

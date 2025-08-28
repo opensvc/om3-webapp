@@ -1,5 +1,5 @@
 import React from "react";
-import {Chip, Box} from "@mui/material";
+import {Chip, Box, Tooltip} from "@mui/material";
 import {StatCard} from "./StatCard.jsx";
 
 export const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
@@ -102,7 +102,8 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                                     backgroundColor: 'default',
                                     cursor: 'pointer',
                                     minWidth: "fit-content",
-                                    px: 1.5
+                                    px: 2,
+                                    height: 24,
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -111,7 +112,7 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                             />
                             <Box sx={{
                                 position: 'absolute',
-                                top: -10,
+                                top: -14,
                                 right: -12,
                                 display: 'flex',
                                 gap: 0.5,
@@ -119,30 +120,34 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                             }}>
                                 {['up', 'warn', 'down', 'n/a', 'unprovisioned'].map((stat) => (
                                     (status[stat] || 0) > 0 && (
-                                        <Box
-                                            key={stat}
-                                            sx={{
-                                                width: 16,
-                                                height: 16,
-                                                borderRadius: '50%',
-                                                backgroundColor: getStatusColor(stat),
-                                                color: 'white',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: 8,
-                                                fontWeight: 'bold',
-                                                border: '1px solid white',
-                                                cursor: 'pointer',
-                                                zIndex: 1
-                                            }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onClick(`/objects?namespace=${namespace}&globalState=${stat}`);
-                                            }}
-                                        >
-                                            {status[stat]}
-                                        </Box>
+                                        <Tooltip key={stat}
+                                                 title={stat === "unprovisioned" ? "Not Provisioned" : stat.charAt(0).toUpperCase() + stat.slice(1)}>
+                                            <Box
+                                                sx={{
+                                                    width: 15.5,
+                                                    height: 15.5,
+                                                    borderRadius: stat === "unprovisioned" ? '3px' : '50%',
+                                                    clipPath: stat === "unprovisioned" ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : undefined,
+                                                    backgroundColor: getStatusColor(stat),
+                                                    color: 'white',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: 7.8,
+                                                    fontWeight: 'bold',
+                                                    border: '1px solid white',
+                                                    cursor: 'pointer',
+                                                    zIndex: 1
+                                                }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onClick(`/objects?namespace=${namespace}&globalState=${stat}`);
+                                                }}
+                                                aria-label={`${stat} status for namespace ${namespace}: ${status[stat]} objects`}
+                                            >
+                                                {status[stat]}
+                                            </Box>
+                                        </Tooltip>
                                     )
                                 ))}
                             </Box>

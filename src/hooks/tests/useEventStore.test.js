@@ -27,6 +27,7 @@ describe('useEventStore', () => {
                 objectInstanceStatus: {},
                 heartbeatStatus: {},
                 instanceMonitor: {},
+                instanceConfig: {},
                 configUpdates: [],
             });
         });
@@ -40,6 +41,9 @@ describe('useEventStore', () => {
         expect(state.objectStatus).toEqual({});
         expect(state.objectInstanceStatus).toEqual({});
         expect(state.heartbeatStatus).toEqual({});
+        expect(state.instanceMonitor).toEqual({});
+        expect(state.instanceConfig).toEqual({});
+        expect(state.configUpdates).toEqual([]);
     });
 
     test('should set node status correctly using setNodeStatuses', () => {
@@ -106,6 +110,110 @@ describe('useEventStore', () => {
         });
     });
 
+    test('should preserve existing encapsulated resources in setInstanceStatuses', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        // Set initial state with valid encapsulated resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'active',
+                        encap: {
+                            container1: {
+                                resources: {cpu: 100, memory: 200}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Update with empty resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'updated',
+                        encap: {
+                            container1: {
+                                resources: {}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        const state = useEventStore.getState();
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'updated',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {
+                        container1: {
+                            resources: {cpu: 100, memory: 200} // Preserved
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    test('should merge new encapsulated resources in setInstanceStatuses', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        // Set initial state with some resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'active',
+                        encap: {
+                            container1: {
+                                resources: {cpu: 100}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Update with new valid resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'updated',
+                        encap: {
+                            container1: {
+                                resources: {memory: 200}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        const state = useEventStore.getState();
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'updated',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {
+                        container1: {
+                            resources: {memory: 200} // Updated
+                        }
+                    }
+                }
+            }
+        });
+    });
+
     test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
         const {setHeartbeatStatuses} = useEventStore.getState();
 
@@ -126,6 +234,42 @@ describe('useEventStore', () => {
 
         const state = useEventStore.getState();
         expect(state.instanceMonitor).toEqual({object1: {monitor: 'running'}});
+    });
+
+    test('should set instance config correctly using setInstanceConfig', () => {
+        const {setInstanceConfig} = useEventStore.getState();
+
+        act(() => {
+            setInstanceConfig('object1', 'node1', {setting: 'value'});
+        });
+
+        const state = useEventStore.getState();
+        expect(state.instanceConfig).toEqual({
+            object1: {
+                node1: {setting: 'value'}
+            }
+        });
+    });
+
+    test('should update existing instance config in setInstanceConfig', () => {
+        const {setInstanceConfig} = useEventStore.getState();
+
+        // Set initial config
+        act(() => {
+            setInstanceConfig('object1', 'node1', {setting1: 'value1'});
+        });
+
+        // Update config
+        act(() => {
+            setInstanceConfig('object1', 'node1', {setting2: 'value2'});
+        });
+
+        const state = useEventStore.getState();
+        expect(state.instanceConfig).toEqual({
+            object1: {
+                node1: {setting2: 'value2'}
+            }
+        });
     });
 
     test('should remove object correctly using removeObject', () => {
@@ -226,6 +370,50 @@ describe('useEventStore', () => {
         expect(state.configUpdates).toEqual([
             {name: 'service1', fullName: 'ns1/svc/service1', node: 'node1'},
             {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
+        ]);
+    });
+
+    test('should handle invalid JSON in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+
+        const updates = [
+            'invalid-json-string',
+            {name: 'service1', node: 'node1'}
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'root/svc/service1', node: 'node1'}
+        ]);
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '[useEventStore] Invalid JSON in setConfigUpdated:',
+            'invalid-json-string'
+        );
+
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('should handle invalid update format in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            {invalid: 'data'}, // Invalid format
+            {name: 'service1', node: 'node1'}
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service1', fullName: 'root/svc/service1', node: 'node1'}
         ]);
     });
 

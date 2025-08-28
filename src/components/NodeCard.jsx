@@ -812,7 +812,7 @@ const NodeCard = ({
                                                     })}
                                                 </Box>
                                             )}
-                                            {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && (
+                                            {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && !isInstanceNotProvisioned && (
                                                 <Box sx={{ml: 4}}>
                                                     <Typography color="textSecondary">
                                                         No encapsulated resources available for {rid}.

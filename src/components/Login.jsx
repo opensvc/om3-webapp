@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
 import {URL_TOKEN} from "../config/apiPath.js";
 
+// --- Secure decodeToken ---
 export const decodeToken = (token) => {
     if (!token) return null;
     try {
@@ -18,6 +19,33 @@ export const decodeToken = (token) => {
         return payload;
     } catch (error) {
         console.error('Error decoding token:', error);
+        return null;
+    }
+};
+
+// --- Exported refreshToken ---
+export const refreshToken = async (dispatch) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return null;
+
+    try {
+        const response = await fetch(URL_TOKEN, {
+            method: 'POST',
+            headers: {'Authorization': `Bearer ${token}`},
+        });
+
+        if (!response.ok) throw new Error('Token refresh failed');
+        const data = await response.json();
+
+        localStorage.setItem('authToken', data.token);
+        const expirationTime = decodeToken(data.token)?.exp * 1000;
+        if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
+
+        dispatch({type: SetAccessToken, data: data.token});
+        return data.token;
+    } catch (error) {
+        console.error('Error refreshing token:', error);
+        dispatch({type: SetAccessToken, data: null});
         return null;
     }
 };
@@ -45,20 +73,12 @@ const Login = forwardRef((props, ref) => {
 
             const data = await response.json();
             setErrorMessage('');
+
             localStorage.setItem('authToken', data.token);
-            const newPayload = decodeToken(data.token);
-            const expirationTime = newPayload?.exp * 1000;
-            localStorage.setItem('tokenExpiration', expirationTime);
+            const expirationTime = decodeToken(data.token)?.exp * 1000;
+            if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
+
             dispatch({type: SetAccessToken, data: data.token});
-
-            const payload = decodeToken(data.token);
-            if (payload?.exp) {
-                const refreshTime = payload.exp * 1000 - Date.now() - 5000;
-                if (refreshTime > 0) {
-                    setTimeout(() => refreshToken(dispatch), refreshTime);
-                }
-            }
-
             navigate('/');
         } catch (error) {
             console.error('Authentication error:', error);
@@ -72,9 +92,7 @@ const Login = forwardRef((props, ref) => {
     };
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            handleSubmit(e);
-        }
+        if (e.key === 'Enter') handleSubmit(e);
     };
 
     const handleChangeMethod = () => {
@@ -83,145 +101,31 @@ const Login = forwardRef((props, ref) => {
     };
 
     return (
-        <Dialog
-            open={true}
-            aria-labelledby="login-dialog"
-            ref={ref}
-            PaperProps={{
-                sx: {
-                    width: '100%',
-                    maxWidth: '448px',
-                    mx: 'auto',
-                    p: 3,
-                    borderRadius: 2,
-                    boxShadow: 3
-                }
-            }}
-        >
-            <DialogTitle
-                id="login-dialog"
-                sx={{
-                    textAlign: 'center',
-                    fontSize: '1.5rem',
-                    fontWeight: 600,
-                    py: 2,
-                    color: 'text.primary'
-                }}
-            >
+        <Dialog open={true} aria-labelledby="login-dialog" ref={ref}
+                PaperProps={{sx: {width: '100%', maxWidth: '448px', mx: 'auto', p: 3, borderRadius: 2, boxShadow: 3}}}>
+            <DialogTitle id="login-dialog"
+                         sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}>
                 {t('Login')}
             </DialogTitle>
             <DialogContent sx={{px: 3}}>
-                <TextField
-                    margin="normal"
-                    fullWidth
-                    label={t('Username')}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoFocus
-                    sx={{mb: 2}}
-                />
-                <TextField
-                    margin="normal"
-                    fullWidth
-                    label={t('Password')}
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    sx={{mb: 2}}
-                />
-                {errorMessage && (
-                    <Typography
-                        color="error"
-                        variant="body2"
-                        sx={{
-                            mt: 1,
-                            textAlign: 'center',
-                            animation: 'pulse 1.5s infinite'
-                        }}
-                    >
-                        {errorMessage}
-                    </Typography>
-                )}
+                <TextField margin="normal" fullWidth label={t('Username')} value={username}
+                           onChange={(e) => setUsername(e.target.value)} autoFocus sx={{mb: 2}}/>
+                <TextField margin="normal" fullWidth label={t('Password')} type="password" value={password}
+                           onChange={(e) => setPassword(e.target.value)} onKeyDown={handleKeyDown} sx={{mb: 2}}/>
+                {errorMessage && <Typography color="error" variant="body2" sx={{
+                    mt: 1,
+                    textAlign: 'center',
+                    animation: 'pulse 1.5s infinite'
+                }}>{errorMessage}</Typography>}
             </DialogContent>
-            <DialogActions sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 2,
-                px: 3,
-                pb: 3
-            }}>
-                <Button
-                    variant="contained"
-                    onClick={handleSubmit}
-                    disabled={!username || !password}
-                    sx={{
-                        px: 4,
-                        py: 1,
-                        borderRadius: 1
-                    }}
-                >
-                    {t('Submit')}
-                </Button>
-                <Button
-                    variant="outlined"
-                    onClick={handleChangeMethod}
-                    sx={{
-                        px: 4,
-                        py: 1,
-                        borderRadius: 1
-                    }}
-                >
-                    {t('Change Method')}
-                </Button>
+            <DialogActions sx={{display: 'flex', justifyContent: 'center', gap: 2, px: 3, pb: 3}}>
+                <Button variant="contained" onClick={handleSubmit} disabled={!username || !password}
+                        sx={{px: 4, py: 1, borderRadius: 1}}>{t('Submit')}</Button>
+                <Button variant="outlined" onClick={handleChangeMethod}
+                        sx={{px: 4, py: 1, borderRadius: 1}}>{t('Change Method')}</Button>
             </DialogActions>
         </Dialog>
     );
 });
-
-export const refreshToken = async (dispatch) => {
-    const token = localStorage.getItem('authToken');
-    const tokenExpiration = localStorage.getItem('tokenExpiration');
-    const currentTime = Date.now();
-
-    console.log('Checking token validity...');
-    console.log('Current time:', new Date(currentTime).toLocaleString());
-    console.log('Token expiration time:', new Date(Number(tokenExpiration)).toLocaleString());
-
-    if (token && tokenExpiration && currentTime < tokenExpiration) {
-        console.log('Token is still valid, attempting to refresh...');
-        try {
-            const response = await fetch(URL_TOKEN, {
-                method: 'POST',
-                headers: {'Authorization': `Bearer ${token}`},
-            });
-
-            if (!response.ok) throw new Error('Token refresh failed');
-            const data = await response.json();
-            console.log('✅ Token refreshed successfully');
-
-            localStorage.setItem('authToken', data.token);
-            const expirationTime = Date.now() + 30000;
-            localStorage.setItem('tokenExpiration', expirationTime);
-            console.log('New token expiration set for:', new Date(expirationTime).toLocaleString());
-
-            dispatch({type: SetAccessToken, data: data.token});
-
-            // Decode the new token and re-set the timeout
-            const payload = decodeToken(data.token);
-            if (payload?.exp) {
-                const refreshTime = payload.exp * 1000 - Date.now() - 5000;
-                if (refreshTime > 0) {
-                    console.log('Next refresh in:', refreshTime / 1000, 'seconds');
-                    setTimeout(() => refreshToken(dispatch), refreshTime);
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error refreshing token:', error);
-        }
-    } else {
-        console.warn('⚠️ Token expired or missing, redirecting to login...');
-    }
-};
 
 export default Login;

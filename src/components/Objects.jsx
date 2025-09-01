@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
@@ -56,6 +56,7 @@ import ActionDialogManager from "./ActionDialogManager";
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const isMounted = useRef(true);
 
     const queryParams = new URLSearchParams(location.search);
     const globalStates = ["all", "up", "down", "warn", "n/a", "unprovisioned"];
@@ -92,6 +93,7 @@ const Objects = () => {
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
     useEffect(() => {
+        if (!isMounted.current) return;
         const newQueryParams = new URLSearchParams();
         if (selectedGlobalState !== "all") {
             newQueryParams.set("globalState", selectedGlobalState);
@@ -112,6 +114,7 @@ const Objects = () => {
     }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname]);
 
     useEffect(() => {
+        if (!isMounted.current) return;
         setSelectedGlobalState(
             globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
         );
@@ -119,6 +122,12 @@ const Objects = () => {
         setSelectedKind(rawKind);
         setSearchQuery(rawSearchQuery);
     }, [location.search]);
+
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
 
     const objects = Object.keys(objectStatus).length
         ? objectStatus
@@ -191,16 +200,22 @@ const Objects = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token, [
+            const subscription = startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
+            return () => {
+                if (typeof subscription !== "function") {
+                    console.warn("[Objects] Subscription is not a function:", subscription);
+                }
+                if (typeof subscription === "function") {
+                    subscription();
+                }
+                closeEventSource();
+            };
         }
-        return () => {
-            closeEventSource();
-        };
     }, []);
 
     const handleSelectObject = (event, objectName) => {

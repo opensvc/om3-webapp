@@ -26,22 +26,16 @@ import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/a
 
 // Helper function to filter resource actions based on type
 const getFilteredResourceActions = (resourceType) => {
-    console.log("getFilteredResourceActions called with resourceType:", resourceType);
     if (!resourceType) {
-        console.log("No resource type provided, returning all actions");
         return RESOURCE_ACTIONS;
     }
     const typePrefix = resourceType.split('.')[0].toLowerCase();
-    console.log("Resource type prefix:", typePrefix);
     if (typePrefix === 'task') {
-        console.log("Type is task, returning only 'run' action");
         return RESOURCE_ACTIONS.filter(action => action.name === 'run');
     }
     if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
-        console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
         return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
     }
-    console.log("No special filtering, returning all actions");
     return RESOURCE_ACTIONS;
 };
 
@@ -51,17 +45,14 @@ const getResourceType = (rid, nodeData) => {
         console.warn("getResourceType called with undefined or null rid");
         return '';
     }
-    console.log(`getResourceType called for rid: ${rid}`);
     const topLevelType = nodeData?.resources?.[rid]?.type;
     if (topLevelType) {
-        console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
         return topLevelType;
     }
     const encapData = nodeData?.encap || {};
     for (const containerId of Object.keys(encapData)) {
         const encapType = encapData[containerId]?.resources?.[rid]?.type;
         if (encapType) {
-            console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
             return encapType;
         }
     }
@@ -145,28 +136,18 @@ const ObjectDetail = () => {
     // Ref to track if component is mounted
     const isMounted = useRef(true);
 
-    // Debug logging for component lifecycle
-    console.log(`[ObjectDetail] Mounting component for ${decodedObjectName}`);
-
     // Cleanup on unmount
     useEffect(() => {
         isMounted.current = true;
         return () => {
-            console.log(`[ObjectDetail] Unmounting component for ${decodedObjectName}`);
             isMounted.current = false;
             closeEventSource();
         };
     }, [decodedObjectName]);
 
-    // Debug selectedResourcesByNode changes
-    useEffect(() => {
-        console.log("[ObjectDetail] selectedResourcesByNode updated:", selectedResourcesByNode);
-    }, [selectedResourcesByNode]);
-
     // Initialize and update accordion states for nodes and resources
     useEffect(() => {
         if (!objectData) return;
-        console.log("[ObjectDetail] Updating accordion states for nodes and resources");
         const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
         setExpandedNodeResources((prev) => {
             const updatedNodeResources = {...prev};
@@ -180,7 +161,6 @@ const ObjectDetail = () => {
                     delete updatedNodeResources[node];
                 }
             });
-            console.log("[ObjectDetail] Updated expandedNodeResources:", updatedNodeResources);
             return updatedNodeResources;
         });
 
@@ -204,7 +184,6 @@ const ObjectDetail = () => {
                     delete updatedResources[key];
                 }
             });
-            console.log("[ObjectDetail] Updated expandedResources:", updatedResources);
             return updatedResources;
         });
     }, [objectInstanceStatus, decodedObjectName]);
@@ -276,17 +255,14 @@ const ObjectDetail = () => {
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
         const url = postActionUrl({node, objectName: decodedObjectName, action});
-        console.log("[ObjectDetail] postNodeAction URL:", url);
         try {
             const res = await fetch(url, {
                 method: "POST",
                 headers: {Authorization: `Bearer ${token}`},
             });
-            console.log("[ObjectDetail] postNodeAction response:", res.status, res.statusText);
             if (!res.ok) throw new Error(`Failed to execute ${action}`);
             openSnackbar(`'${action}' succeeded on node '${node}'`);
         } catch (err) {
-            console.error("[ObjectDetail] postNodeAction error:", err);
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionInProgress(false);
@@ -323,28 +299,23 @@ const ObjectDetail = () => {
 
     // Fetch configuration for the object
     const fetchConfig = async (node) => {
-        console.log("[ObjectDetail] fetchConfig called with node:", node);
         if (!node) {
-            console.warn(`[ObjectDetail] fetchConfig: No node provided for ${decodedObjectName}`);
             setConfigError("No node available to fetch configuration.");
             return;
         }
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
         if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
-            console.log("[ObjectDetail] fetchConfig: Debounced, skipping");
             return;
         }
         lastFetch.current[key] = now;
         if (configLoading) {
-            console.warn(`[ObjectDetail] fetchConfig: Already loading for ${node}, skipping`);
             return;
         }
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
             setConfigError("Auth token not found.");
-            console.error("[ObjectDetail] fetchConfig: No auth token");
             return;
         }
 
@@ -352,7 +323,6 @@ const ObjectDetail = () => {
         setConfigError(null);
         setConfigNode(node);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
-        console.log("[ObjectDetail] fetchConfig URL:", url);
         try {
             const response = await Promise.race([
                 fetch(url, {
@@ -367,19 +337,16 @@ const ObjectDetail = () => {
             const text = await response.text();
             if (isMounted.current) {
                 setConfigData(text);
-                console.log("[ObjectDetail] fetchConfig success, configData:", text);
             }
             return text;
         } catch (err) {
             if (isMounted.current) {
                 setConfigError(err.message);
-                console.error(`[ObjectDetail] fetchConfig error: ${err.message}, URL: ${url}`);
             }
             throw err;
         } finally {
             if (isMounted.current) {
                 setConfigLoading(false);
-                console.log("[ObjectDetail] fetchConfig completed");
             }
         }
     };
@@ -428,7 +395,6 @@ const ObjectDetail = () => {
 
     // Accordion handlers
     const handleNodeResourcesAccordionChange = (node) => (event, isExpanded) => {
-        console.log("[ObjectDetail] handleNodeResourcesAccordionChange:", {node, isExpanded});
         setExpandedNodeResources((prev) => ({
             ...prev,
             [node]: isExpanded,
@@ -436,7 +402,6 @@ const ObjectDetail = () => {
     };
 
     const handleAccordionChange = (node, rid) => (event, isExpanded) => {
-        console.log("[ObjectDetail] handleAccordionChange:", {node, rid, isExpanded});
         setExpandedResources((prev) => ({
             ...prev,
             [`${node}:${rid}`]: isExpanded,
@@ -447,7 +412,6 @@ const ObjectDetail = () => {
     const handleNodesActionsOpen = (e) => setNodesActionsAnchor(e.currentTarget);
     const handleNodesActionsClose = () => setNodesActionsAnchor(null);
     const handleBatchNodeActionClick = (action) => {
-        console.log("[ObjectDetail] handleBatchNodeActionClick:", action);
         setPendingAction({action, batch: "nodes"});
         if (action === "freeze") {
             setCheckboxes({failover: false});
@@ -476,7 +440,6 @@ const ObjectDetail = () => {
 
     // Individual node actions handlers
     const handleIndividualNodeActionClick = (action) => {
-        console.log("[ObjectDetail] handleIndividualNodeActionClick:", action, currentNode);
         setPendingAction({action, node: currentNode});
         if (action === "freeze") {
             setCheckboxes({failover: false});
@@ -505,13 +468,11 @@ const ObjectDetail = () => {
 
     // Batch resource actions handlers
     const handleResourcesActionsOpen = (node, e) => {
-        console.log("[ObjectDetail] handleResourcesActionsOpen:", node);
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
     };
     const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
     const handleBatchResourceActionClick = (action) => {
-        console.log("[ObjectDetail] handleBatchResourceActionClick:", action, resGroupNode);
         setPendingAction({action, batch: "resources", node: resGroupNode});
         setSimpleDialogOpen(true);
         handleResourcesActionsClose();
@@ -519,7 +480,6 @@ const ObjectDetail = () => {
 
     // Individual resource actions handlers
     const handleResourceMenuOpen = (node, rid, e) => {
-        console.log("[ObjectDetail] handleResourceMenuOpen:", node, rid);
         setCurrentResourceId(rid);
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
@@ -529,7 +489,6 @@ const ObjectDetail = () => {
         setCurrentResourceId(null);
     };
     const handleResourceActionClick = (action) => {
-        console.log("[ObjectDetail] handleResourceActionClick:", action, currentResourceId);
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
         setSimpleDialogOpen(true);
         handleResourceMenuClose();
@@ -537,7 +496,6 @@ const ObjectDetail = () => {
 
     // Object action handler
     const handleObjectActionClick = (action) => {
-        console.log("[ObjectDetail] handleObjectActionClick:", action);
         setPendingAction({action});
         if (action === "freeze") {
             setCheckboxes({failover: false});
@@ -566,8 +524,10 @@ const ObjectDetail = () => {
 
     // Dialog confirm handler
     const handleDialogConfirm = () => {
-        console.log("[ObjectDetail] handleDialogConfirm called with pendingAction:", pendingAction);
-        if (!pendingAction) return;
+        if (!pendingAction) {
+            console.warn("No valid pendingAction or action provided:", pendingAction);
+            return;
+        }
 
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) =>
@@ -609,27 +569,23 @@ const ObjectDetail = () => {
 
     // Selection helpers
     const toggleNode = (node) => {
-        console.log("[ObjectDetail] toggleNode:", node);
         setSelectedNodes((prev) =>
             prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
         );
     };
 
     const toggleResource = (node, rid) => {
-        console.log("[ObjectDetail] toggleResource:", {node, rid});
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
             const next = current.includes(rid)
                 ? current.filter((r) => r !== rid)
                 : [...current, rid];
-            console.log("[ObjectDetail] toggleResource result:", {node, next});
             return {...prev, [node]: next};
         });
     };
 
     // Effect for configuring EventSource
     useEffect(() => {
-        console.log(`[ObjectDetail] Setting up EventSource for ${decodedObjectName}`);
         const token = localStorage.getItem("authToken");
         if (token) {
             const filters = [
@@ -640,34 +596,26 @@ const ObjectDetail = () => {
                 `InstanceConfigUpdated,path=${decodedObjectName}`,
             ];
             startEventReception(token, filters);
-        } else {
-            console.warn("[ObjectDetail] No auth token for EventSource");
         }
 
         return () => {
-            console.log(`[ObjectDetail] Cleaning up EventSource for ${decodedObjectName}`);
             closeEventSource();
         };
     }, [decodedObjectName]);
 
     // Effect for handling config updates
     useEffect(() => {
-        console.log("[ObjectDetail] Setting up configUpdates subscription");
         if (!isMounted.current) {
-            console.log("[ObjectDetail] Component unmounted, skipping subscription");
             return;
         }
 
         const subscription = useEventStore.subscribe(
             (state) => state.configUpdates,
             async (updates) => {
-                console.log("[ObjectDetail] Config updates received:", updates);
                 if (!isMounted.current) {
-                    console.log("[ObjectDetail] Component unmounted, ignoring config update");
                     return;
                 }
                 if (isProcessingConfigUpdate.current) {
-                    console.log("[ObjectDetail] Config update processing already in progress, skipping");
                     return;
                 }
                 isProcessingConfigUpdate.current = true;
@@ -680,13 +628,11 @@ const ObjectDetail = () => {
                     );
 
                     if (matchingUpdate && matchingUpdate.node) {
-                        console.log("[ObjectDetail] Processing config update for node:", matchingUpdate.node);
                         try {
                             await fetchConfig(matchingUpdate.node);
                             setConfigAccordionExpanded(true);
                             openSnackbar("Configuration updated", "info");
                         } catch (err) {
-                            console.error(`[ObjectDetail] Failed to fetch updated config:`, err);
                             openSnackbar("Failed to load updated configuration", "error");
                         } finally {
                             clearConfigUpdate(decodedObjectName);
@@ -700,43 +646,34 @@ const ObjectDetail = () => {
             }
         );
 
-        console.log("[ObjectDetail] Subscription created:", typeof subscription);
-
         return () => {
-            console.log("[ObjectDetail] Cleaning up configUpdates subscription");
+            if (typeof subscription !== "function") {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            }
             if (typeof subscription === "function") {
                 subscription();
-            } else {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
     }, [decodedObjectName, clearConfigUpdate]);
 
     // Effect for handling instance config updates
     useEffect(() => {
-        console.log("[ObjectDetail] Setting up instanceConfig subscription");
         if (!isMounted.current) {
-            console.log("[ObjectDetail] Component unmounted, skipping subscription");
             return;
         }
 
         const subscription = useEventStore.subscribe(
             (state) => state.instanceConfig,
             (newConfig) => {
-                console.log("[ObjectDetail] instanceConfig updated:", newConfig);
                 if (!isMounted.current) {
-                    console.log("[ObjectDetail] Component unmounted, ignoring instanceConfig update");
                     return;
                 }
                 const config = newConfig[decodedObjectName];
                 if (config && configNode) {
-                    console.log("[ObjectDetail] Processing instanceConfig update for node:", configNode);
                     try {
-                        // Update NodeCard with the new instanceConfig
                         setConfigAccordionExpanded(true);
                         openSnackbar("Instance configuration updated", "info");
                     } catch (err) {
-                        console.error(`[ObjectDetail] Failed to process instanceConfig update:`, err);
                         openSnackbar("Failed to process instance configuration update", "error");
                     }
                 }
@@ -744,11 +681,11 @@ const ObjectDetail = () => {
         );
 
         return () => {
-            console.log("[ObjectDetail] Cleaning up instanceConfig subscription");
+            if (typeof subscription !== "function") {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            }
             if (typeof subscription === "function") {
                 subscription();
-            } else {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
     }, [decodedObjectName, configNode]);
@@ -756,7 +693,6 @@ const ObjectDetail = () => {
     // Initial load effects
     useEffect(() => {
         const loadInitialConfig = async () => {
-            console.log("[ObjectDetail] Initial load effect for:", decodedObjectName);
             if (objectData) {
                 const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
                 const initialNode = nodes.find((node) => {
@@ -765,24 +701,19 @@ const ObjectDetail = () => {
                         Object.values(objectData[node].encap).some(
                             (container) => container.resources && Object.keys(container.resources).length > 0
                         );
-                    console.log(`[ObjectDetail] Checking node ${node} for valid encap resources:`, hasValidEncapResources);
                     return hasValidEncapResources;
                 }) || nodes[0];
 
                 if (initialNode) {
-                    console.log("[ObjectDetail] Fetching config for initial node:", initialNode);
                     try {
                         await fetchConfig(initialNode);
                     } catch (err) {
-                        console.error(`[ObjectDetail] Initial Load failed for ${decodedObjectName}:`, err);
                         setConfigError("Failed to load initial configuration.");
                     }
                 } else {
                     setConfigError("No nodes available to fetch configuration.");
-                    console.warn(`[ObjectDetail] No initial node found for ${decodedObjectName}`);
                 }
             } else {
-                console.log("[ObjectDetail] No object data available, skipping config fetch");
                 setConfigError("No object data available.");
             }
             setInitialLoading(false);
@@ -793,12 +724,9 @@ const ObjectDetail = () => {
 
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
-        console.log("[ObjectDetail] Memoizing objectData:", objectData);
-        console.log("[ObjectDetail] instanceConfig state:", instanceConfig);
         const enhancedObjectData = {};
         if (objectData) {
             Object.keys(objectData).forEach((node) => {
-                console.log(`[ObjectDetail] Node ${node} encap:`, objectData[node]?.encap);
                 enhancedObjectData[node] = {
                     ...objectData[node],
                     instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName][node] || {resources: {}} : {resources: {}},
@@ -806,16 +734,12 @@ const ObjectDetail = () => {
                 };
             });
         }
-        console.log("[ObjectDetail] Enhanced memoizedObjectData:", enhancedObjectData);
         return enhancedObjectData;
     }, [objectData, instanceConfig, instanceMonitor, decodedObjectName]);
 
     const memoizedNodes = useMemo(() => {
-        console.log("[ObjectDetail] Memoizing nodes:", Object.keys(memoizedObjectData || {}));
         return Object.keys(memoizedObjectData || {});
     }, [memoizedObjectData]);
-
-    console.log("[ObjectDetail] Rendering with memoizedObjectData:", memoizedObjectData);
 
     // Render loading state only if no data is available during initial loading
     if (initialLoading && !memoizedObjectData) {
@@ -830,10 +754,8 @@ const ObjectDetail = () => {
     // Render empty state with separate Typography for object name
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
-    console.log("[ObjectDetail] showKeys:", showKeys, "kind:", kind);
 
     if (!memoizedObjectData) {
-        console.log("[ObjectDetail] No object data, rendering empty state");
         return (
             <Box p={4}>
                 <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
@@ -848,7 +770,7 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
                 />
             </Box>
         );
@@ -895,12 +817,12 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)} // Pass a minimal handler to close dialog
+                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
                 />
                 <ManageConfigParamsDialog
                     open={manageParamsDialogOpen}
                     onClose={() => setManageParamsDialogOpen(false)}
-                    onConfirm={() => setManageParamsDialogOpen(false)} // Use ConfigSection's handleManageParamsSubmit via dialog
+                    onConfirm={() => setManageParamsDialogOpen(false)}
                     paramsToSet={paramsToSet}
                     setParamsToSet={setParamsToSet}
                     paramsToUnset={paramsToUnset}
@@ -922,7 +844,6 @@ const ObjectDetail = () => {
                             </Button>
                         </Box>
                         {memoizedNodes.map((node) => {
-                            console.log("[ObjectDetail] Rendering NodeCard for node:", node);
                             return (
                                 <NodeCard
                                     key={node}
@@ -1009,22 +930,11 @@ const ObjectDetail = () => {
                         >
                             {(() => {
                                 if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
-                                    console.error("Cannot render resource actions menu: missing currentResourceId or node data", {
-                                        currentResourceId,
-                                        resGroupNode,
-                                        nodeData: memoizedObjectData[resGroupNode]
-                                    });
                                     return [];
                                 }
                                 const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
                                 const filteredActions = getFilteredResourceActions(resourceType);
-                                console.log("Rendering resource actions menu:", {
-                                    currentResourceId,
-                                    resourceType,
-                                    filteredActions: filteredActions.map(action => action.name),
-                                });
                                 return filteredActions.map(({name, icon}) => {
-                                    console.log(`Rendering MenuItem for action: ${name}`);
                                     return (
                                         <MenuItem
                                             key={name}

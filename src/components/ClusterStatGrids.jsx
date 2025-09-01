@@ -12,7 +12,6 @@ export const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
 );
 
 export const GridObjects = ({objectCount, statusCount, onClick}) => {
-    console.log("GridObjects rendering with statusCount:", statusCount);
     return (
         <StatCard
             title="Objects"

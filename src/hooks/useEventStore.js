@@ -32,7 +32,6 @@ const useEventStore = create((set) => ({
 
     setInstanceStatuses: (instanceStatuses) =>
         set((state) => {
-            console.log("[useEventStore] setInstanceStatuses received:", instanceStatuses);
             const newObjectInstanceStatus = {...state.objectInstanceStatus};
 
             Object.keys(instanceStatuses).forEach((path) => {
@@ -42,7 +41,6 @@ const useEventStore = create((set) => ({
 
                 Object.keys(instanceStatuses[path]).forEach((node) => {
                     const newStatus = instanceStatuses[path][node];
-                    console.log(`[useEventStore] Processing node ${node} for path ${path}:`, newStatus);
 
                     // Merge data, preserving encap.resources if the new data has no valid resources
                     const existingData = newObjectInstanceStatus[path][node] || {};
@@ -79,12 +77,9 @@ const useEventStore = create((set) => ({
                         ...newStatus,
                         encap: mergedEncap,
                     };
-
-                    console.log(`[useEventStore] Updated node ${node} for path ${path}:`, newObjectInstanceStatus[path][node]);
                 });
             });
 
-            console.log("[useEventStore] Final objectInstanceStatus:", newObjectInstanceStatus);
             return {objectInstanceStatus: newObjectInstanceStatus};
         }),
 
@@ -115,13 +110,11 @@ const useEventStore = create((set) => ({
 
     setInstanceConfig: (path, node, config) =>
         set((state) => {
-            console.log("[useEventStore] setInstanceConfig called with:", {path, node, config});
             const newInstanceConfig = {...state.instanceConfig};
             if (!newInstanceConfig[path]) {
                 newInstanceConfig[path] = {};
             }
             newInstanceConfig[path][node] = {...config};
-            console.log("[useEventStore] Updated instanceConfig:", newInstanceConfig);
             return {instanceConfig: newInstanceConfig};
         }),
 
@@ -176,7 +169,6 @@ const useEventStore = create((set) => ({
 
     clearConfigUpdate: (objectName) => set((state) => {
         const {name} = parseObjectPath(objectName);
-        console.log(`🦗 [Store] Clearing config update for objectName=${objectName}, name=${name}`);
         return {
             configUpdates: state.configUpdates.filter(
                 (u) => u.name !== name && u.fullName !== objectName

@@ -11,7 +11,7 @@ import {
     SetAuthChoice,
 } from '../AuthProvider';
 
-// Simuler BroadcastChannel
+// Mock BroadcastChannel
 global.BroadcastChannel = class {
     constructor() {
         this.onmessage = null;
@@ -26,7 +26,7 @@ global.BroadcastChannel = class {
     }
 };
 
-// Simuler decodeToken et refreshToken
+// Mock decodeToken and refreshToken
 jest.mock('../../components/Login', () => ({
     decodeToken: jest.fn(),
     refreshToken: jest.fn(),
@@ -50,25 +50,47 @@ const TestDispatchComponent = () => {
     const dispatch = useAuthDispatch();
     return (
         <div>
-            <button data-testid="login" onClick={() => dispatch({type: Login, data: 'testuser'})}>Login</button>
-            <button data-testid="logout" onClick={() => dispatch({type: Logout})}>Logout</button>
-            <button data-testid="setAccessToken"
-                    onClick={() => dispatch({type: SetAccessToken, data: 'mock-token'})}>Set Access Token
+            <button data-testid="login" onClick={() => dispatch({type: Login, data: 'testuser'})}>
+                Login
             </button>
-            <button data-testid="setAccessTokenNull" onClick={() => dispatch({type: SetAccessToken, data: null})}>Set
-                Access Token Null
+            <button data-testid="logout" onClick={() => dispatch({type: Logout})}>
+                Logout
             </button>
-            <button data-testid="setAuthInfo"
-                    onClick={() => dispatch({type: SetAuthInfo, data: {provider: 'openid'}})}>Set Auth Info
+            <button
+                data-testid="setAccessToken"
+                onClick={() => dispatch({type: SetAccessToken, data: 'mock-token'})}
+            >
+                Set Access Token
             </button>
-            <button data-testid="setAuthChoice" onClick={() => dispatch({type: SetAuthChoice, data: 'sso'})}>Set Auth
-                Choice
+            <button
+                data-testid="setAccessTokenNull"
+                onClick={() => dispatch({type: SetAccessToken, data: null})}
+            >
+                Set Access Token Null
             </button>
-            <button data-testid="setAuthChoiceOpenid"
-                    onClick={() => dispatch({type: SetAuthChoice, data: 'openid'})}>Set Auth Choice Openid
+            <button
+                data-testid="setAuthInfo"
+                onClick={() => dispatch({type: SetAuthInfo, data: {provider: 'openid'}})}
+            >
+                Set Auth Info
             </button>
-            <button data-testid="unknownAction"
-                    onClick={() => dispatch({type: 'UNKNOWN_ACTION', data: 'invalid'})}>Unknown Action
+            <button
+                data-testid="setAuthChoice"
+                onClick={() => dispatch({type: SetAuthChoice, data: 'sso'})}
+            >
+                Set Auth Choice
+            </button>
+            <button
+                data-testid="setAuthChoiceOpenid"
+                onClick={() => dispatch({type: SetAuthChoice, data: 'openid'})}
+            >
+                Set Auth Choice Openid
+            </button>
+            <button
+                data-testid="unknownAction"
+                onClick={() => dispatch({type: 'UNKNOWN_ACTION', data: 'invalid'})}
+            >
+                Unknown Action
             </button>
         </div>
     );
@@ -83,7 +105,7 @@ const TestUseAuthDispatchError = () => {
     return null;
 };
 
-// Fonction utilitaire pour vider les promesses
+// Utility function to flush promises
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('AuthProvider', () => {
@@ -108,7 +130,7 @@ describe('AuthProvider', () => {
         broadcastChannelInstance = null;
     });
 
-    test('fournit l’état d’authentification initial', () => {
+    test('provides initial authentication state', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -121,7 +143,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
     });
 
-    test('met à jour l’état avec l’action Login', () => {
+    test('updates state with Login action', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -133,7 +155,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
     });
 
-    test('met à jour l’état avec l’action Logout', () => {
+    test('updates state with Logout action', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -148,7 +170,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
     });
 
-    test('met à jour l’état avec l’action SetAccessToken', () => {
+    test('updates state with SetAccessToken action', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -160,7 +182,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
     });
 
-    test('met à jour l’état avec l’action SetAuthInfo', () => {
+    test('updates state with SetAuthInfo action', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -171,7 +193,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('authInfo').textContent).toBe('{"provider":"openid"}');
     });
 
-    test('met à jour l’état avec l’action SetAuthChoice', () => {
+    test('updates state with SetAuthChoice action', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -182,7 +204,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('authChoice').textContent).toBe('"sso"');
     });
 
-    test('rend les enfants correctement', () => {
+    test('renders children correctly', () => {
         render(
             <AuthProvider>
                 <div data-testid="child">Child Content</div>
@@ -191,13 +213,13 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('child').textContent).toBe('Child Content');
     });
 
-    test('useAuth lève une erreur lorsqu’utilisé hors d’AuthProvider', () => {
+    test('useAuth throws an error when used outside AuthProvider', () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
         expect(() => render(<TestUseAuthError/>)).toThrow('useAuth must be used within an AuthProvider');
         consoleErrorSpy.mockRestore();
     });
 
-    test('useAuthDispatch lève une erreur lorsqu’utilisé hors d’AuthProvider', () => {
+    test('useAuthDispatch throws an error when used outside AuthProvider', () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
         expect(() => render(<TestUseAuthDispatchError/>)).toThrow(
             'useAuthDispatch must be used within an AuthProvider'
@@ -205,7 +227,7 @@ describe('AuthProvider', () => {
         consoleErrorSpy.mockRestore();
     });
 
-    test('une action inconnue ne modifie pas l’état', () => {
+    test('unknown action does not modify state', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -220,7 +242,7 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
     });
 
-    test('planifie le rafraîchissement du jeton avec un jeton valide', () => {
+    test('schedules token refresh with valid token', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         refreshToken.mockResolvedValue('new-token');
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -240,7 +262,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('ne planifie pas de rafraîchissement pour un jeton expiré', () => {
+    test('does not schedule refresh for expired token', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10});
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
         render(
@@ -258,7 +280,7 @@ describe('AuthProvider', () => {
         consoleWarnSpy.mockRestore();
     });
 
-    test('nettoie le timeout lors du démontage du composant', () => {
+    test('cleans up timeout on component unmount', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         refreshToken.mockResolvedValue('new-token');
         const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
@@ -274,7 +296,7 @@ describe('AuthProvider', () => {
         clearTimeoutSpy.mockRestore();
     });
 
-    test('n’initialise pas BroadcastChannel lorsqu’il est indéfini', () => {
+    test('does not initialize BroadcastChannel when undefined', () => {
         const originalBroadcastChannel = global.BroadcastChannel;
         delete global.BroadcastChannel;
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -288,7 +310,7 @@ describe('AuthProvider', () => {
         global.BroadcastChannel = originalBroadcastChannel;
     });
 
-    test('ne planifie pas de rafraîchissement lorsqu’aucun jeton n’est fourni', () => {
+    test('does not schedule refresh when no token is provided', () => {
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
@@ -306,7 +328,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('ne planifie pas de rafraîchissement lorsque authChoice est openid', () => {
+    test('does not schedule refresh when authChoice is openid', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
@@ -326,7 +348,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('ne planifie pas de rafraîchissement lorsque le jeton n’a pas de champ exp', () => {
+    test('does not schedule refresh when token has no exp field', () => {
         decodeToken.mockReturnValue({});
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
@@ -345,8 +367,8 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('gère les erreurs de rafraîchissement du jeton', async () => {
-        // Jeton qui expire dans 10 secondes pour permettre le test
+    test('handles token refresh errors', async () => {
+        // Token that expires in 10 seconds for testing
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
         refreshToken.mockRejectedValue(new Error('Refresh failed'));
 
@@ -360,27 +382,27 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
 
-        // Définir le jeton dans l’état
+        // Set token in state
         act(() => {
             fireEvent.click(screen.getByTestId('setAccessToken'));
         });
 
-        // Vérifier l’état initial après setAccessToken
+        // Verify initial state after setAccessToken
         expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
 
-        // Avancer le temps pour déclencher le rafraîchissement et gérer l’erreur
+        // Advance time to trigger refresh and handle error
         await act(async () => {
-            jest.advanceTimersByTime(5100); // Avancer de 5,1 secondes (5000ms + marge)
-            // Utiliser Promise.resolve() au lieu de flushPromises() avec les timers simulés
+            jest.advanceTimersByTime(5100); // Advance by 5.1 seconds (5000ms + margin)
+            // Use Promise.resolve() instead of flushPromises() with fake timers
             await Promise.resolve();
         });
 
-        // Vérifier que le rafraîchissement a été appelé et a échoué
+        // Verify refresh was called and failed
         expect(refreshToken).toHaveBeenCalled();
         expect(consoleErrorSpy).toHaveBeenCalledWith('Token refresh error:', expect.any(Error));
 
-        // Vérifier que la déconnexion a été déclenchée suite à l’erreur
+        // Verify logout was triggered due to error
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(broadcastChannelInstance._messages).toContainEqual({type: 'logout'});
@@ -389,7 +411,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('gère le message tokenUpdated depuis BroadcastChannel', async () => {
+    test('handles tokenUpdated message from BroadcastChannel', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
@@ -408,7 +430,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('gère le message logout depuis BroadcastChannel', async () => {
+    test('handles logout message from BroadcastChannel', async () => {
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
@@ -427,7 +449,7 @@ describe('AuthProvider', () => {
         consoleLogSpy.mockRestore();
     });
 
-    test('ignore le rafraîchissement si le jeton est mis à jour par un autre onglet', () => {
+    test('ignores refresh if token is updated by another tab', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         refreshToken.mockResolvedValue('new-token');
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();

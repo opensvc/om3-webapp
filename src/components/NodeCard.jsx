@@ -55,16 +55,6 @@ const NodeCard = ({
         return null;
     }
 
-    // Log received props for debugging
-    console.log("NodeCard render:", {
-        node,
-        resources: nodeData?.resources,
-        encap: nodeData?.encap,
-        instanceConfig: nodeData?.instanceConfig,
-        instanceMonitor: nodeData?.instanceMonitor,
-        provisioned: nodeData?.provisioned,
-    });
-
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
@@ -79,14 +69,13 @@ const NodeCard = ({
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
-    // Log changes to selectedResourcesByNode
+    // Log changes to selectedResourcesByNode for test
     useEffect(() => {
         console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
 
     // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
-        console.log("handleSelectAllResources:", {node, checked, resIds});
         if (typeof setSelectedResourcesByNode !== "function") {
             console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
             return;
@@ -99,16 +88,14 @@ const NodeCard = ({
                     : []
             ),
         ];
-        setSelectedResourcesByNode((prev) => {
-            const newState = {...prev, [node]: checked ? allResourceIds : []};
-            console.log("After handleSelectAllResources, new selectedResourcesByNode:", newState);
-            return newState;
-        });
+        setSelectedResourcesByNode((prev) => ({
+            ...prev,
+            [node]: checked ? allResourceIds : [],
+        }));
     };
 
     // Handler for individual node actions
     const handleIndividualNodeActionClick = (action) => {
-        console.log("handleIndividualNodeActionClick:", {action, node, frozen});
         setCurrentNode(node);
         setPendingAction({action, node});
         if (action === "freeze") {
@@ -131,11 +118,6 @@ const NodeCard = ({
 
     // Handler for batch resource actions
     const handleBatchResourceActionClick = (action) => {
-        console.log("handleBatchResourceActionClick:", {
-            action,
-            node,
-            selectedResources: selectedResourcesByNode[node],
-        });
         setPendingAction({action, batch: "resources", node});
         setSimpleDialogOpen(true);
         setResourcesActionsAnchor(null);
@@ -143,7 +125,6 @@ const NodeCard = ({
 
     // Handler for individual resource actions
     const handleResourceActionClick = (action) => {
-        console.log("handleResourceActionClick:", {action, node, rid: currentResourceId});
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
@@ -152,22 +133,16 @@ const NodeCard = ({
 
     // Helper function to filter resource actions based on type
     const getFilteredResourceActions = (resourceType) => {
-        console.log("getFilteredResourceActions called with resourceType:", resourceType);
         if (!resourceType) {
-            console.log("No resource type provided, returning all actions");
             return RESOURCE_ACTIONS;
         }
         const typePrefix = resourceType.split('.')[0].toLowerCase();
-        console.log("Resource type prefix:", typePrefix);
         if (typePrefix === 'task') {
-            console.log("Type is task, returning only 'run' action");
-            return RESOURCE_ACTIONS.filter(action => action.name === 'run');
+            return RESOURCE_ACTIONS.filter((action) => action.name === 'run');
         }
         if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
-            console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
-            return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
+            return RESOURCE_ACTIONS.filter((action) => action.name !== 'run');
         }
-        console.log("No special filtering, returning all actions");
         return RESOURCE_ACTIONS;
     };
 
@@ -244,11 +219,9 @@ const NodeCard = ({
 
         // Handle provisioned state
         let provisionedState = resourceData?.provisioned?.state;
-        // For container resources (even at top level), check encapData if available
         const isContainer = resourceData?.type?.toLowerCase().includes("container");
         if (isContainer && encapData[rid]?.provisioned !== undefined) {
             provisionedState = encapData[rid].provisioned;
-            console.log(`Using encapData provisioned state for container ${rid}:`, provisionedState);
         }
         if (provisionedState === "false" || provisionedState === false || provisionedState === "n/a") {
             letters[5] = "P";
@@ -287,21 +260,12 @@ const NodeCard = ({
 
         const statusString = letters.join("");
         const tooltipText = tooltipDescriptions.join(", ");
-        console.log("Status letters for", rid, ":", {
-            statusString,
-            tooltipText,
-            is_monitored: isMonitored,
-            restart: remainingRestarts,
-            provisionedState,
-            isContainer,
-        });
         return {statusString, tooltipText};
     };
 
     // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
         if (!res) {
-            console.error(`Resource data is null or undefined for ${rid}`);
             return null;
         }
 
@@ -321,19 +285,6 @@ const NodeCard = ({
             ? encapData[rid].provisioned
             : res?.provisioned?.state;
         const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
-
-        console.log("Rendering resource row:", {
-            rid,
-            statusString,
-            status: res.status,
-            label: labelText,
-            type: resourceType,
-            isEncap,
-            tooltipText,
-            isResourceNotProvisioned,
-            provisionedState,
-            isContainer,
-        });
 
         return (
             <Box
@@ -360,15 +311,7 @@ const NodeCard = ({
                     <Box onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                             checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                            onChange={(e) => {
-                                toggleResource(node, rid);
-                                console.log("Individual resource checkbox clicked:", {
-                                    node,
-                                    rid,
-                                    checked: e.target.checked,
-                                    selectedResourcesByNode,
-                                });
-                            }}
+                            onChange={() => toggleResource(node, rid)}
                             aria-label={`Select resource ${rid}`}
                         />
                     </Box>
@@ -624,14 +567,7 @@ const NodeCard = ({
                         <Box onClick={(e) => e.stopPropagation()}>
                             <Checkbox
                                 checked={selectedNodes.includes(node)}
-                                onChange={(e) => {
-                                    toggleNode(node);
-                                    console.log("Node checkbox clicked:", {
-                                        node,
-                                        checked: e.target.checked,
-                                        selectedNodes,
-                                    });
-                                }}
+                                onChange={() => toggleNode(node)}
                                 aria-label={`Select node ${node}`}
                             />
                         </Box>
@@ -718,10 +654,7 @@ const NodeCard = ({
                                     )) &&
                                 resIds.length > 0
                             }
-                            onChange={(e) => {
-                                console.log("Select all checkbox clicked:", {node, checked: e.target.checked});
-                                handleSelectAllResources(e.target.checked);
-                            }}
+                            onChange={(e) => handleSelectAllResources(e.target.checked)}
                             disabled={resIds.length === 0}
                             aria-label={`Select all resources for node ${node}`}
                         />
@@ -766,17 +699,6 @@ const NodeCard = ({
                                     const encapRes = isContainer && encapData[rid]?.resources ? encapData[rid].resources : {};
                                     const encapResIds = Object.keys(encapRes);
 
-                                    console.log("Rendering resource:", {
-                                        rid,
-                                        isContainer,
-                                        encapRes,
-                                        encapResIds,
-                                        resourceData: res,
-                                        resourceType: res.type,
-                                        encapDataForRid: encapData[rid],
-                                        status: res.status,
-                                    });
-
                                     return (
                                         <Box key={rid}>
                                             {/* Render top-level resource */}
@@ -797,19 +719,15 @@ const NodeCard = ({
                                             )}
                                             {isContainer && encapResIds.length > 0 && res.status !== "down" && (
                                                 <Box sx={{ml: 4}}>
-                                                    {encapResIds.map((encapRid) => {
-                                                        console.log("Rendering encap resource:", {
-                                                            encapRid,
-                                                            data: encapRes[encapRid],
-                                                        });
-                                                        return renderResourceRow(
+                                                    {encapResIds.map((encapRid) => (
+                                                        renderResourceRow(
                                                             encapRid,
                                                             encapRes[encapRid] || {},
                                                             effectiveInstanceConfig,
                                                             effectiveInstanceMonitor,
                                                             true
-                                                        );
-                                                    })}
+                                                        )
+                                                    ))}
                                                 </Box>
                                             )}
                                             {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && !isInstanceNotProvisioned && (
@@ -884,32 +802,23 @@ const NodeCard = ({
             >
                 {(() => {
                     if (!currentResourceId) {
-                        console.error("No currentResourceId set, cannot render resource actions menu");
                         return [];
                     }
                     const resourceType = getResourceType(currentResourceId);
                     const filteredActions = getFilteredResourceActions(resourceType);
-                    console.log("Rendering resource actions menu:", {
-                        currentResourceId,
-                        resourceType,
-                        filteredActions: filteredActions.map(action => action.name),
-                    });
-                    return filteredActions.map(({name, icon}) => {
-                        console.log(`Rendering MenuItem for action: ${name}`);
-                        return (
-                            <MenuItem
-                                key={name}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleResourceActionClick(name);
-                                }}
-                                aria-label={`Resource ${currentResourceId} ${name} action`}
-                            >
-                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                            </MenuItem>
-                        );
-                    });
+                    return filteredActions.map(({name, icon}) => (
+                        <MenuItem
+                            key={name}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleResourceActionClick(name);
+                            }}
+                            aria-label={`Resource ${currentResourceId} ${name} action`}
+                        >
+                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                        </MenuItem>
+                    ));
                 })()}
             </Menu>
         </Box>

@@ -88,21 +88,25 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                     justifyContent: 'flex-start'
                 }}>
                     {sortedNamespaceSubtitle.map(({namespace, status}) => (
-                        <Box key={namespace} sx={{
-                            position: 'relative',
-                            display: 'inline-flex',
-                            flexShrink: 0,
-                            margin: "4px"
-                        }}>
+                        <Box key={namespace}
+                             sx={{
+                                position: 'relative',
+                                display: 'inline-flex',
+                                flexShrink: 0,
+                                margin: "4px",
+                                alignItems: "center"
+                            }}
+                        >
                             <Chip
                                 label={namespace}
                                 size="small"
                                 sx={{
                                     backgroundColor: 'default',
                                     cursor: 'pointer',
-                                    minWidth: "fit-content",
+                                    minWidth: "100px",
                                     px: 2,
                                     height: 24,
+                                    pr: 4
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -111,8 +115,8 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                             />
                             <Box sx={{
                                 position: 'absolute',
-                                top: -14,
-                                right: -12,
+                                top: -8,
+                                right: -4,
                                 display: 'flex',
                                 gap: 0.5,
                                 flexWrap: 'wrap'

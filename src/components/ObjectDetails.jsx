@@ -5,12 +5,14 @@ import {
     Typography,
     Snackbar,
     Alert,
-    Menu,
+    Popper,
+    Paper,
     MenuItem,
     Button,
     ListItemIcon,
     ListItemText,
     CircularProgress,
+    ClickAwayListener,
 } from "@mui/material";
 import {green, red, grey, blue, orange} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
@@ -63,7 +65,6 @@ const getResourceType = (rid, nodeData) => {
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
-
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
@@ -85,16 +86,21 @@ const ObjectDetail = () => {
     // State for batch selection & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
+    const nodesActionsAnchorRef = useRef(null);
     const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(null);
+    const individualNodeMenuAnchorRef = useRef(null);
     const [currentNode, setCurrentNode] = useState(null);
     const [selectedResourcesByNode, setSelectedResourcesByNode] = useState({});
     const [resGroupNode, setResGroupNode] = useState(null);
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
+    const resourcesActionsAnchorRef = useRef(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
+    const resourceMenuAnchorRef = useRef(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
 
     // State for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
+    const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
@@ -115,7 +121,6 @@ const ObjectDetail = () => {
         configLoss: false,
         serviceInterruption: false,
     });
-
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: "",
@@ -131,10 +136,53 @@ const ObjectDetail = () => {
 
     // Debounce ref to prevent multiple fetchConfig calls
     const lastFetch = useRef({});
+
     // Ref to track subscription status
     const isProcessingConfigUpdate = useRef(false);
+
     // Ref to track if component is mounted
     const isMounted = useRef(true);
+
+    // Calculate the zoom level
+    const getZoomLevel = () => {
+        return window.devicePixelRatio || 1;
+    };
+
+    // Configuration of Popper props
+    const popperProps = () => ({
+        placement: "bottom-end",
+        disablePortal: true,
+        modifiers: [
+            {
+                name: "offset",
+                options: {
+                    offset: ({reference}) => {
+                        const zoomLevel = getZoomLevel();
+                        return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
+                    },
+                },
+            },
+            {
+                name: "preventOverflow",
+                options: {
+                    boundariesElement: "viewport",
+                },
+            },
+            {
+                name: "flip",
+                options: {
+                    enabled: true,
+                },
+            },
+        ],
+        sx: {
+            zIndex: 1300,
+            "& .MuiPaper-root": {
+                minWidth: 200,
+                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+            },
+        },
+    });
 
     // Cleanup on unmount
     useEffect(() => {
@@ -163,7 +211,6 @@ const ObjectDetail = () => {
             });
             return updatedNodeResources;
         });
-
         setExpandedResources((prev) => {
             const updatedResources = {...prev};
             nodes.forEach((node) => {
@@ -190,6 +237,7 @@ const ObjectDetail = () => {
 
     const openSnackbar = (msg, sev = "success") =>
         setSnackbar({open: true, message: msg, severity: sev});
+
     const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
 
     // Helper function to parse provisioned state
@@ -205,10 +253,8 @@ const ObjectDetail = () => {
         if (!objName || typeof objName !== "string") {
             return {namespace: "root", kind: "svc", name: ""};
         }
-
         const parts = objName.split("/");
         let name, kind, namespace;
-
         if (parts.length === 3) {
             namespace = parts[0];
             kind = parts[1];
@@ -222,7 +268,6 @@ const ObjectDetail = () => {
             name = parts[0];
             kind = name === "cluster" ? "ccfg" : "svc";
         }
-
         return {namespace, kind, name};
     };
 
@@ -230,7 +275,6 @@ const ObjectDetail = () => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
-
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
         const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
@@ -251,7 +295,6 @@ const ObjectDetail = () => {
     const postNodeAction = async ({node, action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
-
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
         const url = postActionUrl({node, objectName: decodedObjectName, action});
@@ -277,7 +320,6 @@ const ObjectDetail = () => {
     const postResourceAction = async ({node, action, rid}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
-
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on resource ${rid}…`, "info");
         const url =
@@ -318,7 +360,6 @@ const ObjectDetail = () => {
             setConfigError("Auth token not found.");
             return;
         }
-
         setConfigLoading(true);
         setConfigError(null);
         setConfigNode(node);
@@ -409,8 +450,17 @@ const ObjectDetail = () => {
     };
 
     // Batch node actions handlers
-    const handleNodesActionsOpen = (e) => setNodesActionsAnchor(e.currentTarget);
-    const handleNodesActionsClose = () => setNodesActionsAnchor(null);
+    const handleNodesActionsOpen = (e) => {
+        setNodesActionsAnchor(e.currentTarget);
+        nodesActionsAnchorRef.current = e.currentTarget;
+        console.log("Nodes actions menu opened at:", e.currentTarget.getBoundingClientRect());
+    };
+
+    const handleNodesActionsClose = () => {
+        setNodesActionsAnchor(null);
+        nodesActionsAnchorRef.current = null;
+    };
+
     const handleBatchNodeActionClick = (action) => {
         setPendingAction({action, batch: "nodes"});
         if (action === "freeze") {
@@ -470,8 +520,15 @@ const ObjectDetail = () => {
     const handleResourcesActionsOpen = (node, e) => {
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
+        resourcesActionsAnchorRef.current = e.currentTarget;
+        console.log("Resources actions menu opened at:", e.currentTarget.getBoundingClientRect());
     };
-    const handleResourcesActionsClose = () => setResourcesActionsAnchor(null);
+
+    const handleResourcesActionsClose = () => {
+        setResourcesActionsAnchor(null);
+        resourcesActionsAnchorRef.current = null;
+    };
+
     const handleBatchResourceActionClick = (action) => {
         setPendingAction({action, batch: "resources", node: resGroupNode});
         setSimpleDialogOpen(true);
@@ -483,11 +540,16 @@ const ObjectDetail = () => {
         setCurrentResourceId(rid);
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
+        resourceMenuAnchorRef.current = e.currentTarget;
+        console.log("Resource menu opened at:", e.currentTarget.getBoundingClientRect());
     };
+
     const handleResourceMenuClose = () => {
         setResourceMenuAnchor(null);
         setCurrentResourceId(null);
+        resourceMenuAnchorRef.current = null;
     };
+
     const handleResourceActionClick = (action) => {
         setPendingAction({action, node: resGroupNode, rid: currentResourceId});
         setSimpleDialogOpen(true);
@@ -528,7 +590,6 @@ const ObjectDetail = () => {
             console.warn("No valid pendingAction or action provided:", pendingAction);
             return;
         }
-
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) =>
                 postNodeAction({node, action: pendingAction.action})
@@ -558,7 +619,6 @@ const ObjectDetail = () => {
         } else {
             postObjectAction(pendingAction);
         }
-
         setPendingAction(null);
         setConfirmDialogOpen(false);
         setStopDialogOpen(false);
@@ -597,7 +657,6 @@ const ObjectDetail = () => {
             ];
             startEventReception(token, filters);
         }
-
         return () => {
             closeEventSource();
         };
@@ -608,7 +667,6 @@ const ObjectDetail = () => {
         if (!isMounted.current) {
             return;
         }
-
         const subscription = useEventStore.subscribe(
             (state) => state.configUpdates,
             async (updates) => {
@@ -626,7 +684,6 @@ const ObjectDetail = () => {
                             (u.name === name || u.fullName === decodedObjectName) &&
                             u.node
                     );
-
                     if (matchingUpdate && matchingUpdate.node) {
                         try {
                             await fetchConfig(matchingUpdate.node);
@@ -645,7 +702,6 @@ const ObjectDetail = () => {
                 }
             }
         );
-
         return () => {
             if (typeof subscription !== "function") {
                 console.warn("[ObjectDetail] Subscription is not a function:", subscription);
@@ -661,7 +717,6 @@ const ObjectDetail = () => {
         if (!isMounted.current) {
             return;
         }
-
         const subscription = useEventStore.subscribe(
             (state) => state.instanceConfig,
             (newConfig) => {
@@ -679,7 +734,6 @@ const ObjectDetail = () => {
                 }
             }
         );
-
         return () => {
             if (typeof subscription !== "function") {
                 console.warn("[ObjectDetail] Subscription is not a function:", subscription);
@@ -703,7 +757,6 @@ const ObjectDetail = () => {
                         );
                     return hasValidEncapResources;
                 }) || nodes[0];
-
                 if (initialNode) {
                     try {
                         await fetchConfig(initialNode);
@@ -718,7 +771,6 @@ const ObjectDetail = () => {
             }
             setInitialLoading(false);
         };
-
         loadInitialConfig();
     }, [decodedObjectName, objectData]);
 
@@ -754,7 +806,6 @@ const ObjectDetail = () => {
     // Render empty state with separate Typography for object name
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
-
     if (!memoizedObjectData) {
         return (
             <Box p={4}>
@@ -788,6 +839,7 @@ const ObjectDetail = () => {
                     handleObjectActionClick={handleObjectActionClick}
                     getObjectStatus={getObjectStatus}
                     getColor={getColor}
+                    objectMenuAnchorRef={objectMenuAnchorRef}
                 />
                 <ActionDialogManager
                     pendingAction={pendingAction}
@@ -839,115 +891,147 @@ const ObjectDetail = () => {
                                 onClick={handleNodesActionsOpen}
                                 disabled={selectedNodes.length === 0}
                                 aria-label="Actions on selected nodes"
+                                ref={nodesActionsAnchorRef}
                             >
                                 Actions on Selected Nodes
                             </Button>
                         </Box>
-                        {memoizedNodes.map((node) => {
-                            return (
-                                <NodeCard
-                                    key={node}
-                                    node={node}
-                                    nodeData={memoizedObjectData[node] || {}}
-                                    selectedNodes={selectedNodes}
-                                    toggleNode={toggleNode}
-                                    selectedResourcesByNode={selectedResourcesByNode}
-                                    toggleResource={toggleResource}
-                                    actionInProgress={actionInProgress}
-                                    individualNodeMenuAnchor={individualNodeMenuAnchor}
-                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                                    setCurrentNode={setCurrentNode}
-                                    handleResourcesActionsOpen={handleResourcesActionsOpen}
-                                    handleResourceMenuOpen={handleResourceMenuOpen}
-                                    expandedNodeResources={expandedNodeResources}
-                                    handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
-                                    expandedResources={expandedResources}
-                                    handleAccordionChange={handleAccordionChange}
-                                    getColor={getColor}
-                                    getNodeState={getNodeState}
-                                    parseProvisionedState={parseProvisionedState}
-                                    setPendingAction={setPendingAction}
-                                    setConfirmDialogOpen={setConfirmDialogOpen}
-                                    setStopDialogOpen={setStopDialogOpen}
-                                    setUnprovisionDialogOpen={setUnprovisionDialogOpen}
-                                    setPurgeDialogOpen={setPurgeDialogOpen}
-                                    setSimpleDialogOpen={setSimpleDialogOpen}
-                                    setCheckboxes={setCheckboxes}
-                                    setStopCheckbox={setStopCheckbox}
-                                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                                    setPurgeCheckboxes={setPurgeCheckboxes}
-                                    setSelectedResourcesByNode={setSelectedResourcesByNode}
-                                />
-                            );
-                        })}
-                        <Menu
-                            anchorEl={nodesActionsAnchor}
+                        {memoizedNodes.map((node) => (
+                            <NodeCard
+                                key={node}
+                                node={node}
+                                nodeData={memoizedObjectData[node] || {}}
+                                selectedNodes={selectedNodes}
+                                toggleNode={toggleNode}
+                                selectedResourcesByNode={selectedResourcesByNode}
+                                toggleResource={toggleResource}
+                                actionInProgress={actionInProgress}
+                                individualNodeMenuAnchor={individualNodeMenuAnchor}
+                                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                                setCurrentNode={setCurrentNode}
+                                handleResourcesActionsOpen={handleResourcesActionsOpen}
+                                handleResourceMenuOpen={handleResourceMenuOpen}
+                                expandedNodeResources={expandedNodeResources}
+                                handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                                expandedResources={expandedResources}
+                                handleAccordionChange={handleAccordionChange}
+                                getColor={getColor}
+                                getNodeState={getNodeState}
+                                parseProvisionedState={parseProvisionedState}
+                                setPendingAction={setPendingAction}
+                                setConfirmDialogOpen={setConfirmDialogOpen}
+                                setStopDialogOpen={setStopDialogOpen}
+                                setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                                setPurgeDialogOpen={setPurgeDialogOpen}
+                                setSimpleDialogOpen={setSimpleDialogOpen}
+                                setCheckboxes={setCheckboxes}
+                                setStopCheckbox={setStopCheckbox}
+                                setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                                setPurgeCheckboxes={setPurgeCheckboxes}
+                                setSelectedResourcesByNode={setSelectedResourcesByNode}
+                                individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
+                                resourcesActionsAnchorRef={resourcesActionsAnchorRef}
+                                resourceMenuAnchorRef={resourceMenuAnchorRef}
+                            />
+                        ))}
+                        <Popper
                             open={Boolean(nodesActionsAnchor)}
-                            onClose={handleNodesActionsClose}
+                            anchorEl={nodesActionsAnchor}
+                            {...popperProps()}
                         >
-                            {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
-                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                        <Menu
-                            anchorEl={individualNodeMenuAnchor}
-                            open={Boolean(individualNodeMenuAnchor)}
-                            onClose={() => setIndividualNodeMenuAnchor(null)}
-                        >
-                            {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => handleIndividualNodeActionClick(name)}
-                                >
-                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                        <Menu
-                            anchorEl={resourcesActionsAnchor}
-                            open={Boolean(resourcesActionsAnchor)}
-                            onClose={handleResourcesActionsClose}
-                        >
-                            {RESOURCE_ACTIONS.map(({name, icon}) => (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => handleBatchResourceActionClick(name)}
-                                >
-                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                </MenuItem>
-                            ))}
-                        </Menu>
-                        <Menu
-                            anchorEl={resourceMenuAnchor}
-                            open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
-                            onClose={handleResourceMenuClose}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {(() => {
-                                if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
-                                    return [];
-                                }
-                                const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
-                                const filteredActions = getFilteredResourceActions(resourceType);
-                                return filteredActions.map(({name, icon}) => {
-                                    return (
+                            <ClickAwayListener onClickAway={handleNodesActionsClose}>
+                                <Paper elevation={3} role="menu" aria-label="Batch node actions menu">
+                                    {INSTANCE_ACTIONS.map(({name, icon}) => (
                                         <MenuItem
                                             key={name}
-                                            onClick={() => handleResourceActionClick(name)}
-                                            aria-label={`Resource ${currentResourceId} ${name} action`}
+                                            onClick={() => handleBatchNodeActionClick(name)}
+                                            role="menuitem"
+                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
                                         >
                                             <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                             <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                                         </MenuItem>
-                                    );
-                                });
-                            })()}
-                        </Menu>
+                                    ))}
+                                </Paper>
+                            </ClickAwayListener>
+                        </Popper>
+                        <Popper
+                            open={Boolean(individualNodeMenuAnchor)}
+                            anchorEl={individualNodeMenuAnchor}
+                            {...popperProps()}
+                        >
+                            <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
+                                <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}>
+                                    {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => handleIndividualNodeActionClick(name)}
+                                            role="menuitem"
+                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                        >
+                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                        </MenuItem>
+                                    ))}
+                                </Paper>
+                            </ClickAwayListener>
+                        </Popper>
+                        <Popper
+                            open={Boolean(resourcesActionsAnchor)}
+                            anchorEl={resourcesActionsAnchor}
+                            {...popperProps()}
+                        >
+                            <ClickAwayListener onClickAway={handleResourcesActionsClose}>
+                                <Paper elevation={3} role="menu"
+                                       aria-label={`Batch resource actions for node ${resGroupNode}`}>
+                                    {RESOURCE_ACTIONS.map(({name, icon}) => (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => handleBatchResourceActionClick(name)}
+                                            role="menuitem"
+                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                        >
+                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                        </MenuItem>
+                                    ))}
+                                </Paper>
+                            </ClickAwayListener>
+                        </Popper>
+                        <Popper
+                            open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                            anchorEl={resourceMenuAnchor}
+                            {...popperProps()}
+                        >
+                            <ClickAwayListener
+                                onClickAway={() => {
+                                    setResourceMenuAnchor(null);
+                                    setCurrentResourceId(null);
+                                }}
+                            >
+                                <Paper elevation={3} role="menu"
+                                       aria-label={`Resource ${currentResourceId} actions menu`}>
+                                    {(() => {
+                                        if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
+                                            return [];
+                                        }
+                                        const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
+                                        const filteredActions = getFilteredResourceActions(resourceType);
+                                        return filteredActions.map(({name, icon}) => (
+                                            <MenuItem
+                                                key={name}
+                                                onClick={() => handleResourceActionClick(name)}
+                                                role="menuitem"
+                                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                            >
+                                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                            </MenuItem>
+                                        ));
+                                    })()}
+                                </Paper>
+                            </ClickAwayListener>
+                        </Popper>
                     </>
                 )}
                 <Snackbar

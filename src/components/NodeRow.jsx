@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useRef} from "react";
 import {
     Box,
     Checkbox,
@@ -17,6 +17,9 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {Wifi, AcUnit} from "@mui/icons-material";
 import {blue, green, red, orange} from "@mui/material/colors";
 import {NODE_ACTIONS} from "../constants/actions";
+
+// Safari detection
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const COLORS = {
     frozen: blue[600],
@@ -44,6 +47,9 @@ const NodeRow = ({
                      onMenuClose,
                      anchorEl,
                  }) => {
+    const menuAnchorRef = useRef(null);
+    const [menuPosition, setMenuPosition] = React.useState({top: 0, left: 0});
+
     const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
     const isDaemonNode = daemonNodename === nodename;
     const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
@@ -51,6 +57,56 @@ const NodeRow = ({
         if (name === "unfreeze" && !isFrozen) return false;
         return true;
     });
+
+    // Compute the zoom level
+    const getZoomLevel = () => {
+        return window.devicePixelRatio || 1;
+    };
+
+    // Function to calculate the menu position
+    const calculateMenuPosition = () => {
+        if (menuAnchorRef.current) {
+            const zoomLevel = getZoomLevel();
+            const rect = menuAnchorRef.current.getBoundingClientRect();
+            const scrollY = window.scrollY || window.pageYOffset;
+            const scrollX = window.scrollX || window.pageXOffset;
+            setMenuPosition({
+                top: (rect.bottom + scrollY) / zoomLevel,
+                left: (rect.right + scrollX) / zoomLevel,
+            });
+        }
+    };
+
+    const handleMenuOpen = (e) => {
+        onMenuOpen(e, nodename);
+        if (isSafari) {
+            setTimeout(() => calculateMenuPosition(), 0);
+        }
+    };
+
+    // Menu props configuration
+    const menuProps = {
+        anchorOrigin: {
+            vertical: "bottom",
+            horizontal: "right",
+        },
+        transformOrigin: {
+            vertical: "top",
+            horizontal: "right",
+        },
+        sx: isSafari
+            ? {
+                "& .MuiMenu-paper": {
+                    position: "fixed",
+                    top: `${menuPosition.top}px !important`,
+                    left: `${menuPosition.left}px !important`,
+                    transform: "translateX(-100%)",
+                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                    zIndex: 1300,
+                },
+            }
+            : {},
+    };
 
     return (
         <TableRow hover aria-label={`Node ${nodename} row`} sx={{cursor: "pointer"}}>
@@ -74,7 +130,7 @@ const NodeRow = ({
                     )}
                     {isFrozen && (
                         <Tooltip title="Frozen">
-                            <AcUnit sx={{color: COLORS.frozen}} aria-label="Frozen indicator" />
+                            <AcUnit sx={{color: COLORS.frozen}} aria-label="Frozen indicator"/>
                         </Tooltip>
                     )}
                     {isDaemonNode && (
@@ -131,11 +187,9 @@ const NodeRow = ({
             </TableCell>
             <TableCell>
                 <IconButton
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onMenuOpen(e, nodename);
-                    }}
+                    onClick={handleMenuOpen}
                     aria-label={`More actions for node ${nodename}`}
+                    ref={menuAnchorRef}
                 >
                     <MoreVertIcon/>
                 </IconButton>
@@ -143,6 +197,7 @@ const NodeRow = ({
                     anchorEl={anchorEl}
                     open={Boolean(anchorEl)}
                     onClose={() => onMenuClose(nodename)}
+                    {...menuProps}
                 >
                     {filteredMenuItems.map(({name, icon}) => (
                         <MenuItem
@@ -159,9 +214,8 @@ const NodeRow = ({
                             <ListItemText>
                                 {name
                                     .split(" ")
-                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                    .join(" ")
-                                }
+                                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                                    .join(" ")}
                             </ListItemText>
                         </MenuItem>
                     ))}

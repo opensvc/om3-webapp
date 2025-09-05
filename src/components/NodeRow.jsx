@@ -1,4 +1,4 @@
-import React, {useRef} from "react";
+import React, {useRef, useState} from "react";
 import {
     Box,
     Checkbox,
@@ -18,8 +18,7 @@ import {Wifi, AcUnit} from "@mui/icons-material";
 import {blue, green, red, orange} from "@mui/material/colors";
 import {NODE_ACTIONS} from "../constants/actions";
 
-// Safari detection
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isSafari = () => /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const COLORS = {
     frozen: blue[600],
@@ -48,7 +47,7 @@ const NodeRow = ({
                      anchorEl,
                  }) => {
     const menuAnchorRef = useRef(null);
-    const [menuPosition, setMenuPosition] = React.useState({top: 0, left: 0});
+    const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
 
     const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
     const isDaemonNode = daemonNodename === nodename;
@@ -58,43 +57,34 @@ const NodeRow = ({
         return true;
     });
 
-    // Compute the zoom level
-    const getZoomLevel = () => {
-        return window.devicePixelRatio || 1;
-    };
+    const getZoomLevel = () => window.devicePixelRatio || 1;
 
-    // Function to calculate the menu position
     const calculateMenuPosition = () => {
-        if (menuAnchorRef.current) {
-            const zoomLevel = getZoomLevel();
-            const rect = menuAnchorRef.current.getBoundingClientRect();
-            const scrollY = window.scrollY || window.pageYOffset;
-            const scrollX = window.scrollX || window.pageXOffset;
-            setMenuPosition({
-                top: (rect.bottom + scrollY) / zoomLevel,
-                left: (rect.right + scrollX) / zoomLevel,
-            });
-        }
+        if (!menuAnchorRef.current) return;
+        const zoomLevel = getZoomLevel();
+        const rect = menuAnchorRef.current.getBoundingClientRect();
+        const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
+        const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
+        setMenuPosition({
+            top: (rect.bottom + scrollY) / zoomLevel,
+            left: (rect.right + scrollX) / zoomLevel,
+        });
     };
 
     const handleMenuOpen = (e) => {
+        if (anchorEl) return;
         onMenuOpen(e, nodename);
-        if (isSafari) {
-            setTimeout(() => calculateMenuPosition(), 0);
+        if (isSafari()) {
+            setTimeout(() => {
+                calculateMenuPosition();
+            }, 0);
         }
     };
 
-    // Menu props configuration
     const menuProps = {
-        anchorOrigin: {
-            vertical: "bottom",
-            horizontal: "right",
-        },
-        transformOrigin: {
-            vertical: "top",
-            horizontal: "right",
-        },
-        sx: isSafari
+        anchorOrigin: {vertical: "bottom", horizontal: "right"},
+        transformOrigin: {vertical: "top", horizontal: "right"},
+        sx: isSafari()
             ? {
                 "& .MuiMenu-paper": {
                     position: "fixed",
@@ -114,7 +104,7 @@ const NodeRow = ({
                 <Checkbox
                     checked={isSelected}
                     onChange={(e) => onSelect(e, nodename)}
-                    inputProps={{'aria-label': `Select node ${nodename}`}}
+                    inputProps={{"aria-label": `Select node ${nodename}`}}
                     onClick={(e) => e.stopPropagation()}
                 />
             </TableCell>
@@ -151,10 +141,7 @@ const NodeRow = ({
                             variant="determinate"
                             value={Math.min(stats.load_15m * 20, 100)}
                             sx={STYLES.progress}
-                            color={
-                                stats.load_15m > 4 ? "error" :
-                                    stats.load_15m > 2 ? "warning" : "success"
-                            }
+                            color={stats.load_15m > 4 ? "error" : stats.load_15m > 2 ? "warning" : "success"}
                         />
                     </>
                 ) : (
@@ -169,10 +156,7 @@ const NodeRow = ({
                             variant="determinate"
                             value={stats.mem_avail}
                             sx={STYLES.progress}
-                            color={
-                                stats.mem_avail < 20 ? "error" :
-                                    stats.mem_avail < 50 ? "warning" : "success"
-                            }
+                            color={stats.mem_avail < 20 ? "error" : stats.mem_avail < 50 ? "warning" : "success"}
                         />
                     </>
                 ) : (

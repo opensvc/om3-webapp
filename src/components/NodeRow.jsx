@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useRef, useState} from "react";
 import {
     Box,
     Checkbox,
@@ -17,6 +17,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {Wifi, AcUnit} from "@mui/icons-material";
 import {blue, green, red, orange} from "@mui/material/colors";
 import {NODE_ACTIONS} from "../constants/actions";
+
+const isSafari = () => /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const COLORS = {
     frozen: blue[600],
@@ -44,6 +46,9 @@ const NodeRow = ({
                      onMenuClose,
                      anchorEl,
                  }) => {
+    const menuAnchorRef = useRef(null);
+    const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
+
     const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
     const isDaemonNode = daemonNodename === nodename;
     const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
@@ -52,13 +57,54 @@ const NodeRow = ({
         return true;
     });
 
+    const getZoomLevel = () => window.devicePixelRatio || 1;
+
+    const calculateMenuPosition = () => {
+        if (!menuAnchorRef.current) return;
+        const zoomLevel = getZoomLevel();
+        const rect = menuAnchorRef.current.getBoundingClientRect();
+        const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
+        const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
+        setMenuPosition({
+            top: (rect.bottom + scrollY) / zoomLevel,
+            left: (rect.right + scrollX) / zoomLevel,
+        });
+    };
+
+    const handleMenuOpen = (e) => {
+        if (anchorEl) return;
+        onMenuOpen(e, nodename);
+        if (isSafari()) {
+            setTimeout(() => {
+                calculateMenuPosition();
+            }, 0);
+        }
+    };
+
+    const menuProps = {
+        anchorOrigin: {vertical: "bottom", horizontal: "right"},
+        transformOrigin: {vertical: "top", horizontal: "right"},
+        sx: isSafari()
+            ? {
+                "& .MuiMenu-paper": {
+                    position: "fixed",
+                    top: `${menuPosition.top}px !important`,
+                    left: `${menuPosition.left}px !important`,
+                    transform: "translateX(-100%)",
+                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                    zIndex: 1300,
+                },
+            }
+            : {},
+    };
+
     return (
         <TableRow hover aria-label={`Node ${nodename} row`} sx={{cursor: "pointer"}}>
             <TableCell>
                 <Checkbox
                     checked={isSelected}
                     onChange={(e) => onSelect(e, nodename)}
-                    inputProps={{'aria-label': `Select node ${nodename}`}}
+                    inputProps={{"aria-label": `Select node ${nodename}`}}
                     onClick={(e) => e.stopPropagation()}
                 />
             </TableCell>
@@ -74,7 +120,7 @@ const NodeRow = ({
                     )}
                     {isFrozen && (
                         <Tooltip title="Frozen">
-                            <AcUnit sx={{color: COLORS.frozen}} aria-label="Frozen indicator" />
+                            <AcUnit sx={{color: COLORS.frozen}} aria-label="Frozen indicator"/>
                         </Tooltip>
                     )}
                     {isDaemonNode && (
@@ -95,10 +141,7 @@ const NodeRow = ({
                             variant="determinate"
                             value={Math.min(stats.load_15m * 20, 100)}
                             sx={STYLES.progress}
-                            color={
-                                stats.load_15m > 4 ? "error" :
-                                    stats.load_15m > 2 ? "warning" : "success"
-                            }
+                            color={stats.load_15m > 4 ? "error" : stats.load_15m > 2 ? "warning" : "success"}
                         />
                     </>
                 ) : (
@@ -113,10 +156,7 @@ const NodeRow = ({
                             variant="determinate"
                             value={stats.mem_avail}
                             sx={STYLES.progress}
-                            color={
-                                stats.mem_avail < 20 ? "error" :
-                                    stats.mem_avail < 50 ? "warning" : "success"
-                            }
+                            color={stats.mem_avail < 20 ? "error" : stats.mem_avail < 50 ? "warning" : "success"}
                         />
                     </>
                 ) : (
@@ -131,11 +171,9 @@ const NodeRow = ({
             </TableCell>
             <TableCell>
                 <IconButton
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onMenuOpen(e, nodename);
-                    }}
+                    onClick={handleMenuOpen}
                     aria-label={`More actions for node ${nodename}`}
+                    ref={menuAnchorRef}
                 >
                     <MoreVertIcon/>
                 </IconButton>
@@ -143,6 +181,7 @@ const NodeRow = ({
                     anchorEl={anchorEl}
                     open={Boolean(anchorEl)}
                     onClose={() => onMenuClose(nodename)}
+                    {...menuProps}
                 >
                     {filteredMenuItems.map(({name, icon}) => (
                         <MenuItem
@@ -159,9 +198,8 @@ const NodeRow = ({
                             <ListItemText>
                                 {name
                                     .split(" ")
-                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                    .join(" ")
-                                }
+                                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                                    .join(" ")}
                             </ListItemText>
                         </MenuItem>
                     ))}

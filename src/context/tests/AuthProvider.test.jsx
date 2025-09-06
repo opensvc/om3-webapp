@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import {
     AuthProvider,
     useAuth,
@@ -11,15 +11,28 @@ import {
     SetAuthChoice,
 } from '../AuthProvider';
 
-// Mock the decodeToken and refreshToken functions
+// Mock BroadcastChannel
+global.BroadcastChannel = class {
+    constructor() {
+        this.onmessage = null;
+        this._messages = [];
+    }
+
+    postMessage(msg) {
+        this._messages.push(msg);
+    }
+
+    close() {
+    }
+};
+
+// Mock decodeToken and refreshToken
 jest.mock('../../components/Login', () => ({
     decodeToken: jest.fn(),
     refreshToken: jest.fn(),
 }));
-
 const {decodeToken, refreshToken} = require('../../components/Login');
 
-// Test component to consume useAuth
 const TestAuthComponent = () => {
     const auth = useAuth();
     return (
@@ -33,21 +46,14 @@ const TestAuthComponent = () => {
     );
 };
 
-// Test component to consume useAuthDispatch
 const TestDispatchComponent = () => {
     const dispatch = useAuthDispatch();
     return (
         <div>
-            <button
-                data-testid="login"
-                onClick={() => dispatch({type: Login, data: 'testuser'})}
-            >
+            <button data-testid="login" onClick={() => dispatch({type: Login, data: 'testuser'})}>
                 Login
             </button>
-            <button
-                data-testid="logout"
-                onClick={() => dispatch({type: Logout})}
-            >
+            <button data-testid="logout" onClick={() => dispatch({type: Logout})}>
                 Logout
             </button>
             <button
@@ -55,6 +61,12 @@ const TestDispatchComponent = () => {
                 onClick={() => dispatch({type: SetAccessToken, data: 'mock-token'})}
             >
                 Set Access Token
+            </button>
+            <button
+                data-testid="setAccessTokenNull"
+                onClick={() => dispatch({type: SetAccessToken, data: null})}
+            >
+                Set Access Token Null
             </button>
             <button
                 data-testid="setAuthInfo"
@@ -69,6 +81,12 @@ const TestDispatchComponent = () => {
                 Set Auth Choice
             </button>
             <button
+                data-testid="setAuthChoiceOpenid"
+                onClick={() => dispatch({type: SetAuthChoice, data: 'openid'})}
+            >
+                Set Auth Choice Openid
+            </button>
+            <button
                 data-testid="unknownAction"
                 onClick={() => dispatch({type: 'UNKNOWN_ACTION', data: 'invalid'})}
             >
@@ -78,41 +96,46 @@ const TestDispatchComponent = () => {
     );
 };
 
-// Minimal test component to trigger an error with useAuth
 const TestUseAuthError = () => {
     useAuth();
     return null;
 };
-
-// Minimal test component to trigger an error with useAuthDispatch
 const TestUseAuthDispatchError = () => {
     useAuthDispatch();
     return null;
 };
 
+// Utility function to flush promises
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('AuthProvider', () => {
+    let broadcastChannelInstance;
+
     beforeEach(() => {
-        // Clear mocks before each test
         jest.clearAllMocks();
-        // Clear localStorage
         localStorage.clear();
-        // Enable fake timers
         jest.useFakeTimers();
+        const originalBroadcastChannel = global.BroadcastChannel;
+        global.BroadcastChannel = class extends originalBroadcastChannel {
+            constructor() {
+                super();
+                broadcastChannelInstance = this;
+            }
+        };
     });
 
     afterEach(() => {
-        // Clean up timers
         jest.runOnlyPendingTimers();
         jest.useRealTimers();
+        broadcastChannelInstance = null;
     });
 
-    test('provides initial auth state', () => {
+    test('provides initial authentication state', () => {
         render(
             <AuthProvider>
                 <TestAuthComponent/>
             </AuthProvider>
         );
-
         expect(screen.getByTestId('user').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(screen.getByTestId('authChoice').textContent).toBe('null');
@@ -127,9 +150,7 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('login'));
-
         expect(screen.getByTestId('user').textContent).toBe('"testuser"');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
     });
@@ -141,12 +162,9 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('login'));
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
-
         fireEvent.click(screen.getByTestId('logout'));
-
         expect(screen.getByTestId('user').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
@@ -159,10 +177,9 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('setAccessToken'));
-
         expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
     });
 
     test('updates state with SetAuthInfo action', () => {
@@ -172,9 +189,7 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('setAuthInfo'));
-
         expect(screen.getByTestId('authInfo').textContent).toBe('{"provider":"openid"}');
     });
 
@@ -185,9 +200,7 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('setAuthChoice'));
-
         expect(screen.getByTestId('authChoice').textContent).toBe('"sso"');
     });
 
@@ -197,24 +210,20 @@ describe('AuthProvider', () => {
                 <div data-testid="child">Child Content</div>
             </AuthProvider>
         );
-
         expect(screen.getByTestId('child').textContent).toBe('Child Content');
     });
 
-    test('useAuth throws error when used outside AuthProvider', () => {
+    test('useAuth throws an error when used outside AuthProvider', () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
         expect(() => render(<TestUseAuthError/>)).toThrow('useAuth must be used within an AuthProvider');
-
         consoleErrorSpy.mockRestore();
     });
 
-    test('useAuthDispatch throws error when used outside AuthProvider', () => {
+    test('useAuthDispatch throws an error when used outside AuthProvider', () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-        expect(() => render(
-            <TestUseAuthDispatchError/>)).toThrow('useAuthDispatch must be used within an AuthProvider');
-
+        expect(() => render(<TestUseAuthDispatchError/>)).toThrow(
+            'useAuthDispatch must be used within an AuthProvider'
+        );
         consoleErrorSpy.mockRestore();
     });
 
@@ -225,9 +234,7 @@ describe('AuthProvider', () => {
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
         fireEvent.click(screen.getByTestId('unknownAction'));
-
         expect(screen.getByTestId('user').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(screen.getByTestId('authChoice').textContent).toBe('null');
@@ -236,11 +243,136 @@ describe('AuthProvider', () => {
     });
 
     test('schedules token refresh with valid token', () => {
-        // Mock decodeToken to return a payload with a future expiration
-        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60}); // 60 seconds from now
-        refreshToken.mockResolvedValue(undefined); // Mock refreshToken to resolve
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
+        refreshToken.mockResolvedValue('new-token');
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAccessToken'));
+        expect(consoleLogSpy).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
+        expect(decodeToken).toHaveBeenCalledWith('mock-token');
+        act(() => {
+            jest.runAllTimers();
+        });
+        expect(refreshToken).toHaveBeenCalled();
+        consoleLogSpy.mockRestore();
+    });
 
-        // Mock console.log to verify scheduling
+    test('does not schedule refresh for expired token', () => {
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10});
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAccessToken'));
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            'Token already expired or too close to expiration, no refresh scheduled'
+        );
+        expect(refreshToken).not.toHaveBeenCalled();
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('cleans up timeout on component unmount', () => {
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
+        refreshToken.mockResolvedValue('new-token');
+        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+        const {unmount} = render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAccessToken'));
+        unmount();
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+        clearTimeoutSpy.mockRestore();
+    });
+
+    test('does not initialize BroadcastChannel when undefined', () => {
+        const originalBroadcastChannel = global.BroadcastChannel;
+        delete global.BroadcastChannel;
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+            </AuthProvider>
+        );
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+        consoleLogSpy.mockRestore();
+        global.BroadcastChannel = originalBroadcastChannel;
+    });
+
+    test('does not schedule refresh when no token is provided', () => {
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAccessTokenNull'));
+        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+            'Token refresh scheduled in',
+            expect.any(Number),
+            'seconds'
+        );
+        expect(refreshToken).not.toHaveBeenCalled();
+        consoleLogSpy.mockRestore();
+    });
+
+    test('does not schedule refresh when authChoice is openid', () => {
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAuthChoiceOpenid'));
+        fireEvent.click(screen.getByTestId('setAccessToken'));
+        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+            'Token refresh scheduled in',
+            expect.any(Number),
+            'seconds'
+        );
+        expect(refreshToken).not.toHaveBeenCalled();
+        consoleLogSpy.mockRestore();
+    });
+
+    test('does not schedule refresh when token has no exp field', () => {
+        decodeToken.mockReturnValue({});
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
+        fireEvent.click(screen.getByTestId('setAccessToken'));
+        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+            'Token refresh scheduled in',
+            expect.any(Number),
+            'seconds'
+        );
+        expect(refreshToken).not.toHaveBeenCalled();
+        consoleLogSpy.mockRestore();
+    });
+
+    test('handles token refresh errors', async () => {
+        // Token that expires in 10 seconds for testing
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
+        refreshToken.mockRejectedValue(new Error('Refresh failed'));
+
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
         render(
@@ -250,68 +382,90 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
 
-        // Set a mock token
-        fireEvent.click(screen.getByTestId('setAccessToken'));
+        // Set token in state
+        act(() => {
+            fireEvent.click(screen.getByTestId('setAccessToken'));
+        });
 
-        // Verify the refresh was scheduled
-        expect(consoleLogSpy).toHaveBeenCalledWith('🔁 Token refresh scheduled in', expect.any(Number), 'seconds');
-        expect(decodeToken).toHaveBeenCalledWith('mock-token');
+        // Verify initial state after setAccessToken
+        expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
 
-        // Advance timers to trigger refresh
-        jest.advanceTimersByTime(55000); // Advance to just before 60 seconds
+        // Advance time to trigger refresh and handle error
+        await act(async () => {
+            jest.advanceTimersByTime(5100); // Advance by 5.1 seconds (5000ms + margin)
+            // Use Promise.resolve() instead of flushPromises() with fake timers
+            await Promise.resolve();
+        });
+
+        // Verify refresh was called and failed
         expect(refreshToken).toHaveBeenCalled();
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Token refresh error:', expect.any(Error));
 
+        // Verify logout was triggered due to error
+        expect(screen.getByTestId('accessToken').textContent).toBe('null');
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
+        expect(broadcastChannelInstance._messages).toContainEqual({type: 'logout'});
+
+        consoleErrorSpy.mockRestore();
         consoleLogSpy.mockRestore();
     });
 
-    test('does not schedule refresh for expired token', () => {
-        // Mock decodeToken to return an expired token
-        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10}); // Expired 10 seconds ago
-
-        // Mock console.warn to verify warning
-        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
+    test('handles tokenUpdated message from BroadcastChannel', async () => {
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
                 <TestDispatchComponent/>
             </AuthProvider>
         );
-
-        // Set a mock token
         fireEvent.click(screen.getByTestId('setAccessToken'));
-
-        // Verify no refresh was scheduled
-        expect(consoleWarnSpy).toHaveBeenCalledWith('⚠️ Token already expired or too close to expiration, no refresh scheduled');
-        expect(refreshToken).not.toHaveBeenCalled();
-
-        consoleWarnSpy.mockRestore();
+        await act(async () => {
+            broadcastChannelInstance.onmessage({data: {type: 'tokenUpdated', data: 'new-token'}});
+        });
+        expect(consoleLogSpy).toHaveBeenCalledWith('Token updated from another tab');
+        expect(screen.getByTestId('accessToken').textContent).toBe('"new-token"');
+        expect(decodeToken).toHaveBeenCalledWith('new-token');
+        consoleLogSpy.mockRestore();
     });
 
-    test('cleans up timeout on component unmount', () => {
-        // Mock decodeToken to return a valid future expiration
-        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
-        refreshToken.mockResolvedValue(undefined);
-
-        // Spy on clearTimeout
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-
-        const {unmount} = render(
+    test('handles logout message from BroadcastChannel', async () => {
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
             <AuthProvider>
                 <TestAuthComponent/>
                 <TestDispatchComponent/>
             </AuthProvider>
         );
+        fireEvent.click(screen.getByTestId('login'));
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
+        await act(async () => {
+            broadcastChannelInstance.onmessage({data: {type: 'logout'}});
+        });
+        expect(consoleLogSpy).toHaveBeenCalledWith('Logout triggered from another tab');
+        expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
+        expect(screen.getByTestId('accessToken').textContent).toBe('null');
+        consoleLogSpy.mockRestore();
+    });
 
-        // Set a mock token to schedule a refresh
+    test('ignores refresh if token is updated by another tab', () => {
+        decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
+        refreshToken.mockResolvedValue('new-token');
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+        render(
+            <AuthProvider>
+                <TestAuthComponent/>
+                <TestDispatchComponent/>
+            </AuthProvider>
+        );
         fireEvent.click(screen.getByTestId('setAccessToken'));
-
-        // Unmount the component
-        unmount();
-
-        // Verify the timeout was cleared
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-
-        clearTimeoutSpy.mockRestore();
+        localStorage.setItem('authToken', 'different-token');
+        act(() => {
+            jest.runAllTimers();
+        });
+        expect(consoleLogSpy).toHaveBeenCalledWith('Refresh skipped, token already updated by another tab');
+        expect(decodeToken).toHaveBeenCalledWith('different-token');
+        consoleLogSpy.mockRestore();
     });
 });

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
 import axios from "axios";
@@ -23,21 +23,25 @@ const ClusterOverview = () => {
 
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
+    const isMounted = useRef(true);
 
     useEffect(() => {
+        isMounted.current = true;
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token);
+            const subscription = startEventReception(token);
 
             // Fetch pools
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
             })
                 .then((res) => {
+                    if (!isMounted.current) return;
                     const items = res.data?.items || [];
                     setPoolCount(items.length);
                 })
                 .catch((error) => {
+                    if (!isMounted.current) return;
                     console.error('Failed to fetch pools:', error.message);
                     setPoolCount(0);
                 });
@@ -47,14 +51,31 @@ const ClusterOverview = () => {
                 headers: {Authorization: `Bearer ${token}`}
             })
                 .then((res) => {
+                    if (!isMounted.current) return;
                     const items = res.data?.items || [];
                     setNetworks(items);
                 })
                 .catch((error) => {
+                    if (!isMounted.current) return;
                     console.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
                 });
+
+            return () => {
+                if (typeof subscription !== "function") {
+                    console.warn("[ClusterOverview] Subscription is not a function:", subscription);
+                }
+                if (typeof subscription === "function") {
+                    subscription();
+                }
+            };
         }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
     }, []);
 
     const nodeCount = Object.keys(nodeStatus).length;
@@ -69,7 +90,7 @@ const ClusterOverview = () => {
     });
 
     const namespaces = new Set();
-    const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0};
+    const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
     const objectsPerNamespace = {};
     const statusPerNamespace = {};
 
@@ -85,7 +106,7 @@ const ClusterOverview = () => {
 
         const s = status?.avail?.toLowerCase() || "n/a";
         if (!statusPerNamespace[ns]) {
-            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
+            statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
         }
         if (s === "up" || s === "down" || s === "warn" || s === "n/a") {
             statusPerNamespace[ns][s]++;
@@ -93,6 +114,14 @@ const ClusterOverview = () => {
         } else {
             statusPerNamespace[ns]["n/a"]++;
             statusCount["n/a"]++;
+        }
+
+        // Count unprovisioned objects
+        const provisioned = status?.provisioned;
+        const isUnprovisioned = provisioned === "false" || provisioned === false;
+        if (isUnprovisioned) {
+            statusPerNamespace[ns].unprovisioned++;
+            statusCount.unprovisioned++;
         }
     });
 

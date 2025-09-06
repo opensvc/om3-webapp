@@ -156,9 +156,6 @@ export const createEventSource = (url, token) => {
         },
     });
 
-    currentEventSource.onopen = () => {
-        console.log('✅ SSE connection established! URL:', url, 'readyState:', currentEventSource.readyState);
-    };
 
     currentEventSource.onerror = (error) => {
         console.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource.readyState);

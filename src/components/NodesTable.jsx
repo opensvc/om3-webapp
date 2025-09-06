@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import {useNavigate} from "react-router-dom";
 import {
     Box,
@@ -29,6 +29,9 @@ import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 
+// Safari detection
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
@@ -43,7 +46,27 @@ const NodesTable = () => {
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
+    const actionsMenuAnchorRef = useRef(null);
+    const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
 
+    // Compute the zoom level
+    const getZoomLevel = () => {
+        return window.devicePixelRatio || 1;
+    };
+
+    // Function to calculate the menu position
+    const calculateMenuPosition = (anchorRef) => {
+        if (anchorRef.current) {
+            const zoomLevel = getZoomLevel();
+            const rect = anchorRef.current.getBoundingClientRect();
+            const scrollY = window.scrollY || window.pageYOffset;
+            const scrollX = window.scrollX || window.pageXOffset;
+            setMenuPosition({
+                top: (rect.bottom + scrollY) / zoomLevel,
+                left: (rect.right + scrollX) / zoomLevel,
+            });
+        }
+    };
 
     const handleAction = (action, nodename = null) => {
         setPendingAction({action, node: nodename});
@@ -92,10 +115,16 @@ const NodesTable = () => {
 
     const handleActionsMenuOpen = (event) => {
         setActionsMenuAnchor(event.currentTarget);
+        actionsMenuAnchorRef.current = event.currentTarget;
+        if (isSafari) {
+            setTimeout(() => calculateMenuPosition(actionsMenuAnchorRef), 0);
+        }
     };
 
     const handleActionsMenuClose = () => {
         setActionsMenuAnchor(null);
+        actionsMenuAnchorRef.current = null;
+        setMenuPosition({top: 0, left: 0});
     };
 
     const postActionUrl = (node, action) => {
@@ -120,7 +149,7 @@ const NodesTable = () => {
 
         const actionLabel = action
             .split(" ")
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(" ");
         setSnackbar({
             open: true,
@@ -189,6 +218,30 @@ const NodesTable = () => {
         });
     });
 
+    // Menu props configuration
+    const menuProps = {
+        anchorOrigin: {
+            vertical: "bottom",
+            horizontal: "right",
+        },
+        transformOrigin: {
+            vertical: "top",
+            horizontal: "right",
+        },
+        sx: isSafari
+            ? {
+                "& .MuiMenu-paper": {
+                    position: "fixed",
+                    top: `${menuPosition.top}px !important`,
+                    left: `${menuPosition.left}px !important`,
+                    transform: "translateX(-100%)",
+                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                    zIndex: 1300,
+                },
+            }
+            : {},
+    };
+
     return (
         <Box
             sx={{
@@ -222,6 +275,7 @@ const NodesTable = () => {
                         color="primary"
                         onClick={handleActionsMenuOpen}
                         disabled={selectedNodes.length === 0}
+                        ref={actionsMenuAnchorRef}
                     >
                         Actions on selected nodes
                     </Button>
@@ -229,6 +283,7 @@ const NodesTable = () => {
                         anchorEl={actionsMenuAnchor}
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
+                        {...menuProps}
                     >
                         {filteredMenuItems.map(({name, icon}) => (
                             <MenuItem
@@ -244,9 +299,8 @@ const NodesTable = () => {
                                 <ListItemText>
                                     {name
                                         .split(" ")
-                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                        .join(" ")
-                                    }
+                                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                                        .join(" ")}
                                 </ListItemText>
                             </MenuItem>
                         ))}
@@ -322,7 +376,7 @@ const NodesTable = () => {
                     pendingAction={pendingAction}
                     handleConfirm={handleDialogConfirm}
                     target={pendingAction?.node ? `node ${pendingAction.node}` : `${selectedNodes.length} nodes`}
-                    supportedActions={NODE_ACTIONS.map(action => action.name)}
+                    supportedActions={NODE_ACTIONS.map((action) => action.name)}
                     onClose={() => setPendingAction(null)}
                 />
             </Box>

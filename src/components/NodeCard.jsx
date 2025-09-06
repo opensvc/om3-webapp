@@ -7,7 +7,9 @@ import {
     IconButton,
     Accordion,
     AccordionDetails,
-    Menu,
+    ClickAwayListener,
+    Popper,
+    Paper,
     MenuItem,
     ListItemIcon,
     ListItemText,
@@ -34,6 +36,9 @@ const NodeCard = ({
                       handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
                       handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
                       individualNodeMenuAnchor = null,
+                      individualNodeMenuAnchorRef = null,
+                      resourcesActionsAnchorRef = null,
+                      resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
@@ -55,20 +60,51 @@ const NodeCard = ({
         return null;
     }
 
-    // Log received props for debugging
-    console.log("NodeCard render:", {
-        node,
-        resources: nodeData?.resources,
-        encap: nodeData?.encap,
-        instanceConfig: nodeData?.instanceConfig,
-        instanceMonitor: nodeData?.instanceMonitor,
-        provisioned: nodeData?.provisioned,
-    });
-
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
+
+    // Calculate the zoom level
+    const getZoomLevel = () => {
+        return window.devicePixelRatio || 1;
+    };
+
+    // Configuration of Popper props
+    const popperProps = () => ({
+        placement: "bottom-end",
+        disablePortal: true,
+        modifiers: [
+            {
+                name: "offset",
+                options: {
+                    offset: ({reference}) => {
+                        const zoomLevel = getZoomLevel();
+                        return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
+                    },
+                },
+            },
+            {
+                name: "preventOverflow",
+                options: {
+                    boundariesElement: "viewport",
+                },
+            },
+            {
+                name: "flip",
+                options: {
+                    enabled: true,
+                },
+            },
+        ],
+        sx: {
+            zIndex: 1300,
+            "& .MuiPaper-root": {
+                minWidth: 200,
+                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+            },
+        },
+    });
 
     // Extract node data with defaults
     const resources = nodeData?.resources || {};
@@ -77,16 +113,15 @@ const NodeCard = ({
     const effectiveInstanceConfig = nodeData?.instanceConfig || {resources: {}};
     const effectiveInstanceMonitor = nodeData?.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
-    const isInstanceNotProvisioned = nodeData?.provisioned === "false" || nodeData?.provisioned === false;
+    const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
-    // Log changes to selectedResourcesByNode
+    // Log changes to selectedResourcesByNode for test
     useEffect(() => {
         console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
 
     // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
-        console.log("handleSelectAllResources:", {node, checked, resIds});
         if (typeof setSelectedResourcesByNode !== "function") {
             console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
             return;
@@ -94,21 +129,19 @@ const NodeCard = ({
         const allResourceIds = [
             ...resIds,
             ...resIds.flatMap((rid) =>
-                resources[rid]?.type?.toLowerCase().includes("container") && encapData[rid]?.resources
+                resources[rid]?.type?.toLowerCase().includes("container") && encapData[rid]?.resources && resources[rid]?.status !== "down"
                     ? Object.keys(encapData[rid].resources)
                     : []
             ),
         ];
-        setSelectedResourcesByNode((prev) => {
-            const newState = {...prev, [node]: checked ? allResourceIds : []};
-            console.log("After handleSelectAllResources, new selectedResourcesByNode:", newState);
-            return newState;
-        });
+        setSelectedResourcesByNode((prev) => ({
+            ...prev,
+            [node]: checked ? allResourceIds : [],
+        }));
     };
 
     // Handler for individual node actions
     const handleIndividualNodeActionClick = (action) => {
-        console.log("handleIndividualNodeActionClick:", {action, node, frozen});
         setCurrentNode(node);
         setPendingAction({action, node});
         if (action === "freeze") {
@@ -131,11 +164,6 @@ const NodeCard = ({
 
     // Handler for batch resource actions
     const handleBatchResourceActionClick = (action) => {
-        console.log("handleBatchResourceActionClick:", {
-            action,
-            node,
-            selectedResources: selectedResourcesByNode[node],
-        });
         setPendingAction({action, batch: "resources", node});
         setSimpleDialogOpen(true);
         setResourcesActionsAnchor(null);
@@ -143,7 +171,6 @@ const NodeCard = ({
 
     // Handler for individual resource actions
     const handleResourceActionClick = (action) => {
-        console.log("handleResourceActionClick:", {action, node, rid: currentResourceId});
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
@@ -152,22 +179,16 @@ const NodeCard = ({
 
     // Helper function to filter resource actions based on type
     const getFilteredResourceActions = (resourceType) => {
-        console.log("getFilteredResourceActions called with resourceType:", resourceType);
         if (!resourceType) {
-            console.log("No resource type provided, returning all actions");
             return RESOURCE_ACTIONS;
         }
         const typePrefix = resourceType.split('.')[0].toLowerCase();
-        console.log("Resource type prefix:", typePrefix);
         if (typePrefix === 'task') {
-            console.log("Type is task, returning only 'run' action");
-            return RESOURCE_ACTIONS.filter(action => action.name === 'run');
+            return RESOURCE_ACTIONS.filter((action) => action.name === 'run');
         }
         if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
-            console.log(`Type prefix is ${typePrefix}, excluding 'run' action`);
-            return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
+            return RESOURCE_ACTIONS.filter((action) => action.name !== 'run');
         }
-        console.log("No special filtering, returning all actions");
         return RESOURCE_ACTIONS;
     };
 
@@ -178,13 +199,11 @@ const NodeCard = ({
             return '';
         }
         console.log(`getResourceType called for rid: ${rid}`);
-        // Check top-level resources
         const topLevelType = resources[rid]?.type;
         if (topLevelType) {
             console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
             return topLevelType;
         }
-        // Check encapsulated resources
         for (const containerId of Object.keys(encapData)) {
             const encapType = encapData[containerId]?.resources?.[rid]?.type;
             if (encapType) {
@@ -197,7 +216,7 @@ const NodeCard = ({
     };
 
     // Helper function to determine resource status letters and tooltip
-    const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false) => {
+    const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false, encapData = {}) => {
         const letters = [".", ".", ".", ".", ".", ".", ".", "."];
         const tooltipDescriptions = [
             "Not Running",
@@ -209,64 +228,52 @@ const NodeCard = ({
             "Not Standby",
             "No Restart",
         ];
-
-        // Handle running state
         if (resourceData?.running !== undefined) {
             letters[0] = resourceData.running ? "R" : ".";
             tooltipDescriptions[0] = resourceData.running ? "Running" : "Not Running";
         }
-
-        // Handle monitored state
         const isMonitored = instanceConfig?.resources?.[rid]?.is_monitored;
         if (isMonitored === true || isMonitored === "true") {
             letters[1] = "M";
             tooltipDescriptions[1] = "Monitored";
         }
-
-        // Handle disabled state
         const isDisabled = instanceConfig?.resources?.[rid]?.is_disabled;
         if (isDisabled === true || isDisabled === "true") {
             letters[2] = "D";
             tooltipDescriptions[2] = "Disabled";
         }
-
-        // Handle optional state
         if (resourceData?.optional === true || resourceData?.optional === "true") {
             letters[3] = "O";
             tooltipDescriptions[3] = "Optional";
         }
-
-        // Handle encap state
         if (isEncap) {
             letters[4] = "E";
             tooltipDescriptions[4] = "Encap";
         }
-
-        // Handle provisioned state
-        const provisionedState = resourceData?.provisioned?.state;
+        let provisionedState = resourceData?.provisioned?.state;
+        const isContainer = resourceData?.type?.toLowerCase().includes("container");
+        if (isContainer && encapData[rid]?.provisioned !== undefined) {
+            provisionedState = encapData[rid].provisioned;
+        }
         if (provisionedState === "false" || provisionedState === false || provisionedState === "n/a") {
             letters[5] = "P";
             tooltipDescriptions[5] = "Not Provisioned";
+        } else if (provisionedState === "true" || provisionedState === true) {
+            tooltipDescriptions[5] = "Provisioned";
         }
-
-        // Handle standby state
         const isStandby = instanceConfig?.resources?.[rid]?.is_standby;
         if (isStandby === true || isStandby === "true") {
             letters[6] = "S";
             tooltipDescriptions[6] = "Standby";
         }
-
-        // Handle restart count
         const configRestarts = instanceConfig?.resources?.[rid]?.restart;
         const monitorRestarts = instanceMonitor?.resources?.[rid]?.restart?.remaining;
         let remainingRestarts;
-
         if (typeof configRestarts === "number" && configRestarts > 0) {
             remainingRestarts = configRestarts;
         } else if (typeof monitorRestarts === "number") {
             remainingRestarts = monitorRestarts;
         }
-
         if (typeof remainingRestarts === "number") {
             letters[7] = remainingRestarts === 0 ? "." : remainingRestarts > 10 ? "+" : remainingRestarts.toString();
             tooltipDescriptions[7] =
@@ -276,45 +283,32 @@ const NodeCard = ({
                         ? "More than 10 Restarts"
                         : `${remainingRestarts} Restart${remainingRestarts === 1 ? "" : "s"} Remaining`;
         }
-
         const statusString = letters.join("");
         const tooltipText = tooltipDescriptions.join(", ");
-        console.log("Status letters for", rid, ":", {
-            statusString,
-            tooltipText,
-            is_monitored: isMonitored,
-            restart: remainingRestarts,
-        });
         return {statusString, tooltipText};
     };
 
     // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
         if (!res) {
-            console.error(`Resource data is null or undefined for ${rid}`);
             return null;
         }
-
-        const {
-            statusString,
-            tooltipText
-        } = getResourceStatusLetters(rid, res, instanceConfig, instanceMonitor, isEncap);
+        const {statusString, tooltipText} = getResourceStatusLetters(
+            rid,
+            res,
+            instanceConfig,
+            instanceMonitor,
+            isEncap,
+            encapData
+        );
         const labelText = res.label || "N/A";
         const infoText = res.info?.actions === "disabled" ? "info: actions disabled" : "";
         const resourceType = res.type || "N/A";
-        const isResourceNotProvisioned = res?.provisioned?.state === "false" || res?.provisioned?.state === false || res?.provisioned?.state === "n/a";
-
-        console.log("Rendering resource row:", {
-            rid,
-            statusString,
-            status: res.status,
-            label: labelText,
-            type: resourceType,
-            isEncap,
-            tooltipText,
-            isResourceNotProvisioned,
-        });
-
+        const isContainer = resourceType.toLowerCase().includes("container");
+        const provisionedState = isContainer && encapData[rid]?.provisioned !== undefined
+            ? encapData[rid].provisioned
+            : res?.provisioned?.state;
+        const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
         return (
             <Box
                 key={rid}
@@ -340,15 +334,7 @@ const NodeCard = ({
                     <Box onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                             checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                            onChange={(e) => {
-                                toggleResource(node, rid);
-                                console.log("Individual resource checkbox clicked:", {
-                                    node,
-                                    rid,
-                                    checked: e.target.checked,
-                                    selectedResourcesByNode,
-                                });
-                            }}
+                            onChange={() => toggleResource(node, rid)}
                             aria-label={`Select resource ${rid}`}
                         />
                     </Box>
@@ -604,14 +590,7 @@ const NodeCard = ({
                         <Box onClick={(e) => e.stopPropagation()}>
                             <Checkbox
                                 checked={selectedNodes.includes(node)}
-                                onChange={(e) => {
-                                    toggleNode(node);
-                                    console.log("Node checkbox clicked:", {
-                                        node,
-                                        checked: e.target.checked,
-                                        selectedNodes,
-                                    });
-                                }}
+                                onChange={() => toggleNode(node)}
                                 aria-label={`Select node ${node}`}
                             />
                         </Box>
@@ -650,9 +629,11 @@ const NodeCard = ({
                                 e.stopPropagation();
                                 setCurrentNode(node);
                                 setIndividualNodeMenuAnchor(e.currentTarget);
+                                console.log("Node menu opened at:", e.currentTarget.getBoundingClientRect());
                             }}
                             disabled={actionInProgress}
                             aria-label={`Node ${node} actions`}
+                            ref={individualNodeMenuAnchorRef}
                         >
                             <Tooltip title="Actions">
                                 <MoreVertIcon/>
@@ -661,7 +642,6 @@ const NodeCard = ({
                     </Box>
                 </Box>
             </Box>
-
             {/* Resources accordion */}
             <Accordion
                 expanded={expandedNodeResources[node] || false}
@@ -690,17 +670,15 @@ const NodeCard = ({
                                     resIds.reduce(
                                         (acc, rid) =>
                                             resources[rid]?.type?.toLowerCase().includes("container") &&
-                                            encapData[rid]?.resources
+                                            encapData[rid]?.resources &&
+                                            resources[rid]?.status !== "down"
                                                 ? acc + Object.keys(encapData[rid].resources).length
                                                 : acc,
                                         0
                                     )) &&
                                 resIds.length > 0
                             }
-                            onChange={(e) => {
-                                console.log("Select all checkbox clicked:", {node, checked: e.target.checked});
-                                handleSelectAllResources(e.target.checked);
-                            }}
+                            onChange={(e) => handleSelectAllResources(e.target.checked)}
                             disabled={resIds.length === 0}
                             aria-label={`Select all resources for node ${node}`}
                         />
@@ -713,9 +691,11 @@ const NodeCard = ({
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     handleResourcesActionsOpen(node, e);
+                                    setResourcesActionsAnchor(e.currentTarget);
                                 }}
                                 disabled={!(selectedResourcesByNode[node] || []).length}
                                 aria-label={`Resource actions for node ${node}`}
+                                ref={resourcesActionsAnchorRef}
                             >
                                 Actions on Selected Resources
                             </Button>
@@ -744,20 +724,8 @@ const NodeCard = ({
                                     const isContainer = res.type?.toLowerCase().includes("container") || false;
                                     const encapRes = isContainer && encapData[rid]?.resources ? encapData[rid].resources : {};
                                     const encapResIds = Object.keys(encapRes);
-
-                                    console.log("Rendering resource:", {
-                                        rid,
-                                        isContainer,
-                                        encapRes,
-                                        encapResIds,
-                                        resourceData: res,
-                                        resourceType: res.type,
-                                        encapDataForRid: encapData[rid],
-                                    });
-
                                     return (
                                         <Box key={rid}>
-                                            {/* Render top-level resource */}
                                             {renderResourceRow(rid, res, effectiveInstanceConfig, effectiveInstanceMonitor, false)}
                                             {isContainer && !encapData[rid] && (
                                                 <Box sx={{ml: 4}}>
@@ -773,24 +741,20 @@ const NodeCard = ({
                                                     </Typography>
                                                 </Box>
                                             )}
-                                            {isContainer && encapResIds.length > 0 && (
+                                            {isContainer && encapResIds.length > 0 && res.status !== "down" && (
                                                 <Box sx={{ml: 4}}>
-                                                    {encapResIds.map((encapRid) => {
-                                                        console.log("Rendering encap resource:", {
-                                                            encapRid,
-                                                            data: encapRes[encapRid],
-                                                        });
-                                                        return renderResourceRow(
+                                                    {encapResIds.map((encapRid) => (
+                                                        renderResourceRow(
                                                             encapRid,
                                                             encapRes[encapRid] || {},
                                                             effectiveInstanceConfig,
                                                             effectiveInstanceMonitor,
                                                             true
-                                                        );
-                                                    })}
+                                                        )
+                                                    ))}
                                                 </Box>
                                             )}
-                                            {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && (
+                                            {isContainer && encapResIds.length === 0 && encapData[rid]?.resources !== undefined && !isInstanceNotProvisioned && (
                                                 <Box sx={{ml: 4}}>
                                                     <Typography color="textSecondary">
                                                         No encapsulated resources available for {rid}.
@@ -805,91 +769,93 @@ const NodeCard = ({
                     </Box>
                 </AccordionDetails>
             </Accordion>
-
-            {/* Menu for node actions */}
-            <Menu
-                anchorEl={individualNodeMenuAnchor}
+            {/* Popper for node actions */}
+            <Popper
                 open={Boolean(individualNodeMenuAnchor)}
-                onClose={() => setIndividualNodeMenuAnchor(null)}
-                onClick={(e) => e.stopPropagation()}
+                anchorEl={individualNodeMenuAnchor}
+                {...popperProps()}
             >
-                {INSTANCE_ACTIONS.map(({name, icon}) => (
-                    <MenuItem
-                        key={name}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleIndividualNodeActionClick(name);
-                        }}
-                        aria-label={`Node ${node} ${name} action`}
-                    >
-                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                    </MenuItem>
-                ))}
-            </Menu>
-
-            {/* Menu for batch resource actions */}
-            <Menu
-                anchorEl={resourcesActionsAnchor}
-                open={Boolean(resourcesActionsAnchor)}
-                onClose={() => setResourcesActionsAnchor(null)}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {RESOURCE_ACTIONS.map(({name, icon}) => (
-                    <MenuItem
-                        key={name}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleBatchResourceActionClick(name);
-                        }}
-                        aria-label={`Batch resource ${name} action for node ${node}`}
-                    >
-                        <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                    </MenuItem>
-                ))}
-            </Menu>
-
-            {/* Menu for individual resource actions */}
-            <Menu
-                anchorEl={resourceMenuAnchor}
-                open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
-                onClose={() => {
-                    setResourceMenuAnchor(null);
-                    setCurrentResourceId(null);
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {(() => {
-                    if (!currentResourceId) {
-                        console.error("No currentResourceId set, cannot render resource actions menu");
-                        return [];
-                    }
-                    const resourceType = getResourceType(currentResourceId);
-                    const filteredActions = getFilteredResourceActions(resourceType);
-                    console.log("Rendering resource actions menu:", {
-                        currentResourceId,
-                        resourceType,
-                        filteredActions: filteredActions.map(action => action.name),
-                    });
-                    return filteredActions.map(({name, icon}) => {
-                        console.log(`Rendering MenuItem for action: ${name}`);
-                        return (
+                <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
+                    <Paper elevation={3} role="menu" aria-label={`Node ${node} actions menu`}>
+                        {INSTANCE_ACTIONS.map(({name, icon}) => (
                             <MenuItem
                                 key={name}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    handleResourceActionClick(name);
+                                    handleIndividualNodeActionClick(name);
                                 }}
-                                aria-label={`Resource ${currentResourceId} ${name} action`}
+                                role="menuitem"
+                                aria-label={`Node ${node} ${name} action`}
                             >
                                 <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                 <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                             </MenuItem>
-                        );
-                    });
-                })()}
-            </Menu>
+                        ))}
+                    </Paper>
+                </ClickAwayListener>
+            </Popper>
+            {/* Popper for batch resource actions */}
+            <Popper
+                open={Boolean(resourcesActionsAnchor)}
+                anchorEl={resourcesActionsAnchor}
+                {...popperProps()}
+            >
+                <ClickAwayListener onClickAway={() => setResourcesActionsAnchor(null)}>
+                    <Paper elevation={3} role="menu" aria-label={`Batch resource actions for node ${node}`}>
+                        {RESOURCE_ACTIONS.map(({name, icon}) => (
+                            <MenuItem
+                                key={name}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleBatchResourceActionClick(name);
+                                }}
+                                role="menuitem"
+                                aria-label={`Batch ${name} action for node ${node}`}
+                            >
+                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                            </MenuItem>
+                        ))}
+                    </Paper>
+                </ClickAwayListener>
+            </Popper>
+            {/* Popper for individual resource actions */}
+            <Popper
+                open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                anchorEl={resourceMenuAnchor}
+                {...popperProps()}
+            >
+                <ClickAwayListener
+                    onClickAway={() => {
+                        setResourceMenuAnchor(null);
+                        setCurrentResourceId(null);
+                    }}
+                >
+                    <Paper elevation={3} role="menu" aria-label={`Resource ${currentResourceId} actions menu`}>
+                        {(() => {
+                            if (!currentResourceId) {
+                                return [];
+                            }
+                            const resourceType = getResourceType(currentResourceId);
+                            const filteredActions = getFilteredResourceActions(resourceType);
+                            return filteredActions.map(({name, icon}) => (
+                                <MenuItem
+                                    key={name}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleResourceActionClick(name);
+                                    }}
+                                    role="menuitem"
+                                    aria-label={`Resource ${currentResourceId} ${name} action`}
+                                >
+                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            ));
+                        })()}
+                    </Paper>
+                </ClickAwayListener>
+            </Popper>
         </Box>
     );
 };

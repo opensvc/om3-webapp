@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
@@ -10,7 +10,8 @@ import {
     TableRow,
     Typography,
     Button,
-    Menu,
+    Popper,
+    Paper,
     MenuItem,
     Checkbox,
     Autocomplete,
@@ -24,6 +25,7 @@ import {
     useTheme,
     Tooltip,
     IconButton,
+    ClickAwayListener,
 } from "@mui/material";
 import {
     RestartAlt,
@@ -53,12 +55,18 @@ import {extractNamespace, extractKind, isActionAllowedForSelection} from "../uti
 import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 
+// Safari detection
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const isMounted = useRef(true);
+    const actionsMenuAnchorRef = useRef(null);
+    const rowMenuAnchorRef = useRef(null);
 
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "n/a"];
+    const globalStates = ["all", "up", "down", "warn", "n/a", "unprovisioned"];
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -91,7 +99,13 @@ const Objects = () => {
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
+    // Calculate zoom level
+    const getZoomLevel = () => {
+        return window.devicePixelRatio || 1;
+    };
+
     useEffect(() => {
+        if (!isMounted.current) return;
         const newQueryParams = new URLSearchParams();
         if (selectedGlobalState !== "all") {
             newQueryParams.set("globalState", selectedGlobalState);
@@ -112,6 +126,7 @@ const Objects = () => {
     }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname]);
 
     useEffect(() => {
+        if (!isMounted.current) return;
         setSelectedGlobalState(
             globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
         );
@@ -119,6 +134,12 @@ const Objects = () => {
         setSelectedKind(rawKind);
         setSearchQuery(rawSearchQuery);
     }, [location.search]);
+
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
 
     const objects = Object.keys(objectStatus).length
         ? objectStatus
@@ -134,7 +155,7 @@ const Objects = () => {
         const validStatuses = ["up", "down", "warn"];
         const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
         const frozen = obj?.frozen;
-        const provisioned = obj?.provisioned; // Extract provisioned status
+        const provisioned = obj?.provisioned;
         const nodes = Object.keys(objectInstanceStatus[objectName] || {});
         let globalExpect = null;
         for (const node of nodes) {
@@ -160,14 +181,18 @@ const Objects = () => {
                     ? "frozen"
                     : "unfrozen",
             state: monitor.state !== "idle" ? monitor.state : null,
+            provisioned: instanceStatus[node]?.provisioned,
         };
     };
 
     const kinds = Array.from(new Set(allObjectNames.map(extractKind))).sort();
     const filteredObjectNames = allObjectNames.filter((name) => {
-        const {avail} = getObjectStatus(name);
+        const {avail, provisioned} = getObjectStatus(name);
         const matchesGlobalState =
-            selectedGlobalState === "all" || avail === selectedGlobalState;
+            selectedGlobalState === "all" ||
+            (selectedGlobalState === "unprovisioned"
+                ? provisioned === "false" || provisioned === false
+                : avail === selectedGlobalState);
         return (
             (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
             (selectedKind === "all" || extractKind(name) === selectedKind) &&
@@ -187,16 +212,22 @@ const Objects = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token, [
+            const subscription = startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
+            return () => {
+                if (typeof subscription !== "function") {
+                    console.warn("[Objects] Subscription is not a function:", subscription);
+                }
+                if (typeof subscription === "function") {
+                    subscription();
+                }
+                closeEventSource();
+            };
         }
-        return () => {
-            closeEventSource();
-        };
     }, []);
 
     const handleSelectObject = (event, objectName) => {
@@ -209,20 +240,26 @@ const Objects = () => {
 
     const handleActionsMenuOpen = (event) => {
         setActionsMenuAnchor(event.currentTarget);
+        actionsMenuAnchorRef.current = event.currentTarget;
+        console.log("Actions menu opened at:", event.currentTarget.getBoundingClientRect());
     };
 
     const handleActionsMenuClose = () => {
         setActionsMenuAnchor(null);
+        actionsMenuAnchorRef.current = null;
     };
 
     const handleRowMenuOpen = (event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
+        rowMenuAnchorRef.current = event.currentTarget;
+        console.log("Row menu opened at:", event.currentTarget.getBoundingClientRect());
     };
 
     const handleRowMenuClose = () => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
+        rowMenuAnchorRef.current = null;
     };
 
     const handleActionClick = (action, isSingleObject = false, objectName = null) => {
@@ -334,6 +371,42 @@ const Objects = () => {
             navigate(`/objects/${encodeURIComponent(objectName)}`);
     };
 
+    // Popper props configuration
+    const popperProps = (anchorRef) => ({
+        placement: "bottom-end",
+        disablePortal: isSafari, // Disable portal for Safari
+        modifiers: [
+            {
+                name: "offset",
+                options: {
+                    offset: ({reference}) => {
+                        const zoomLevel = getZoomLevel();
+                        return [0, 8 / zoomLevel]; // Adjust offset based on zoom
+                    },
+                },
+            },
+            {
+                name: "preventOverflow",
+                options: {
+                    boundariesElement: "viewport",
+                },
+            },
+            {
+                name: "flip",
+                options: {
+                    enabled: true,
+                },
+            },
+        ],
+        sx: {
+            zIndex: 1300,
+            "& .MuiPaper-root": {
+                minWidth: 200,
+                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+            },
+        },
+    });
+
     return (
         <Box
             sx={{
@@ -393,6 +466,7 @@ const Objects = () => {
                             onClick={handleActionsMenuOpen}
                             disabled={!selectedObjects.length}
                             aria-label="Actions on selected objects"
+                            ref={actionsMenuAnchorRef}
                         >
                             Actions on selected objects
                         </Button>
@@ -430,6 +504,9 @@ const Objects = () => {
                                             {option === "n/a" && (
                                                 <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>
                                             )}
+                                            {option === "unprovisioned" && (
+                                                <WarningAmberIcon sx={{color: red[500], fontSize: 18}}/>
+                                            )}
                                             {option === "all"
                                                 ? "All"
                                                 : option.charAt(0).toUpperCase() + option.slice(1)}
@@ -462,35 +539,39 @@ const Objects = () => {
                         </Box>
                     </Collapse>
 
-                    <Menu
-                        anchorEl={actionsMenuAnchor}
+                    <Popper
                         open={Boolean(actionsMenuAnchor)}
-                        onClose={handleActionsMenuClose}
+                        anchorEl={actionsMenuAnchor}
+                        {...popperProps(actionsMenuAnchorRef)}
                     >
-                        {OBJECT_ACTIONS.map(({name, icon}) => {
-                            const isAllowed = isActionAllowedForSelection(name, selectedObjects);
-                            return (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => handleActionClick(name)}
-                                    disabled={!isAllowed}
-                                    sx={{
-                                        color: isAllowed ? "inherit" : "text.disabled",
-                                        "&.Mui-disabled": {
-                                            opacity: 0.5,
-                                        },
-                                    }}
-                                >
-                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
-                                        {icon}
-                                    </ListItemIcon>
-                                    <ListItemText>
-                                        {name.charAt(0).toUpperCase() + name.slice(1)}
-                                    </ListItemText>
-                                </MenuItem>
-                            );
-                        })}
-                    </Menu>
+                        <ClickAwayListener onClickAway={handleActionsMenuClose}>
+                            <Paper elevation={3} role="menu">
+                                {OBJECT_ACTIONS.map(({name, icon}) => {
+                                    const isAllowed = isActionAllowedForSelection(name, selectedObjects);
+                                    return (
+                                        <MenuItem
+                                            key={name}
+                                            onClick={() => handleActionClick(name)}
+                                            disabled={!isAllowed}
+                                            sx={{
+                                                color: isAllowed ? "inherit" : "text.disabled",
+                                                "&.Mui-disabled": {
+                                                    opacity: 0.5,
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
+                                                {icon}
+                                            </ListItemIcon>
+                                            <ListItemText>
+                                                {name.charAt(0).toUpperCase() + name.slice(1)}
+                                            </ListItemText>
+                                        </MenuItem>
+                                    );
+                                })}
+                            </Paper>
+                        </ClickAwayListener>
+                    </Popper>
                 </Box>
 
                 <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
@@ -526,7 +607,7 @@ const Objects = () => {
                             {filteredObjectNames.map((objectName) => {
                                 const {avail, frozen, globalExpect, provisioned} = getObjectStatus(objectName);
                                 const isFrozen = frozen === "frozen";
-                                const isNotProvisioned = provisioned === "false" || provisioned === false; // Check if not provisioned
+                                const isNotProvisioned = provisioned === "false" || provisioned === false;
                                 const hasAnyNodeFrozen = allNodes.some((node) => {
                                     const {frozen: nodeFrozen} = getNodeState(objectName, node);
                                     return nodeFrozen === "frozen";
@@ -612,8 +693,13 @@ const Objects = () => {
                                         </TableCell>
                                         {isWideScreen &&
                                             allNodes.map((node) => {
-                                                const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState} =
-                                                    getNodeState(objectName, node);
+                                                const {
+                                                    avail: nodeAvail,
+                                                    frozen: nodeFrozen,
+                                                    state: nodeState,
+                                                    provisioned: nodeProvisioned,
+                                                } = getNodeState(objectName, node);
+                                                const isNodeNotProvisioned = nodeProvisioned === "false" || nodeProvisioned === false;
                                                 return (
                                                     <TableCell key={node} align="center">
                                                         <Box
@@ -645,6 +731,17 @@ const Objects = () => {
                                                                             <WarningAmberIcon
                                                                                 sx={{color: orange[500]}}
                                                                                 aria-label={`Node ${node} has warning`}
+                                                                            />
+                                                                        </Tooltip>
+                                                                    )}
+                                                                    {isNodeNotProvisioned && (
+                                                                        <Tooltip title="Not Provisioned">
+                                                                            <WarningAmberIcon
+                                                                                sx={{
+                                                                                    color: red[500],
+                                                                                    fontSize: "1.2rem",
+                                                                                }}
+                                                                                aria-label={`Node ${node} is not provisioned`}
                                                                             />
                                                                         </Tooltip>
                                                                     )}
@@ -680,30 +777,34 @@ const Objects = () => {
                                                     handleRowMenuOpen(e, objectName);
                                                 }}
                                                 aria-label={`More actions for object ${objectName}`}
+                                                ref={rowMenuAnchorRef}
                                             >
                                                 <MoreVertIcon/>
                                             </IconButton>
-                                            <Menu
-                                                anchorEl={rowMenuAnchor}
+                                            <Popper
                                                 open={Boolean(rowMenuAnchor) && currentObject === objectName}
-                                                onClose={handleRowMenuClose}
-                                                onClick={(e) => e.stopPropagation()}
+                                                anchorEl={rowMenuAnchor}
+                                                {...popperProps(rowMenuAnchorRef)}
                                             >
-                                                {filteredActions.map(({name, icon}) => (
-                                                    <MenuItem
-                                                        key={name}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleActionClick(name, true, objectName);
-                                                        }}
-                                                        sx={{display: "flex", alignItems: "center", gap: 1}}
-                                                        aria-label={`${name} action for object ${objectName}`}
-                                                    >
-                                                        <ListItemIcon>{icon}</ListItemIcon>
-                                                        {name.charAt(0).toUpperCase() + name.slice(1)}
-                                                    </MenuItem>
-                                                ))}
-                                            </Menu>
+                                                <ClickAwayListener onClickAway={handleRowMenuClose}>
+                                                    <Paper elevation={3} role="menu">
+                                                        {filteredActions.map(({name, icon}) => (
+                                                            <MenuItem
+                                                                key={name}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleActionClick(name, true, objectName);
+                                                                }}
+                                                                sx={{display: "flex", alignItems: "center", gap: 1}}
+                                                                aria-label={`${name} action for object ${objectName}`}
+                                                            >
+                                                                <ListItemIcon>{icon}</ListItemIcon>
+                                                                {name.charAt(0).toUpperCase() + name.slice(1)}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Paper>
+                                                </ClickAwayListener>
+                                            </Popper>
                                         </TableCell>
                                     </TableRow>
                                 );

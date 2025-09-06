@@ -1,20 +1,7 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
-import NavBar from '../NavBar';
-import ClusterOverview from '../Cluster';
-import NodesTable from '../NodesTable';
-import Namespaces from '../Namespaces';
-import Heartbeats from '../Heartbeats';
-import Pools from '../Pools';
-import Objects from '../Objects';
-import ObjectDetails from '../ObjectDetails';
-import AuthChoice from '../AuthChoice.jsx';
-import Login from '../Login';
-import OidcCallback from '../OidcCallback';
-import {AuthProvider} from '../../context/AuthProvider';
-import {OidcProvider} from '../../context/OidcAuthContext.tsx';
 
 // Mock CSS imports
 jest.mock('../../styles/main.css', () => ({}));
@@ -99,7 +86,7 @@ const mockLocalStorage = {
 };
 Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
-// Mock console.log and console.error to suppress logs
+// Mock console.log, console.error, and console.warn to suppress logs
 jest.spyOn(console, 'log').mockImplementation(() => {
 });
 jest.spyOn(console, 'error').mockImplementation(() => {
@@ -118,6 +105,8 @@ describe('App Component', () => {
         mockAuthState.authChoice = null;
         mockAuthState.accessToken = null;
         mockAuthState.isAuthenticated = false;
+        // Reset getUser default
+        mockUserManager.getUser.mockResolvedValue(null);
     });
 
     test('renders NavBar and redirects from / to /cluster', async () => {
@@ -198,6 +187,7 @@ describe('App Component', () => {
             if (key === 'authChoice') return 'openid';
             return null;
         });
+        mockAuthState.authChoice = 'openid';
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -215,6 +205,7 @@ describe('App Component', () => {
             if (key === 'authChoice') return 'openid';
             return null; // no token
         });
+        mockAuthState.authChoice = 'openid';
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -365,7 +356,6 @@ describe('App Component', () => {
     });
 
     test('does not render blank page', async () => {
-        // Mock a valid token to access protected routes
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockLocalStorage.getItem.mockImplementation((key) => {
             if (key === 'authToken') return validToken;
@@ -398,7 +388,7 @@ describe('App Component', () => {
         }, {timeout: 2000});
     });
 
-    test('initializes OIDC UserManager on startup with existing token', async () => {
+    test('initializes OIDC UserManager on startup with existing token (cluster renders)', async () => {
         const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
         mockAuthState.authChoice = 'openid';
         mockLocalStorage.getItem.mockImplementation((key) => {
@@ -416,5 +406,144 @@ describe('App Component', () => {
         await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
         }, {timeout: 2000});
+    });
+
+    test('refreshes user and updates access token on userManager.getUser()', async () => {
+        const validUser = {
+            profile: {preferred_username: 'test-user'},
+            access_token: 'new-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expired: false,
+        };
+        mockUserManager.getUser.mockResolvedValue(validUser);
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'dummy';
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Wait for getUser to be called by the effect
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
+            expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'new-token'});
+            expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'Login', data: 'test-user'});
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'new-token');
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('tokenExpiration', expect.any(String));
+        });
+    });
+
+    test('handles expired user by not refreshing tokens (silent renew path)', async () => {
+        const expiredUser = {profile: {preferred_username: 'expired-user'}, expired: true};
+        mockUserManager.getUser.mockResolvedValue(expiredUser);
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'dummy';
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        // Token should not be set
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(expect.objectContaining({type: 'SetAccessToken'}));
+    });
+
+    test('handles token expired by clearing storage and redirecting', async () => {
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'dummy';
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Wait for the listener to be registered
+        await waitFor(() => {
+            expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled();
+        });
+
+        const expiredCb = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
+        expiredCb();
+
+        await waitFor(() => {
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
+        });
+    });
+
+    test('handles silent renew error by clearing storage and redirecting', async () => {
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'dummy';
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled();
+        });
+
+        const errorCb = mockUserManager.events.addSilentRenewError.mock.calls[0][0];
+        errorCb(new Error('renew failed'));
+
+        await waitFor(() => {
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
+        });
+    });
+
+    test('logs when access token is about to expire', async () => {
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return 'dummy';
+            if (key === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled();
+        });
+
+        const expiringCb = mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0];
+        expiringCb();
+
+        expect(console.log).toHaveBeenCalledWith(
+            'Access token is about to expire, attempting silent renew...'
+        );
     });
 });

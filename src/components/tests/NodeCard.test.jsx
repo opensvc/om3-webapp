@@ -415,7 +415,9 @@ describe('NodeCard Component', () => {
             await user.click(actionsButton);
         });
 
-        const startItem = await screen.findByRole('menuitem', {name: /^Start$/i});
+        // Scope the query to the nodeSection to find the batch resource actions menu
+        const resourceActionsMenu = await within(nodeSection).findByRole('menu', {name: `Batch resource actions for node node1`});
+        const startItem = await within(resourceActionsMenu).findByRole('menuitem', {name: /^Start$/i});
         await act(async () => {
             await user.click(startItem);
         });

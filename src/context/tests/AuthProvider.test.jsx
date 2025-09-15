@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent, act} from '@testing-library/react';
 import {
     AuthProvider,
     useAuth,
@@ -10,6 +10,12 @@ import {
     SetAuthInfo,
     SetAuthChoice,
 } from '../AuthProvider';
+
+// Mock updateEventSourceToken
+jest.mock('../../eventSourceManager', () => ({
+    updateEventSourceToken: jest.fn(),
+}));
+const {updateEventSourceToken} = require('../../eventSourceManager');
 
 // Mock BroadcastChannel
 global.BroadcastChannel = class {
@@ -255,6 +261,8 @@ describe('AuthProvider', () => {
         fireEvent.click(screen.getByTestId('setAccessToken'));
         expect(consoleLogSpy).toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
         expect(decodeToken).toHaveBeenCalledWith('mock-token');
+        expect(updateEventSourceToken).toHaveBeenCalledWith('mock-token');
+        expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
         act(() => {
             jest.runAllTimers();
         });
@@ -368,7 +376,6 @@ describe('AuthProvider', () => {
     });
 
     test('handles token refresh errors', async () => {
-        // Token that expires in 10 seconds for testing
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
         refreshToken.mockRejectedValue(new Error('Refresh failed'));
 
@@ -382,27 +389,20 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
 
-        // Set token in state
         act(() => {
             fireEvent.click(screen.getByTestId('setAccessToken'));
         });
 
-        // Verify initial state after setAccessToken
         expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
 
-        // Advance time to trigger refresh and handle error
         await act(async () => {
-            jest.advanceTimersByTime(5100); // Advance by 5.1 seconds (5000ms + margin)
-            // Use Promise.resolve() instead of flushPromises() with fake timers
+            jest.advanceTimersByTime(5100);
             await Promise.resolve();
         });
 
-        // Verify refresh was called and failed
         expect(refreshToken).toHaveBeenCalled();
         expect(consoleErrorSpy).toHaveBeenCalledWith('Token refresh error:', expect.any(Error));
-
-        // Verify logout was triggered due to error
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(broadcastChannelInstance._messages).toContainEqual({type: 'logout'});

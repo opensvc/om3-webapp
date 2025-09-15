@@ -3,6 +3,9 @@ import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
 
 let currentEventSource = null;
+let currentToken = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Default filters when no specific filters are provided
@@ -36,11 +39,32 @@ function createQueryString(filters = defaultFilters, objectName = null) {
     return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 }
 
+// Function to get current token from localStorage or global state
+export const getCurrentToken = () => {
+    return localStorage.getItem('authToken') || currentToken;
+};
+
+// Function to update the token for EventSource
+export const updateEventSourceToken = (newToken) => {
+    currentToken = newToken;
+    if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
+        console.log('🔄 Token updated, restarting EventSource with new token');
+        closeEventSource();
+
+        // Get current configuration and restart
+        const queryString = createQueryString(defaultFilters, null);
+        const url = `${URL_NODE_EVENT}?${queryString}`;
+        setTimeout(() => createEventSource(url, newToken), 100);
+    }
+};
+
 export const createEventSource = (url, token) => {
     if (!token) {
         console.error('❌ Missing token for EventSource!');
         return null;
     }
+
+    currentToken = token;
 
     if (currentEventSource) {
         console.log('Closing existing EventSource');
@@ -154,16 +178,64 @@ export const createEventSource = (url, token) => {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'text/event-stream',
         },
+        withCredentials: true,
     });
 
+    currentEventSource.onopen = () => {
+        console.log('✅ EventSource connection established');
+        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+    };
 
     currentEventSource.onerror = (error) => {
         console.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource.readyState);
-        currentEventSource.close();
-        setTimeout(() => {
-            console.log('🔄 Attempting to reconnect...');
-            createEventSource(url, token);
-        }, 5000);
+
+        // Check if it's an authentication error (401)
+        if (error.status === 401) {
+            console.log('🔐 Authentication error detected, checking for token refresh...');
+
+            // Check if we have a new token in localStorage
+            const newToken = localStorage.getItem('authToken');
+            if (newToken && newToken !== token) {
+                console.log('🔄 New token available, updating EventSource');
+                updateEventSourceToken(newToken);
+                return;
+            }
+
+            // If no new token, try to get one from silent renew
+            if (window.oidcUserManager) {
+                console.log('🔄 Attempting silent token renewal...');
+                window.oidcUserManager.signinSilent()
+                    .then(user => {
+                        const refreshedToken = user.access_token;
+                        localStorage.setItem('authToken', refreshedToken);
+                        localStorage.setItem('tokenExpiration', user.expires_at.toString());
+                        updateEventSourceToken(refreshedToken);
+                    })
+                    .catch(silentError => {
+                        console.error('❌ Silent renew failed:', silentError);
+                        // Redirect to login if silent renew fails
+                        window.location.href = '/auth-choice';
+                    });
+                return;
+            }
+        }
+
+        // For non-auth errors or if auth renewal fails, attempt reconnect
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Exponential backoff
+
+            console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+            setTimeout(() => {
+                const currentToken = getCurrentToken();
+                if (currentToken) {
+                    createEventSource(url, currentToken);
+                }
+            }, delay);
+        } else {
+            console.error('❌ Max reconnection attempts reached');
+        }
     };
 
     currentEventSource.addEventListener('NodeStatusUpdated', (event) => {
@@ -291,6 +363,8 @@ export const closeEventSource = () => {
         console.log('Closing current EventSource');
         currentEventSource.close();
         currentEventSource = null;
+        currentToken = null;
+        reconnectAttempts = 0;
     }
 };
 

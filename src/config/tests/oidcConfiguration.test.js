@@ -13,6 +13,11 @@ Object.defineProperty(window, 'location', {
 // Mock fetch globally
 global.fetch = jest.fn();
 
+// Mock WebStorageStateStore
+jest.mock("oidc-client-ts", () => ({
+    WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
+}));
+
 describe('oidcConfiguration', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -85,6 +90,7 @@ describe('oidcConfiguration', () => {
             redirect_uri: 'https://example.com/app/subpath/auth-callback',
             silent_redirect_uri: 'https://example.com/app/subpath/auth-callback',
             post_logout_redirect_uri: 'https://example.com/app/subpath/',
+            userStore: expect.any(Object),
         });
     });
 
@@ -109,6 +115,7 @@ describe('oidcConfiguration', () => {
             redirect_uri: 'https://example.com/app/subpath/auth-callback',
             silent_redirect_uri: 'https://example.com/app/subpath/auth-callback',
             post_logout_redirect_uri: 'https://example.com/app/subpath/',
+            userStore: expect.any(Object),
         });
     });
 

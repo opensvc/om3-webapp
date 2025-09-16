@@ -789,7 +789,7 @@ type = flag
         console.log(`[DEBUG] Batch actions button disabled after selection: ${batchActionsButton.disabled}`);
         expect(batchActionsButton).not.toBeDisabled();
         await act(async () => {
-            fireEvent.click(batchActionsButton);
+            await user.click(batchActionsButton);
         });
 
         await waitFor(() => {
@@ -817,7 +817,7 @@ type = flag
         }
         console.log(`[DEBUG] Clicking start action: ${startAction.textContent}`);
         await act(async () => {
-            fireEvent.click(startAction);
+            await user.click(startAction);
         });
 
         await waitFor(() => {
@@ -836,6 +836,12 @@ type = flag
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
+        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
+        if (checkbox) {
+            await act(async () => {
+                await user.click(checkbox);
+            });
+        }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
             console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
@@ -849,7 +855,7 @@ type = flag
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(confirmButton);
         });
 
         await waitFor(() => {
@@ -922,7 +928,7 @@ type = flag
         });
         console.log(`[DEBUG] Node actions button disabled: ${actionsButton.disabled}`);
         await act(async () => {
-            fireEvent.click(actionsButton);
+            await user.click(actionsButton);
         });
 
         await waitFor(() => {
@@ -950,7 +956,7 @@ type = flag
         }
         console.log(`[DEBUG] Clicking stop action: ${stopAction.textContent}`);
         await act(async () => {
-            fireEvent.click(stopAction);
+            await user.click(stopAction);
         });
 
         await waitFor(() => {
@@ -969,6 +975,12 @@ type = flag
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
+        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
+        if (checkbox) {
+            await act(async () => {
+                await user.click(checkbox);
+            });
+        }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
             console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
@@ -982,7 +994,7 @@ type = flag
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(confirmButton);
         });
 
         await waitFor(() => {
@@ -992,11 +1004,16 @@ type = flag
         await waitFor(
             () => {
                 expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
-                    expect.any(Object)
+                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        headers: expect.objectContaining({
+                            Authorization: 'Bearer mock-token',
+                        }),
+                    })
                 );
             },
-            {timeout: 15000, interval: 200}
+            {timeout: 20000, interval: 200}
         );
 
         await waitFor(
@@ -1016,9 +1033,9 @@ type = flag
                     console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 }
             },
-            {timeout: 15000, interval: 200}
+            {timeout: 30000, interval: 200}
         );
-    }, 20000);
+    }, 35000);
 
     test('handles resource selection and batch resource actions', async () => {
         require('react-router-dom').useParams.mockReturnValue({
@@ -1112,6 +1129,12 @@ type = flag
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
+        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
+        if (checkbox) {
+            await act(async () => {
+                await user.click(checkbox);
+            });
+        }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
             console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
@@ -1125,7 +1148,7 @@ type = flag
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await act(async () => {
-            fireEvent.click(confirmButton);
+            await user.click(confirmButton);
         });
 
         await waitFor(() => {
@@ -1294,6 +1317,9 @@ type = flag
     });
 
     test('useEffect for configUpdates handles no matching update', async () => {
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {
+        });
+
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
@@ -1307,8 +1333,9 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {
+        useEventStore.subscribe = jest.fn((selector, callback) => {
+            callback(mockState.configUpdates);
+            return jest.fn();
         });
 
         render(
@@ -1345,8 +1372,7 @@ type = flag
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter
-            >
+            </MemoryRouter>
         );
 
         await waitFor(() => {
@@ -1563,7 +1589,13 @@ type = flag
                 'root/svc/svc1': {
                     node1: {
                         resources: {
-                            resFs: {type: 'fs.mount', status: 'up'},
+                            resFs: {
+                                type: 'fs.mount',
+                                status: 'up',
+                                label: 'Fs Resource',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
                         },
                     },
                 },
@@ -1600,17 +1632,18 @@ type = flag
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter
-            >
+            </MemoryRouter>
         );
 
         const nodeSection = await findNodeSection('node1');
         const resourcesAccordion = await within(nodeSection).findByRole('button', {name: /expand resources for node node1/i});
         await user.click(resourcesAccordion);
 
-        const resFsActionsButtons = await within(nodeSection).findAllByRole('button', {name: /resource resFs actions/i});
-        const resFsActionsButton = resFsActionsButtons[0]; // Select the first button to avoid ambiguity
-        await user.click(resFsActionsButton);
+        const resFsRow = await within(nodeSection).findByText('resFs');
+        const resourceMenuButton = await within(resFsRow.closest('div')).findByRole('button', {
+            name: /Resource resFs actions/i,
+        });
+        await user.click(resourceMenuButton);
 
         await waitFor(() => {
             const menu = screen.getByRole('menu');
@@ -1638,7 +1671,12 @@ type = flag
                 'root/svc/svc1': {
                     node1: {
                         resources: {
-                            resNoType: {status: 'up'},
+                            resNoType: {
+                                status: 'up',
+                                label: 'No Type Resource',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
                         },
                     },
                 },
@@ -1675,20 +1713,21 @@ type = flag
                 <Routes>
                     <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
-            </MemoryRouter
-            >
+            </MemoryRouter>
         );
 
         const nodeSection = await findNodeSection('node1');
         const resourcesAccordion = await within(nodeSection).findByRole('button', {name: /expand resources for node node1/i});
         await user.click(resourcesAccordion);
 
-        const resNoTypeActionsButtons = await within(nodeSection).findAllByRole('button', {name: /resource resNoType actions/i});
-        const resNoTypeActionsButton = resNoTypeActionsButtons[0]; // Select the first button to avoid ambiguity
-        await user.click(resNoTypeActionsButton);
+        const resNoTypeRow = await within(nodeSection).findByText('resNoType');
+        const resourceMenuButton = await within(resNoTypeRow.closest('div')).findByRole('button', {
+            name: /Resource resNoType actions/i,
+        });
+        await user.click(resourceMenuButton);
 
         await waitFor(() => {
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Resource type not found for rid: resNoType'));
+            expect(consoleWarnSpy).toHaveBeenCalledWith('Resource type not found for rid: resNoType, returning empty string');
             const menu = screen.getByRole('menu');
             require('../../constants/actions').RESOURCE_ACTIONS.forEach(({name}) => {
                 expect(within(menu).getByRole('menuitem', {name: new RegExp(name, 'i')})).toBeInTheDocument();

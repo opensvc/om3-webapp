@@ -99,7 +99,7 @@ describe('OidcCallback Component', () => {
 
         await waitFor(() => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
-            expect(console.log).toHaveBeenCalledWith('Handling signinRedirectCallback');
+            expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
         });
     });
 
@@ -226,7 +226,6 @@ describe('OidcCallback Component', () => {
         });
     });
 
-    // New test for addAccessTokenExpired event
     test('handles access token expired event', async () => {
         useOidc.mockReturnValue({
             userManager: mockUserManager,

@@ -1,4 +1,5 @@
 /* eslint-disable no-unused-vars */
+import {WebStorageStateStore} from "oidc-client-ts";
 
 const DEFAULT_SCOPES = [
     "openid",
@@ -77,6 +78,7 @@ async function oidcConfiguration(authInfo) {
         redirect_uri: `${baseUrl}/auth-callback`,
         silent_redirect_uri: `${baseUrl}/auth-callback`,
         post_logout_redirect_uri: `${baseUrl}/`,
+        userStore: new WebStorageStateStore({store: window.localStorage}),
     };
     console.log("Final OIDC configuration:", config);
     return config;

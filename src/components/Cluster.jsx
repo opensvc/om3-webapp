@@ -28,9 +28,9 @@ const ClusterOverview = () => {
     useEffect(() => {
         isMounted.current = true;
         const token = localStorage.getItem("authToken");
+        let subscription;
         if (token) {
-            const subscription = startEventReception(token);
-
+            subscription = startEventReception(token);
             // Fetch pools
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
@@ -60,16 +60,12 @@ const ClusterOverview = () => {
                     console.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
                 });
-
-            return () => {
-                if (typeof subscription !== "function") {
-                    console.warn("[ClusterOverview] Subscription is not a function:", subscription);
-                }
-                if (typeof subscription === "function") {
-                    subscription();
-                }
-            };
         }
+        return () => {
+            if (subscription && typeof subscription === "function") {
+                subscription();
+            }
+        };
     }, []);
 
     useEffect(() => {

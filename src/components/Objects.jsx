@@ -211,23 +211,21 @@ const Objects = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let subscription;
         if (token) {
-            const subscription = startEventReception(token, [
+            subscription = startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
-            return () => {
-                if (typeof subscription !== "function") {
-                    console.warn("[Objects] Subscription is not a function:", subscription);
-                }
-                if (typeof subscription === "function") {
-                    subscription();
-                }
-                closeEventSource();
-            };
         }
+        return () => {
+            if (subscription && typeof subscription === "function") {
+                subscription();
+            }
+            closeEventSource();
+        };
     }, []);
 
     const handleSelectObject = (event, objectName) => {

@@ -80,7 +80,7 @@ const NodeCard = ({
                 options: {
                     offset: ({reference}) => {
                         const zoomLevel = getZoomLevel();
-                        return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
+                        return [0, 8 / zoomLevel];
                     },
                 },
             },
@@ -629,7 +629,6 @@ const NodeCard = ({
                                 e.stopPropagation();
                                 setCurrentNode(node);
                                 setIndividualNodeMenuAnchor(e.currentTarget);
-                                console.log("Node menu opened at:", e.currentTarget.getBoundingClientRect());
                             }}
                             disabled={actionInProgress}
                             aria-label={`Node ${node} actions`}
@@ -810,7 +809,7 @@ const NodeCard = ({
                                     handleBatchResourceActionClick(name);
                                 }}
                                 role="menuitem"
-                                aria-label={`Batch ${name} action for node ${node}`}
+                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
                             >
                                 <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                 <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
@@ -846,7 +845,7 @@ const NodeCard = ({
                                         handleResourceActionClick(name);
                                     }}
                                     role="menuitem"
-                                    aria-label={`Resource ${currentResourceId} ${name} action`}
+                                    aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
                                 >
                                     <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                     <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>

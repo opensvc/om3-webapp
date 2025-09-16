@@ -183,7 +183,14 @@ describe('ActionDialogManager', () => {
         await waitFor(() => {
             expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
             expect(defaultProps.onClose).toHaveBeenCalled();
-            expect(console.warn).toHaveBeenCalledWith('No valid pendingAction or action provided:', null);
+        });
+    });
+
+    test('logs warning for invalid non-null pendingAction', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{}}/>);
+        await waitFor(() => {
+            expect(console.warn).toHaveBeenCalledWith('Invalid pendingAction provided:', {});
+            expect(defaultProps.onClose).toHaveBeenCalled();
         });
     });
 
@@ -258,7 +265,7 @@ describe('ActionDialogManager', () => {
         });
     });
     test('handles delete dialog checkboxes correctly', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{ action: 'delete' }} />);
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'delete'}}/>);
         await waitFor(() => {
             expect(screen.getByTestId('delete-dialog')).toBeInTheDocument();
         });
@@ -269,7 +276,7 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('delete');
     });
     test('handles switch dialog correctly', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{ action: 'switch' }} />);
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'switch'}}/>);
         await waitFor(() => {
             expect(screen.getByTestId('switch-dialog')).toBeInTheDocument();
         });
@@ -280,7 +287,7 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('switch');
     });
     test('handles giveback dialog correctly', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{ action: 'giveback' }} />);
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'giveback'}}/>);
         await waitFor(() => {
             expect(screen.getByTestId('giveback-dialog')).toBeInTheDocument();
         });
@@ -291,7 +298,7 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('giveback');
     });
     test('handles simpleConfirm fallback dialog', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{ action: 'other' }} />);
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
         await waitFor(() => {
             expect(screen.getByText('Confirm Other')).toBeInTheDocument();
         });

@@ -1,4 +1,4 @@
-import React, {useState, useMemo, useEffect, useRef} from "react";
+import React, {useState, useMemo, useEffect, useRef, useCallback} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
@@ -26,6 +26,12 @@ import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
 import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
+// Constants for default checkboxes
+const DEFAULT_CHECKBOXES = {failover: false};
+const DEFAULT_STOP_CHECKBOX = false;
+const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
+const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
+
 // Helper function to filter resource actions based on type
 const getFilteredResourceActions = (resourceType) => {
     if (!resourceType) {
@@ -43,8 +49,7 @@ const getFilteredResourceActions = (resourceType) => {
 
 // Helper function to get resource type for a given resource ID
 const getResourceType = (rid, nodeData) => {
-    if (!rid) {
-        console.warn("getResourceType called with undefined or null rid");
+    if (!rid || !nodeData) {
         return '';
     }
     const topLevelType = nodeData?.resources?.[rid]?.type;
@@ -58,7 +63,6 @@ const getResourceType = (rid, nodeData) => {
             return encapType;
         }
     }
-    console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
     return '';
 };
 
@@ -72,7 +76,7 @@ const ObjectDetail = () => {
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
 
-    // State for configuration
+    // States for configuration
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
@@ -83,7 +87,7 @@ const ObjectDetail = () => {
     const [paramsToDelete, setParamsToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
-    // State for batch selection & actions
+    // States for batch & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
     const nodesActionsAnchorRef = useRef(null);
@@ -98,68 +102,49 @@ const ObjectDetail = () => {
     const resourceMenuAnchorRef = useRef(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
 
-    // State for dialogs & snackbar
+    // States for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
     const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
-    // State for dialog management
+    // States for dialog management
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
-    const [checkboxes, setCheckboxes] = useState({failover: false});
-    const [stopCheckbox, setStopCheckbox] = useState(false);
-    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState({
-        dataLoss: false,
-        serviceInterruption: false,
-    });
-    const [purgeCheckboxes, setPurgeCheckboxes] = useState({
-        dataLoss: false,
-        configLoss: false,
-        serviceInterruption: false,
-    });
+    const [checkboxes, setCheckboxes] = useState(DEFAULT_CHECKBOXES);
+    const [stopCheckbox, setStopCheckbox] = useState(DEFAULT_STOP_CHECKBOX);
+    const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
+    const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: "",
         severity: "success",
     });
 
-    // State for accordion expansion
+    // States for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
 
-    // State for initial loading
+    // States for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
 
-    // Debounce ref to prevent multiple fetchConfig calls
+    // Refs for debounce and mounted
     const lastFetch = useRef({});
-
-    // Ref to track subscription status
     const isProcessingConfigUpdate = useRef(false);
-
-    // Ref to track if component is mounted
     const isMounted = useRef(true);
 
-    // Calculate the zoom level
-    const getZoomLevel = () => {
-        return window.devicePixelRatio || 1;
-    };
-
     // Configuration of Popper props
-    const popperProps = () => ({
+    const popperProps = {
         placement: "bottom-end",
         disablePortal: true,
         modifiers: [
             {
                 name: "offset",
                 options: {
-                    offset: ({reference}) => {
-                        const zoomLevel = getZoomLevel();
-                        return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
-                    },
+                    offset: [0, 8],
                 },
             },
             {
@@ -182,7 +167,7 @@ const ObjectDetail = () => {
                 boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
             },
         },
-    });
+    };
 
     // Cleanup on unmount
     useEffect(() => {
@@ -195,61 +180,76 @@ const ObjectDetail = () => {
 
     // Initialize and update accordion states for nodes and resources
     useEffect(() => {
-        if (!objectData) return;
+        if (!objectData || !isMounted.current) return;
+
         const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
-        setExpandedNodeResources((prev) => {
-            const updatedNodeResources = {...prev};
+        const updateNodeResources = (prev) => {
+            const updated = {...prev};
             nodes.forEach((node) => {
-                if (!(node in updatedNodeResources)) {
-                    updatedNodeResources[node] = false;
+                if (!(node in updated)) {
+                    updated[node] = false;
                 }
             });
-            Object.keys(updatedNodeResources).forEach((node) => {
+            Object.keys(updated).forEach((node) => {
                 if (!nodes.includes(node)) {
-                    delete updatedNodeResources[node];
+                    delete updated[node];
                 }
             });
-            return updatedNodeResources;
-        });
-        setExpandedResources((prev) => {
-            const updatedResources = {...prev};
+            return updated;
+        };
+
+        const updateResources = (prev) => {
+            const updated = {...prev};
             nodes.forEach((node) => {
                 const resources = objectInstanceStatus[decodedObjectName]?.[node]?.resources || {};
                 Object.keys(resources).forEach((rid) => {
                     const key = `${node}:${rid}`;
-                    if (!(key in updatedResources)) {
-                        updatedResources[key] = false;
+                    if (!(key in updated)) {
+                        updated[key] = false;
                     }
                 });
             });
-            Object.keys(updatedResources).forEach((key) => {
+            Object.keys(updated).forEach((key) => {
                 const [node] = key.split(":");
                 if (
                     !nodes.includes(node) ||
                     !(objectInstanceStatus[decodedObjectName]?.[node]?.resources?.[key.split(":")[1]])
                 ) {
-                    delete updatedResources[key];
+                    delete updated[key];
                 }
             });
-            return updatedResources;
+            return updated;
+        };
+
+        setExpandedNodeResources((prev) => {
+            const updated = updateNodeResources(prev);
+            return JSON.stringify(prev) !== JSON.stringify(updated) ? updated : prev;
         });
-    }, [objectInstanceStatus, decodedObjectName]);
+        setExpandedResources((prev) => {
+            const updated = updateResources(prev);
+            return JSON.stringify(prev) !== JSON.stringify(updated) ? updated : prev;
+        });
+    }, [objectData, objectInstanceStatus, decodedObjectName]);
 
-    const openSnackbar = (msg, sev = "success") =>
+    // Function to open snackbar
+    const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
+    }, []);
 
-    const closeSnackbar = () => setSnackbar((s) => ({...s, open: false}));
+    const closeSnackbar = useCallback(() => {
+        setSnackbar((s) => ({...s, open: false}));
+    }, []);
 
     // Helper function to parse provisioned state
-    const parseProvisionedState = (state) => {
+    const parseProvisionedState = useCallback((state) => {
         if (typeof state === "string") {
             return state.toLowerCase() === "true";
         }
         return !!state;
-    };
+    }, []);
 
-    // Helper functions
-    const parseObjectPath = (objName) => {
+    // Helper functions for parsing and actions
+    const parseObjectPath = useCallback((objName) => {
         if (!objName || typeof objName !== "string") {
             return {namespace: "root", kind: "svc", name: ""};
         }
@@ -269,9 +269,29 @@ const ObjectDetail = () => {
             kind = name === "cluster" ? "ccfg" : "svc";
         }
         return {namespace, kind, name};
-    };
+    }, []);
 
-    const postObjectAction = async ({action}) => {
+    // Function to open action dialogs
+    const openActionDialog = useCallback((action, context = null) => {
+        setPendingAction({action, ...(context ? context : {})});
+        if (action === "freeze") {
+            setCheckboxes(DEFAULT_CHECKBOXES);
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(DEFAULT_STOP_CHECKBOX);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes(DEFAULT_UNPROVISION_CHECKBOXES);
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes(DEFAULT_PURGE_CHECKBOXES);
+            setPurgeDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
+        }
+    }, []);
+
+    const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
@@ -290,9 +310,9 @@ const ObjectDetail = () => {
         } finally {
             setActionInProgress(false);
         }
-    };
+    }, [decodedObjectName, openSnackbar, parseObjectPath]);
 
-    const postNodeAction = async ({node, action}) => {
+    const postNodeAction = useCallback(async ({node, action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
@@ -310,14 +330,14 @@ const ObjectDetail = () => {
         } finally {
             setActionInProgress(false);
         }
-    };
+    }, [decodedObjectName, openSnackbar]);
 
-    const postActionUrl = ({node, objectName, action}) => {
+    const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
-    };
+    }, [parseObjectPath]);
 
-    const postResourceAction = async ({node, action, rid}) => {
+    const postResourceAction = useCallback(async ({node, action, rid}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
@@ -337,12 +357,12 @@ const ObjectDetail = () => {
         } finally {
             setActionInProgress(false);
         }
-    };
+    }, [decodedObjectName, openSnackbar, postActionUrl]);
 
     // Fetch configuration for the object
-    const fetchConfig = async (node) => {
-        if (!node) {
-            setConfigError("No node available to fetch configuration.");
+    const fetchConfig = useCallback(async (node) => {
+        if (!node || !decodedObjectName) {
+            setConfigError("No node or object available to fetch configuration.");
             return;
         }
         const key = `${decodedObjectName}:${node}`;
@@ -370,7 +390,7 @@ const ObjectDetail = () => {
                     headers: {Authorization: `Bearer ${token}`},
                     cache: "no-cache",
                 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 5000)),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 10000)),
             ]);
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);
@@ -390,18 +410,18 @@ const ObjectDetail = () => {
                 setConfigLoading(false);
             }
         }
-    };
+    }, [decodedObjectName, configLoading, parseObjectPath]);
 
     // Color helper
-    const getColor = (status) => {
+    const getColor = useCallback((status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
         if (status === "warn") return orange[500];
         return grey[500];
-    };
+    }, []);
 
     // Node state helper
-    const getNodeState = (node) => {
+    const getNodeState = useCallback((node) => {
         const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
         const monitorKey = `${node}:${decodedObjectName}`;
         const monitor = instanceMonitor[monitorKey] || {};
@@ -414,10 +434,10 @@ const ObjectDetail = () => {
                     : "unfrozen",
             state: monitor.state !== "idle" ? monitor.state : null,
         };
-    };
+    }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     // Object status helper
-    const getObjectStatus = () => {
+    const getObjectStatus = useCallback(() => {
         const obj = objectStatus[decodedObjectName] || {};
         const avail = obj?.avail;
         const frozen = obj?.frozen;
@@ -432,180 +452,127 @@ const ObjectDetail = () => {
             }
         }
         return {avail, frozen, globalExpect};
-    };
+    }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     // Accordion handlers
-    const handleNodeResourcesAccordionChange = (node) => (event, isExpanded) => {
+    const handleNodeResourcesAccordionChange = useCallback((node) => (event, isExpanded) => {
         setExpandedNodeResources((prev) => ({
             ...prev,
             [node]: isExpanded,
         }));
-    };
+    }, []);
 
-    const handleAccordionChange = (node, rid) => (event, isExpanded) => {
+    const handleAccordionChange = useCallback((node, rid) => (event, isExpanded) => {
         setExpandedResources((prev) => ({
             ...prev,
             [`${node}:${rid}`]: isExpanded,
         }));
-    };
+    }, []);
 
     // Batch node actions handlers
-    const handleNodesActionsOpen = (e) => {
+    const handleNodesActionsOpen = useCallback((e) => {
         setNodesActionsAnchor(e.currentTarget);
         nodesActionsAnchorRef.current = e.currentTarget;
-        console.log("Nodes actions menu opened at:", e.currentTarget.getBoundingClientRect());
-    };
+    }, []);
 
-    const handleNodesActionsClose = () => {
+    const handleNodesActionsClose = useCallback(() => {
         setNodesActionsAnchor(null);
         nodesActionsAnchorRef.current = null;
-    };
+    }, []);
 
-    const handleBatchNodeActionClick = (action) => {
-        setPendingAction({action, batch: "nodes"});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionCheckboxes({
-                dataLoss: false,
-                serviceInterruption: false,
-            });
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
+    const handleBatchNodeActionClick = useCallback((action) => {
+        openActionDialog(action, {batch: "nodes"});
         handleNodesActionsClose();
-    };
+    }, [openActionDialog, handleNodesActionsClose]);
 
     // Individual node actions handlers
-    const handleIndividualNodeActionClick = (action) => {
-        setPendingAction({action, node: currentNode});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionCheckboxes({
-                dataLoss: false,
-                serviceInterruption: false,
-            });
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
+    const handleIndividualNodeActionClick = useCallback((action) => {
+        if (!currentNode) {
+            console.warn("No valid pendingAction or action provided: No current node");
+            return;
         }
+        openActionDialog(action, {node: currentNode});
         setIndividualNodeMenuAnchor(null);
-    };
+    }, [openActionDialog, currentNode]);
 
     // Batch resource actions handlers
-    const handleResourcesActionsOpen = (node, e) => {
+    const handleResourcesActionsOpen = useCallback((node, e) => {
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
         resourcesActionsAnchorRef.current = e.currentTarget;
-        console.log("Resources actions menu opened at:", e.currentTarget.getBoundingClientRect());
-    };
+    }, []);
 
-    const handleResourcesActionsClose = () => {
+    const handleResourcesActionsClose = useCallback(() => {
         setResourcesActionsAnchor(null);
         resourcesActionsAnchorRef.current = null;
-    };
+    }, []);
 
-    const handleBatchResourceActionClick = (action) => {
-        setPendingAction({action, batch: "resources", node: resGroupNode});
-        setSimpleDialogOpen(true);
+    const handleBatchResourceActionClick = useCallback((action) => {
+        if (!resGroupNode) {
+            console.warn("No valid pendingAction or action provided: No resGroupNode");
+            return;
+        }
+        openActionDialog(action, {batch: "resources", node: resGroupNode});
         handleResourcesActionsClose();
-    };
+    }, [openActionDialog, resGroupNode, handleResourcesActionsClose]);
 
     // Individual resource actions handlers
-    const handleResourceMenuOpen = (node, rid, e) => {
+    const handleResourceMenuOpen = useCallback((node, rid, e) => {
         setCurrentResourceId(rid);
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
         resourceMenuAnchorRef.current = e.currentTarget;
-        console.log("Resource menu opened at:", e.currentTarget.getBoundingClientRect());
-    };
+    }, []);
 
-    const handleResourceMenuClose = () => {
+    const handleResourceMenuClose = useCallback(() => {
         setResourceMenuAnchor(null);
         setCurrentResourceId(null);
         resourceMenuAnchorRef.current = null;
-    };
+    }, []);
 
-    const handleResourceActionClick = (action) => {
-        setPendingAction({action, node: resGroupNode, rid: currentResourceId});
-        setSimpleDialogOpen(true);
+    const handleResourceActionClick = useCallback((action) => {
+        if (!resGroupNode || !currentResourceId) {
+            console.warn("No valid pendingAction or action provided: No resource details");
+            return;
+        }
+        openActionDialog(action, {node: resGroupNode, rid: currentResourceId});
         handleResourceMenuClose();
-    };
+    }, [openActionDialog, resGroupNode, currentResourceId, handleResourceMenuClose]);
 
     // Object action handler
-    const handleObjectActionClick = (action) => {
-        setPendingAction({action});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionCheckboxes({
-                dataLoss: false,
-                serviceInterruption: false,
-            });
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes({
-                dataLoss: false,
-                configLoss: false,
-                serviceInterruption: false,
-            });
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
+    const handleObjectActionClick = useCallback((action) => {
+        openActionDialog(action);
         setObjectMenuAnchor(null);
-    };
+    }, [openActionDialog]);
 
     // Dialog confirm handler
-    const handleDialogConfirm = () => {
-        if (!pendingAction) {
+    const handleDialogConfirm = useCallback(() => {
+        if (!pendingAction || !pendingAction.action) {
             console.warn("No valid pendingAction or action provided:", pendingAction);
+            setPendingAction(null);
+            setConfirmDialogOpen(false);
+            setStopDialogOpen(false);
+            setUnprovisionDialogOpen(false);
+            setPurgeDialogOpen(false);
+            setSimpleDialogOpen(false);
             return;
         }
         if (pendingAction.batch === "nodes") {
-            selectedNodes.forEach((node) =>
-                postNodeAction({node, action: pendingAction.action})
-            );
+            selectedNodes.forEach((node) => {
+                if (node) postNodeAction({node, action: pendingAction.action});
+            });
             setSelectedNodes([]);
         } else if (pendingAction.node && !pendingAction.rid) {
             postNodeAction({node: pendingAction.node, action: pendingAction.action});
         } else if (pendingAction.batch === "resources") {
             const rids = selectedResourcesByNode[pendingAction.node] || [];
-            rids.forEach((rid) =>
-                postResourceAction({
+            rids.forEach((rid) => {
+                if (rid) postResourceAction({
                     node: pendingAction.node,
                     action: pendingAction.action,
                     rid,
-                })
-            );
+                });
+            });
             setSelectedResourcesByNode((prev) => ({
                 ...prev,
                 [pendingAction.node]: [],
@@ -617,7 +584,7 @@ const ObjectDetail = () => {
                 rid: pendingAction.rid,
             });
         } else {
-            postObjectAction(pendingAction);
+            postObjectAction({action: pendingAction.action});
         }
         setPendingAction(null);
         setConfirmDialogOpen(false);
@@ -625,16 +592,16 @@ const ObjectDetail = () => {
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
-    };
+    }, [pendingAction, selectedNodes, selectedResourcesByNode, postNodeAction, postResourceAction, postObjectAction]);
 
     // Selection helpers
-    const toggleNode = (node) => {
+    const toggleNode = useCallback((node) => {
         setSelectedNodes((prev) =>
             prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
         );
-    };
+    }, []);
 
-    const toggleResource = (node, rid) => {
+    const toggleResource = useCallback((node, rid) => {
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
             const next = current.includes(rid)
@@ -642,7 +609,7 @@ const ObjectDetail = () => {
                 : [...current, rid];
             return {...prev, [node]: next};
         });
-    };
+    }, []);
 
     // Effect for configuring EventSource
     useEffect(() => {
@@ -667,82 +634,95 @@ const ObjectDetail = () => {
         if (!isMounted.current) {
             return;
         }
-        const subscription = useEventStore.subscribe(
-            (state) => state.configUpdates,
-            async (updates) => {
-                if (!isMounted.current) {
-                    return;
-                }
-                if (isProcessingConfigUpdate.current) {
-                    return;
-                }
-                isProcessingConfigUpdate.current = true;
-                try {
-                    const {name} = parseObjectPath(decodedObjectName);
-                    const matchingUpdate = updates.find(
-                        (u) =>
-                            (u.name === name || u.fullName === decodedObjectName) &&
-                            u.node
-                    );
-                    if (matchingUpdate && matchingUpdate.node) {
-                        try {
-                            await fetchConfig(matchingUpdate.node);
-                            setConfigAccordionExpanded(true);
-                            openSnackbar("Configuration updated", "info");
-                        } catch (err) {
-                            openSnackbar("Failed to load updated configuration", "error");
-                        } finally {
-                            clearConfigUpdate(decodedObjectName);
-                        }
-                    } else {
-                        console.log("[ObjectDetail] No valid node in config update, skipping fetchConfig");
+        let subscription;
+        try {
+            subscription = useEventStore.subscribe(
+                (state) => state.configUpdates,
+                async (updates) => {
+                    if (!isMounted.current || isProcessingConfigUpdate.current) {
+                        return;
                     }
-                } finally {
-                    isProcessingConfigUpdate.current = false;
-                }
-            }
-        );
+                    isProcessingConfigUpdate.current = true;
+                    try {
+                        const {name} = parseObjectPath(decodedObjectName);
+                        const matchingUpdate = updates.find(
+                            (u) =>
+                                (u.name === name || u.fullName === decodedObjectName) &&
+                                u.node
+                        );
+                        if (matchingUpdate && matchingUpdate.node) {
+                            try {
+                                const lastUpdateKey = `${decodedObjectName}:${matchingUpdate.node}`;
+                                if (lastFetch.current[lastUpdateKey] && Date.now() - lastFetch.current[lastUpdateKey] < 2000) {
+                                    console.log("[ObjectDetail] Skipping fetchConfig due to recent update");
+                                    return;
+                                }
+                                await fetchConfig(matchingUpdate.node);
+                                setConfigAccordionExpanded(true);
+                                openSnackbar("Configuration updated", "info");
+                            } catch (err) {
+                                openSnackbar("Failed to load updated configuration", "error");
+                            } finally {
+                                clearConfigUpdate(decodedObjectName);
+                            }
+                        } else {
+                            console.log("[ObjectDetail] No valid node in config update, skipping fetchConfig");
+                        }
+                    } finally {
+                        isProcessingConfigUpdate.current = false;
+                    }
+                },
+                {fireImmediately: false}
+            );
+        } catch (err) {
+            console.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
+            return;
+        }
         return () => {
-            if (typeof subscription !== "function") {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
-            }
             if (typeof subscription === "function") {
                 subscription();
+            } else {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
-    }, [decodedObjectName, clearConfigUpdate]);
+    }, [decodedObjectName, clearConfigUpdate, parseObjectPath, fetchConfig, openSnackbar]);
 
     // Effect for handling instance config updates
     useEffect(() => {
         if (!isMounted.current) {
             return;
         }
-        const subscription = useEventStore.subscribe(
-            (state) => state.instanceConfig,
-            (newConfig) => {
-                if (!isMounted.current) {
-                    return;
-                }
-                const config = newConfig[decodedObjectName];
-                if (config && configNode) {
-                    try {
-                        setConfigAccordionExpanded(true);
-                        openSnackbar("Instance configuration updated", "info");
-                    } catch (err) {
-                        openSnackbar("Failed to process instance configuration update", "error");
+        let subscription;
+        try {
+            subscription = useEventStore.subscribe(
+                (state) => state.instanceConfig,
+                (newConfig) => {
+                    if (!isMounted.current) {
+                        return;
+                    }
+                    const config = newConfig[decodedObjectName];
+                    if (config && configNode) {
+                        try {
+                            setConfigAccordionExpanded(true);
+                            openSnackbar("Instance configuration updated", "info");
+                        } catch (err) {
+                            openSnackbar("Failed to process instance configuration update", "error");
+                        }
                     }
                 }
-            }
-        );
+            );
+        } catch (err) {
+            console.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
+            return;
+        }
         return () => {
-            if (typeof subscription !== "function") {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
-            }
             if (typeof subscription === "function") {
                 subscription();
+            } else {
+                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
-    }, [decodedObjectName, configNode]);
+    }, [decodedObjectName, configNode, openSnackbar]);
 
     // Initial load effects
     useEffect(() => {
@@ -772,7 +752,7 @@ const ObjectDetail = () => {
             setInitialLoading(false);
         };
         loadInitialConfig();
-    }, [decodedObjectName, objectData]);
+    }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
 
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
@@ -793,7 +773,7 @@ const ObjectDetail = () => {
         return Object.keys(memoizedObjectData || {});
     }, [memoizedObjectData]);
 
-    // Render loading state only if no data is available during initial loading
+    // Render loading state
     if (initialLoading && !memoizedObjectData) {
         return (
             <Box p={4} display="flex" justifyContent="center" alignItems="center">
@@ -803,7 +783,7 @@ const ObjectDetail = () => {
         );
     }
 
-    // Render empty state with separate Typography for object name
+    // Render empty state
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
     if (!memoizedObjectData) {
@@ -813,7 +793,7 @@ const ObjectDetail = () => {
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
                     No information available for object.
                 </Typography>
-                {showKeys && memoizedObjectData && (
+                {showKeys && (
                     <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
                 )}
                 <ConfigSection
@@ -911,6 +891,9 @@ const ObjectDetail = () => {
                                 setCurrentNode={setCurrentNode}
                                 handleResourcesActionsOpen={handleResourcesActionsOpen}
                                 handleResourceMenuOpen={handleResourceMenuOpen}
+                                handleIndividualNodeActionClick={handleIndividualNodeActionClick}
+                                handleBatchResourceActionClick={handleBatchResourceActionClick}
+                                handleResourceActionClick={handleResourceActionClick}
                                 expandedNodeResources={expandedNodeResources}
                                 handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
                                 expandedResources={expandedResources}
@@ -937,7 +920,7 @@ const ObjectDetail = () => {
                         <Popper
                             open={Boolean(nodesActionsAnchor)}
                             anchorEl={nodesActionsAnchor}
-                            {...popperProps()}
+                            {...popperProps}
                         >
                             <ClickAwayListener onClickAway={handleNodesActionsClose}>
                                 <Paper elevation={3} role="menu" aria-label="Batch node actions menu">
@@ -958,7 +941,7 @@ const ObjectDetail = () => {
                         <Popper
                             open={Boolean(individualNodeMenuAnchor)}
                             anchorEl={individualNodeMenuAnchor}
-                            {...popperProps()}
+                            {...popperProps}
                         >
                             <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
                                 <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}>
@@ -979,7 +962,7 @@ const ObjectDetail = () => {
                         <Popper
                             open={Boolean(resourcesActionsAnchor)}
                             anchorEl={resourcesActionsAnchor}
-                            {...popperProps()}
+                            {...popperProps}
                         >
                             <ClickAwayListener onClickAway={handleResourcesActionsClose}>
                                 <Paper elevation={3} role="menu"
@@ -1001,7 +984,7 @@ const ObjectDetail = () => {
                         <Popper
                             open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                             anchorEl={resourceMenuAnchor}
-                            {...popperProps()}
+                            {...popperProps}
                         >
                             <ClickAwayListener
                                 onClickAway={() => {
@@ -1013,7 +996,7 @@ const ObjectDetail = () => {
                                        aria-label={`Resource ${currentResourceId} actions menu`}>
                                     {(() => {
                                         if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
-                                            return [];
+                                            return null;
                                         }
                                         const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
                                         const filteredActions = getFilteredResourceActions(resourceType);

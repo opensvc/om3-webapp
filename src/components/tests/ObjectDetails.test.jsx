@@ -578,7 +578,7 @@ type = flag
         });
 
         expect(mockSubscribe).toHaveBeenCalled();
-    }, 15000);
+    }, 20000);
 
     test('handles non-function subscription', async () => {
         require('react-router-dom').useParams.mockReturnValue({

@@ -50,7 +50,6 @@ export const updateEventSourceToken = (newToken) => {
     if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
         console.log('🔄 Token updated, restarting EventSource with new token');
         closeEventSource();
-
         // Get current configuration and restart
         const queryString = createQueryString(defaultFilters, null);
         const url = `${URL_NODE_EVENT}?${queryString}`;
@@ -192,7 +191,6 @@ export const createEventSource = (url, token) => {
         // Check if it's an authentication error (401)
         if (error.status === 401) {
             console.log('🔐 Authentication error detected, checking for token refresh...');
-
             // Check if we have a new token in localStorage
             const newToken = localStorage.getItem('authToken');
             if (newToken && newToken !== token) {
@@ -200,7 +198,6 @@ export const createEventSource = (url, token) => {
                 updateEventSourceToken(newToken);
                 return;
             }
-
             // If no new token, try to get one from silent renew
             if (window.oidcUserManager) {
                 console.log('🔄 Attempting silent token renewal...');
@@ -213,20 +210,16 @@ export const createEventSource = (url, token) => {
                     })
                     .catch(silentError => {
                         console.error('❌ Silent renew failed:', silentError);
-                        // Redirect to login if silent renew fails
-                        window.location.href = '/auth-choice';
+                        window.location.href = '/ui/auth-choice';
                     });
                 return;
             }
         }
-
         // For non-auth errors or if auth renewal fails, attempt reconnect
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Exponential backoff
-
             console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {

@@ -41,19 +41,7 @@ const useEventStore = create((set) => ({
 
                 Object.keys(instanceStatuses[path]).forEach((node) => {
                     const newStatus = instanceStatuses[path][node];
-
-                    // Merge data, preserving encap.resources if the new data has no valid resources
                     const existingData = newObjectInstanceStatus[path][node] || {};
-                    const hasValidEncapResources =
-                        newStatus?.encap &&
-                        Object.values(newStatus.encap).some(
-                            (container) => container.resources && Object.keys(container.resources).length > 0
-                        );
-                    const existingHasValidEncapResources =
-                        existingData?.encap &&
-                        Object.values(existingData.encap).some(
-                            (container) => container.resources && Object.keys(container.resources).length > 0
-                        );
 
                     // Preserve existing encapsulated resources if the new ones are empty
                     const mergedEncap = newStatus?.encap
@@ -119,62 +107,56 @@ const useEventStore = create((set) => ({
         }),
 
     setConfigUpdated: (updates) => {
-        const normalizedUpdates = updates.map((update) => {
-            // Handle direct object format {name, node}
-            if (typeof update === 'object' && update !== null && update.name && update.node) {
-                const namespace = "root";
-                const kind = update.name === "cluster" ? "ccfg" : "svc";
-                const fullName = `${namespace}/${kind}/${update.name}`;
-                return {name: update.name, fullName, node: update.node};
-            }
-            // Handle stringified JSON format
-            if (typeof update === 'string') {
-                try {
-                    const parsed = JSON.parse(update);
-                    if (parsed.name && parsed.node) {
-                        const namespace = "root";
-                        const kind = parsed.name === "cluster" ? "ccfg" : "svc";
-                        const fullName = `${namespace}/${kind}/${parsed.name}`;
-                        return {name: parsed.name, fullName, node: parsed.node};
-                    }
-                } catch (e) {
-                    console.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
-                    return null;
+        const normalizedUpdates = updates
+            .map((update) => {
+                if (typeof update === "object" && update !== null && update.name && update.node) {
+                    const namespace = "root";
+                    const kind = update.name === "cluster" ? "ccfg" : "svc";
+                    const fullName = `${namespace}/${kind}/${update.name}`;
+                    return {name: update.name, fullName, node: update.node};
                 }
-            }
-            // Handle SSE format with kind: "InstanceConfigUpdated"
-            if (typeof update === 'object' && update.kind === "InstanceConfigUpdated") {
-                const name = update.data?.path || "";
-                const namespace = update.data?.labels?.namespace || "root";
-                const kind = name === "cluster" ? "ccfg" : "svc";
-                const fullName = `${namespace}/${kind}/${name}`;
-                const node = update.data?.node || "";
-                return {name, fullName, node};
-            }
-            return null;
-        }).filter(update => update !== null);
+                if (typeof update === "string") {
+                    try {
+                        const parsed = JSON.parse(update);
+                        if (parsed.name && parsed.node) {
+                            const namespace = "root";
+                            const kind = parsed.name === "cluster" ? "ccfg" : "svc";
+                            const fullName = `${namespace}/${kind}/${parsed.name}`;
+                            return {name: parsed.name, fullName, node: parsed.node};
+                        }
+                    } catch (e) {
+                        console.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
+                        return null;
+                    }
+                }
+                if (typeof update === "object" && update.kind === "InstanceConfigUpdated") {
+                    const name = update.data?.path || "";
+                    const namespace = update.data?.labels?.namespace || "root";
+                    const kind = name === "cluster" ? "ccfg" : "svc";
+                    const fullName = `${namespace}/${kind}/${name}`;
+                    const node = update.data?.node || "";
+                    return {name, fullName, node};
+                }
+                return null;
+            })
+            .filter((update) => update !== null);
 
         set((state) => {
-            const existingKeys = new Set(
-                state.configUpdates.map((u) => `${u.fullName}:${u.node}`)
-            );
-            const newUpdates = normalizedUpdates.filter(
-                (u) => !existingKeys.has(`${u.fullName}:${u.node}`)
-            );
-            return {
-                configUpdates: [...state.configUpdates, ...newUpdates],
-            };
+            const existingKeys = new Set(state.configUpdates.map((u) => `${u.fullName}:${u.node}`));
+            const newUpdates = normalizedUpdates.filter((u) => !existingKeys.has(`${u.fullName}:${u.node}`));
+            return {configUpdates: [...state.configUpdates, ...newUpdates]};
         });
     },
 
-    clearConfigUpdate: (objectName) => set((state) => {
-        const {name} = parseObjectPath(objectName);
-        return {
-            configUpdates: state.configUpdates.filter(
-                (u) => u.name !== name && u.fullName !== objectName
-            ),
-        };
-    }),
+    clearConfigUpdate: (objectName) =>
+        set((state) => {
+            const {name} = parseObjectPath(objectName);
+            return {
+                configUpdates: state.configUpdates.filter(
+                    (u) => u.name !== name && u.fullName !== objectName
+                ),
+            };
+        }),
 }));
 
 const parseObjectPath = (objName) => {

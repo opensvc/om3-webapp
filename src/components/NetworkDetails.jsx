@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useMemo} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
@@ -13,47 +13,61 @@ import {
     TextField,
     Button,
     Collapse,
+    CircularProgress,
+    Alert,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import axios from "axios";
+import debounce from "lodash.debounce";
 import {URL_NETWORK_IP} from "../config/apiPath.js";
 
 const NetworkDetails = () => {
     const [ipDetails, setIpDetails] = useState([]);
-    const [filteredIpDetails, setFilteredIpDetails] = useState([]);
     const [networkType, setNetworkType] = useState("N/A");
     const [nodeFilter, setNodeFilter] = useState("");
     const [pathFilter, setPathFilter] = useState("");
     const [ridFilter, setRidFilter] = useState("");
     const [showFilters, setShowFilters] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
     const {networkName} = useParams();
 
     useEffect(() => {
+        let isMounted = true;
         const fetchIpDetails = async () => {
+            setIsLoading(true);
+            setError(null);
             try {
                 const token = localStorage.getItem("authToken");
                 const res = await axios.get(URL_NETWORK_IP, {
                     headers: {
-                        Authorization: `Bearer ${token}`
-                    }
+                        Authorization: `Bearer ${token}`,
+                    },
                 });
 
-                // Filter IPs by network name
                 const filteredItems = (res.data.items || []).filter(
                     (item) => item.network?.name === networkName
                 );
-
-                console.log("Raw API response:", res.data.items);
-                console.log("Filtered items for network:", filteredItems);
-                setIpDetails(filteredItems);
-                setFilteredIpDetails(filteredItems);
-                setNetworkType(filteredItems.length > 0 ? filteredItems[0].network?.type || "N/A" : "N/A");
+                if (isMounted) {
+                    setIpDetails(filteredItems);
+                    setNetworkType(
+                        filteredItems.length > 0
+                            ? filteredItems[0].network?.type || "N/A"
+                            : "N/A"
+                    );
+                }
             } catch (err) {
                 console.error("Error retrieving network IP details", err);
-                setIpDetails([]);
-                setFilteredIpDetails([]);
-                setNetworkType("N/A");
+                if (isMounted) {
+                    setError("Failed to load network details. Please try again.");
+                    setIpDetails([]);
+                    setNetworkType("N/A");
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false);
+                }
             }
         };
 
@@ -62,26 +76,70 @@ const NetworkDetails = () => {
         } else {
             setNetworkType("N/A");
             setIpDetails([]);
-            setFilteredIpDetails([]);
+            setIsLoading(false);
         }
+
+        return () => {
+            isMounted = false;
+        };
     }, [networkName]);
 
+    // Debounced filter handlers
+    const debouncedSetNodeFilter = useMemo(
+        () => debounce((value) => setNodeFilter(value), 300),
+        []
+    );
+    const debouncedSetPathFilter = useMemo(
+        () => debounce((value) => setPathFilter(value), 300),
+        []
+    );
+    const debouncedSetRidFilter = useMemo(
+        () => debounce((value) => setRidFilter(value), 300),
+        []
+    );
+
+    // Clean up debounced functions on unmount
     useEffect(() => {
-        // Apply filters to ipDetails with null checks
-        const filtered = ipDetails.filter((detail) =>
-            (nodeFilter === "" || (detail.node || "").toLowerCase().includes(nodeFilter.toLowerCase())) &&
-            (pathFilter === "" || (detail.path || "").toLowerCase().includes(pathFilter.toLowerCase())) &&
-            (ridFilter === "" || (detail.rid || "").toLowerCase().includes(ridFilter.toLowerCase()))
+        return () => {
+            debouncedSetNodeFilter.cancel();
+            debouncedSetPathFilter.cancel();
+            debouncedSetRidFilter.cancel();
+        };
+    }, [debouncedSetNodeFilter, debouncedSetPathFilter, debouncedSetRidFilter]);
+
+    const filteredIpDetails = useMemo(() => {
+        return ipDetails.filter(
+            (detail) =>
+                (nodeFilter === "" ||
+                    (detail.node || "")
+                        .toLowerCase()
+                        .includes(nodeFilter.toLowerCase())) &&
+                (pathFilter === "" ||
+                    (detail.path || "")
+                        .toLowerCase()
+                        .includes(pathFilter.toLowerCase())) &&
+                (ridFilter === "" ||
+                    (detail.rid || "")
+                        .toLowerCase()
+                        .includes(ridFilter.toLowerCase()))
         );
-        console.log("Applied filters:", {nodeFilter, pathFilter, ridFilter, filtered});
-        setFilteredIpDetails(filtered);
     }, [ipDetails, nodeFilter, pathFilter, ridFilter]);
 
     return (
         <Box sx={{p: 3, maxWidth: "1400px", mx: "auto"}}>
-            <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
+            <Typography
+                variant="h4"
+                gutterBottom
+                sx={{mb: 3}}
+                align="center"
+            >
                 Network Details: {networkName || "N/A"} ({networkType})
             </Typography>
+            {error && (
+                <Alert severity="error" sx={{mb: 2}}>
+                    {error}
+                </Alert>
+            )}
             <Box
                 sx={{
                     position: "sticky",
@@ -103,7 +161,9 @@ const NetworkDetails = () => {
                 >
                     <Button
                         onClick={() => setShowFilters(!showFilters)}
-                        startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                        startIcon={
+                            showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>
+                        }
                         aria-label={showFilters ? "Hide filters" : "Show filters"}
                     >
                         {showFilters ? "Hide filters" : "Show filters"}
@@ -122,53 +182,78 @@ const NetworkDetails = () => {
                         <TextField
                             label="Node"
                             value={nodeFilter}
-                            onChange={(e) => setNodeFilter(e.target.value)}
+                            onChange={(e) => debouncedSetNodeFilter(e.target.value)}
                             sx={{minWidth: 200}}
                         />
                         <TextField
                             label="Path"
                             value={pathFilter}
-                            onChange={(e) => setPathFilter(e.target.value)}
+                            onChange={(e) => debouncedSetPathFilter(e.target.value)}
                             sx={{minWidth: 200}}
                         />
                         <TextField
                             label="RID"
                             value={ridFilter}
-                            onChange={(e) => setRidFilter(e.target.value)}
+                            onChange={(e) => debouncedSetRidFilter(e.target.value)}
                             sx={{minWidth: 200}}
                         />
                     </Box>
                 </Collapse>
             </Box>
-            <TableContainer component={Paper} sx={{width: "100%"}}>
-                <Table sx={{minWidth: 700}}>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell><strong>IP</strong></TableCell>
-                            <TableCell align="center"><strong>Node</strong></TableCell>
-                            <TableCell align="center"><strong>Path</strong></TableCell>
-                            <TableCell align="center"><strong>RID</strong></TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {filteredIpDetails.map((detail, index) => (
-                            <TableRow key={`${detail.rid}-${index}`}>
-                                <TableCell>{detail.ip || "N/A"}</TableCell>
-                                <TableCell align="center">{detail.node || "N/A"}</TableCell>
-                                <TableCell align="center">{detail.path || "N/A"}</TableCell>
-                                <TableCell align="center">{detail.rid || "N/A"}</TableCell>
-                            </TableRow>
-                        ))}
-                        {filteredIpDetails.length === 0 && (
+            {isLoading ? (
+                <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
+                    <CircularProgress aria-label="Loading network details"/>
+                </Box>
+            ) : (
+                <TableContainer component={Paper} sx={{width: "100%"}}>
+                    <Table sx={{minWidth: 700}} aria-label="Network details table">
+                        <TableHead>
                             <TableRow>
-                                <TableCell colSpan={4} align="center">
-                                    No IP details available for this network.
+                                <TableCell scope="col">
+                                    <strong>IP</strong>
+                                </TableCell>
+                                <TableCell align="center" scope="col">
+                                    <strong>Node</strong>
+                                </TableCell>
+                                <TableCell align="center" scope="col">
+                                    <strong>Path</strong>
+                                </TableCell>
+                                <TableCell align="center" scope="col">
+                                    <strong>RID</strong>
                                 </TableCell>
                             </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                            {filteredIpDetails.length > 0 ? (
+                                filteredIpDetails.map((detail, index) => (
+                                    <TableRow key={`${detail.rid}-${index}`}>
+                                        <TableCell>{detail.ip || "N/A"}</TableCell>
+                                        <TableCell align="center">
+                                            {detail.node || "N/A"}
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            {detail.path || "N/A"}
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            {detail.rid || "N/A"}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={4}
+                                        align="center"
+                                        sx={{color: "text.secondary"}}
+                                    >
+                                        No IP details available for this network.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
         </Box>
     );
 };

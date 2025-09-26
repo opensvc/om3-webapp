@@ -56,11 +56,11 @@ const OidcInitializer = ({children}) => {
     const authInfo = useAuthInfo();
 
     const handleTokenExpired = () => {
-        console.warn('Access token expired, redirecting to /auth-choice');
+        console.warn('Access token expired, redirecting to /ui/auth-choice');
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
-        window.location.href = '/auth-choice';
+        window.location.href = '/ui/auth-choice';
     };
 
     const handleSilentRenewError = (error) => {
@@ -68,7 +68,7 @@ const OidcInitializer = ({children}) => {
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
-        window.location.href = '/auth-choice';
+        window.location.href = '/ui/auth-choice';
     };
 
     const onUserRefreshed = (user) => {

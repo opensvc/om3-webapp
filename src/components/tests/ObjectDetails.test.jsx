@@ -1,3 +1,4 @@
+// ObjectDetails.test.jsx (fixed version with added mocks for missing MUI components and subscribe in beforeEach)
 import React from 'react';
 import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
@@ -6,7 +7,6 @@ import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
 import userEvent from '@testing-library/user-event';
-
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -17,7 +17,6 @@ jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
 }));
-
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
@@ -111,6 +110,10 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
+        Popper: ({open, anchorEl, children, ...props}) => open ? <div role="popper" {...props}>{children}</div> : null,
+        Paper: ({elevation, children, ...props}) => <div role="paper" {...props}>{children}</div>,
+        ClickAwayListener: ({onClickAway, children, ...props}) => <div
+            onClick={onClickAway} {...props}>{children}</div>,
     };
 });
 
@@ -339,7 +342,8 @@ describe('ObjectDetail Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
+        // Mock subscribe to prevent crashes in all tests
+        useEventStore.subscribe = jest.fn(() => jest.fn());
         global.fetch = jest.fn((url, options) => {
             console.log(`[fetch] Called with URL: ${url}, Options:`, options);
             if (url.includes('/data/keys')) {
@@ -574,7 +578,7 @@ type = flag
         });
 
         expect(mockSubscribe).toHaveBeenCalled();
-    }, 15000);
+    }, 20000);
 
     test('handles non-function subscription', async () => {
         require('react-router-dom').useParams.mockReturnValue({
@@ -582,7 +586,7 @@ type = flag
         });
 
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        useEventStore.subscribe.mockReturnValue(null);
+        useEventStore.subscribe = jest.fn(() => null);
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>

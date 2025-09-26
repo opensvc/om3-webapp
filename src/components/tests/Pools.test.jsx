@@ -33,11 +33,18 @@ describe('Pools Component', () => {
         expect(screen.getByText('Pools')).toBeInTheDocument();
     });
 
-    test('renders table headers correctly', () => {
+    test('renders table headers correctly', async () => {
+        // Mock API to resolve immediately with empty data
+        axios.get.mockResolvedValueOnce({data: {items: []}});
+
         render(<Pools/>);
-        const headers = ['Name', 'Type', 'Volume Count', 'Usage', 'Head'];
-        headers.forEach((header) => {
-            expect(screen.getByText(header)).toBeInTheDocument();
+
+        // Wait for the loading state to resolve
+        await waitFor(() => {
+            const headers = ['Name', 'Type', 'Volume Count', 'Usage', 'Head'];
+            headers.forEach((header) => {
+                expect(screen.getByText(header)).toBeInTheDocument();
+            });
         });
     });
 
@@ -94,14 +101,9 @@ describe('Pools Component', () => {
         await waitFor(() => {
             expect(screen.getByText('pool3')).toBeInTheDocument();
             // Use a more flexible query to find "N/A"
-            const naElement = screen.getByText((content, element) => content.includes('N/A'));
+            const naElement = screen.getByText((content) => content.includes('N/A'));
             expect(naElement).toBeInTheDocument();
         }, {timeout: 2000}); // Increase timeout if needed
-
-        // Debug DOM if test fails
-        if (!screen.queryByText('N/A')) {
-            console.log(screen.debug());
-        }
     });
 
     test('calls API with correct authorization token', async () => {

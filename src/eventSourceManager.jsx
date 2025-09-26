@@ -2,98 +2,69 @@ import useEventStore from './hooks/useEventStore.js';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
 
+// Constants for event names
+const EVENT_TYPES = {
+    NODE_STATUS_UPDATED: 'NodeStatusUpdated',
+    NODE_MONITOR_UPDATED: 'NodeMonitorUpdated',
+    NODE_STATS_UPDATED: 'NodeStatsUpdated',
+    DAEMON_HEARTBEAT_UPDATED: 'DaemonHeartbeatUpdated',
+    OBJECT_STATUS_UPDATED: 'ObjectStatusUpdated',
+    INSTANCE_STATUS_UPDATED: 'InstanceStatusUpdated',
+    OBJECT_DELETED: 'ObjectDeleted',
+    INSTANCE_MONITOR_UPDATED: 'InstanceMonitorUpdated',
+    INSTANCE_CONFIG_UPDATED: 'InstanceConfigUpdated',
+};
+
+// Default filters
+const DEFAULT_FILTERS = Object.values(EVENT_TYPES);
+
+// Filters for specific objectName
+const OBJECT_SPECIFIC_FILTERS = [
+    EVENT_TYPES.OBJECT_STATUS_UPDATED,
+    EVENT_TYPES.INSTANCE_STATUS_UPDATED,
+    EVENT_TYPES.OBJECT_DELETED,
+    EVENT_TYPES.INSTANCE_MONITOR_UPDATED,
+    EVENT_TYPES.INSTANCE_CONFIG_UPDATED,
+];
+
 let currentEventSource = null;
 let currentToken = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
-const isEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const BASE_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
-// Default filters when no specific filters are provided
-const defaultFilters = [
-    'NodeStatusUpdated',
-    'NodeMonitorUpdated',
-    'NodeStatsUpdated',
-    'DaemonHeartbeatUpdated',
-    'ObjectStatusUpdated',
-    'InstanceStatusUpdated',
-    'ObjectDeleted',
-    'InstanceMonitorUpdated',
-    'InstanceConfigUpdated',
-];
-
-// Filters for specific objectName
-const objectSpecificFilters = [
-    'ObjectStatusUpdated',
-    'InstanceStatusUpdated',
-    'ObjectDeleted',
-    'InstanceMonitorUpdated',
-    'InstanceConfigUpdated',
-];
+// Optimized equality check to avoid unnecessary JSON serialization for simple objects
+const isEqual = (a, b) => {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    return JSON.stringify(a) === JSON.stringify(b);
+};
 
 // Create query string for EventSource URL
-function createQueryString(filters = defaultFilters, objectName = null) {
-    let queryFilters = filters;
-    if (objectName) {
-        queryFilters = objectSpecificFilters.map(filter => `${filter},path=${encodeURIComponent(objectName)}`);
-    }
+const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
+    const queryFilters = objectName
+        ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
+        : filters;
     return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
-}
-
-// Function to get current token from localStorage or global state
-export const getCurrentToken = () => {
-    return localStorage.getItem('authToken') || currentToken;
 };
 
-// Function to update the token for EventSource
-export const updateEventSourceToken = (newToken) => {
-    currentToken = newToken;
-    if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
-        console.log('🔄 Token updated, restarting EventSource with new token');
-        closeEventSource();
+// Get current token
+export const getCurrentToken = () => localStorage.getItem('authToken') || currentToken;
 
-        // Get current configuration and restart
-        const queryString = createQueryString(defaultFilters, null);
-        const url = `${URL_NODE_EVENT}?${queryString}`;
-        setTimeout(() => createEventSource(url, newToken), 100);
-    }
-};
-
-export const createEventSource = (url, token) => {
-    if (!token) {
-        console.error('❌ Missing token for EventSource!');
-        return null;
-    }
-
-    currentToken = token;
-
-    if (currentEventSource) {
-        console.log('Closing existing EventSource');
-        currentEventSource.close();
-    }
-
-    const {
-        setObjectStatuses,
-        setInstanceStatuses,
-        setNodeStatuses,
-        setNodeMonitors,
-        setNodeStats,
-        setHeartbeatStatuses,
-        setInstanceMonitors,
-        setInstanceConfig,
-        removeObject,
-        setConfigUpdated,
-    } = useEventStore.getState();
-
-    // Buffers for batching SSE updates
-    let objectStatusBuffer = {};
-    let instanceStatusBuffer = {};
-    let nodeStatusBuffer = {};
-    let nodeMonitorBuffer = {};
-    let nodeStatsBuffer = {};
-    let heartbeatStatusBuffer = {};
-    let instanceMonitorBuffer = {};
-    let instanceConfigBuffer = {};
-    let configUpdatedBuffer = new Set();
+// Centralized buffer management
+const createBufferManager = () => {
+    const buffers = {
+        objectStatus: {},
+        instanceStatus: {},
+        nodeStatus: {},
+        nodeMonitor: {},
+        nodeStats: {},
+        heartbeatStatus: {},
+        instanceMonitor: {},
+        instanceConfig: {},
+        configUpdated: new Set(),
+    };
     let flushTimeout = null;
 
     const scheduleFlush = () => {
@@ -104,75 +75,86 @@ export const createEventSource = (url, token) => {
 
     const flushBuffers = () => {
         const store = useEventStore.getState();
+        const {
+            setObjectStatuses,
+            setInstanceStatuses,
+            setNodeStatuses,
+            setNodeMonitors,
+            setNodeStats,
+            setHeartbeatStatuses,
+            setInstanceMonitors,
+            setInstanceConfig,
+            setConfigUpdated,
+        } = store;
 
-        if (Object.keys(objectStatusBuffer).length > 0) {
-            const merged = {...store.objectStatus, ...objectStatusBuffer};
-            setObjectStatuses(merged);
-            objectStatusBuffer = {};
+        if (Object.keys(buffers.objectStatus).length) {
+            setObjectStatuses({...store.objectStatus, ...buffers.objectStatus});
+            buffers.objectStatus = {};
         }
-
-        if (Object.keys(instanceStatusBuffer).length > 0) {
+        if (Object.keys(buffers.instanceStatus).length) {
             const mergedInst = {...store.objectInstanceStatus};
-            for (const obj of Object.keys(instanceStatusBuffer)) {
-                mergedInst[obj] = {
-                    ...mergedInst[obj],
-                    ...instanceStatusBuffer[obj],
-                };
+            for (const obj of Object.keys(buffers.instanceStatus)) {
+                mergedInst[obj] = {...mergedInst[obj], ...buffers.instanceStatus[obj]};
             }
             setInstanceStatuses(mergedInst);
-            instanceStatusBuffer = {};
+            buffers.instanceStatus = {};
         }
-
-        if (Object.keys(nodeStatusBuffer).length > 0) {
-            const merged = {...store.nodeStatus, ...nodeStatusBuffer};
-            setNodeStatuses(merged);
-            nodeStatusBuffer = {};
+        if (Object.keys(buffers.nodeStatus).length) {
+            setNodeStatuses({...store.nodeStatus, ...buffers.nodeStatus});
+            buffers.nodeStatus = {};
         }
-
-        if (Object.keys(nodeMonitorBuffer).length > 0) {
-            const merged = {...store.nodeMonitor, ...nodeMonitorBuffer};
-            setNodeMonitors(merged);
-            nodeMonitorBuffer = {};
+        if (Object.keys(buffers.nodeMonitor).length) {
+            setNodeMonitors({...store.nodeMonitor, ...buffers.nodeMonitor});
+            buffers.nodeMonitor = {};
         }
-
-        if (Object.keys(nodeStatsBuffer).length > 0) {
-            const merged = {...store.nodeStats, ...nodeStatsBuffer};
-            setNodeStats(merged);
-            nodeStatsBuffer = {};
+        if (Object.keys(buffers.nodeStats).length) {
+            setNodeStats({...store.nodeStats, ...buffers.nodeStats});
+            buffers.nodeStats = {};
         }
-
-        if (Object.keys(heartbeatStatusBuffer).length > 0) {
-            console.log('buffer:', heartbeatStatusBuffer);
-            const merged = {...store.heartbeatStatus, ...heartbeatStatusBuffer};
-            setHeartbeatStatuses(merged);
-            heartbeatStatusBuffer = {};
+        if (Object.keys(buffers.heartbeatStatus).length) {
+            console.log('buffer:', buffers.heartbeatStatus);
+            setHeartbeatStatuses({...store.heartbeatStatus, ...buffers.heartbeatStatus});
+            buffers.heartbeatStatus = {};
         }
-
-        if (Object.keys(instanceMonitorBuffer).length > 0) {
-            const merged = {...store.instanceMonitor, ...instanceMonitorBuffer};
-            setInstanceMonitors(merged);
-            instanceMonitorBuffer = {};
+        if (Object.keys(buffers.instanceMonitor).length) {
+            setInstanceMonitors({...store.instanceMonitor, ...buffers.instanceMonitor});
+            buffers.instanceMonitor = {};
         }
-
-        if (Object.keys(instanceConfigBuffer).length > 0) {
-            for (const path of Object.keys(instanceConfigBuffer)) {
-                for (const node of Object.keys(instanceConfigBuffer[path])) {
-                    setInstanceConfig(path, node, instanceConfigBuffer[path][node]);
+        if (Object.keys(buffers.instanceConfig).length) {
+            for (const path of Object.keys(buffers.instanceConfig)) {
+                for (const node of Object.keys(buffers.instanceConfig[path])) {
+                    setInstanceConfig(path, node, buffers.instanceConfig[path][node]);
                 }
             }
-            instanceConfigBuffer = {};
+            buffers.instanceConfig = {};
         }
-
-        if (configUpdatedBuffer.size > 0) {
-            setConfigUpdated([...configUpdatedBuffer]);
-            configUpdatedBuffer.clear();
+        if (buffers.configUpdated.size) {
+            setConfigUpdated([...buffers.configUpdated]);
+            buffers.configUpdated.clear();
         }
-
         flushTimeout = null;
     };
 
-    console.log('🔗 Creating EventSource with URL:', url);
+    return {buffers, scheduleFlush};
+};
 
+// Create EventSource with improved reconnection logic
+export const createEventSource = (url, token) => {
+    if (!token) {
+        console.error('❌ Missing token for EventSource!');
+        return null;
+    }
+
+    if (currentEventSource) {
+        console.log('Closing existing EventSource');
+        currentEventSource.close();
+    }
+
+    currentToken = token;
+    const {buffers, scheduleFlush} = createBufferManager();
+    const {removeObject} = useEventStore.getState();
+
+    console.log('🔗 Creating EventSource with URL:', url);
     currentEventSource = new EventSourcePolyfill(url, {
         headers: {
             Authorization: `Bearer ${token}`,
@@ -183,25 +165,20 @@ export const createEventSource = (url, token) => {
 
     currentEventSource.onopen = () => {
         console.log('✅ EventSource connection established');
-        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+        reconnectAttempts = 0;
     };
 
     currentEventSource.onerror = (error) => {
-        console.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource.readyState);
+        console.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
 
-        // Check if it's an authentication error (401)
         if (error.status === 401) {
-            console.log('🔐 Authentication error detected, checking for token refresh...');
-
-            // Check if we have a new token in localStorage
+            console.log('🔐 Authentication error detected');
             const newToken = localStorage.getItem('authToken');
             if (newToken && newToken !== token) {
                 console.log('🔄 New token available, updating EventSource');
                 updateEventSourceToken(newToken);
                 return;
             }
-
-            // If no new token, try to get one from silent renew
             if (window.oidcUserManager) {
                 console.log('🔄 Attempting silent token renewal...');
                 window.oidcUserManager.signinSilent()
@@ -213,20 +190,16 @@ export const createEventSource = (url, token) => {
                     })
                     .catch(silentError => {
                         console.error('❌ Silent renew failed:', silentError);
-                        // Redirect to login if silent renew fails
-                        window.location.href = '/auth-choice';
+                        window.location.href = '/ui/auth-choice';
                     });
                 return;
             }
         }
 
-        // For non-auth errors or if auth renewal fails, attempt reconnect
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Exponential backoff
-
+            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -238,126 +211,131 @@ export const createEventSource = (url, token) => {
         }
     };
 
-    currentEventSource.addEventListener('NodeStatusUpdated', (event) => {
-        const {node, node_status} = JSON.parse(event.data);
+    // Event handlers with type checking
+    const addEventListener = (eventType, handler) => {
+        currentEventSource.addEventListener(eventType, (event) => {
+            let parsed;
+            try {
+                parsed = JSON.parse(event.data);
+            } catch (e) {
+                console.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
+                return;
+            }
+            handler(parsed);
+        });
+    };
+
+    addEventListener(EVENT_TYPES.NODE_STATUS_UPDATED, ({node, node_status}) => {
+        if (!node || !node_status) return;
         const current = useEventStore.getState().nodeStatus[node];
         if (!isEqual(current, node_status)) {
-            nodeStatusBuffer[node] = node_status;
+            buffers.nodeStatus[node] = node_status;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('NodeMonitorUpdated', (event) => {
-        const {node, node_monitor} = JSON.parse(event.data);
+    addEventListener(EVENT_TYPES.NODE_MONITOR_UPDATED, ({node, node_monitor}) => {
+        if (!node || !node_monitor) return;
         const current = useEventStore.getState().nodeMonitor[node];
         if (!isEqual(current, node_monitor)) {
-            nodeMonitorBuffer[node] = node_monitor;
+            buffers.nodeMonitor[node] = node_monitor;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('NodeStatsUpdated', (event) => {
-        const {node, node_stats} = JSON.parse(event.data);
+    addEventListener(EVENT_TYPES.NODE_STATS_UPDATED, ({node, node_stats}) => {
+        if (!node || !node_stats) return;
         const current = useEventStore.getState().nodeStats[node];
         if (!isEqual(current, node_stats)) {
-            nodeStatsBuffer[node] = node_stats;
+            buffers.nodeStats[node] = node_stats;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('ObjectStatusUpdated', (event) => {
-        const parsed = JSON.parse(event.data);
-        const name = parsed.path || parsed.labels?.path;
-        const status = parsed.object_status;
-        if (!name || !status) return;
-
+    addEventListener(EVENT_TYPES.OBJECT_STATUS_UPDATED, ({path, labels, object_status}) => {
+        const name = path || labels?.path;
+        if (!name || !object_status) return;
         const current = useEventStore.getState().objectStatus[name];
-        if (!isEqual(current, status)) {
-            objectStatusBuffer[name] = status;
+        if (!isEqual(current, object_status)) {
+            buffers.objectStatus[name] = object_status;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('InstanceStatusUpdated', (event) => {
-        const parsed = JSON.parse(event.data);
-        const name = parsed.path || parsed.labels?.path;
-        const node = parsed.node;
-        const instStatus = parsed.instance_status;
-        if (!name || !node || !instStatus) return;
-
+    addEventListener(EVENT_TYPES.INSTANCE_STATUS_UPDATED, ({path, labels, node, instance_status}) => {
+        const name = path || labels?.path;
+        if (!name || !node || !instance_status) return;
         const current = useEventStore.getState().objectInstanceStatus?.[name]?.[node];
-        if (!isEqual(current, instStatus)) {
-            instanceStatusBuffer[name] = {
-                ...(instanceStatusBuffer[name] || {}),
-                [node]: instStatus,
-            };
+        if (!isEqual(current, instance_status)) {
+            buffers.instanceStatus[name] = {...(buffers.instanceStatus[name] || {}), [node]: instance_status};
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('DaemonHeartbeatUpdated', (event) => {
-        const parsed = JSON.parse(event.data);
-        const node = parsed.node || parsed.labels?.node;
-        const status = parsed.heartbeat;
-        if (!node || status === undefined) return;
-
-        const current = useEventStore.getState().heartbeatStatus[node];
-        if (!isEqual(current, status)) {
-            heartbeatStatusBuffer[node] = status;
+    addEventListener(EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED, ({node, labels, heartbeat}) => {
+        const nodeName = node || labels?.node;
+        if (!nodeName || heartbeat === undefined) return;
+        const current = useEventStore.getState().heartbeatStatus[nodeName];
+        if (!isEqual(current, heartbeat)) {
+            buffers.heartbeatStatus[nodeName] = heartbeat;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('ObjectDeleted', (event) => {
-        console.log('📩 Received ObjectDeleted event:', event.data);
-        const parsed = JSON.parse(event.data);
-        const name = parsed.path || parsed.labels?.path;
+    addEventListener(EVENT_TYPES.OBJECT_DELETED, ({path, labels}) => {
+        console.log('📩 Received ObjectDeleted event:', JSON.stringify({path, labels}));
+        const name = path || labels?.path;
         if (!name) {
-            console.warn('⚠️ ObjectDeleted event missing objectName:', parsed);
+            console.warn('⚠️ ObjectDeleted event missing objectName:', {path, labels});
             return;
         }
-        delete objectStatusBuffer[name];
-        delete instanceStatusBuffer[name];
-        delete instanceConfigBuffer[name];
+        delete buffers.objectStatus[name];
+        delete buffers.instanceStatus[name];
+        delete buffers.instanceConfig[name];
         removeObject(name);
         scheduleFlush();
     });
 
-    currentEventSource.addEventListener('InstanceMonitorUpdated', (event) => {
-        const parsed = JSON.parse(event.data);
-        const {node, path, instance_monitor} = parsed;
+    addEventListener(EVENT_TYPES.INSTANCE_MONITOR_UPDATED, ({node, path, instance_monitor}) => {
         if (!node || !path || !instance_monitor) return;
-
         const key = `${node}:${path}`;
         const current = useEventStore.getState().instanceMonitor[key];
         if (!isEqual(current, instance_monitor)) {
-            instanceMonitorBuffer[key] = instance_monitor;
+            buffers.instanceMonitor[key] = instance_monitor;
             scheduleFlush();
         }
     });
 
-    currentEventSource.addEventListener('InstanceConfigUpdated', (event) => {
-        const parsed = JSON.parse(event.data);
-        const name = parsed.path || parsed.labels?.path;
-        const node = parsed.node;
-        const instance_config = parsed.instance_config;
+    addEventListener(EVENT_TYPES.INSTANCE_CONFIG_UPDATED, ({path, labels, node, instance_config}) => {
+        const name = path || labels?.path;
         if (!name || !node) {
-            console.warn('⚠️ InstanceConfigUpdated event missing name or node:', parsed);
+            console.warn('⚠️ InstanceConfigUpdated event missing name or node:', {path, labels, node});
             return;
         }
         if (instance_config) {
-            instanceConfigBuffer[name] = {
-                ...(instanceConfigBuffer[name] || {}),
-                [node]: instance_config,
-            };
+            buffers.instanceConfig[name] = {...(buffers.instanceConfig[name] || {}), [node]: instance_config};
         }
-        configUpdatedBuffer.add(JSON.stringify({name, node}));
+        buffers.configUpdated.add(JSON.stringify({name, node}));
         scheduleFlush();
     });
 
     return currentEventSource;
 };
 
+// Update EventSource token
+export const updateEventSourceToken = (newToken) => {
+    if (!newToken) return;
+    currentToken = newToken;
+    if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
+        console.log('🔄 Token updated, restarting EventSource');
+        closeEventSource();
+        const queryString = createQueryString(DEFAULT_FILTERS, null);
+        const url = `${URL_NODE_EVENT}?${queryString}`;
+        setTimeout(() => createEventSource(url, newToken), 100);
+    }
+};
+
+// Close EventSource
 export const closeEventSource = () => {
     if (currentEventSource) {
         console.log('Closing current EventSource');
@@ -368,23 +346,20 @@ export const closeEventSource = () => {
     }
 };
 
-export const configureEventSource = (token, objectName = null, filters = defaultFilters) => {
+// Configure EventSource
+export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
     if (!token) {
         console.error('❌ No token provided for SSE!');
         return;
     }
-
     const queryString = createQueryString(filters, objectName);
     const url = `${URL_NODE_EVENT}?${queryString}`;
-
-    if (currentEventSource) {
-        closeEventSource();
-    }
-
+    closeEventSource();
     currentEventSource = createEventSource(url, token);
 };
 
-export const startEventReception = (token, filters = defaultFilters) => {
+// Start Event Reception
+export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     if (!token) {
         console.error('❌ No token provided for SSE!');
         return;

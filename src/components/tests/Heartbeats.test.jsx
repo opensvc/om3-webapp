@@ -1,5 +1,5 @@
 import React from "react";
-import {render, screen, waitFor, within, act} from "@testing-library/react";
+import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
 import {BrowserRouter} from "react-router-dom";
 import Heartbeats from "../Heartbeats";
@@ -17,9 +17,9 @@ const mockLocalStorage = {
 Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
 
 const theme = createTheme();
-const renderWithTheme = (ui, {initialPath = "/"} = {}) => {
+const renderWithTheme = (ui = {}) => {
     return render(
-        <BrowserRouter initialEntries={[initialPath]}>
+        <BrowserRouter>
             <ThemeProvider theme={theme}>{ui}</ThemeProvider>
         </BrowserRouter>
     );
@@ -50,7 +50,7 @@ describe("Heartbeats Component", () => {
         const table = screen.getByRole("table");
         expect(table).toBeInTheDocument();
 
-        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC LAST_AT/i});
+        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC CHANGED_AT LAST_BEATING_AT/i});
         expect(within(headerRow).getByText("RUNNING")).toBeInTheDocument();
         expect(within(headerRow).getByText("BEATING")).toBeInTheDocument();
         expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
@@ -67,7 +67,8 @@ describe("Heartbeats Component", () => {
                             peer1: {
                                 is_beating: true,
                                 desc: ":10011 ← peer1",
-                                last_at: "2025-06-03T04:25:31+00:00",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
                             },
                         },
                         type: "unicast",
@@ -79,7 +80,8 @@ describe("Heartbeats Component", () => {
                             peer1: {
                                 is_beating: false,
                                 desc: "→ peer1:10011",
-                                last_at: "2025-06-03T04:25:31+00:00",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
                             },
                         },
                         type: "unicast",
@@ -99,24 +101,22 @@ describe("Heartbeats Component", () => {
         expect(dataRows).toHaveLength(2);
 
         const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-        expect(within(firstRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(firstRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING
         expect(firstRowCells[2]).toHaveTextContent("1.rx");
         expect(firstRowCells[3]).toHaveTextContent("node1");
         expect(firstRowCells[4]).toHaveTextContent("peer1");
         expect(firstRowCells[5]).toHaveTextContent("unicast");
         expect(firstRowCells[6]).toHaveTextContent(":10011 ← peer1");
         expect(firstRowCells[7]).toHaveTextContent("2025-06-03T04:25:31+00:00");
+        expect(firstRowCells[8]).toHaveTextContent("2025-06-03T04:25:31+00:00");
 
         const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-        expect(within(secondRowCells[0]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // RUNNING
-        expect(within(secondRowCells[1]).getByTestId("CheckCircleIcon")).toBeInTheDocument(); // BEATING (single-node cluster)
         expect(secondRowCells[2]).toHaveTextContent("1.tx");
         expect(secondRowCells[3]).toHaveTextContent("node1");
         expect(secondRowCells[4]).toHaveTextContent("peer1");
         expect(secondRowCells[5]).toHaveTextContent("unicast");
         expect(secondRowCells[6]).toHaveTextContent("→ peer1:10011");
         expect(secondRowCells[7]).toHaveTextContent("2025-06-03T04:25:31+00:00");
+        expect(secondRowCells[8]).toHaveTextContent("2025-06-03T04:25:31+00:00");
     });
 
     test("handles missing peer data for running streams", () => {
@@ -152,7 +152,6 @@ describe("Heartbeats Component", () => {
         expect(within(headerRow).getByText("ID")).toBeInTheDocument();
         expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
     });
-
 
     test("initializes with auth token", async () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});

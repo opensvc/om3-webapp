@@ -1,16 +1,13 @@
 /* eslint-disable no-unused-vars */
 
 import {useState, useRef} from "react";
-import {createEventSource, closeEventSource} from "../eventSourceManager";
 import {fetchDaemonStatus} from "../services/api";
-import {URL_NODE_EVENT} from "../config/apiPath.js";
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
     const [daemon, setDaemon] = useState({});
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const eventSourceRef = useRef(null);
     const cacheRef = useRef([]);
     const [clusterStats, setClusterStats] = useState({});
     const [clusterName, setClusterName] = useState("");

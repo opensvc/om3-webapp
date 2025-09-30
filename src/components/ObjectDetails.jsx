@@ -1,30 +1,30 @@
-import React, {useState, useMemo, useEffect, useRef, useCallback} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
 import {
-    Box,
-    Typography,
-    Snackbar,
     Alert,
-    Popper,
-    Paper,
-    MenuItem,
+    Box,
     Button,
-    ListItemIcon,
-    ListItemText,
     CircularProgress,
     ClickAwayListener,
+    ListItemIcon,
+    ListItemText,
+    MenuItem,
+    Paper,
+    Popper,
+    Snackbar,
+    Typography,
 } from "@mui/material";
-import {green, red, grey, blue, orange} from "@mui/material/colors";
+import {green, grey, orange, red} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
-import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
+import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
 import {ManageConfigParamsDialog} from "./ActionDialogs";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
-import {OBJECT_ACTIONS, INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 // Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
@@ -291,6 +291,11 @@ const ObjectDetail = () => {
         }
     }, []);
 
+    const postActionUrl = useCallback(({node, objectName, action}) => {
+        const {namespace, kind, name} = parseObjectPath(objectName);
+        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+    }, [parseObjectPath]);
+
     const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
@@ -303,7 +308,10 @@ const ObjectDetail = () => {
                 method: "POST",
                 headers: {Authorization: `Bearer ${token}`},
             });
-            if (!res.ok) throw new Error(`Failed to execute ${action}`);
+            if (!res.ok) {
+                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}`, "error");
+                return;
+            }
             openSnackbar(`'${action}' succeeded on object`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -323,19 +331,17 @@ const ObjectDetail = () => {
                 method: "POST",
                 headers: {Authorization: `Bearer ${token}`},
             });
-            if (!res.ok) throw new Error(`Failed to execute ${action}`);
+            if (!res.ok) {
+                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}`, "error");
+                return;
+            }
             openSnackbar(`'${action}' succeeded on node '${node}'`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionInProgress(false);
         }
-    }, [decodedObjectName, openSnackbar]);
-
-    const postActionUrl = useCallback(({node, objectName, action}) => {
-        const {namespace, kind, name} = parseObjectPath(objectName);
-        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
-    }, [parseObjectPath]);
+    }, [decodedObjectName, openSnackbar, postActionUrl]);
 
     const postResourceAction = useCallback(async ({node, action, rid}) => {
         const token = localStorage.getItem("authToken");
@@ -350,7 +356,10 @@ const ObjectDetail = () => {
                 method: "POST",
                 headers: {Authorization: `Bearer ${token}`},
             });
-            if (!res.ok) throw new Error(`Failed to execute ${action}`);
+            if (!res.ok) {
+                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}`, "error");
+                return;
+            }
             openSnackbar(`'${action}' succeeded on resource '${rid}'`);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -393,7 +402,8 @@ const ObjectDetail = () => {
                 new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 10000)),
             ]);
             if (!response.ok) {
-                throw new Error(`Failed to fetch config: ${response.status}`);
+                setConfigError(`Failed to fetch config: HTTP error! status: ${response.status}`);
+                return;
             }
             const text = await response.text();
             if (isMounted.current) {
@@ -404,7 +414,6 @@ const ObjectDetail = () => {
             if (isMounted.current) {
                 setConfigError(err.message);
             }
-            throw err;
         } finally {
             if (isMounted.current) {
                 setConfigLoading(false);
@@ -730,12 +739,10 @@ const ObjectDetail = () => {
             if (objectData) {
                 const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
                 const initialNode = nodes.find((node) => {
-                    const hasValidEncapResources =
-                        objectData[node]?.encap &&
+                    return objectData[node]?.encap &&
                         Object.values(objectData[node].encap).some(
                             (container) => container.resources && Object.keys(container.resources).length > 0
                         );
-                    return hasValidEncapResources;
                 }) || nodes[0];
                 if (initialNode) {
                     try {
@@ -802,6 +809,11 @@ const ObjectDetail = () => {
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
                     handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
+                    configData={configData}
+                    configLoading={configLoading}
+                    configError={configError}
+                    configAccordionExpanded={configAccordionExpanded}
+                    setConfigAccordionExpanded={setConfigAccordionExpanded}
                 />
             </Box>
         );
@@ -840,6 +852,19 @@ const ObjectDetail = () => {
                         setPurgeDialogOpen(false);
                         setSimpleDialogOpen(false);
                     }}
+                    confirmDialogOpen={confirmDialogOpen}
+                    stopDialogOpen={stopDialogOpen}
+                    unprovisionDialogOpen={unprovisionDialogOpen}
+                    purgeDialogOpen={purgeDialogOpen}
+                    simpleDialogOpen={simpleDialogOpen}
+                    checkboxes={checkboxes}
+                    setCheckboxes={setCheckboxes}
+                    stopCheckbox={stopCheckbox}
+                    setStopCheckbox={setStopCheckbox}
+                    unprovisionCheckboxes={unprovisionCheckboxes}
+                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                    purgeCheckboxes={purgeCheckboxes}
+                    setPurgeCheckboxes={setPurgeCheckboxes}
                 />
                 {showKeys && (
                     <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
@@ -850,6 +875,11 @@ const ObjectDetail = () => {
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
                     handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
+                    configData={configData}
+                    configLoading={configLoading}
+                    configError={configError}
+                    configAccordionExpanded={configAccordionExpanded}
+                    setConfigAccordionExpanded={setConfigAccordionExpanded}
                 />
                 <ManageConfigParamsDialog
                     open={manageParamsDialogOpen}

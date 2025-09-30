@@ -1,12 +1,10 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 import {
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
     Button,
-    Checkbox,
-    FormControlLabel,
     Typography,
 } from '@mui/material';
 import {
@@ -79,10 +77,8 @@ const ActionDialogManager = ({
         simpleConfirm: false,
     });
 
-    const dialogConfig = {
+    const dialogConfig = useMemo(() => ({
         freeze: {
-            openDialog: () => setDialogState((prev) => ({...prev, freeze: true})),
-            initState: () => setCheckboxState((prev) => ({...prev, freeze: false})),
             component: FreezeDialog,
             props: {
                 open: dialogState.freeze,
@@ -106,8 +102,6 @@ const ActionDialogManager = ({
             },
         },
         stop: {
-            openDialog: () => setDialogState((prev) => ({...prev, stop: true})),
-            initState: () => setCheckboxState((prev) => ({...prev, stop: false})),
             component: StopDialog,
             props: {
                 open: dialogState.stop,
@@ -131,11 +125,6 @@ const ActionDialogManager = ({
             },
         },
         unprovision: {
-            openDialog: () => setDialogState((prev) => ({...prev, unprovision: true})),
-            initState: () => setCheckboxState((prev) => ({
-                ...prev,
-                unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
-            })),
             component: UnprovisionDialog,
             props: {
                 open: dialogState.unprovision,
@@ -178,11 +167,6 @@ const ActionDialogManager = ({
             },
         },
         purge: {
-            openDialog: () => setDialogState((prev) => ({...prev, purge: true})),
-            initState: () => setCheckboxState((prev) => ({
-                ...prev,
-                purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
-            })),
             component: PurgeDialog,
             props: {
                 open: dialogState.purge,
@@ -225,11 +209,6 @@ const ActionDialogManager = ({
             },
         },
         delete: {
-            openDialog: () => setDialogState((prev) => ({...prev, delete: true})),
-            initState: () => setCheckboxState((prev) => ({
-                ...prev,
-                delete: {configLoss: false, clusterwide: false},
-            })),
             component: DeleteDialog,
             props: {
                 open: dialogState.delete,
@@ -272,8 +251,6 @@ const ActionDialogManager = ({
             },
         },
         switch: {
-            openDialog: () => setDialogState((prev) => ({...prev, switch: true})),
-            initState: () => setCheckboxState((prev) => ({...prev, switch: false})),
             component: SwitchDialog,
             props: {
                 open: dialogState.switch,
@@ -297,8 +274,6 @@ const ActionDialogManager = ({
             },
         },
         giveback: {
-            openDialog: () => setDialogState((prev) => ({...prev, giveback: true})),
-            initState: () => setCheckboxState((prev) => ({...prev, giveback: false})),
             component: GivebackDialog,
             props: {
                 open: dialogState.giveback,
@@ -322,8 +297,6 @@ const ActionDialogManager = ({
             },
         },
         simpleConfirm: {
-            openDialog: () => setDialogState((prev) => ({...prev, simpleConfirm: true})),
-            initState: () => setCheckboxState((prev) => ({...prev, simpleConfirm: false})),
             component: SimpleConfirmDialog,
             props: {
                 open: dialogState.simpleConfirm,
@@ -342,6 +315,58 @@ const ActionDialogManager = ({
                 cancelDisabled: false,
             },
         },
+    }), [dialogState, checkboxState, handleConfirm, pendingAction, target, onClose]);
+
+    const initializeDialog = (action) => {
+        const actions = {
+            freeze: () => {
+                setDialogState((prev) => ({...prev, freeze: true}));
+                setCheckboxState((prev) => ({...prev, freeze: false}));
+            },
+            stop: () => {
+                setDialogState((prev) => ({...prev, stop: true}));
+                setCheckboxState((prev) => ({...prev, stop: false}));
+            },
+            unprovision: () => {
+                setDialogState((prev) => ({...prev, unprovision: true}));
+                setCheckboxState((prev) => ({
+                    ...prev,
+                    unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
+                }));
+            },
+            purge: () => {
+                setDialogState((prev) => ({...prev, purge: true}));
+                setCheckboxState((prev) => ({
+                    ...prev,
+                    purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
+                }));
+            },
+            delete: () => {
+                setDialogState((prev) => ({...prev, delete: true}));
+                setCheckboxState((prev) => ({
+                    ...prev,
+                    delete: {configLoss: false, clusterwide: false},
+                }));
+            },
+            switch: () => {
+                setDialogState((prev) => ({...prev, switch: true}));
+                setCheckboxState((prev) => ({...prev, switch: false}));
+            },
+            giveback: () => {
+                setDialogState((prev) => ({...prev, giveback: true}));
+                setCheckboxState((prev) => ({...prev, giveback: false}));
+            },
+            simpleConfirm: () => {
+                setDialogState((prev) => ({...prev, simpleConfirm: true}));
+                setCheckboxState((prev) => ({...prev, simpleConfirm: false}));
+            },
+        };
+
+        if (action in actions) {
+            actions[action]();
+        } else {
+            actions.simpleConfirm();
+        }
     };
 
     useEffect(() => {
@@ -362,13 +387,7 @@ const ActionDialogManager = ({
 
         const action = pendingAction.action.toLowerCase();
         if (supportedActions.includes(action)) {
-            if (action in dialogConfig) {
-                dialogConfig[action].openDialog();
-                dialogConfig[action].initState();
-            } else {
-                dialogConfig.simpleConfirm.openDialog();
-                dialogConfig.simpleConfirm.initState();
-            }
+            initializeDialog(action);
         } else {
             if (process.env.NODE_ENV !== 'production') {
                 console.warn(`Unsupported action: ${action}`);

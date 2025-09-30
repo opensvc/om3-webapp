@@ -47,7 +47,7 @@ function AuthChoice() {
                 }
             })();
         }
-    }, [authInfo]);
+    }, [authInfo, recreateUserManager, userManager]);
 
     return (
         <Dialog open={true} maxWidth="xs" fullWidth>

@@ -15,8 +15,7 @@ import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
 export const decodeToken = (token) => {
     if (!token) return null;
     try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload;
+        return JSON.parse(atob(token.split('.')[1]));
     } catch (error) {
         console.error('Error decoding token:', error);
         return null;
@@ -44,7 +43,12 @@ export const refreshToken = async (dispatch) => {
             },
         });
 
-        if (!response.ok) throw new Error('Token refresh failed');
+        if (!response.ok) {
+            console.error('Error refreshing token: Token refresh failed');
+            dispatch({type: SetAccessToken, data: null});
+            return null;
+        }
+
         const data = await response.json();
 
         localStorage.setItem('authToken', data.access_token);
@@ -78,7 +82,10 @@ const Login = forwardRef((props, ref) => {
             });
 
             if (!response.ok) {
-                throw new Error('Incorrect username or password');
+                const errorMessage = t('Incorrect username or password');
+                console.error('Authentication error:', errorMessage);
+                setErrorMessage(errorMessage);
+                return;
             }
 
             const data = await response.json();
@@ -115,10 +122,25 @@ const Login = forwardRef((props, ref) => {
     };
 
     return (
-        <Dialog open={true} aria-labelledby="login-dialog" ref={ref}
-                PaperProps={{sx: {width: '100%', maxWidth: '448px', mx: 'auto', p: 3, borderRadius: 2, boxShadow: 3}}}>
-            <DialogTitle id="login-dialog"
-                         sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}>
+        <Dialog
+            open={true}
+            aria-labelledby="login-dialog"
+            ref={ref}
+            sx={{
+                '& .MuiPaper-root': {
+                    width: '100%',
+                    maxWidth: '448px',
+                    mx: 'auto',
+                    p: 3,
+                    borderRadius: 2,
+                    boxShadow: 3
+                }
+            }}
+        >
+            <DialogTitle
+                id="login-dialog"
+                sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}
+            >
                 {t('Login')}
             </DialogTitle>
             <DialogContent sx={{px: 3}}>

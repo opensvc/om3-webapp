@@ -46,7 +46,8 @@ async function oidcConfiguration(authInfo) {
     try {
         let url = new URL(authInfo.openid.issuer);
         if (!url.protocol || !url.host) {
-            throw new Error("Malformed URI");
+            console.error("Malformed URI: missing protocol or host");
+            return initData;
         }
         if (!url.pathname.endsWith("/")) {
             url.pathname += "/";

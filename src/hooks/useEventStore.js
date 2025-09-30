@@ -118,7 +118,7 @@ const useEventStore = create((set) => ({
                 if (typeof update === "string") {
                     try {
                         const parsed = JSON.parse(update);
-                        if (parsed.name && parsed.node) {
+                        if (parsed && parsed.name && parsed.node) {
                             const namespace = "root";
                             const kind = parsed.name === "cluster" ? "ccfg" : "svc";
                             const fullName = `${namespace}/${kind}/${parsed.name}`;
@@ -129,7 +129,7 @@ const useEventStore = create((set) => ({
                         return null;
                     }
                 }
-                if (typeof update === "object" && update.kind === "InstanceConfigUpdated") {
+                if (typeof update === "object" && update !== null && update.kind === "InstanceConfigUpdated") {
                     const name = update.data?.path || "";
                     const namespace = update.data?.labels?.namespace || "root";
                     const kind = name === "cluster" ? "ccfg" : "svc";

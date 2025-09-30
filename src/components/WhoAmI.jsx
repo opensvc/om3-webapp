@@ -23,7 +23,10 @@ const WhoAmI = () => {
                     }
                 });
 
-                if (!response.ok) throw new Error('Failed to load user information');
+                if (!response.ok) {
+                    setError('Failed to load user information');
+                    return;
+                }
                 setUserInfo(await response.json());
             } catch (err) {
                 setError(err.message);

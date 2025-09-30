@@ -38,7 +38,6 @@ const NodeCard = ({
                       individualNodeMenuAnchor = null,
                       individualNodeMenuAnchorRef = null,
                       resourcesActionsAnchorRef = null,
-                      resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
@@ -51,19 +50,23 @@ const NodeCard = ({
                       setCheckboxes = () => console.warn("setCheckboxes not provided"),
                       setStopCheckbox = () => console.warn("setStopCheckbox not provided"),
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
-                      setPurgeCheckboxes = () => console.warn("setPurgeCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                   }) => {
-    if (!node) {
-        console.error("Node name is required");
-        return null;
-    }
-
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
+
+    // Log changes to selectedResourcesByNode for test
+    useEffect(() => {
+        console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
+    }, [selectedResourcesByNode]);
+
+    if (!node) {
+        console.error("Node name is required");
+        return null;
+    }
 
     // Calculate the zoom level
     const getZoomLevel = () => {
@@ -78,7 +81,7 @@ const NodeCard = ({
             {
                 name: "offset",
                 options: {
-                    offset: ({reference}) => {
+                    offset: () => {
                         const zoomLevel = getZoomLevel();
                         return [0, 8 / zoomLevel];
                     },
@@ -114,11 +117,6 @@ const NodeCard = ({
     const effectiveInstanceMonitor = nodeData?.instanceMonitor || {resources: {}};
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
-
-    // Log changes to selectedResourcesByNode for test
-    useEffect(() => {
-        console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
-    }, [selectedResourcesByNode]);
 
     // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {

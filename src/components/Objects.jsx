@@ -27,20 +27,7 @@ import {
     IconButton,
     ClickAwayListener,
 } from "@mui/material";
-import {
-    RestartAlt,
-    AcUnit,
-    LockOpen,
-    Delete,
-    Settings,
-    Block,
-    CleaningServices,
-    SwapHoriz,
-    Undo,
-    Cancel,
-    Stop,
-    PlayArrow,
-} from "@mui/icons-material";
+import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -267,7 +254,7 @@ const Objects = () => {
 
     // Parse query parameters
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "n/a", "unprovisioned"];
+    const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -425,27 +412,29 @@ const Objects = () => {
         setSelectedNamespace(newNamespace);
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
-    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery]);
+    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
 
     // Cleanup on unmount
-    useEffect(() => () => {
-        isMounted.current = false;
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
     }, []);
 
     // Event subscription
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        let subscription;
         if (token) {
-            subscription = startEventReception(token, [
+            // Appeler la fonction sans utiliser sa valeur de retour
+            startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
         }
+
         return () => {
-            if (subscription && typeof subscription === "function") subscription();
             closeEventSource();
         };
     }, []);
@@ -496,7 +485,7 @@ const Objects = () => {
             let successCount = 0;
             let errorCount = 0;
 
-            const objectsToProcess = pendingAction.node ? [pendingAction.node] : selectedObjects;
+            const objectsToProcess = pendingAction?.node ? [pendingAction.node] : selectedObjects;
 
             const promises = objectsToProcess.map(async (objectName) => {
                 const rawObj = objectStatus[objectName];
@@ -518,7 +507,13 @@ const Objects = () => {
                         method: "POST",
                         headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                     });
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    if (!response.ok) {
+                        // Create error without throwing it immediately
+                        const error = new Error(`HTTP error! status: ${response.status}`);
+                        console.error(`Failed to execute ${action} on ${objectName}:`, error);
+                        errorCount++;
+                        return;
+                    }
                     successCount++;
                     if (action === "delete") removeObject(objectName);
                 } catch (error) {

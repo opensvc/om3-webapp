@@ -53,8 +53,7 @@ const NodeRow = ({
     const isDaemonNode = daemonNodename === nodename;
     const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
         if (name === "freeze" && isFrozen) return false;
-        if (name === "unfreeze" && !isFrozen) return false;
-        return true;
+        return !(name === "unfreeze" && !isFrozen);
     });
 
     const getZoomLevel = () => window.devicePixelRatio || 1;
@@ -104,7 +103,7 @@ const NodeRow = ({
                 <Checkbox
                     checked={isSelected}
                     onChange={(e) => onSelect(e, nodename)}
-                    inputProps={{"aria-label": `Select node ${nodename}`}}
+                    slotProps={{input: {"aria-label": `Select node ${nodename}`}}}
                     onClick={(e) => e.stopPropagation()}
                 />
             </TableCell>

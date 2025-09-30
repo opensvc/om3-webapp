@@ -1,5 +1,4 @@
 import React, {useEffect, useState, useRef} from "react";
-import {useNavigate} from "react-router-dom";
 import {
     Box,
     Table,
@@ -37,7 +36,6 @@ const NodesTable = () => {
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
-    const navigate = useNavigate();
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
@@ -90,12 +88,7 @@ const NodesTable = () => {
         return () => {
             closeEventSource();
         };
-    }, []);
-
-    const handleLogout = () => {
-        localStorage.removeItem("authToken");
-        navigate("/auth/login");
-    };
+    }, [fetchNodes]);
 
     const handleMenuOpen = (event, nodename) => {
         setAnchorEls((prev) => ({...prev, [nodename]: event.currentTarget}));
@@ -183,7 +176,9 @@ const NodesTable = () => {
                     },
                 });
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    errorCount++;
+                    console.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
+                    return;
                 }
                 successCount++;
             } catch (error) {
@@ -213,8 +208,7 @@ const NodesTable = () => {
         return selectedNodes.some((nodename) => {
             const isFrozen = !!nodeStatus[nodename]?.frozen_at && nodeStatus[nodename]?.frozen_at !== "0001-01-01T00:00:00Z";
             if (name === "freeze" && isFrozen) return false;
-            if (name === "unfreeze" && !isFrozen) return false;
-            return true;
+            return !(name === "unfreeze" && !isFrozen);
         });
     });
 

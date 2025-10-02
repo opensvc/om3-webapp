@@ -1,7 +1,7 @@
 import React from "react";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
-import {BrowserRouter} from "react-router-dom";
+import {MemoryRouter} from "react-router-dom";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
 import {
@@ -27,11 +27,11 @@ const mockLocalStorage = {
 Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
 
 const theme = createTheme();
-const renderWithTheme = (ui = {}) => {
+const renderWithRouter = (ui, {route = "/"} = {}) => {
     return render(
-        <BrowserRouter>
+        <MemoryRouter initialEntries={[route]}>
             <ThemeProvider theme={theme}>{ui}</ThemeProvider>
-        </BrowserRouter>
+        </MemoryRouter>
     );
 };
 
@@ -52,13 +52,9 @@ describe("Heartbeats Component", () => {
 
     test("renders basic structure", () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
+        renderWithRouter(<Heartbeats/>);
 
-        renderWithTheme(<Heartbeats/>);
-
-        expect(
-            screen.getByRole("heading", {name: /Heartbeats/i})
-        ).toBeInTheDocument();
-
+        expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
         const table = screen.getByRole("table");
         expect(table).toBeInTheDocument();
 
@@ -70,7 +66,7 @@ describe("Heartbeats Component", () => {
         expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
     });
 
-    test("renders node with heartbeat statuses", async () => {
+    test("renders node with heartbeat statuses for all state types", async () => {
         const mockHeartbeatStatus = {
             node1: {
                 streams: [
@@ -88,12 +84,51 @@ describe("Heartbeats Component", () => {
                         type: "unicast",
                     },
                     {
-                        id: "hb#1.tx",
-                        state: "running",
+                        id: "hb#2.rx",
+                        state: "stopped",
                         peers: {
-                            peer1: {
+                            peer2: {
                                 is_beating: false,
-                                desc: "→ peer1:10011",
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#3.rx",
+                        state: "failed",
+                        peers: {
+                            peer3: {
+                                is_beating: false,
+                                desc: ":10013 ← peer3",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#4.rx",
+                        state: "warning",
+                        peers: {
+                            peer4: {
+                                is_beating: false,
+                                desc: ":10014 ← peer4",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#5.rx",
+                        state: "unknown",
+                        peers: {
+                            peer5: {
+                                is_beating: false,
+                                desc: ":10015 ← peer5",
                                 changed_at: "2025-06-03T04:25:31+00:00",
                                 last_beating_at: "2025-06-03T04:25:31+00:00",
                             },
@@ -108,38 +143,115 @@ describe("Heartbeats Component", () => {
             selector({heartbeatStatus: mockHeartbeatStatus})
         );
 
-        renderWithTheme(<Heartbeats/>);
+        renderWithRouter(<Heartbeats/>);
 
-        const rows = screen.getAllByRole("row");
+        const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
-        expect(dataRows).toHaveLength(2);
+        expect(dataRows).toHaveLength(5);
 
-        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
-        expect(firstRowCells[2]).toHaveTextContent("1.rx");
-        expect(firstRowCells[3]).toHaveTextContent("node1");
-        expect(firstRowCells[4]).toHaveTextContent("peer1");
-        expect(firstRowCells[5]).toHaveTextContent("unicast");
-        expect(firstRowCells[6]).toHaveTextContent(":10011 ← peer1");
-        expect(firstRowCells[7]).toHaveTextContent("2025-06-03T04:25:31+00:00");
-        expect(firstRowCells[8]).toHaveTextContent("2025-06-03T04:25:31+00:00");
-
-        const secondRowCells = within(dataRows[1]).getAllByRole("cell");
-        expect(secondRowCells[2]).toHaveTextContent("1.tx");
-        expect(secondRowCells[3]).toHaveTextContent("node1");
-        expect(secondRowCells[4]).toHaveTextContent("peer1");
-        expect(secondRowCells[5]).toHaveTextContent("unicast");
-        expect(secondRowCells[6]).toHaveTextContent("→ peer1:10011");
-        expect(secondRowCells[7]).toHaveTextContent("2025-06-03T04:25:31+00:00");
-        expect(secondRowCells[8]).toHaveTextContent("2025-06-03T04:25:31+00:00");
+        dataRows.forEach((row, index) => {
+            const cells = within(row).getAllByRole("cell");
+            expect(cells[2]).toHaveTextContent(`${index + 1}.rx`);
+            expect(cells[3]).toHaveTextContent("node1");
+            expect(cells[4]).toHaveTextContent(`peer${index + 1}`);
+            expect(cells[5]).toHaveTextContent("unicast");
+            expect(cells[6]).toHaveTextContent(`:1001${index + 1} ← peer${index + 1}`);
+        });
     });
 
-    test("handles missing peer data for running streams", () => {
+    test("handles default state icon in getStateIcon", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "invalid-state", // Triggers default case
+                        peers: {peer1: {is_beating: true, desc: ":10011 ← peer1"}},
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const rows = await screen.findAllByRole("row");
+        const dataRow = rows[1]; // Skip header row
+        const stateCell = within(dataRow).getAllByRole("cell")[0];
+        expect(within(stateCell).getByTestId("HelpIcon")).toBeInTheDocument();
+    });
+
+    test("filters by stale status", async () => {
         const mockHeartbeatStatus = {
             node1: {
                 streams: [
                     {
                         id: "hb#1.rx",
                         state: "running",
+                        peers: {peer1: {is_beating: false, desc: ":10011 ← peer1"}},
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?status=stale"});
+
+        const rows = await screen.findAllByRole("row");
+        expect(rows.slice(1)).toHaveLength(1);
+        expect(within(rows[1]).getByText("1.rx")).toBeInTheDocument();
+    });
+
+    test("handles single node scenario", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+
+        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+        expect(firstRowCells[2]).toHaveTextContent("1.rx");
+        expect(firstRowCells[3]).toHaveTextContent("node1");
+        expect(firstRowCells[4]).toHaveTextContent("peer1");
+    });
+
+    test("handles stopped stream with no peers using cached data", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "stopped",
                         peers: {},
                         type: "unicast",
                     },
@@ -147,41 +259,381 @@ describe("Heartbeats Component", () => {
             },
         };
 
-        useEventStore.mockReturnValue({
-            heartbeatStatus: mockHeartbeatStatus,
-        });
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
 
-        renderWithTheme(<Heartbeats/>);
+        renderWithRouter(<Heartbeats/>);
 
-        const table = screen.getByRole("table");
-        expect(table).toBeInTheDocument();
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
 
-        const rows = screen.getAllByRole("row");
-        expect(rows).toHaveLength(1);
+        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+        expect(firstRowCells[2]).toHaveTextContent("1.rx");
+        expect(firstRowCells[3]).toHaveTextContent("node1");
+        expect(firstRowCells[4]).toHaveTextContent("N/A");
+        expect(firstRowCells[5]).toHaveTextContent("unicast");
+        expect(firstRowCells[6]).toHaveTextContent("N/A");
+    });
 
-        const headerRow = rows[0];
-        expect(within(headerRow).getByText("RUNNING")).toBeInTheDocument();
-        expect(within(headerRow).getByText("BEATING")).toBeInTheDocument();
-        expect(within(headerRow).getByText("ID")).toBeInTheDocument();
-        expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
+    test("applies filter by beating status from URL", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: false,
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?status=beating"});
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+        expect(within(dataRows[0]).getByText("1.rx")).toBeInTheDocument();
     });
 
     test("initializes with auth token", () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
-        renderWithTheme(<Heartbeats/>);
+        renderWithRouter(<Heartbeats/>);
 
         expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-        expect(startEventReception).toHaveBeenCalledWith("valid-token", [
-            "DaemonHeartbeatUpdated",
-        ]);
+        expect(startEventReception).toHaveBeenCalledWith("valid-token", ["DaemonHeartbeatUpdated"]);
     });
 
     test("cleans up on unmount", async () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
-        const {unmount} = renderWithTheme(<Heartbeats/>);
+        const {unmount} = renderWithRouter(<Heartbeats/>);
         unmount();
         await waitFor(() => {
             expect(mockCloseEventSource).toHaveBeenCalled();
+        });
+    });
+
+    test("handles missing auth token", () => {
+        mockLocalStorage.getItem.mockReturnValue(null);
+        useEventStore.mockReturnValue({heartbeatStatus: {}});
+        renderWithRouter(<Heartbeats/>);
+        expect(startEventReception).not.toHaveBeenCalled();
+    });
+
+    test("handles multiple nodes and complex sorting", async () => {
+        const mockHeartbeatStatus = {
+            nodeB: {
+                streams: [
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: true,
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+            nodeA: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(2);
+
+        // Verify that nodes are sorted alphabetically
+        const firstRowCells = within(dataRows[0]).getAllByRole("cell");
+        const secondRowCells = within(dataRows[1]).getAllByRole("cell");
+
+        expect(firstRowCells[3]).toHaveTextContent("nodeA");
+        expect(secondRowCells[3]).toHaveTextContent("nodeB");
+    });
+
+    test("handles filter by node", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+            node2: {
+                streams: [
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: true,
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?node=node1"});
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+        expect(within(dataRows[0]).getByText("1.rx")).toBeInTheDocument();
+        expect(within(dataRows[0]).getByText("node1")).toBeInTheDocument();
+    });
+
+    test("handles filter by state", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "stopped",
+                        peers: {
+                            peer2: {
+                                is_beating: false,
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?state=stopped"});
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+        expect(within(dataRows[0]).getByText("2.rx")).toBeInTheDocument();
+    });
+
+    test("handles filter by id", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: true,
+                                desc: ":10012 ← peer2",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?id=1.rx"});
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+        expect(within(dataRows[0]).getByText("1.rx")).toBeInTheDocument();
+    });
+
+    test("handles id with hb# prefix in URL", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>, {route: "/?id=hb%231.rx"});
+
+        const rows = await screen.findAllByRole("row");
+        const dataRows = rows.slice(1);
+        expect(dataRows).toHaveLength(1);
+        expect(within(dataRows[0]).getByText("1.rx")).toBeInTheDocument();
+    });
+
+    test("handles edge case with empty streams array", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [],
+            },
+            node2: {
+                streams: null,
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        // The component should render without error
+        expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
+
+        // The table should only have the header row
+        const rows = screen.getAllByRole("row");
+        expect(rows).toHaveLength(1); // Only the header
+    });
+
+    test("handles URL parameter initialization with invalid status", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        // Test with an invalid status in the URL
+        renderWithRouter(<Heartbeats/>, {route: "/?status=invalid"});
+
+        // The component should use "all" as the default value
+        await waitFor(() => {
+            expect(screen.getByText("1.rx")).toBeInTheDocument();
         });
     });
 });

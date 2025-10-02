@@ -4,10 +4,12 @@ import NodeRow from '../NodeRow';
 import '@testing-library/jest-dom';
 
 // Keep mocks for Wifi / AcUnit
-jest.mock('@mui/icons-material', () => ({
-    Wifi: (props) => <span {...props} aria-label="Daemon node indicator"/>,
-    AcUnit: (props) => <span {...props} aria-label="Frozen indicator"/>,
-}));
+jest.mock('@mui/icons-material', () => {
+    const Wifi = (props) => <span {...props} aria-label="Daemon node indicator"/>;
+    const AcUnit = (props) => <span {...props} aria-label="Frozen indicator"/>;
+
+    return {Wifi, AcUnit};
+});
 
 // Mock NODE_ACTIONS
 jest.mock('../../constants/actions', () => ({
@@ -142,6 +144,7 @@ describe('NodeRow Component', () => {
 
     test('renders LinearProgress with correct value and color for load_15m', () => {
         render(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
+        // eslint-disable-next-line testing-library/no-node-access
         const progress = within(screen.getByText('5').closest('td')).getByRole('progressbar');
         expect(progress).toHaveAttribute('aria-valuenow', '100');
         expect(progress).toHaveClass('MuiLinearProgress-colorError');
@@ -149,6 +152,7 @@ describe('NodeRow Component', () => {
 
     test('renders LinearProgress with correct value and color for mem_avail', () => {
         render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
+        // eslint-disable-next-line testing-library/no-node-access
         const progress = within(screen.getByText('10%').closest('td')).getByRole('progressbar');
         expect(progress).toHaveAttribute('aria-valuenow', '10');
         expect(progress).toHaveClass('MuiLinearProgress-colorError');
@@ -172,13 +176,13 @@ describe('NodeRow Component', () => {
         expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
     });
 
-    test('calculateMenuPosition updates menuPosition when menuAnchorRef is valid', () => {
+    test('calculateMenuPosition updates menuPosition when menuAnchorRef is valid', async () => {
         Object.defineProperty(navigator, 'userAgent', {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
             configurable: true,
         });
 
-        const {container} = render(<NodeRow {...defaultProps} />);
+        render(<NodeRow {...defaultProps} />);
 
         const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
         expect(menuButton).toBeInTheDocument();
@@ -189,17 +193,8 @@ describe('NodeRow Component', () => {
         fireEvent.click(menuButton); // triggers handleMenuOpen
         jest.runAllTimers();
 
-        // Check that menuPosition has been calculated
-        const menuPaper = container.querySelector('.MuiMenu-paper');
-        // The menu is not necessarily rendered because anchorEl is null, we can just check menuPosition via style
-        if (menuPaper) {
-            const top = parseFloat(menuPaper.style.top);
-            const left = parseFloat(menuPaper.style.left);
-            expect(top).toBeGreaterThan(0);
-            expect(left).toBeGreaterThan(0);
-        }
+        expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
     });
-
 
     test('checkbox click stops propagation', () => {
         render(<NodeRow {...defaultProps} />);

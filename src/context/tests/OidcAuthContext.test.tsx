@@ -1,18 +1,20 @@
 import {renderHook, act} from '@testing-library/react';
 import {OidcProvider, useOidc, cleanupUserManager} from '../OidcAuthContext';
-import {UserManager} from 'oidc-client-ts';
+import {UserManager, UserManagerSettings} from 'oidc-client-ts';
+
+const mockUserManagerInstance = {
+    events: {
+        removeUserLoaded: jest.fn(),
+        removeUserUnloaded: jest.fn(),
+        removeAccessTokenExpired: jest.fn(),
+        removeAccessTokenExpiring: jest.fn(),
+        removeSilentRenewError: jest.fn(),
+    },
+    clearStaleState: jest.fn(),
+};
 
 jest.mock('oidc-client-ts', () => ({
-    UserManager: jest.fn().mockImplementation(() => ({
-        events: {
-            removeUserLoaded: jest.fn(),
-            removeUserUnloaded: jest.fn(),
-            removeAccessTokenExpired: jest.fn(),
-            removeAccessTokenExpiring: jest.fn(),
-            removeSilentRenewError: jest.fn(),
-        },
-        clearStaleState: jest.fn(),
-    })),
+    UserManager: jest.fn().mockImplementation(() => mockUserManagerInstance),
 }));
 
 describe('OidcAuthContext', () => {
@@ -20,7 +22,6 @@ describe('OidcAuthContext', () => {
         <OidcProvider>{children}</OidcProvider>
     );
 
-    // Clear mocks before each test to ensure isolation
     beforeEach(() => {
         jest.clearAllMocks();
     });
@@ -37,7 +38,11 @@ describe('OidcAuthContext', () => {
     });
 
     test('recreateUserManager updates userManager with new settings', () => {
-        const settings = {authority: 'https://example.com', client_id: 'test-client'};
+        const settings: UserManagerSettings = {
+            authority: 'https://example.com',
+            client_id: 'test-client',
+            redirect_uri: 'https://example.com/callback'
+        };
         const {result} = renderHook(() => useOidc(), {wrapper});
         act(() => {
             result.current.recreateUserManager(settings);
@@ -57,7 +62,7 @@ describe('OidcAuthContext', () => {
             },
             clearStaleState: jest.fn(),
         };
-        cleanupUserManager(mockUserManager);
+        cleanupUserManager(mockUserManager as unknown as UserManager);
         expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalled();
         expect(mockUserManager.events.removeUserUnloaded).toHaveBeenCalled();
         expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalled();

@@ -67,15 +67,11 @@ describe('NetworkDetails Component', () => {
         );
 
         await waitFor(() => {
-            // Find all elements containing part of the text
             const titleElements = screen.getAllByText(/Network Details:/i);
-
-            // Filter to find the element that contains both the name and type
             const matchingTitle = titleElements.find(el =>
                 el.textContent.includes('Network Details: default') &&
                 el.textContent.includes('(bridge)')
             );
-
             expect(matchingTitle).toBeInTheDocument();
         });
     });
@@ -145,6 +141,9 @@ describe('NetworkDetails Component', () => {
         fireEvent.click(filterButton);
         await waitFor(() => {
             expect(screen.queryByLabelText('Node')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByRole('button', {name: /show filters/i})).toBeInTheDocument();
         });
 
@@ -152,6 +151,9 @@ describe('NetworkDetails Component', () => {
         fireEvent.click(screen.getByRole('button', {name: /show filters/i}));
         await waitFor(() => {
             expect(screen.getByLabelText('Node')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByRole('button', {name: /hide filters/i})).toBeInTheDocument();
         });
     });
@@ -170,25 +172,24 @@ describe('NetworkDetails Component', () => {
         await waitFor(() => {
             // First verify the table is rendered
             const table = screen.getByRole('table');
-            const rows = within(table).getAllByRole('row').slice(1); // Skip header row
-
-            // Verify row count matches expected
+            const rows = within(table).getAllByRole('row').slice(1);
             expect(rows).toHaveLength(3);
-
-            // Helper function to test each row
-            const testRow = (row, ip, node, path, rid) => {
-                const cells = within(row).getAllByRole('cell');
-                expect(cells[0]).toHaveTextContent(ip);
-                expect(cells[1]).toHaveTextContent(node);
-                expect(cells[2]).toHaveTextContent(path);
-                expect(cells[3]).toHaveTextContent(rid);
-            };
-
-            // Test each row
-            testRow(rows[0], '192.168.1.1', 'node1', '/path/to/resource', 'ip#1');
-            testRow(rows[1], '192.168.1.2', 'node2', '/path/to/resource2', 'ip#2');
-            testRow(rows[2], '192.168.1.3', 'node1', '/path/to/resource3', 'ip#1');
         });
+
+        const table = screen.getByRole('table');
+        const rows = within(table).getAllByRole('row').slice(1);
+
+        const testRow = (row, ip, node, path, rid) => {
+            const cells = within(row).getAllByRole('cell');
+            expect(cells[0]).toHaveTextContent(ip);
+            expect(cells[1]).toHaveTextContent(node);
+            expect(cells[2]).toHaveTextContent(path);
+            expect(cells[3]).toHaveTextContent(rid);
+        };
+
+        testRow(rows[0], '192.168.1.1', 'node1', '/path/to/resource', 'ip#1');
+        testRow(rows[1], '192.168.1.2', 'node2', '/path/to/resource2', 'ip#2');
+        testRow(rows[2], '192.168.1.3', 'node1', '/path/to/resource3', 'ip#1');
     });
 
     test('filters IP details by node', async () => {
@@ -204,7 +205,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
         });
 
@@ -213,7 +220,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
         });
     });
@@ -231,7 +244,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
         });
 
@@ -240,7 +259,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
         });
     });
@@ -258,7 +283,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
         });
 
@@ -267,7 +298,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
         });
     });
@@ -292,8 +329,17 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.3')).not.toBeInTheDocument();
         });
     });
@@ -313,8 +359,17 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving network IP details', expect.any(Error));
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText(/Network Details: default \(N\/A\)/i)).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
         });
 
@@ -334,8 +389,17 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText(/Network Details: unknown \(N\/A\)/i)).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('127.0.0.1')).not.toBeInTheDocument();
         });
     });
@@ -353,7 +417,13 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText(/Network Details: default \(N\/A\)/i)).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
         });
     });
@@ -387,21 +457,22 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             const rows = screen.getAllByRole('row').slice(1);
-
-            // First row with null/undefined fields
-            const firstRowCells = within(rows[0]).getAllByRole('cell');
-            expect(firstRowCells[0]).toHaveTextContent('192.168.1.1');
-            expect(firstRowCells[1]).toHaveTextContent('N/A'); // Node
-            expect(firstRowCells[2]).toHaveTextContent('N/A'); // Path
-            expect(firstRowCells[3]).toHaveTextContent('ip#1');
-
-            // Second normal row
-            const secondRowCells = within(rows[1]).getAllByRole('cell');
-            expect(secondRowCells[0]).toHaveTextContent('192.168.1.2');
-            expect(secondRowCells[1]).toHaveTextContent('node2');
-            expect(secondRowCells[2]).toHaveTextContent('/path/to/resource2');
-            expect(secondRowCells[3]).toHaveTextContent('ip#2');
+            expect(rows).toHaveLength(2);
         });
+
+        const rows = screen.getAllByRole('row').slice(1);
+
+        const firstRowCells = within(rows[0]).getAllByRole('cell');
+        expect(firstRowCells[0]).toHaveTextContent('192.168.1.1');
+        expect(firstRowCells[1]).toHaveTextContent('N/A');
+        expect(firstRowCells[2]).toHaveTextContent('N/A');
+        expect(firstRowCells[3]).toHaveTextContent('ip#1');
+
+        const secondRowCells = within(rows[1]).getAllByRole('cell');
+        expect(secondRowCells[0]).toHaveTextContent('192.168.1.2');
+        expect(secondRowCells[1]).toHaveTextContent('node2');
+        expect(secondRowCells[2]).toHaveTextContent('/path/to/resource2');
+        expect(secondRowCells[3]).toHaveTextContent('ip#2');
     });
 
     test('calls API with correct authorization token', async () => {

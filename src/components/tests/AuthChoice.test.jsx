@@ -162,15 +162,18 @@ describe('AuthChoice Component', () => {
         renderComponent();
 
         await waitFor(() => {
-            expect(mockRecreateUserManager).toHaveBeenCalledWith({
-                issuer: 'mock-issuer',
-                client_id: 'mock-client'
-            });
             expect(oidcConfiguration).toHaveBeenCalledWith({
                 openid: {issuer: 'https://auth.example.com'},
                 methods: [],
             });
-        })
+        });
+
+        await waitFor(() => {
+            expect(mockRecreateUserManager).toHaveBeenCalledWith({
+                issuer: 'mock-issuer',
+                client_id: 'mock-client'
+            });
+        });
     });
 
     test('useEffect does not call recreateUserManager when userManager exists', () => {
@@ -224,7 +227,13 @@ describe('AuthChoice Component', () => {
 
         await waitFor(() => {
             expect(mockSigninRedirect).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
             expect(console.error).toHaveBeenCalledWith('handleAuthChoice signinRedirect:', expect.any(Error));
+        });
+
+        await waitFor(() => {
             expect(console.error.mock.calls[0][1].message).toBe('Signin failed');
         });
     });

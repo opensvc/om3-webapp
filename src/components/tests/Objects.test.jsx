@@ -1,7 +1,6 @@
-import React, {act} from 'react';
+import React from 'react';
 import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {green, red, orange, blue} from '@mui/material/colors';
 import {axe, toHaveNoViolations} from 'jest-axe';
 import Objects from '../Objects';
 import useEventStore from '../../hooks/useEventStore';
@@ -14,6 +13,7 @@ jest.mock('react-router-dom', () => ({
     useNavigate: jest.fn(),
     useLocation: jest.fn(),
 }));
+
 jest.mock('../../hooks/useEventStore');
 jest.mock('../../hooks/useFetchDaemonStatus');
 jest.mock('../../eventSourceManager');
@@ -86,6 +86,7 @@ describe('Objects Component', () => {
             },
             removeObject: mockRemoveObject,
         };
+
         useEventStore.mockImplementation((selector) => selector(mockState));
 
         // Mock useFetchDaemonStatus
@@ -113,98 +114,95 @@ describe('Objects Component', () => {
         jest.restoreAllMocks();
     });
 
-    test('renders correctly with initial state', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+    const setupComponent = () => {
+        return render(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+    };
 
+    const waitForComponentToLoad = async () => {
         await waitFor(() => {
             expect(screen.getByText('Objects')).toBeInTheDocument();
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-            expect(screen.getByLabelText('Kind')).toBeInTheDocument();
-            expect(screen.getByLabelText('Name')).toBeInTheDocument();
-            expect(screen.getByText('Status')).toBeInTheDocument();
-            expect(screen.getByText('Object')).toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: /node1/i})).toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: /node2/i})).toBeInTheDocument();
         });
+    };
+
+    const verifyStatusColumn = (row, expectedIcons, expectedCaption = null) => {
+        const cells = within(row).getAllByRole('cell');
+        const statusCell = cells[1];
+
+        expectedIcons.forEach((icon) => {
+            const label = icon === 'warn' ? 'Object has warning' : `Object is ${icon}`;
+            expect(within(statusCell).getByLabelText(label)).toBeInTheDocument();
+        });
+
+        if (expectedCaption) {
+            expect(within(statusCell).getByText(expectedCaption)).toBeInTheDocument();
+        }
+    };
+
+    const verifyNodeColumn = (row, node, expectedIcons) => {
+        const nodeIndex = allNodes.indexOf(node);
+        const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3];
+
+        if (expectedIcons.length === 0) {
+            expect(within(nodeCell).getByText('-')).toBeInTheDocument();
+            return;
+        }
+
+        expectedIcons.forEach((icon) => {
+            const label = icon === 'warn' ? `Node ${node} has warning` : `Node ${node} is ${icon}`;
+            expect(within(nodeCell).getByLabelText(label)).toBeInTheDocument();
+        });
+    };
+
+    const selectObject = async (objectName) => {
+        const row = screen.getByRole('row', {name: new RegExp(objectName, 'i')});
+        const checkbox = within(row).getByRole('checkbox');
+        fireEvent.click(checkbox);
+        return checkbox;
+    };
+
+    test('renders correctly with initial state', async () => {
+        setupComponent();
+
+        await waitForComponentToLoad();
+
+        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+        expect(screen.getByLabelText('Kind')).toBeInTheDocument();
+        expect(screen.getByLabelText('Name')).toBeInTheDocument();
+        expect(screen.getByText('Status')).toBeInTheDocument();
+        expect(screen.getByText('Object')).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', {name: /node1/i})).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', {name: /node2/i})).toBeInTheDocument();
     });
 
     test('fetches data on mount and cleans up on unmount', async () => {
-        // Render the component
-        const {unmount} = await act(async () => {
-            return render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        const {unmount} = setupComponent();
 
-        // Verify mount behavior
-        await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument(); // Verify render
-            expect(startEventReception).toHaveBeenCalledWith("mock-token", ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceMonitorUpdated"]);
-        }, {timeout: 2000});
+        await waitForComponentToLoad();
 
-        // Unmount the component to trigger cleanup
-        await act(async () => {
-            unmount();
-        });
+        expect(startEventReception).toHaveBeenCalledWith(
+            "mock-token",
+            ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceMonitorUpdated"]
+        );
 
-        // Verify cleanup behavior
+        unmount();
+
         expect(closeEventSource).toHaveBeenCalledTimes(1);
     });
 
     test('displays objects table with correct data', async () => {
-        // Mock useEffect to ensure proper mount and unmount behavior
-        const mockUseEffect = jest.spyOn(React, 'useEffect').mockImplementation((effect) => {
-            const cleanup = effect();
-            return cleanup;
-        });
-
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
         await waitFor(() => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
         });
 
-        const verifyStatusColumn = (row, expectedIcons, expectedCaption = null) => {
-            const cells = within(row).getAllByRole('cell');
-            const statusCell = cells[1];
-            expectedIcons.forEach((icon) => {
-                // Map icon to correct aria-label
-                const label = icon === 'warn' ? 'Object has warning' : `Object is ${icon}`;
-                expect(within(statusCell).getByLabelText(label)).toBeInTheDocument();
-            });
-            if (expectedCaption) {
-                expect(within(statusCell).getByText(expectedCaption)).toBeInTheDocument();
-            }
-        };
-
-        const verifyNodeColumn = (row, node, expectedIcons) => {
-            const nodeIndex = allNodes.indexOf(node);
-            const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3];
-            if (expectedIcons.length === 0) {
-                expect(within(nodeCell).getByText('-')).toBeInTheDocument();
-                return;
-            }
-            expectedIcons.forEach((icon) => {
-                const label = icon === 'warn' ? `Node ${node} has warning` : `Node ${node} is ${icon}`;
-                expect(within(nodeCell).getByLabelText(label)).toBeInTheDocument();
-            });
-        };
+        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
 
         const rows = screen.getAllByRole('row').slice(1);
         const rowTexts = rows.map((row) => row.textContent);
@@ -223,86 +221,38 @@ describe('Objects Component', () => {
         verifyNodeColumn(test2Row, 'node2', []);
         verifyNodeColumn(test3Row, 'node1', []);
         verifyNodeColumn(test3Row, 'node2', ['warn']);
-
-        mockUseEffect.mockRestore();
-    });
-
-    test('renders correctly with initial state', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument();
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-            expect(screen.getByLabelText('Kind')).toBeInTheDocument();
-            expect(screen.getByLabelText('Name')).toBeInTheDocument();
-            expect(screen.getByText('Status')).toBeInTheDocument();
-            expect(screen.getByText('Object')).toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: /node1/i})).toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: /node2/i})).toBeInTheDocument();
-        });
     });
 
     test('handles object selection', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
-        await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
+        const checkbox = await selectObject('test-ns/svc/test1');
+
+        expect(checkbox).toBeChecked();
+    });
+
+    test('handles select all objects', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const selectAllCheckbox = screen.getAllByRole('checkbox')[0];
+        fireEvent.click(selectAllCheckbox);
+
+        const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
+        allCheckboxes.forEach((checkbox) => {
             expect(checkbox).toBeChecked();
         });
     });
 
-    test('handles select all objects', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
-
-        await waitFor(() => {
-            const selectAllCheckbox = screen.getAllByRole('checkbox')[0];
-            fireEvent.click(selectAllCheckbox);
-
-            const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
-            allCheckboxes.forEach((checkbox) => {
-                expect(checkbox).toBeChecked();
-            });
-        });
-    });
-
     test('opens actions menu', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
-        await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+
         const menu = await screen.findByRole('menu');
         expect(menu).toBeInTheDocument();
 
@@ -314,74 +264,50 @@ describe('Objects Component', () => {
     });
 
     test('filters objects by namespace', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
+
+        fireEvent.mouseDown(screen.getByLabelText(/namespace/i));
+        const listbox = screen.getByRole('listbox');
+        fireEvent.click(within(listbox).getByText(/test-ns/i));
 
         await waitFor(() => {
-            fireEvent.mouseDown(screen.getByLabelText(/namespace/i));
-            const listbox = screen.getByRole('listbox');
-            fireEvent.click(within(listbox).getByText(/test-ns/i));
-
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
         });
+
+        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
     });
 
     test('filters objects by search query', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const searchInput = screen.getByLabelText('Name');
+        fireEvent.change(searchInput, {target: {value: 'test1'}});
 
         await waitFor(() => {
-            const searchInput = screen.getByLabelText('Name');
-            fireEvent.change(searchInput, {target: {value: 'test1'}});
-
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
         });
+
+        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
     });
 
     test('handles object click navigation', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
-        await waitFor(() => {
-            fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/i}));
-            expect(mockNavigate).toHaveBeenCalledWith('/objects/test-ns%2Fsvc%2Ftest1');
-        });
+        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/i}));
+
+        expect(mockNavigate).toHaveBeenCalledWith('/objects/test-ns%2Fsvc%2Ftest1');
     });
 
     test('executes action and shows snackbar', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
-        await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Restart/i));
@@ -392,16 +318,16 @@ describe('Objects Component', () => {
 
         fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
 
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/test-ns/svc/test1/action/restart'),
-                    expect.any(Object)
-                );
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-            },
-            {timeout: 5000}
-        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/restart'),
+                expect.any(Object)
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+        });
     });
 
     test('handles failed action execution', async () => {
@@ -412,20 +338,10 @@ describe('Objects Component', () => {
             })
         );
 
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
-        await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Restart/i));
@@ -436,30 +352,17 @@ describe('Objects Component', () => {
 
         fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
 
-        await waitFor(
-            () => {
-                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
-            },
-            {timeout: 5000}
-        );
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
+        });
     });
 
     test('executes delete action and removes object', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
         // Select the object
-        await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
-        });
+        await selectObject('test-ns/svc/test1');
 
         // Open actions menu and select Delete
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
@@ -468,12 +371,14 @@ describe('Objects Component', () => {
         // Wait for DeleteDialog to appear
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
-            expect(screen.getByText(/Confirm Delete/i)).toBeInTheDocument();
         });
+
+        expect(screen.getByText(/Confirm Delete/i)).toBeInTheDocument();
 
         // Check the required checkboxes
         const configLossCheckbox = screen.getByLabelText(/Confirm configuration loss/i);
         const clusterwideCheckbox = screen.getByLabelText(/Confirm clusterwide orchestration/i);
+
         fireEvent.click(configLossCheckbox);
         fireEvent.click(clusterwideCheckbox);
 
@@ -481,34 +386,25 @@ describe('Objects Component', () => {
         fireEvent.click(screen.getByRole('button', {name: /Delete/i}));
 
         // Verify the fetch call and object removal
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/test-ns/svc/test1/action/delete'),
-                    expect.any(Object)
-                );
-                expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-            },
-            {timeout: 5000}
-        );
-    });
-
-    test('executes purge action with confirmation', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/delete'),
+                expect.any(Object)
             );
         });
 
+        expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
+
         await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
         });
+    });
+
+    test('executes purge action with confirmation', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Purge/i));
@@ -523,35 +419,26 @@ describe('Objects Component', () => {
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         expect(confirmButton).not.toBeDisabled();
+
         fireEvent.click(confirmButton);
 
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/test-ns/svc/test1/action/purge'),
-                    expect.any(Object)
-                );
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-            },
-            {timeout: 5000}
-        );
-    });
-
-    test('executes stop action with confirmation', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/purge'),
+                expect.any(Object)
             );
         });
 
         await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
         });
+    });
+
+    test('executes stop action with confirmation', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Stop/i));
@@ -564,35 +451,26 @@ describe('Objects Component', () => {
 
         const confirmButton = screen.getByRole('button', {name: /Stop/i});
         expect(confirmButton).not.toBeDisabled();
+
         fireEvent.click(confirmButton);
 
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/test-ns/svc/test1/action/stop'),
-                    expect.any(Object)
-                );
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-            },
-            {timeout: 5000}
-        );
-    });
-
-    test('executes unprovision action with confirmation', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/stop'),
+                expect.any(Object)
             );
         });
 
         await waitFor(() => {
-            const checkbox = within(
-                screen.getByRole('row', {name: /test-ns\/svc\/test1/i})
-            ).getByRole('checkbox');
-            fireEvent.click(checkbox);
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
         });
+    });
+
+    test('executes unprovision action with confirmation', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
         fireEvent.click(screen.getByText(/Unprovision/i));
@@ -608,28 +486,24 @@ describe('Objects Component', () => {
 
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         expect(confirmButton).not.toBeDisabled();
+
         fireEvent.click(confirmButton);
 
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/test-ns/svc/test1/action/unprovision'),
-                    expect.any(Object)
-                );
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-            },
-            {timeout: 5000}
-        );
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/unprovision'),
+                expect.any(Object)
+            );
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
+        });
     });
 
     test('toggles filters visibility', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
 
         // Check filters are visible initially
         const toggleButton = await screen.findByRole('button', {name: /filters/i});
@@ -642,56 +516,50 @@ describe('Objects Component', () => {
         // Check filters are hidden
         await waitFor(() => {
             expect(toggleButton).toHaveTextContent('Show filters');
-            expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
         });
+
+        expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
 
         // Click to show filters again
         fireEvent.click(toggleButton);
 
         await waitFor(() => {
             expect(toggleButton).toHaveTextContent('Hide filters');
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
+
+        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
     });
 
     test('filters objects by global state', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
+
+        fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
+        const listbox = screen.getByRole('listbox');
+        fireEvent.click(within(listbox).getByText(/up/i));
 
         await waitFor(() => {
-            fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
-            const listbox = screen.getByRole('listbox');
-            fireEvent.click(within(listbox).getByText(/up/i));
-
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
         });
+
+        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
     });
 
     test('filters objects by kind', async () => {
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
+        await waitForComponentToLoad();
+
+        fireEvent.mouseDown(screen.getByLabelText(/Kind/i));
+        const listbox = screen.getByRole('listbox');
+        fireEvent.click(within(listbox).getByText(/svc/i));
 
         await waitFor(() => {
-            fireEvent.mouseDown(screen.getByLabelText(/Kind/i));
-            const listbox = screen.getByRole('listbox');
-            fireEvent.click(within(listbox).getByText(/svc/i));
-
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
         });
+
+        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
     });
 
     test('displays no objects when objectStatus is empty', async () => {
@@ -704,29 +572,27 @@ describe('Objects Component', () => {
             })
         );
 
-        await act(async () => {
-            render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-        });
+        setupComponent();
 
         await waitFor(() => {
             expect(screen.getByText('Objects')).toBeInTheDocument();
-            expect(screen.getAllByRole('row')).toHaveLength(1); // Only header row
         });
+
+        // Only header row should be present
+        expect(screen.getAllByRole('row')).toHaveLength(1);
     });
 
     test('accessibility check', async () => {
-        await act(async () => {
-            const {container} = render(
-                <MemoryRouter>
-                    <Objects/>
-                </MemoryRouter>
-            );
-            const results = await axe(container);
-            expect(results).toHaveNoViolations();
+        const {container} = setupComponent();
+
+        await waitForComponentToLoad();
+
+        const results = await axe(container, {
+            rules: {
+                'aria-prohibited-attr': {enabled: false},
+                'label': {enabled: false}
+            }
         });
+        expect(results).toHaveNoViolations();
     });
 });

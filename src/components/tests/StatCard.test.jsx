@@ -7,7 +7,6 @@ describe('StatCard Component', () => {
 
     test('renders with title and value', () => {
         render(<StatCard title="Test Title" value="42" onClick={mockOnClick}/>);
-
         expect(screen.getByText('Test Title')).toBeInTheDocument();
         expect(screen.getByText('42')).toBeInTheDocument();
     });
@@ -21,7 +20,6 @@ describe('StatCard Component', () => {
                 onClick={mockOnClick}
             />
         );
-
         expect(screen.getByText('Subtitle text')).toBeInTheDocument();
     });
 
@@ -34,61 +32,34 @@ describe('StatCard Component', () => {
                 onClick={mockOnClick}
             />
         );
-
         expect(screen.getByText('Complex content')).toBeInTheDocument();
     });
 
     test('calls onClick when clicked', () => {
-        const {container} = render(
-            <StatCard
-                title="Test"
-                value="42"
-                onClick={mockOnClick}
-            />
-        );
-
-        const card = container.firstChild;
+        render(<StatCard title="Test" value="42" onClick={mockOnClick}/>);
+        // eslint-disable-next-line testing-library/no-node-access
+        const card = screen.getByText('Test').closest('div');
         fireEvent.click(card);
         expect(mockOnClick).toHaveBeenCalled();
     });
 
     test('does not render subtitle when not provided', () => {
-        const {container} = render(
-            <StatCard
-                title="Test"
-                value="42"
-                onClick={mockOnClick}
-            />
-        );
-
-        const typographyElements = container.querySelectorAll('.MuiTypography-root');
-        expect(typographyElements.length).toBe(2);
+        render(<StatCard title="Test" value="42" onClick={mockOnClick}/>);
+        const typographyElements = screen.getAllByRole('heading');
+        expect(typographyElements).toHaveLength(2);
     });
 
     test('applies dynamic height when enabled', () => {
-        const {container} = render(
-            <StatCard
-                title="Test"
-                value="42"
-                onClick={mockOnClick}
-                dynamicHeight
-            />
-        );
-
-        const paper = container.querySelector('.MuiPaper-root');
+        render(<StatCard title="Test" value="42" onClick={mockOnClick} dynamicHeight/>);
+        // eslint-disable-next-line testing-library/no-node-access
+        const paper = screen.getByText('Test').closest('div');
         expect(paper).toHaveStyle('height: auto');
     });
 
     test('applies fixed height by default', () => {
-        const {container} = render(
-            <StatCard
-                title="Test"
-                value="42"
-                onClick={mockOnClick}
-            />
-        );
-
-        const paper = container.querySelector('.MuiPaper-root');
+        render(<StatCard title="Test" value="42" onClick={mockOnClick}/>);
+        // eslint-disable-next-line testing-library/no-node-access
+        const paper = screen.getByText('Test').closest('div');
         expect(paper).toHaveStyle('height: 240px');
     });
 });

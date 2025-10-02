@@ -1,14 +1,14 @@
 import React from 'react';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {
     AuthProvider,
-    useAuth,
-    useAuthDispatch,
     Login,
     Logout,
     SetAccessToken,
-    SetAuthInfo,
     SetAuthChoice,
+    SetAuthInfo,
+    useAuth,
+    useAuthDispatch,
 } from '../AuthProvider';
 
 // Mock updateEventSourceToken
@@ -111,9 +111,6 @@ const TestUseAuthDispatchError = () => {
     return null;
 };
 
-// Utility function to flush promises
-const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 describe('AuthProvider', () => {
     let broadcastChannelInstance;
 
@@ -121,8 +118,7 @@ describe('AuthProvider', () => {
         jest.clearAllMocks();
         localStorage.clear();
         jest.useFakeTimers();
-        const originalBroadcastChannel = global.BroadcastChannel;
-        global.BroadcastChannel = class extends originalBroadcastChannel {
+        global.BroadcastChannel = class extends global.BroadcastChannel {
             constructor() {
                 super();
                 broadcastChannelInstance = this;
@@ -263,9 +259,9 @@ describe('AuthProvider', () => {
         expect(decodeToken).toHaveBeenCalledWith('mock-token');
         expect(updateEventSourceToken).toHaveBeenCalledWith('mock-token');
         expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
-        act(() => {
-            jest.runAllTimers();
-        });
+
+        // Use jest.runAllTimers() without act wrapper
+        jest.runAllTimers();
         expect(refreshToken).toHaveBeenCalled();
         consoleLogSpy.mockRestore();
     });
@@ -389,15 +385,19 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
 
-        act(() => {
-            fireEvent.click(screen.getByTestId('setAccessToken'));
-        });
+        fireEvent.click(screen.getByTestId('setAccessToken'));
 
         expect(screen.getByTestId('accessToken').textContent).toBe('"mock-token"');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
 
+        // Advance timers and wait for promises to resolve with act
         await act(async () => {
             jest.advanceTimersByTime(5100);
+            await Promise.resolve();
+        });
+
+        // Wait for state updates to complete
+        await act(async () => {
             await Promise.resolve();
         });
 
@@ -421,9 +421,13 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
         fireEvent.click(screen.getByTestId('setAccessToken'));
+
+        // Trigger the message and wait for state updates
         await act(async () => {
             broadcastChannelInstance.onmessage({data: {type: 'tokenUpdated', data: 'new-token'}});
+            await Promise.resolve();
         });
+
         expect(consoleLogSpy).toHaveBeenCalledWith('Token updated from another tab');
         expect(screen.getByTestId('accessToken').textContent).toBe('"new-token"');
         expect(decodeToken).toHaveBeenCalledWith('new-token');
@@ -440,9 +444,13 @@ describe('AuthProvider', () => {
         );
         fireEvent.click(screen.getByTestId('login'));
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('true');
+
+        // Trigger the message and wait for state updates
         await act(async () => {
             broadcastChannelInstance.onmessage({data: {type: 'logout'}});
+            await Promise.resolve();
         });
+
         expect(consoleLogSpy).toHaveBeenCalledWith('Logout triggered from another tab');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
@@ -461,9 +469,10 @@ describe('AuthProvider', () => {
         );
         fireEvent.click(screen.getByTestId('setAccessToken'));
         localStorage.setItem('authToken', 'different-token');
-        act(() => {
-            jest.runAllTimers();
-        });
+
+        // Run timers without act wrapper
+        jest.runAllTimers();
+
         expect(consoleLogSpy).toHaveBeenCalledWith('Refresh skipped, token already updated by another tab');
         expect(decodeToken).toHaveBeenCalledWith('different-token');
         consoleLogSpy.mockRestore();

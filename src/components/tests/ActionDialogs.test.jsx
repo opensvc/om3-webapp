@@ -3,7 +3,7 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import {
     FreezeDialog, StopDialog, RestartDialog, ClearDialog, DrainDialog,
     UnprovisionDialog, PurgeDialog, DeleteDialog, SwitchDialog, GivebackDialog,
-    DeleteKeyDialog, CreateKeyDialog, UpdateKeyDialog, UpdateConfigDialog,
+    DeleteKeyDialog, CreateKeyDialog, UpdateConfigDialog,
     ManageConfigParamsDialog, SimpleConfirmDialog,
 } from '../ActionDialogs';
 
@@ -40,7 +40,8 @@ describe('ActionDialogs', () => {
                                  checked={checked} setChecked={setChecked} disabled={false}/>
             );
             // Confirm starts disabled
-            expect(screen.getByText(confirmLabel).closest('button')).toBeDisabled();
+            const buttonName = confirmLabel === 'Confirm' ? /Confirm/i : new RegExp(`Confirm ${confirmLabel.toLowerCase()}`, 'i');
+            expect(screen.getByRole('button', {name: buttonName})).toBeDisabled();
 
             // Check the box
             fireEvent.click(screen.getByRole('checkbox'));
@@ -51,10 +52,9 @@ describe('ActionDialogs', () => {
                 <DialogComponent open onClose={onClose} onConfirm={onConfirm}
                                  checked={true} setChecked={setChecked} disabled={false}/>
             );
-            const btn = screen.getByText(confirmLabel);
-            expect(btn.closest('button')).not.toBeDisabled();
+            expect(screen.getByRole('button', {name: buttonName})).not.toBeDisabled();
 
-            fireEvent.click(btn);
+            fireEvent.click(screen.getByRole('button', {name: buttonName}));
             expect(onConfirm).toHaveBeenCalled();
         });
     }
@@ -67,7 +67,6 @@ describe('ActionDialogs', () => {
     testCheckboxDialog(DrainDialog, 'Confirm Drain');
     testCheckboxDialog(SwitchDialog, 'Confirm Switch');
     testCheckboxDialog(GivebackDialog, 'Confirm Giveback');
-
 
     test('UnprovisionDialog requires all checkboxes', async () => {
         const cb = {dataLoss: false, clusterwide: false, serviceInterruption: false};

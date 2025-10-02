@@ -4,10 +4,20 @@ import {ThemeProvider, createTheme} from "@mui/material/styles";
 import {BrowserRouter} from "react-router-dom";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
-import {closeEventSource, startEventReception} from "../../eventSourceManager.jsx";
+import {
+    closeEventSource,
+    startEventReception,
+} from "../../eventSourceManager.jsx";
 
-jest.mock("../../hooks/useEventStore.js");
-jest.mock("../../eventSourceManager.jsx");
+jest.mock("../../hooks/useEventStore.js", () => ({
+    __esModule: true,
+    default: jest.fn(),
+}));
+
+jest.mock("../../eventSourceManager.jsx", () => ({
+    startEventReception: jest.fn(),
+    closeEventSource: jest.fn(),
+}));
 
 const mockLocalStorage = {
     getItem: jest.fn(),
@@ -45,12 +55,16 @@ describe("Heartbeats Component", () => {
 
         renderWithTheme(<Heartbeats/>);
 
-        expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
+        expect(
+            screen.getByRole("heading", {name: /Heartbeats/i})
+        ).toBeInTheDocument();
 
         const table = screen.getByRole("table");
         expect(table).toBeInTheDocument();
 
-        const headerRow = within(table).getByRole("row", {name: /RUNNING BEATING ID NODE PEER TYPE DESC CHANGED_AT LAST_BEATING_AT/i});
+        const headerRow = within(table).getByRole("row", {
+            name: /RUNNING BEATING ID NODE PEER TYPE DESC CHANGED_AT LAST_BEATING_AT/i,
+        });
         expect(within(headerRow).getByText("RUNNING")).toBeInTheDocument();
         expect(within(headerRow).getByText("BEATING")).toBeInTheDocument();
         expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
@@ -90,9 +104,9 @@ describe("Heartbeats Component", () => {
             },
         };
 
-        useEventStore.mockImplementation((selector) => selector({
-            heartbeatStatus: mockHeartbeatStatus
-        }));
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
 
         renderWithTheme(<Heartbeats/>);
 
@@ -134,7 +148,7 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockReturnValue({
-            heartbeatStatus: mockHeartbeatStatus
+            heartbeatStatus: mockHeartbeatStatus,
         });
 
         renderWithTheme(<Heartbeats/>);
@@ -143,7 +157,6 @@ describe("Heartbeats Component", () => {
         expect(table).toBeInTheDocument();
 
         const rows = screen.getAllByRole("row");
-
         expect(rows).toHaveLength(1);
 
         const headerRow = rows[0];
@@ -153,14 +166,14 @@ describe("Heartbeats Component", () => {
         expect(within(headerRow).getByText("NODE")).toBeInTheDocument();
     });
 
-    test("initializes with auth token", async () => {
+    test("initializes with auth token", () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
         renderWithTheme(<Heartbeats/>);
 
-        await waitFor(() => {
-            expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-            expect(startEventReception).toHaveBeenCalledWith("valid-token", ["DaemonHeartbeatUpdated"]);
-        });
+        expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
+        expect(startEventReception).toHaveBeenCalledWith("valid-token", [
+            "DaemonHeartbeatUpdated",
+        ]);
     });
 
     test("cleans up on unmount", async () => {

@@ -2,8 +2,6 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {MemoryRouter, useLocation, useNavigate} from 'react-router-dom';
 import NavBar from '../NavBar';
-import {AppBar, Toolbar, Typography, Button} from '@mui/material';
-import {FaSignOutAlt} from 'react-icons/fa';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -121,13 +119,12 @@ describe('NavBar Component', () => {
         const logoutButton = screen.getByText('Logout');
         fireEvent.click(logoutButton);
 
-        await waitFor(() => {
-            expect(mockSignoutRedirect).toHaveBeenCalled();
-            expect(mockRemoveUser).toHaveBeenCalled();
-            expect(localStorage.getItem('authToken')).toBeNull();
-            expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
-            expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
-        }, {timeout: 2000});
+        await waitFor(() => expect(mockSignoutRedirect).toHaveBeenCalled(), {timeout: 2000});
+
+        expect(mockRemoveUser).toHaveBeenCalled();
+        expect(localStorage.getItem('authToken')).toBeNull();
+        expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
 
     test('handles logout without openid auth', () => {
@@ -323,6 +320,7 @@ describe('NavBar Component', () => {
         const selectedItem = screen.getByRole('menuitem', {name: /namespaces/i});
         expect(selectedItem).toHaveClass('Mui-selected');
     });
+
     test('retries fetchNodes when token is not initially available', async () => {
         const mockFetchNodes = jest.fn();
         require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
@@ -331,7 +329,6 @@ describe('NavBar Component', () => {
             loading: false,
         });
 
-        // Initially return null for auth token, then after delay return a token
         let tokenCallCount = 0;
         require('../../context/AuthProvider.jsx').useAuth.mockImplementation(() => ({
             authChoice: 'local',
@@ -345,11 +342,10 @@ describe('NavBar Component', () => {
 
         render(
             <MemoryRouter>
-                <NavBar />
+                <NavBar/>
             </MemoryRouter>
         );
 
-        // Advance timers to trigger retry
         jest.advanceTimersByTime(1000);
 
         await waitFor(() => {
@@ -358,6 +354,7 @@ describe('NavBar Component', () => {
 
         jest.useRealTimers();
     });
+
     test('handles case when max retries are exceeded', async () => {
         require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
             authChoice: 'local',
@@ -375,11 +372,10 @@ describe('NavBar Component', () => {
 
         render(
             <MemoryRouter>
-                <NavBar />
+                <NavBar/>
             </MemoryRouter>
         );
 
-        // Advance timers beyond all retries
         jest.advanceTimersByTime(3000);
 
         await waitFor(() => {
@@ -388,6 +384,7 @@ describe('NavBar Component', () => {
 
         jest.useRealTimers();
     });
+
     test('handles fetchNodes error', async () => {
         const mockFetchNodes = jest.fn().mockRejectedValue(new Error('Network error'));
         require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
@@ -401,18 +398,21 @@ describe('NavBar Component', () => {
             authToken: 'test-token',
         });
 
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
 
         render(
             <MemoryRouter>
-                <NavBar />
+                <NavBar/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(mockFetchNodes).toHaveBeenCalledWith('test-token');
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error while calling fetchNodes:', 'Network error');
-        });
+        await waitFor(() => expect(mockFetchNodes).toHaveBeenCalledWith('test-token'));
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error while calling fetchNodes:',
+            'Network error'
+        );
 
         consoleErrorSpy.mockRestore();
     });

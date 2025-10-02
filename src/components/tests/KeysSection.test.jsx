@@ -1,8 +1,7 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
+import {render, screen, waitFor, act, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import KeysSection from '../KeysSection';
-import {URL_OBJECT} from '../../config/apiPath.js';
 
 // Mock dependencies
 jest.mock('../../hooks/useEventStore.js', () => jest.fn());
@@ -87,7 +86,7 @@ jest.mock('@mui/icons-material/ExpandMore', () => () => <span/>);
 
 // Mock localStorage
 const mockLocalStorage = {
-    getItem: jest.fn((key) => 'mock-token'),
+    getItem: jest.fn(() => 'mock-token'),
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
@@ -138,6 +137,44 @@ describe('KeysSection Component', () => {
         jest.resetAllMocks();
     });
 
+    // Helper function to find file inputs without direct DOM access
+    const findFileInput = (dialog, type = 'create') => {
+        const inputId = type === 'create' ? 'create-key-file-upload' : 'update-key-file-upload';
+
+        // Strategy 1: Use screen.getByTestId if available
+        try {
+            return screen.getByTestId(inputId);
+        } catch {
+            // Continue to other strategies
+        }
+
+        // Strategy 2: Look within dialog using Testing Library methods
+        const allInputs = within(dialog).queryAllByRole('textbox');
+        let fileInput = allInputs.find(input => input.type === 'file' || input.id === inputId);
+
+        // Strategy 3: Look for file inputs by their accept attribute
+        if (!fileInput) {
+            const fileInputs = within(dialog).queryAllByDisplayValue('');
+            fileInput = fileInputs.find(input => input.type === 'file');
+        }
+
+        // Strategy 4: Look for upload buttons and find associated input
+        if (!fileInput) {
+            const uploadButtons = within(dialog).queryAllByRole('button', {name: /upload file/i});
+            if (uploadButtons.length > 0) {
+                const labelButton = uploadButtons[0];
+                if (labelButton.htmlFor) {
+                    const label = screen.queryByLabelText(/upload file/i);
+                    if (label && label.htmlFor) {
+                        fileInput = screen.queryByLabelText(/upload file/i);
+                    }
+                }
+            }
+        }
+
+        return fileInput || null;
+    };
+
     test('displays no keys message when keys array is empty', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) {
@@ -187,16 +224,26 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(within(keysAccordionDetails).getByText('key1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(within(keysAccordionDetails).getByText('key2')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(within(keysAccordionDetails).getByText('2626 bytes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(within(keysAccordionDetails).getByText('6946 bytes')).toBeInTheDocument();
-            const node1Elements = within(keysAccordionDetails).getAllByText('node1');
-            expect(node1Elements).toHaveLength(2);
-            node1Elements.forEach((element) => {
-                expect(element).toBeInTheDocument();
-                expect(element.tagName.toLowerCase()).toBe('td');
-            });
-        }, {timeout: 5000});
+        });
+
+        const node1Elements = within(keysAccordionDetails).getAllByText('node1');
+        expect(node1Elements).toHaveLength(2);
+        node1Elements.forEach((element) => {
+            expect(element).toBeInTheDocument();
+            expect(element.tagName.toLowerCase()).toBe('td');
+        });
     });
 
     test('expands keys accordion', async () => {
@@ -263,7 +310,7 @@ describe('KeysSection Component', () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/api/object/path/root/cfg/cfg1/data/key?name=')) {
                 return new Promise(() => {
-                }); // Never resolves
+                });
             }
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
@@ -304,17 +351,26 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'), {timeout: 10000});
+        const dialog = await screen.findByRole('dialog');
 
         await waitFor(() => {
             expect(dialog).toHaveTextContent(/Create New Key/i);
         });
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        const fileInput = document.querySelector('#create-key-file-upload');
+
+        // Find file input using helper
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'create');
+            expect(fileInput).toBeInTheDocument();
+        });
+
         await act(async () => {
             await user.type(nameInput, 'newKey');
-            await user.upload(fileInput, new File(['content'], 'key.txt'));
+            if (fileInput) {
+                await user.upload(fileInput, new File(['content'], 'key.txt'));
+            }
         });
 
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
@@ -324,10 +380,17 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(createButton).toBeDisabled();
-            const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
+        });
+
+        const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
+
+        await waitFor(() => {
             expect(cancelButton).toBeDisabled();
+        });
+
+        await waitFor(() => {
             expect(fileInput).toBeDisabled();
-        }, {timeout: 5000});
+        });
     }, 20000);
 
     test('does not render when kind is neither cfg nor sec', async () => {
@@ -359,7 +422,7 @@ describe('KeysSection Component', () => {
             await user.click(deleteButton[0]);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         expect(dialog).toHaveTextContent(/Confirm Key Deletion/i);
         expect(dialog).toHaveTextContent(/key1/);
 
@@ -370,6 +433,9 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Deleting key key1…', 'info');
+        });
+
+        await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith("Key 'key1' deleted successfully");
         });
     });
@@ -393,15 +459,24 @@ describe('KeysSection Component', () => {
             await user.click(editButton[0]);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         expect(dialog).toHaveTextContent(/Update Key/i);
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        const fileInput = document.querySelector('#update-key-file-upload');
+
+        // Find file input using helper
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'update');
+            expect(fileInput).toBeInTheDocument();
+        });
+
         await act(async () => {
             await user.clear(nameInput);
             await user.type(nameInput, 'updatedKey');
-            await user.upload(fileInput, new File(['content'], 'updatedKey.txt'));
+            if (fileInput) {
+                await user.upload(fileInput, new File(['content'], 'updatedKey.txt'));
+            }
         });
 
         const updateButton = within(dialog).getByRole('button', {name: /Update/i});
@@ -411,6 +486,9 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Updating key updatedKey…', 'info');
+        });
+
+        await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith("Key 'updatedKey' updated successfully");
         });
     });
@@ -455,7 +533,7 @@ describe('KeysSection Component', () => {
             await user.click(deleteButton[0]);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         const confirmButton = within(dialog).getByRole('button', {name: /Delete/i});
         const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
 
@@ -465,6 +543,9 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(confirmButton).toBeDisabled();
+        });
+
+        await waitFor(() => {
             expect(cancelButton).toBeDisabled();
         });
     });
@@ -554,10 +635,10 @@ describe('KeysSection Component', () => {
             await user.click(deleteButton[0]);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         const confirmButton = within(dialog).getByRole('button', {name: /Delete/i});
 
-        mockLocalStorage.getItem.mockReturnValue(null); // Set after fetchKeys
+        mockLocalStorage.getItem.mockReturnValue(null);
         await act(async () => {
             await user.click(confirmButton);
         });
@@ -588,13 +669,21 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        const fileInput = document.querySelector('#create-key-file-upload');
+
+        // Find file input using helper
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'create');
+            expect(fileInput).toBeInTheDocument();
+        });
 
         await act(async () => {
             await user.type(nameInput, 'newKey');
-            await user.upload(fileInput, new File(['content'], 'key.txt'));
+            if (fileInput) {
+                await user.upload(fileInput, new File(['content'], 'key.txt'));
+            }
         });
 
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
@@ -643,18 +732,26 @@ describe('KeysSection Component', () => {
             await user.click(editButton[0]);
         });
 
-        const dialog = await waitFor(() => screen.getByRole('dialog'));
+        const dialog = await screen.findByRole('dialog');
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        const fileInput = document.querySelector('#update-key-file-upload');
+
+        // Find file input using helper
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'update');
+            expect(fileInput).toBeInTheDocument();
+        });
 
         await act(async () => {
             await user.clear(nameInput);
             await user.type(nameInput, 'updatedKey');
-            await user.upload(fileInput, new File(['content'], 'updatedKey.txt'));
+            if (fileInput) {
+                await user.upload(fileInput, new File(['content'], 'updatedKey.txt'));
+            }
         });
 
         const updateButton = within(dialog).getByRole('button', {name: /Update/i});
-        mockLocalStorage.getItem.mockReturnValue(null); // Set after fetchKeys
+        mockLocalStorage.getItem.mockReturnValue(null);
         await act(async () => {
             await user.click(updateButton);
         });

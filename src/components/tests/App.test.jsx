@@ -125,6 +125,9 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('navbar')).toBeInTheDocument();
+        }, {timeout: 2000});
+
+        await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
         }, {timeout: 2000});
     });
@@ -164,8 +167,9 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         }, {timeout: 2000});
+
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
 
     test('redirects from protected route /cluster to /auth-choice with no token', async () => {
@@ -332,8 +336,9 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         }, {timeout: 2000});
+
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
 
     test('redirects unknown routes to /', async () => {
@@ -363,29 +368,23 @@ describe('App Component', () => {
             return null;
         });
 
-        const {container} = render(
+        render(
             <MemoryRouter initialEntries={['/']}>
                 <App/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            // Verify the main container is not empty
-            expect(container).not.toBeEmptyDOMElement();
-
-            // Verify NavBar is present (key layout element)
             expect(screen.getByTestId('navbar')).toBeInTheDocument();
+        }, {timeout: 2000});
 
-            // Verify there's more than just basic HTML
-            const allElements = screen.queryAllByRole(/.*/);
-            expect(allElements.length).toBeGreaterThan(3);
-
-            // Verify text content presence
-            expect(container.textContent?.trim().length).toBeGreaterThan(0);
-
-            // Specifically verify Cluster component is rendered (default route)
+        await waitFor(() => {
             expect(screen.getByTestId('cluster')).toBeInTheDocument();
         }, {timeout: 2000});
+
+        // Verify text content presence using specific elements
+        expect(screen.getByTestId('navbar').textContent).toBe('NavBar');
+        expect(screen.getByTestId('cluster').textContent).toBe('ClusterOverview');
     });
 
     test('initializes OIDC UserManager on startup with existing token (cluster renders)', async () => {
@@ -429,15 +428,23 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for getUser to be called by the effect
         await waitFor(() => {
             expect(mockUserManager.getUser).toHaveBeenCalled();
         });
 
         await waitFor(() => {
             expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'new-token'});
+        });
+
+        await waitFor(() => {
             expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'Login', data: 'test-user'});
+        });
+
+        await waitFor(() => {
             expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'new-token');
+        });
+
+        await waitFor(() => {
             expect(mockLocalStorage.setItem).toHaveBeenCalledWith('tokenExpiration', expect.any(String));
         });
     });
@@ -462,7 +469,6 @@ describe('App Component', () => {
             expect(mockUserManager.getUser).toHaveBeenCalled();
         });
 
-        // Token should not be set
         expect(mockAuthDispatch).not.toHaveBeenCalledWith(expect.objectContaining({type: 'SetAccessToken'}));
     });
 
@@ -480,7 +486,6 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        // Wait for the listener to be registered
         await waitFor(() => {
             expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled();
         });
@@ -490,6 +495,9 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
+        });
+
+        await waitFor(() => {
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
         });
     });
@@ -517,6 +525,9 @@ describe('App Component', () => {
 
         await waitFor(() => {
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
+        });
+
+        await waitFor(() => {
             expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
         });
     });

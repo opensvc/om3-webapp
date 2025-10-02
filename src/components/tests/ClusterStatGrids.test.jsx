@@ -24,8 +24,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('5')).toBeInTheDocument();
         expect(screen.getByText('Frozen: 2 | Unfrozen: 3')).toBeInTheDocument();
 
-        const card = screen.getByText('Nodes').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Nodes'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -48,8 +47,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('ns1')).toBeInTheDocument();
         expect(screen.getByText('ns2')).toBeInTheDocument();
 
-        const card = screen.getByText('Namespaces').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Namespaces'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -76,8 +74,8 @@ describe('ClusterStatGrids', () => {
         expect(staleChipLabel).toBeInTheDocument();
 
         // Check the styles of the beating/stale chips
-        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
-        const staleChip = staleChipLabel.closest('.MuiChip-root');
+        const beatingChip = screen.getByRole('button', {name: 'Beating 4'});
+        const staleChip = screen.getByRole('button', {name: 'Stale 4'});
         expect(beatingChip).toHaveStyle('background-color: green');
         expect(staleChip).toHaveStyle('background-color: red');
 
@@ -93,10 +91,10 @@ describe('ClusterStatGrids', () => {
         expect(screen.queryByText('Warning 0')).not.toBeInTheDocument();
 
         // Check the styles of the state chips
-        const runningChip = runningChipLabel.closest('.MuiChip-root');
-        const stoppedChip = stoppedChipLabel.closest('.MuiChip-root');
-        const failedChip = failedChipLabel.closest('.MuiChip-root');
-        const unknownChip = unknownChipLabel.closest('.MuiChip-root');
+        const runningChip = screen.getByRole('button', {name: 'Running 3'});
+        const stoppedChip = screen.getByRole('button', {name: 'Stopped 2'});
+        const failedChip = screen.getByRole('button', {name: 'Failed 1'});
+        const unknownChip = screen.getByRole('button', {name: 'Unknown 2'});
         expect(runningChip).toHaveStyle('background-color: green');
         expect(stoppedChip).toHaveStyle('background-color: orange');
         expect(failedChip).toHaveStyle('background-color: red');
@@ -122,8 +120,7 @@ describe('ClusterStatGrids', () => {
         expect(mockOnClick).toHaveBeenCalledWith(null, 'unknown');
 
         // Check click on the entire card
-        const card = screen.getByText('Heartbeats').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Heartbeats'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -138,8 +135,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Pools')).toBeInTheDocument();
         expect(screen.getByText('3')).toBeInTheDocument();
 
-        const card = screen.getByText('Pools').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Pools'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -196,17 +192,16 @@ describe('ClusterStatGrids', () => {
         expect(downChipLabel).toBeInTheDocument();
 
         // Find the root Chip element
-        const upChip = upChipLabel.closest('.MuiChip-root');
-        const warnChip = warnChipLabel.closest('.MuiChip-root');
-        const downChip = downChipLabel.closest('.MuiChip-root');
+        const upChip = screen.getByRole('button', {name: 'Up 5'});
+        const warnChip = screen.getByRole('button', {name: 'Warn 2'});
+        const downChip = screen.getByRole('button', {name: 'Down 1'});
 
         // Verify styles with color values
         expect(upChip).toHaveStyle('background-color: green');
         expect(warnChip).toHaveStyle('background-color: orange');
         expect(downChip).toHaveStyle('background-color: red');
 
-        const card = screen.getByText('Objects').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Objects'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -262,7 +257,7 @@ describe('ClusterStatGrids', () => {
         expect(beatingChipLabel).toBeInTheDocument();
         expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
 
-        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
+        const beatingChip = screen.getByRole('button', {name: 'Beating 3'});
         expect(beatingChip).toHaveStyle('background-color: green');
         expect(beatingChip).toHaveAttribute('title', 'Healthy (Single Node)');
 
@@ -288,13 +283,14 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('network1 (50.0% used)')).toBeInTheDocument();
         expect(screen.getByText('network2 (91.0% used)')).toBeInTheDocument();
 
+        // eslint-disable-next-line testing-library/no-node-access
         const network1Chip = screen.getByText('network1 (50.0% used)').closest('.MuiChip-root');
+        // eslint-disable-next-line testing-library/no-node-access
         const network2Chip = screen.getByText('network2 (91.0% used)').closest('.MuiChip-root');
         expect(network1Chip).not.toHaveStyle('background-color: red');
         expect(network2Chip).toHaveStyle('background-color: red');
 
-        const card = screen.getByText('Networks').closest('div');
-        fireEvent.click(card);
+        fireEvent.click(screen.getByText('Networks'));
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -326,6 +322,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('1')).toBeInTheDocument();
         expect(screen.getByText('network1 (0% used)')).toBeInTheDocument();
 
+        // eslint-disable-next-line testing-library/no-node-access
         const networkChip = screen.getByText('network1 (0% used)').closest('.MuiChip-root');
         expect(networkChip).not.toHaveStyle('background-color: red');
     });

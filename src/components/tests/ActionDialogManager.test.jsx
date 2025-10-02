@@ -1,15 +1,7 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent} from '@testing-library/react';
 import ActionDialogManager from '../ActionDialogManager';
-import {
-    FreezeDialog,
-    StopDialog,
-    UnprovisionDialog,
-    PurgeDialog,
-    DeleteDialog,
-    SwitchDialog,
-    GivebackDialog,
-} from '../ActionDialogs';
+import {UnprovisionDialog} from '../ActionDialogs';
 
 jest.mock('@mui/material', () => ({
     Dialog: ({open, children}) => (open ? <div data-testid="mock-dialog">{children}</div> : null),
@@ -180,65 +172,56 @@ describe('ActionDialogManager', () => {
 
     test('renders without crashing when no pendingAction is provided', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={null}/>);
-        await waitFor(() => {
-            expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
-            expect(defaultProps.onClose).toHaveBeenCalled();
-        });
+        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(defaultProps.onClose).toHaveBeenCalled();
     });
 
     test('logs warning for invalid non-null pendingAction', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{}}/>);
-        await waitFor(() => {
-            expect(console.warn).toHaveBeenCalledWith('Invalid pendingAction provided:', {});
-            expect(defaultProps.onClose).toHaveBeenCalled();
-        });
+        expect(console.warn).toHaveBeenCalledWith('Invalid pendingAction provided:', {});
+        expect(defaultProps.onClose).toHaveBeenCalled();
     });
 
     test('opens FreezeDialog when pendingAction is "freeze"', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'freeze'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('freeze-dialog')).toBeInTheDocument();
-        });
+        const dialog = await screen.findByTestId('freeze-dialog');
+        expect(dialog).toBeInTheDocument();
     });
 
     test('opens SimpleConfirmDialog for unknown action in dialogConfig', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Other')).toBeInTheDocument();
-            expect(screen.getByText(/Are you sure you want to other on test-target\?/)).toBeInTheDocument();
-        });
+        expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
+        expect(screen.getByText(/Are you sure you want to other on test-target\?/)).toBeInTheDocument();
     });
 
     test('closes dialog and calls onClose when Cancel is clicked', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'freeze'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('freeze-dialog')).toBeInTheDocument();
-        });
+        const dialog = await screen.findByTestId('freeze-dialog');
+        expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByText('Cancel'));
-        await waitFor(() => {
-            expect(defaultProps.onClose).toHaveBeenCalled();
-        });
+        expect(defaultProps.onClose).toHaveBeenCalled();
     });
 
     test('updates checkbox and confirms freeze', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'freeze'}}/>);
-        await waitFor(() => screen.getByTestId('freeze-checkbox'));
-        fireEvent.click(screen.getByTestId('freeze-checkbox'));
+        const checkbox = await screen.findByTestId('freeze-checkbox');
+        fireEvent.click(checkbox);
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('freeze');
     });
 
     test('handles unprovision checkboxes properly', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision'}}/>);
-        await waitFor(() => screen.getByTestId('unprovision-dataLoss-checkbox'));
-        fireEvent.click(screen.getByTestId('unprovision-dataLoss-checkbox'));
+        const checkbox = await screen.findByTestId('unprovision-dataLoss-checkbox');
+        fireEvent.click(checkbox);
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('unprovision');
     });
 
     test('handles invalid setCheckboxes value for unprovision', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision'}}/>);
-        await waitFor(() => screen.getByTestId('unprovision-dialog'));
+        const dialog = await screen.findByTestId('unprovision-dialog');
+        expect(dialog).toBeInTheDocument();
         UnprovisionDialog.mock.calls[0][0].setCheckboxes(null);
         expect(console.error).toHaveBeenCalledWith('setCheckboxes for unprovision received invalid value:', null);
     });
@@ -246,66 +229,51 @@ describe('ActionDialogManager', () => {
     test('ignores unsupported action and calls onClose', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'invalid'}}
                                     supportedActions={['freeze']}/>);
-        await waitFor(() => {
-            expect(defaultProps.onClose).toHaveBeenCalled();
-            expect(console.warn).toHaveBeenCalledWith('Unsupported action: invalid');
-        });
+        expect(console.warn).toHaveBeenCalledWith('Unsupported action: invalid');
+        expect(defaultProps.onClose).toHaveBeenCalled();
     });
 
     test('re-initializes dialog when pendingAction changes', async () => {
         const {rerender} = render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'stop'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('stop-dialog')).toBeInTheDocument();
-        });
+        const stopDialog = await screen.findByTestId('stop-dialog');
+        expect(stopDialog).toBeInTheDocument();
 
-        // Change to another dialog
         rerender(<ActionDialogManager {...defaultProps} pendingAction={{action: 'freeze'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('freeze-dialog')).toBeInTheDocument();
-        });
+        const freezeDialog = await screen.findByTestId('freeze-dialog');
+        expect(freezeDialog).toBeInTheDocument();
     });
+
     test('handles delete dialog checkboxes correctly', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'delete'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('delete-dialog')).toBeInTheDocument();
-        });
-
+        const dialog = await screen.findByTestId('delete-dialog');
+        expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('delete-configLoss-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
-
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('delete');
     });
+
     test('handles switch dialog correctly', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'switch'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('switch-dialog')).toBeInTheDocument();
-        });
-
+        const dialog = await screen.findByTestId('switch-dialog');
+        expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('switch-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
-
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('switch');
     });
+
     test('handles giveback dialog correctly', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'giveback'}}/>);
-        await waitFor(() => {
-            expect(screen.getByTestId('giveback-dialog')).toBeInTheDocument();
-        });
-
+        const dialog = await screen.findByTestId('giveback-dialog');
+        expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('giveback-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
-
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('giveback');
     });
+
     test('handles simpleConfirm fallback dialog', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
-        await waitFor(() => {
-            expect(screen.getByText('Confirm Other')).toBeInTheDocument();
-        });
-
+        expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('other');
     });
-
 });
-

@@ -2,7 +2,6 @@ import React, {useEffect} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import useFetchDaemonStatus from '../useFetchDaemonStatus';
 import {fetchDaemonStatus} from '../../services/api';
-import {URL_NODE_EVENT} from '../../config/apiPath.js';
 
 // Mock dependencies
 jest.mock('../../services/api');
@@ -77,21 +76,22 @@ describe('useFetchDaemonStatus Hook', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('loading').textContent).toBe('false');
-            expect(screen.getByTestId('error').textContent).toBe('');
-            expect(screen.getByTestId('daemon').textContent).toBe(
-                JSON.stringify({status: 'running'})
-            );
-            expect(screen.getByTestId('nodes').textContent).toBe(
-                JSON.stringify([
-                    {nodename: 'node1', status: 'active'},
-                    {nodename: 'node2', status: 'inactive'},
-                ])
-            );
-            expect(screen.getByTestId('clusterStats').textContent).toBe(
-                JSON.stringify({nodeCount: 2})
-            );
-            expect(screen.getByTestId('clusterName').textContent).toBe('test-cluster');
         });
+
+        expect(screen.getByTestId('error').textContent).toBe('');
+        expect(screen.getByTestId('daemon').textContent).toBe(
+            JSON.stringify({status: 'running'})
+        );
+        expect(screen.getByTestId('nodes').textContent).toBe(
+            JSON.stringify([
+                {nodename: 'node1', status: 'active'},
+                {nodename: 'node2', status: 'inactive'},
+            ])
+        );
+        expect(screen.getByTestId('clusterStats').textContent).toBe(
+            JSON.stringify({nodeCount: 2})
+        );
+        expect(screen.getByTestId('clusterName').textContent).toBe('test-cluster');
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
     });
@@ -106,14 +106,15 @@ describe('useFetchDaemonStatus Hook', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('loading').textContent).toBe('false');
-            expect(screen.getByTestId('error').textContent).toBe(
-                'Failed to retrieve daemon statuses.'
-            );
-            expect(screen.getByTestId('nodes').textContent).toBe('[]');
-            expect(screen.getByTestId('daemon').textContent).toBe('{}');
-            expect(screen.getByTestId('clusterStats').textContent).toBe('{}');
-            expect(screen.getByTestId('clusterName').textContent).toBe('');
         });
+
+        expect(screen.getByTestId('error').textContent).toBe(
+            'Failed to retrieve daemon statuses.'
+        );
+        expect(screen.getByTestId('nodes').textContent).toBe('[]');
+        expect(screen.getByTestId('daemon').textContent).toBe('{}');
+        expect(screen.getByTestId('clusterStats').textContent).toBe('{}');
+        expect(screen.getByTestId('clusterName').textContent).toBe('');
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
         expect(console.error).toHaveBeenCalledWith(
@@ -134,11 +135,12 @@ describe('useFetchDaemonStatus Hook', () => {
                     {nodename: 'node2', status: 'inactive'},
                 ])
             );
-            expect(screen.getByTestId('clusterStats').textContent).toBe(
-                JSON.stringify({nodeCount: 2})
-            );
-            expect(screen.getByTestId('clusterName').textContent).toBe('test-cluster');
         });
+
+        expect(screen.getByTestId('clusterStats').textContent).toBe(
+            JSON.stringify({nodeCount: 2})
+        );
+        expect(screen.getByTestId('clusterName').textContent).toBe('test-cluster');
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
     });

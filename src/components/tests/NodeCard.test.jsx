@@ -1297,4 +1297,56 @@ describe('NodeCard Component', () => {
 
         consoleWarnSpy.mockRestore();
     }, 15000);
+
+    test('triggers individual node action (default case)', async () => {
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const nodeSection = await findNodeSection('node1', 10000);
+        const actionsButton = await within(nodeSection).findByRole('button', { name: /node1 actions/i });
+        await user.click(actionsButton);
+
+        const startItem = await screen.findByRole('menuitem', { name: /Node node1 start action/i });
+        await user.click(startItem);
+
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toHaveTextContent(/Confirm Start/i);
+        }, { timeout: 10000 });
+
+        const confirmButton = await within(screen.getByRole('dialog')).findByRole('button', { name: /Confirm/i });
+        await user.click(confirmButton);
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/action/start'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: { Authorization: 'Bearer mock-token' },
+                })
+            );
+        }, { timeout: 10000 });
+    }, 30000);
+
+    test('disables node actions button when actionInProgress is true', async () => {
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{ resources: {} }}
+                actionInProgress={true}
+                handleNodeResourcesAccordionChange={() => {}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({ avail: 'up', frozen: 'unfrozen', state: null })}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1', 10000);
+        const actionsButton = await within(nodeSection).findByRole('button', { name: /node1 actions/i });
+        expect(actionsButton).toBeDisabled();
+    }, 10000);
 });

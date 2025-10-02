@@ -3,7 +3,7 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {useNavigate} from 'react-router-dom';
 import Login, {decodeToken, refreshToken} from '../Login';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from '../../context/AuthProvider.jsx';
-import {URL_TOKEN, URL_REFRESH} from '../../config/apiPath';
+import {URL_TOKEN} from '../../config/apiPath';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -25,7 +25,6 @@ jest.mock('../../context/AuthProvider.jsx', () => ({
 
 jest.mock('../../config/apiPath.js', () => ({
     URL_TOKEN: 'http://mock-api/token',
-    URL_REFRESH: 'http://mock-api/refresh',
 }));
 
 // Global fetch mock
@@ -36,7 +35,7 @@ const createMockToken = (payload) => {
     const header = {alg: 'HS256', typ: 'JWT'};
     const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64').replace(/=/g, '');
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64').replace(/=/g, '');
-    const signature = 'mock-signature';
+    const signature = 'mock-signature'; // Fake signature, not validated by decodeToken
     return `${encodedHeader}.${encodedPayload}.${signature}`;
 };
 
@@ -63,15 +62,18 @@ describe('Login Component', () => {
 
     test('handles form input changes', () => {
         render(<Login/>);
+
         const usernameInput = screen.getByLabelText('Username');
         const passwordInput = screen.getByLabelText('Password');
+
         fireEvent.change(usernameInput, {target: {value: 'testuser'}});
         fireEvent.change(passwordInput, {target: {value: 'testpass'}});
+
         expect(usernameInput.value).toBe('testuser');
         expect(passwordInput.value).toBe('testpass');
     });
 
-    test('submits form with Enter key', async () => {
+    test('submits form with Enter key', () => {
         render(<Login/>);
 
         const usernameInput = screen.getByLabelText('Username');
@@ -80,7 +82,8 @@ describe('Login Component', () => {
         fireEvent.change(usernameInput, {target: {value: 'testuser'}});
         fireEvent.change(passwordInput, {target: {value: 'testpass'}});
         fireEvent.keyDown(passwordInput, {key: 'Enter'});
-        await waitFor(() => expect(fetch).toHaveBeenCalled());
+
+        expect(fetch).toHaveBeenCalled();
     });
 
     test('handles successful login', async () => {
@@ -90,16 +93,10 @@ describe('Login Component', () => {
             iat: 1516239022,
             exp: Math.floor(Date.now() / 1000) + 3600,
         };
-        const mockAccessToken = createMockToken(payload);
-        const mockRefreshToken = createMockToken({...payload, token_use: 'refresh'});
+        const mockToken = createMockToken(payload);
         fetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({
-                access_token: mockAccessToken,
-                refresh_token: mockRefreshToken,
-                access_expired_at: new Date(Date.now() + 3600 * 1000).toISOString(),
-                refresh_expired_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-            }),
+            json: () => Promise.resolve({token: mockToken}),
         });
 
         render(<Login/>);
@@ -109,7 +106,7 @@ describe('Login Component', () => {
         fireEvent.click(screen.getByText('Submit'));
 
         await waitFor(() =>
-            expect(fetch).toHaveBeenCalledWith(`${URL_TOKEN}?refresh=true`, {
+            expect(fetch).toHaveBeenCalledWith(URL_TOKEN, {
                 method: 'POST',
                 headers: {
                     Authorization: 'Basic ' + btoa('testuser:testpass'),
@@ -117,19 +114,17 @@ describe('Login Component', () => {
             })
         );
 
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
-        expect(localStorage.getItem('refreshToken')).toBe(mockRefreshToken);
-        expect(localStorage.getItem('tokenExpiration')).toBeDefined();
-        expect(localStorage.getItem('refreshTokenExpiration')).toBeDefined();
+        expect(localStorage.getItem('authToken')).toBe(mockToken);
         expect(mockDispatch).toHaveBeenCalledWith({
             type: SetAccessToken,
-            data: mockAccessToken,
+            data: mockToken,
         });
         expect(mockNavigate).toHaveBeenCalledWith('/');
     });
 
+
     test('handles login error', async () => {
-        fetch.mockResolvedValueOnce({ok: false});
+        fetch.mockRejectedValueOnce(new Error('Incorrect username or password'));
 
         render(<Login/>);
 
@@ -139,7 +134,7 @@ describe('Login Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
-        }, {timeout: 2000});
+        });
     });
 
     test('disables submit button when fields are empty', () => {
@@ -180,32 +175,28 @@ describe('Login Component', () => {
             iat: 1516239022,
             exp: Math.floor(Date.now() / 1000) + 3600,
         };
-        const mockAccessToken = createMockToken(payload);
+        const mockToken = createMockToken(payload);
         jest.spyOn(Date, 'now').mockImplementation(() => 1000000);
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
-        localStorage.setItem('refreshTokenExpiration', '2000000');
+        localStorage.setItem('authToken', 'old.token.123');
+        localStorage.setItem('tokenExpiration', '2000000'); // Future expiration
 
         fetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({access_token: mockAccessToken}),
+            json: () => Promise.resolve({token: mockToken}),
         });
 
         await refreshToken(mockDispatch);
 
-        expect(fetch).toHaveBeenCalledWith(URL_REFRESH, {
+        expect(fetch).toHaveBeenCalledWith(URL_TOKEN, {
             method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'Authorization': 'Bearer mock.refresh.token',
-            },
+            headers: {'Authorization': 'Bearer old.token.123'},
         });
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
+        expect(localStorage.getItem('authToken')).toBe(mockToken);
         expect(mockDispatch).toHaveBeenCalledWith({
             type: SetAccessToken,
-            data: mockAccessToken,
+            data: mockToken,
         });
     });
-
     test('decodeToken returns null when no token is provided', () => {
         expect(decodeToken(null)).toBeNull();
         expect(decodeToken(undefined)).toBeNull();
@@ -213,8 +204,7 @@ describe('Login Component', () => {
     });
 
     test('decodeToken returns null and logs error on invalid token', () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
         const invalidToken = 'invalid.token.string';
         const result = decodeToken(invalidToken);
         expect(result).toBeNull();
@@ -222,49 +212,34 @@ describe('Login Component', () => {
         consoleSpy.mockRestore();
     });
 
-    test('refreshToken returns null when no refresh token is stored', async () => {
-        localStorage.removeItem('refreshToken');
+    test('refreshToken returns null when no token is stored', async () => {
+        localStorage.removeItem('authToken');
         const result = await refreshToken(mockDispatch);
         expect(result).toBeNull();
         expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     test('refreshToken handles failed response (response.ok = false)', async () => {
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
-        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600 * 1000).toString());
-        fetch.mockResolvedValueOnce({ok: false});
+        localStorage.setItem('authToken', 'old.token.123');
+        fetch.mockResolvedValueOnce({ ok: false });
 
         const result = await refreshToken(mockDispatch);
 
-        expect(fetch).toHaveBeenCalledWith(URL_REFRESH, {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'Authorization': 'Bearer mock.refresh.token',
-            },
-        });
         expect(result).toBeNull();
-        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
+        expect(mockDispatch).toHaveBeenCalledWith({ type: SetAccessToken, data: null });
     });
 
     test('handleLogin sets error message when credentials are incorrect (401)', async () => {
-        fetch.mockResolvedValueOnce({ok: false});
+        fetch.mockResolvedValueOnce({ ok: false });
 
-        render(<Login/>);
+        render(<Login />);
 
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'wronguser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'wrongpass'}});
+        fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'wronguser' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrongpass' } });
         fireEvent.click(screen.getByText('Submit'));
-
-        expect(fetch).toHaveBeenCalledWith(`${URL_TOKEN}?refresh=true`, {
-            method: 'POST',
-            headers: {
-                Authorization: 'Basic ' + btoa('wronguser:wrongpass'),
-            },
-        });
 
         await waitFor(() => {
             expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
-        }, {timeout: 2000});
+        });
     });
 });

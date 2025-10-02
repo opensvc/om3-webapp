@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import ActionDialogManager from '../ActionDialogManager';
-import {UnprovisionDialog} from '../ActionDialogs';
+import {UnprovisionDialog, PurgeDialog, DeleteDialog} from '../ActionDialogs';
 
 jest.mock('@mui/material', () => ({
     Dialog: ({open, children}) => (open ? <div data-testid="mock-dialog">{children}</div> : null),
@@ -275,5 +275,112 @@ describe('ActionDialogManager', () => {
         expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('other');
+    });
+
+    test('handles purge dialog correctly', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'purge'}}/>);
+        const dialog = await screen.findByTestId('purge-dialog');
+        expect(dialog).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('purge-dataLoss-checkbox'));
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('purge');
+    });
+
+    test('covers setCheckboxes branches for unprovision', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision'}}/>);
+        await screen.findByTestId('unprovision-dialog');
+        const mockProps = UnprovisionDialog.mock.calls[UnprovisionDialog.mock.calls.length - 1][0];
+        const setCheckboxes = mockProps.setCheckboxes;
+
+        // Function branch (with extra key for reduce false branch)
+        setCheckboxes(prev => ({...prev, dataLoss: true, extra: true}));
+
+        // Object with invalid key (reduce false branch)
+        setCheckboxes({serviceInterruption: true, invalidKey: false});
+
+        // Invalid value (error branch)
+        setCheckboxes(42);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for unprovision received invalid value:', 42);
+    });
+
+    test('covers setCheckboxes branches for purge', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'purge'}}/>);
+        await screen.findByTestId('purge-dialog');
+        const mockProps = PurgeDialog.mock.calls[PurgeDialog.mock.calls.length - 1][0];
+        const setCheckboxes = mockProps.setCheckboxes;
+
+        // Function branch (with extra key for reduce false branch)
+        setCheckboxes(prev => ({...prev, dataLoss: true, extra: true}));
+
+        // Object with invalid key (reduce false branch)
+        setCheckboxes({configLoss: true, invalidKey: false});
+
+        // Invalid value (error branch)
+        setCheckboxes(42);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for purge received invalid value:', 42);
+    });
+
+    test('covers setCheckboxes branches for delete', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'delete'}}/>);
+        await screen.findByTestId('delete-dialog');
+        const mockProps = DeleteDialog.mock.calls[DeleteDialog.mock.calls.length - 1][0];
+        const setCheckboxes = mockProps.setCheckboxes;
+
+        // Function branch (with extra key for reduce false branch)
+        setCheckboxes(prev => ({...prev, configLoss: true, extra: true}));
+
+        // Object with invalid key (reduce false branch)
+        setCheckboxes({clusterwide: true, invalidKey: false});
+
+        // Invalid value (error branch)
+        setCheckboxes(42);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for delete received invalid value:', 42);
+    });
+
+
+    test('does not log warnings in production environment', () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+
+        // Invalid pendingAction
+        render(<ActionDialogManager {...defaultProps} pendingAction={{}}/>);
+        expect(console.warn).not.toHaveBeenCalled();
+
+        // Unsupported action
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'invalid'}} supportedActions={[]}/>);
+        expect(console.warn).not.toHaveBeenCalled();
+
+        process.env.NODE_ENV = originalEnv;
+    });
+
+    test('covers false branches for if(onClose) in dialogs without onClose prop', async () => {
+        const propsWithoutOnClose = {...defaultProps, onClose: undefined};
+
+        // Helper function to trigger onClose and onConfirm for a given action
+        const triggerActions = async (action, checkboxTestId, dialogTestId) => {
+            // Render for onClose (Cancel)
+            let {unmount} = render(<ActionDialogManager {...propsWithoutOnClose} pendingAction={{action}}/>);
+            await screen.findByTestId(dialogTestId);
+            fireEvent.click(screen.getByText('Cancel')); // Hits false branch in onClose closure
+            unmount();
+
+            // Render for onConfirm (Confirm, after checking checkbox if needed)
+            ({unmount} = render(<ActionDialogManager {...propsWithoutOnClose} pendingAction={{action}}/>));
+            await screen.findByTestId(dialogTestId);
+            if (checkboxTestId) {
+                fireEvent.click(screen.getByTestId(checkboxTestId)); // Enable confirm
+            }
+            fireEvent.click(screen.getByText('Confirm')); // Hits false branch in onConfirm closure
+            unmount();
+        };
+
+        // Trigger for listed dialogs
+        await triggerActions('stop', 'stop-checkbox', 'stop-dialog');
+        await triggerActions('unprovision', 'unprovision-dataLoss-checkbox', 'unprovision-dialog');
+        await triggerActions('purge', 'purge-dataLoss-checkbox', 'purge-dialog');
+        await triggerActions('delete', 'delete-configLoss-checkbox', 'delete-dialog');
+        await triggerActions('switch', 'switch-checkbox', 'switch-dialog');
+        await triggerActions('giveback', 'giveback-checkbox', 'giveback-dialog');
+        await triggerActions('other', null, 'mock-dialog'); // simpleConfirm, no checkbox
     });
 });

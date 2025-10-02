@@ -94,20 +94,47 @@ describe('Pools Component', () => {
         consoleErrorSpy.mockRestore();
     });
 
-    test('displays N/A for usage when size is zero', async () => {
-        const poolsWithZeroSize = [
-            {name: 'pool3', type: 'zfs', volume_count: 2, used: 10, size: 0, head: 'node3'},
+    test('displays N/A for usage when used is negative', async () => {
+        const poolsWithNegativeUsed = [
+            {name: 'pool4', type: 'zfs', volume_count: 2, used: -10, size: 100, head: 'node4'},
         ];
-        axios.get.mockResolvedValueOnce({data: {items: poolsWithZeroSize}});
+        axios.get.mockResolvedValueOnce({data: {items: poolsWithNegativeUsed}});
 
         render(<Pools/>);
 
         await waitFor(() => {
-            expect(screen.getByText('pool3')).toBeInTheDocument();
+            expect(screen.getByText('pool4')).toBeInTheDocument();
         });
 
-        const naElement = screen.getByText((content) => content.includes('N/A'));
-        expect(naElement).toBeInTheDocument();
+        // Use a more flexible matcher for N/A
+        await waitFor(() => {
+            expect(screen.getByText((content, element) => content.includes('N/A') && element.tagName === 'TD')).toBeInTheDocument();
+        });
+    });
+
+    test('handles pools with missing properties', async () => {
+        const poolsWithMissingProps = [
+            {name: null, type: undefined, volume_count: null, used: undefined, size: null, head: undefined},
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: poolsWithMissingProps}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            // Use getAllByText to find all N/A instances
+            const naElements = screen.getAllByText((content, element) => content.includes('N/A') && element.tagName === 'TD');
+            expect(naElements.length).toBe(5); // Expect N/A for name, type, volume_count, usage, head
+        });
+    });
+
+    test('handles API response with null items', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: null}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('No pools available.')).toBeInTheDocument();
+        });
     });
 
     test('calls API with correct authorization token', async () => {

@@ -121,4 +121,37 @@ describe('Pools Component', () => {
             });
         });
     });
+
+    test('displays "No pools available." when API returns an empty list', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: []}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('No pools available.')).toBeInTheDocument();
+        });
+    });
+
+    test('displays error and allows retry on failure', async () => {
+        // First call fails
+        axios.get.mockRejectedValueOnce(new Error('API Error'));
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
+        });
+
+        // Second call succeeds after retry
+        axios.get.mockResolvedValueOnce({data: {items: mockPools}});
+
+        const retryButton = screen.getByRole('button', {name: /retry/i});
+        retryButton.click();
+
+        await waitFor(() => {
+            expect(screen.getByText('pool1')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('pool2')).toBeInTheDocument();
+    });
 });

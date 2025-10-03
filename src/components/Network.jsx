@@ -13,11 +13,15 @@ import {
     LinearProgress,
     Tooltip
 } from "@mui/material";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_NETWORK} from "../config/apiPath.js";
 
 const Network = () => {
     const [networks, setNetworks] = useState([]);
+    const [sortColumn, setSortColumn] = useState("name");
+    const [sortDirection, setSortDirection] = useState("asc");
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -29,12 +33,7 @@ const Network = () => {
                         Authorization: `Bearer ${token}`
                     }
                 });
-
-                // Sort networks alphabetically by name
-                const sortedNetworks = (res.data.items || []).sort((a, b) =>
-                    a.name.localeCompare(b.name)
-                );
-                setNetworks(sortedNetworks);
+                setNetworks(res.data.items || []);
             } catch (err) {
                 console.error("Error retrieving networks", err);
             }
@@ -42,6 +41,33 @@ const Network = () => {
 
         fetchNetworks();
     }, []);
+
+    const sortedNetworks = React.useMemo(() => {
+        return [...networks].sort((a, b) => {
+            let diff = 0;
+            if (sortColumn === "name") {
+                diff = a.name.localeCompare(b.name);
+            } else if (sortColumn === "type") {
+                diff = a.type.localeCompare(b.type);
+            } else if (sortColumn === "network") {
+                diff = a.network.localeCompare(b.network);
+            } else if (sortColumn === "usage") {
+                const usedPercentageA = a.size ? (a.used / a.size) * 100 : 0;
+                const usedPercentageB = b.size ? (b.used / b.size) * 100 : 0;
+                diff = usedPercentageA - usedPercentageB;
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [networks, sortColumn, sortDirection]);
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
+    };
 
     return (
         <Box sx={{p: 3, maxWidth: "1400px", mx: "auto"}}>
@@ -52,14 +78,38 @@ const Network = () => {
                 <Table sx={{minWidth: 700}}>
                     <TableHead>
                         <TableRow>
-                            <TableCell><strong>Name</strong></TableCell>
-                            <TableCell><strong>Type</strong></TableCell>
-                            <TableCell align="center"><strong>Network</strong></TableCell>
-                            <TableCell align="center"><strong>Usage</strong></TableCell>
+                            <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
+                                <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <strong>Name</strong>
+                                    {sortColumn === "name" &&
+                                        (sortDirection === "asc" ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>)}
+                                </Box>
+                            </TableCell>
+                            <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
+                                <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <strong>Type</strong>
+                                    {sortColumn === "type" &&
+                                        (sortDirection === "asc" ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>)}
+                                </Box>
+                            </TableCell>
+                            <TableCell align="center" onClick={() => handleSort("network")} sx={{cursor: "pointer"}}>
+                                <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                    <strong>Network</strong>
+                                    {sortColumn === "network" &&
+                                        (sortDirection === "asc" ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>)}
+                                </Box>
+                            </TableCell>
+                            <TableCell align="center" onClick={() => handleSort("usage")} sx={{cursor: "pointer"}}>
+                                <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                    <strong>Usage</strong>
+                                    {sortColumn === "usage" &&
+                                        (sortDirection === "asc" ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>)}
+                                </Box>
+                            </TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {networks.map((network) => {
+                        {sortedNetworks.map((network) => {
                             const usedPercentage = network.size
                                 ? ((network.used / network.size) * 100).toFixed(1)
                                 : "N/A";
@@ -102,7 +152,7 @@ const Network = () => {
                                 </TableRow>
                             );
                         })}
-                        {networks.length === 0 && (
+                        {sortedNetworks.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={4} align="center">
                                     No networks available.

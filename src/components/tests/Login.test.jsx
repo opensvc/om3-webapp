@@ -63,13 +63,10 @@ describe('Login Component', () => {
 
     test('handles form input changes', () => {
         render(<Login/>);
-
         const usernameInput = screen.getByLabelText('Username');
         const passwordInput = screen.getByLabelText('Password');
-
         fireEvent.change(usernameInput, {target: {value: 'testuser'}});
         fireEvent.change(passwordInput, {target: {value: 'testpass'}});
-
         expect(usernameInput.value).toBe('testuser');
         expect(passwordInput.value).toBe('testpass');
     });

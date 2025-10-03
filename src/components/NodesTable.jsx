@@ -20,6 +20,8 @@ import {
     ListItemText,
     CircularProgress,
 } from "@mui/material";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource, startEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
@@ -44,6 +46,8 @@ const NodesTable = () => {
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
+    const [sortColumn, setSortColumn] = useState("name");
+    const [sortDirection, setSortDirection] = useState("asc");
     const actionsMenuAnchorRef = useRef(null);
     const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
 
@@ -212,6 +216,30 @@ const NodesTable = () => {
         });
     });
 
+    const sortedNodes = React.useMemo(() => {
+        return [...Object.keys(nodeStatus)].sort((a, b) => {
+            let diff = 0;
+            if (sortColumn === "name") {
+                diff = a.localeCompare(b);
+            } else if (sortColumn === "state") {
+                const stateA = nodeMonitor[a]?.state || "idle";
+                const stateB = nodeMonitor[b]?.state || "idle";
+                diff = stateA.localeCompare(stateB);
+            } else if (sortColumn === "score") {
+                diff = (nodeStats[a]?.score || 0) - (nodeStats[b]?.score || 0);
+            } else if (sortColumn === "load_15m") {
+                diff = (nodeStats[a]?.load_15m || 0) - (nodeStats[b]?.load_15m || 0);
+            } else if (sortColumn === "mem_avail") {
+                diff = (nodeStats[a]?.mem_avail || 0) - (nodeStats[b]?.mem_avail || 0);
+            } else if (sortColumn === "swap_avail") {
+                diff = (nodeStats[a]?.swap_avail || 0) - (nodeStats[b]?.swap_avail || 0);
+            } else if (sortColumn === "version") {
+                diff = (nodeStatus[a]?.agent || '').localeCompare(nodeStatus[b]?.agent || '');
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
+
     // Menu props configuration
     const menuProps = {
         anchorOrigin: {
@@ -234,6 +262,15 @@ const NodesTable = () => {
                 },
             }
             : {},
+    };
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
     };
 
     return (
@@ -320,18 +357,67 @@ const NodesTable = () => {
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell><strong>Name</strong></TableCell>
-                                    <TableCell><strong>State</strong></TableCell>
-                                    <TableCell><strong>Score</strong></TableCell>
-                                    <TableCell><strong>Load (15m)</strong></TableCell>
-                                    <TableCell><strong>Mem Avail</strong></TableCell>
-                                    <TableCell><strong>Swap Avail</strong></TableCell>
-                                    <TableCell><strong>Version</strong></TableCell>
+                                    <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Name</strong>
+                                            {sortColumn === "name" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("state")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>State</strong>
+                                            {sortColumn === "state" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("score")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Score</strong>
+                                            {sortColumn === "score" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("load_15m")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Load (15m)</strong>
+                                            {sortColumn === "load_15m" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("mem_avail")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Mem Avail</strong>
+                                            {sortColumn === "mem_avail" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("swap_avail")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Swap Avail</strong>
+                                            {sortColumn === "swap_avail" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("version")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Version</strong>
+                                            {sortColumn === "version" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
                                     <TableCell><strong>Actions</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {Object.keys(nodeStatus).map((nodename, index) => (
+                                {sortedNodes.map((nodename, index) => (
                                     <NodeRow
                                         key={index}
                                         nodename={nodename}

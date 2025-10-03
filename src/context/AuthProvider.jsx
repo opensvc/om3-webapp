@@ -23,6 +23,8 @@ const authReducer = (state, action) => {
         case Logout:
             localStorage.removeItem('authToken');
             localStorage.removeItem('tokenExpiration');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('refreshTokenExpiration');
             return {...state, user: null, isAuthenticated: false, accessToken: null};
         case SetAccessToken:
             if (action.data) {
@@ -32,6 +34,8 @@ const authReducer = (state, action) => {
             } else {
                 localStorage.removeItem('authToken');
                 localStorage.removeItem('tokenExpiration');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('refreshTokenExpiration');
             }
             return {...state, accessToken: action.data, isAuthenticated: !!action.data};
         case SetAuthInfo:

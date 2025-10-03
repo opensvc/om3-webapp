@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useMemo} from "react";
 import {
     Box,
     Table,
@@ -11,6 +11,8 @@ import {
     Autocomplete,
     TextField,
 } from "@mui/material";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../hooks/useEventStore.js";
@@ -39,6 +41,8 @@ const Namespaces = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
     const location = useLocation();
+    const [sortColumn, setSortColumn] = useState("namespace");
+    const [sortDirection, setSortDirection] = useState("asc");
 
     // Read namespace parameter from URL
     const queryParams = new URLSearchParams(location.search);
@@ -70,31 +74,66 @@ const Namespaces = () => {
     );
 
     // Get all unique namespaces
-    const namespaces = Array.from(
+    const namespaces = useMemo(() => Array.from(
         new Set(allObjectNames.map(extractNamespace))
-    ).sort();
+    ).sort(), [allObjectNames]);
 
-    const statusByNamespace = {};
+    // Memoize statusByNamespace to prevent recreation on every render
+    const statusByNamespace = useMemo(() => {
+        const statusMap = {};
+        allObjectNames.forEach((name) => {
+            const ns = extractNamespace(name);
+            const status = objectStatus[name]?.avail || "n/a";
 
-    allObjectNames.forEach((name) => {
-        const ns = extractNamespace(name);
-        const status = objectStatus[name]?.avail || "n/a";
+            if (!statusMap[ns]) {
+                statusMap[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
+            }
 
-        if (!statusByNamespace[ns]) {
-            statusByNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
-        }
+            if (statusMap[ns][status] !== undefined) {
+                statusMap[ns][status]++;
+            } else {
+                statusMap[ns]["n/a"]++;
+            }
+        });
+        return statusMap;
+    }, [allObjectNames, objectStatus]);
 
-        if (statusByNamespace[ns][status] !== undefined) {
-            statusByNamespace[ns][status]++;
+    // Filter and sort namespaces
+    const filteredNamespaces = useMemo(() => {
+        const filtered = Object.entries(statusByNamespace).filter(
+            ([namespace]) => selectedNamespace === "all" || namespace === selectedNamespace
+        );
+        return filtered.sort((a, b) => {
+            const [namespaceA, countsA] = a;
+            const [namespaceB, countsB] = b;
+            let diff = 0;
+            if (sortColumn === "namespace") {
+                diff = namespaceA.localeCompare(namespaceB);
+            } else if (sortColumn === "up") {
+                diff = countsA.up - countsB.up;
+            } else if (sortColumn === "down") {
+                diff = countsA.down - countsB.down;
+            } else if (sortColumn === "warn") {
+                diff = countsA.warn - countsB.warn;
+            } else if (sortColumn === "n/a") {
+                diff = countsA["n/a"] - countsB["n/a"];
+            } else if (sortColumn === "total") {
+                const totalA = countsA.up + countsA.down + countsA.warn + countsA["n/a"];
+                const totalB = countsB.up + countsB.down + countsB.warn + countsB["n/a"];
+                diff = totalA - totalB;
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [statusByNamespace, selectedNamespace, sortColumn, sortDirection]);
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
         } else {
-            statusByNamespace[ns]["n/a"]++;
+            setSortColumn(column);
+            setSortDirection("asc");
         }
-    });
-
-    // Filter namespaces based on selected namespace
-    const filteredNamespaces = Object.entries(statusByNamespace).filter(
-        ([namespace]) => selectedNamespace === "all" || namespace === selectedNamespace
-    );
+    };
 
     return (
         <Box
@@ -147,12 +186,54 @@ const Namespaces = () => {
                     <Table>
                         <TableHead>
                             <TableRow>
-                                <TableCell><strong>Namespace</strong></TableCell>
-                                <TableCell align="center"><strong>Up</strong></TableCell>
-                                <TableCell align="center"><strong>Down</strong></TableCell>
-                                <TableCell align="center"><strong>Warn</strong></TableCell>
-                                <TableCell align="center"><strong>N/A</strong></TableCell>
-                                <TableCell align="center"><strong>Total</strong></TableCell>
+                                <TableCell onClick={() => handleSort("namespace")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Namespace</strong>
+                                        {sortColumn === "namespace" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("up")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Up</strong>
+                                        {sortColumn === "up" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("down")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Down</strong>
+                                        {sortColumn === "down" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("warn")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Warn</strong>
+                                        {sortColumn === "warn" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("n/a")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>N/A</strong>
+                                        {sortColumn === "n/a" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("total")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Total</strong>
+                                        {sortColumn === "total" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>

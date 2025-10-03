@@ -13,6 +13,8 @@ import {
     Button,
     Alert
 } from "@mui/material";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_POOL} from "../config/apiPath.js";
 
@@ -20,6 +22,8 @@ const Pools = () => {
     const [pools, setPools] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [sortColumn, setSortColumn] = useState("name");
+    const [sortDirection, setSortDirection] = useState("asc");
 
     useEffect(() => {
         let isMounted = true;
@@ -58,8 +62,24 @@ const Pools = () => {
 
     // Memoize sorted pools to optimize performance
     const sortedPools = useMemo(() => {
-        return [...pools].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    }, [pools]);
+        return [...pools].sort((a, b) => {
+            let diff = 0;
+            if (sortColumn === "name") {
+                diff = (a.name || '').localeCompare(b.name || '');
+            } else if (sortColumn === "type") {
+                diff = (a.type || '').localeCompare(b.type || '');
+            } else if (sortColumn === "volume_count") {
+                diff = (a.volume_count ?? 0) - (b.volume_count ?? 0);
+            } else if (sortColumn === "usage") {
+                const usedPercentageA = a.size && a.used >= 0 ? (a.used / a.size) * 100 : 0;
+                const usedPercentageB = b.size && b.used >= 0 ? (b.used / b.size) * 100 : 0;
+                diff = usedPercentageA - usedPercentageB;
+            } else if (sortColumn === "head") {
+                diff = (a.head || '').localeCompare(b.head || '');
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [pools, sortColumn, sortDirection]);
 
     const handleRetry = () => {
         setLoading(true);
@@ -84,6 +104,15 @@ const Pools = () => {
             }
         };
         fetchPools();
+    };
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
     };
 
     return (
@@ -113,11 +142,47 @@ const Pools = () => {
                     <Table sx={{minWidth: 700}} aria-label="pools table">
                         <TableHead>
                             <TableRow>
-                                <TableCell scope="col">Name</TableCell>
-                                <TableCell scope="col">Type</TableCell>
-                                <TableCell scope="col" align="center">Volume Count</TableCell>
-                                <TableCell scope="col" align="center">Usage</TableCell>
-                                <TableCell scope="col">Head</TableCell>
+                                <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Name</strong>
+                                        {sortColumn === "name" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Type</strong>
+                                        {sortColumn === "type" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("volume_count")}
+                                           sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Volume Count</strong>
+                                        {sortColumn === "volume_count" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="center" onClick={() => handleSort("usage")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                        <strong>Usage</strong>
+                                        {sortColumn === "usage" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
+                                <TableCell onClick={() => handleSort("head")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Head</strong>
+                                        {sortColumn === "head" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>

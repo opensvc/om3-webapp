@@ -27,21 +27,10 @@ import {
     IconButton,
     ClickAwayListener,
 } from "@mui/material";
-import {
-    RestartAlt,
-    AcUnit,
-    LockOpen,
-    Delete,
-    Settings,
-    Block,
-    CleaningServices,
-    SwapHoriz,
-    Undo,
-    Cancel,
-    Stop,
-    PlayArrow,
-} from "@mui/icons-material";
+import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -267,7 +256,7 @@ const Objects = () => {
 
     // Parse query parameters
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = ["all", "up", "down", "warn", "n/a", "unprovisioned"];
+    const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
@@ -297,6 +286,8 @@ const Objects = () => {
     const [pendingAction, setPendingAction] = useState(null);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [showFilters, setShowFilters] = useState(true);
+    const [sortColumn, setSortColumn] = useState("object");
+    const [sortDirection, setSortDirection] = useState("asc");
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
@@ -390,6 +381,25 @@ const Objects = () => {
         [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, getObjectStatus, objects]
     );
 
+    const sortedObjectNames = useMemo(() => {
+        const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
+        return [...filteredObjectNames].sort((a, b) => {
+            let diff = 0;
+            if (sortColumn === "object") {
+                diff = a.localeCompare(b);
+            } else if (sortColumn === "status") {
+                const statusA = getObjectStatus(a, objects).avail || "n/a";
+                const statusB = getObjectStatus(b, objects).avail || "n/a";
+                diff = statusOrder[statusA] - statusOrder[statusB];
+            } else if (allNodes.includes(sortColumn)) {
+                const statusA = getNodeState(a, sortColumn).avail || "n/a";
+                const statusB = getNodeState(b, sortColumn).avail || "n/a";
+                diff = statusOrder[statusA] - statusOrder[statusB];
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
+
     // Update URL query parameters with debounce (state to URL)
     const debouncedUpdateQuery = useMemo(
         () =>
@@ -425,27 +435,29 @@ const Objects = () => {
         setSelectedNamespace(newNamespace);
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
-    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery]);
+    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
 
     // Cleanup on unmount
-    useEffect(() => () => {
-        isMounted.current = false;
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
     }, []);
 
     // Event subscription
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        let subscription;
         if (token) {
-            subscription = startEventReception(token, [
+            // Appeler la fonction sans utiliser sa valeur de retour
+            startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
         }
+
         return () => {
-            if (subscription && typeof subscription === "function") subscription();
             closeEventSource();
         };
     }, []);
@@ -496,7 +508,7 @@ const Objects = () => {
             let successCount = 0;
             let errorCount = 0;
 
-            const objectsToProcess = pendingAction.node ? [pendingAction.node] : selectedObjects;
+            const objectsToProcess = pendingAction?.node ? [pendingAction.node] : selectedObjects;
 
             const promises = objectsToProcess.map(async (objectName) => {
                 const rawObj = objectStatus[objectName];
@@ -518,7 +530,13 @@ const Objects = () => {
                         method: "POST",
                         headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                     });
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    if (!response.ok) {
+                        // Create error without throwing it immediately
+                        const error = new Error(`HTTP error! status: ${response.status}`);
+                        console.error(`Failed to execute ${action} on ${objectName}:`, error);
+                        errorCount++;
+                        return;
+                    }
                     successCount++;
                     if (action === "delete") removeObject(objectName);
                 } catch (error) {
@@ -550,6 +568,18 @@ const Objects = () => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
+    );
+
+    const handleSort = useCallback(
+        (column) => {
+            if (sortColumn === column) {
+                setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+            } else {
+                setSortColumn(column);
+                setSortDirection("asc");
+            }
+        },
+        [sortColumn, sortDirection]
     );
 
     const popperProps = useCallback(
@@ -719,16 +749,36 @@ const Objects = () => {
                                         aria-label="Select all objects"
                                     />
                                 </TableCell>
-                                <TableCell>
-                                    <strong>Status</strong>
+                                <TableCell onClick={() => handleSort("status")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Status</strong>
+                                        {sortColumn === "status" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
                                 </TableCell>
-                                <TableCell>
-                                    <strong>Object</strong>
+                                <TableCell onClick={() => handleSort("object")} sx={{cursor: "pointer"}}>
+                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                        <strong>Object</strong>
+                                        {sortColumn === "object" &&
+                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                <KeyboardArrowDownIcon/>)}
+                                    </Box>
                                 </TableCell>
                                 {isWideScreen &&
                                     allNodes.map((node) => (
-                                        <TableCell key={node} align="center">
-                                            <strong>{node}</strong>
+                                        <TableCell
+                                            key={node}
+                                            align="center"
+                                            onClick={() => handleSort(node)}
+                                            sx={{cursor: "pointer"}}
+                                        >
+                                            <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                                <strong>{node}</strong>
+                                                {sortColumn === node &&
+                                                    (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                        <KeyboardArrowDownIcon/>)}
+                                            </Box>
                                         </TableCell>
                                     ))}
                                 <TableCell>
@@ -737,7 +787,7 @@ const Objects = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredObjectNames.map((objectName) => (
+                            {sortedObjectNames.map((objectName) => (
                                 <TableRowComponent
                                     key={objectName}
                                     objectName={objectName}

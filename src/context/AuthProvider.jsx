@@ -1,4 +1,4 @@
-import React, {createContext, useReducer, useContext, useEffect, useRef, useCallback} from 'react';
+import React, {createContext, useCallback, useContext, useEffect, useReducer, useRef} from 'react';
 import {decodeToken, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
 
@@ -23,6 +23,8 @@ const authReducer = (state, action) => {
         case Logout:
             localStorage.removeItem('authToken');
             localStorage.removeItem('tokenExpiration');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('refreshTokenExpiration');
             return {...state, user: null, isAuthenticated: false, accessToken: null};
         case SetAccessToken:
             if (action.data) {
@@ -32,6 +34,8 @@ const authReducer = (state, action) => {
             } else {
                 localStorage.removeItem('authToken');
                 localStorage.removeItem('tokenExpiration');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('refreshTokenExpiration');
             }
             return {...state, accessToken: action.data, isAuthenticated: !!action.data};
         case SetAuthInfo:
@@ -53,60 +57,8 @@ export const AuthProvider = ({children}) => {
     const oidcUserManagerRef = useRef(null);
 
     // Safe access to window.oidcUserManager with browser check
-    const getOidcUserManager = () => {
+    const getOidcUserManager = useCallback(() => {
         return typeof window !== 'undefined' ? window.oidcUserManager : null;
-    };
-
-    // Multi-tab synchronization (only in browser)
-    useEffect(() => {
-        if (typeof BroadcastChannel === 'undefined') return;
-        channel.current = new BroadcastChannel('auth-channel');
-        channel.current.onmessage = (event) => {
-            const {type, data} = event.data || {};
-            if (type === 'tokenUpdated') {
-                console.log('Token updated from another tab');
-                dispatch({type: SetAccessToken, data});
-                if (auth.authChoice !== 'openid') {
-                    scheduleRefresh(data);
-                }
-            } else if (type === 'logout') {
-                console.log('Logout triggered from another tab');
-                dispatch({type: Logout});
-            }
-        };
-        return () => channel.current?.close();
-    }, [auth.authChoice]);
-
-    // OpenID token refresh handler
-    const setupOidcTokenRefresh = useCallback(() => {
-        const userManager = getOidcUserManager();
-        if (!userManager) return;
-
-        const handleTokenExpired = () => {
-            console.warn('OpenID token expired, attempting silent renew...');
-            userManager.signinSilent()
-                .then(user => {
-                    const newToken = user.access_token;
-                    dispatch({type: SetAccessToken, data: newToken});
-                    localStorage.setItem('authToken', newToken);
-                    localStorage.setItem('tokenExpiration', user.expires_at.toString());
-                    if (typeof BroadcastChannel !== 'undefined' && channel.current) {
-                        channel.current.postMessage({type: 'tokenUpdated', data: newToken});
-                    }
-                })
-                .catch(err => {
-                    console.error('Silent renew failed:', err);
-                    dispatch({type: Logout});
-                    if (typeof BroadcastChannel !== 'undefined' && channel.current) {
-                        channel.current.postMessage({type: 'logout'});
-                    }
-                });
-        };
-
-        userManager.events.addAccessTokenExpired(handleTokenExpired);
-        return () => {
-            userManager.events.removeAccessTokenExpired(handleTokenExpired);
-        };
     }, []);
 
     // Refresh function for non-OpenID
@@ -152,7 +104,59 @@ export const AuthProvider = ({children}) => {
                 channel.current.postMessage({type: 'logout'});
             }
         }
-    }, [auth.authChoice]);
+    }, [auth.authChoice, dispatch]);
+
+    // OpenID token refresh handler
+    const setupOidcTokenRefresh = useCallback(() => {
+        const userManager = getOidcUserManager();
+        if (!userManager) return;
+
+        const handleTokenExpired = () => {
+            console.warn('OpenID token expired, attempting silent renew...');
+            userManager.signinSilent()
+                .then(user => {
+                    const newToken = user.access_token;
+                    dispatch({type: SetAccessToken, data: newToken});
+                    localStorage.setItem('authToken', newToken);
+                    localStorage.setItem('tokenExpiration', user.expires_at.toString());
+                    if (typeof BroadcastChannel !== 'undefined' && channel.current) {
+                        channel.current.postMessage({type: 'tokenUpdated', data: newToken});
+                    }
+                })
+                .catch(err => {
+                    console.error('Silent renew failed:', err);
+                    dispatch({type: Logout});
+                    if (typeof BroadcastChannel !== 'undefined' && channel.current) {
+                        channel.current.postMessage({type: 'logout'});
+                    }
+                });
+        };
+
+        userManager.events.addAccessTokenExpired(handleTokenExpired);
+        return () => {
+            userManager.events.removeAccessTokenExpired(handleTokenExpired);
+        };
+    }, [getOidcUserManager, dispatch]);
+
+    // Multi-tab synchronization (only in browser)
+    useEffect(() => {
+        if (typeof BroadcastChannel === 'undefined') return;
+        channel.current = new BroadcastChannel('auth-channel');
+        channel.current.onmessage = (event) => {
+            const {type, data} = event.data || {};
+            if (type === 'tokenUpdated') {
+                console.log('Token updated from another tab');
+                dispatch({type: SetAccessToken, data});
+                if (auth.authChoice !== 'openid') {
+                    scheduleRefresh(data);
+                }
+            } else if (type === 'logout') {
+                console.log('Logout triggered from another tab');
+                dispatch({type: Logout});
+            }
+        };
+        return () => channel.current?.close();
+    }, [auth.authChoice, scheduleRefresh]);
 
     // Set up OIDC user manager reference
     useEffect(() => {
@@ -160,11 +164,10 @@ export const AuthProvider = ({children}) => {
             const userManager = getOidcUserManager();
             if (userManager) {
                 oidcUserManagerRef.current = userManager;
-                const cleanup = setupOidcTokenRefresh();
-                return cleanup;
+                return setupOidcTokenRefresh();
             }
         }
-    }, [auth.authChoice, setupOidcTokenRefresh]);
+    }, [auth.authChoice, getOidcUserManager, setupOidcTokenRefresh]);
 
     // Reschedule refresh when token changes
     useEffect(() => {

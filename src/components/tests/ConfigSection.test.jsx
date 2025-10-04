@@ -1,6 +1,5 @@
 import React from 'react';
 import {render, screen, waitFor, act} from '@testing-library/react';
-import {MemoryRouter} from 'react-router-dom';
 import ConfigSection from '../ConfigSection';
 import userEvent from '@testing-library/user-event';
 import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
@@ -15,7 +14,7 @@ jest.mock('react-router-dom', () => ({
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
-    return {
+    const mocks = {
         ...actual,
         Accordion: ({children, expanded, onChange, ...props}) => (
             <div data-testid="accordion" className={expanded ? 'expanded' : ''} {...props}>
@@ -64,6 +63,8 @@ jest.mock('@mui/material', () => {
                 type={type || 'text'}
                 role="combobox"
                 aria-label={InputLabelProps?.['aria-label'] || label || 'autocomplete-input'}
+                aria-controls="text-field-options"
+                aria-expanded={!!value}
                 placeholder={label || ''}
                 value={value || ''}
                 onChange={onChange}
@@ -72,7 +73,7 @@ jest.mock('@mui/material', () => {
                 {...props}
             />
         ),
-        Autocomplete: ({options, getOptionLabel, onChange, disabled, multiple, renderInput, value, ...props}) => {
+        Autocomplete: ({options, getOptionLabel, onChange, multiple, renderInput, value, ...props}) => {
             const state = {
                 inputValue: multiple
                     ? (Array.isArray(value) ? value.map(item => typeof item === 'string' ? item : getOptionLabel(item)).join(', ') : '')
@@ -123,6 +124,8 @@ jest.mock('@mui/material', () => {
                             onChange: handleChange,
                             'aria-label': inputLabel,
                             role: 'combobox',
+                            'aria-controls': 'autocomplete-options',
+                            'aria-expanded': !!state.inputValue,
                         },
                         label: inputLabel,
                     })}
@@ -139,18 +142,6 @@ jest.mock('@mui/material', () => {
             </span>
         ),
         Box: ({children, sx, ...props}) => <div style={sx} {...props}>{children}</div>,
-        Grid: ({children, container, spacing, item, xs, ...props}) => (
-            <div
-                style={
-                    container
-                        ? {display: 'flex', flexWrap: 'wrap', gap: `${spacing * 8}px`}
-                        : {flex: `0 0 ${(xs / 12) * 100}%`}
-                }
-                {...props}
-            >
-                {children}
-            </div>
-        ),
         Tooltip: ({children, title}) => <span title={title}>{children}</span>,
         IconButton: ({children, onClick, disabled, ...props}) => (
             <button onClick={onClick} disabled={disabled} {...props}>
@@ -165,6 +156,9 @@ jest.mock('@mui/material', () => {
         TableCell: ({children, ...props}) => <td {...props}>{children}</td>,
         Paper: ({children, ...props}) => <div {...props}>{children}</div>,
     };
+    const useMock = () => mocks.Autocomplete;
+    useMock();
+    return mocks;
 });
 
 // Mock Material-UI icons
@@ -189,8 +183,7 @@ describe('ConfigSection Component', () => {
     beforeEach(() => {
         jest.setTimeout(30000);
         jest.clearAllMocks();
-        mockLocalStorage.getItem.mockImplementation((key) => 'mock-token');
-
+        mockLocalStorage.getItem.mockImplementation(() => 'mock-token');
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
@@ -316,11 +309,16 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByText(/orchestrate = ha/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByText(/size = 10GB/i)).toBeInTheDocument();
         }, {timeout: 10000});
 
         const accordionDetails = screen.getByTestId('accordion-details');
+        // eslint-disable-next-line testing-library/no-node-access
         const scrollableBox = accordionDetails.querySelector('div[style*="overflow-x: auto"]');
         expect(scrollableBox).toBeInTheDocument();
         expect(scrollableBox).toHaveStyle({'overflow-x': 'auto'});
@@ -422,15 +420,15 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
-
+        // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['[DEFAULT]\nnodes = node2'], 'config.ini');
         await act(async () => {
             await user.upload(fileInput, testFile);
         });
-
-        expect(screen.getByText('config.ini')).toBeInTheDocument();
-
+        await waitFor(() => {
+            expect(screen.getByText('config.ini')).toBeInTheDocument();
+        }, {timeout: 5000});
         const updateButton = screen.getByRole('button', {name: /Update/i});
         await act(async () => {
             await user.click(updateButton);
@@ -438,18 +436,22 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
-                expect.objectContaining({
-                    method: 'PUT',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                        'Content-Type': 'application/octet-stream',
-                    }),
-                    body: testFile,
-                })
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.objectContaining({
+                method: 'PUT',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                    'Content-Type': 'application/octet-stream',
+                }),
+                body: testFile,
+            })
+        );
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -497,7 +499,7 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
-
+        // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
         await act(async () => {
@@ -511,10 +513,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -556,7 +560,7 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
-
+        // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
         await act(async () => {
@@ -570,7 +574,11 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Error: Failed to update config: 500', 'error');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -645,18 +653,24 @@ size = 10GB
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
-            const table = within(dialog).getByRole('table');
-            const nodesRow = within(table).getByText('nodes').closest('tr');
-            expect(within(nodesRow).getByText('Nodes to deploy the service')).toBeInTheDocument();
-            expect(within(nodesRow).getByText('string')).toBeInTheDocument();
-            expect(within(nodesRow).getByText('DEFAULT')).toBeInTheDocument();
-            expect(within(nodesRow).getByText('Yes')).toBeInTheDocument();
-            const sizeRow = within(table).getByText('size').closest('tr');
-            expect(within(sizeRow).getByText('Size of filesystem')).toBeInTheDocument();
-            expect(within(sizeRow).getByText('fs')).toBeInTheDocument();
-            expect(within(sizeRow).getByText('No')).toBeInTheDocument();
         }, {timeout: 10000});
-
+        const dialog = screen.getByRole('dialog');
+        const table = within(dialog).getByRole('table');
+        await waitFor(() => {
+            expect(within(table).getByRole('row', {name: /nodes/})).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
+            expect(within(table).getByRole('row', {name: /size/})).toBeInTheDocument();
+        }, {timeout: 10000});
+        const nodesRow = within(table).getByRole('row', {name: /nodes/});
+        expect(within(nodesRow).getByText('Nodes to deploy the service')).toBeInTheDocument();
+        expect(within(nodesRow).getByText('string')).toBeInTheDocument();
+        expect(within(nodesRow).getByText('DEFAULT')).toBeInTheDocument();
+        expect(within(nodesRow).getByText('Yes')).toBeInTheDocument();
+        const sizeRow = within(table).getByRole('row', {name: /size/});
+        expect(within(sizeRow).getByText('Size of filesystem')).toBeInTheDocument();
+        expect(within(sizeRow).getByText('fs')).toBeInTheDocument();
+        expect(within(sizeRow).getByText('No')).toBeInTheDocument();
         const closeButton = screen.getByRole('button', {name: /Close/i});
         await act(async () => {
             await user.click(closeButton);
@@ -703,7 +717,10 @@ size = 10GB
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
-            expect(within(dialog).getByRole('alert')).toHaveTextContent(/Request timed out after 60 seconds/i);
+        }, {timeout: 2000});
+        await waitFor(() => {
+            const alert = within(screen.getByRole('dialog')).getByRole('alert');
+            expect(alert).toHaveTextContent(/Request timed out after 60 seconds/i);
         }, {timeout: 2000});
     });
 
@@ -738,11 +755,13 @@ size = 10GB
         await act(async () => {
             await user.click(keywordsButton);
         });
-
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Configuration Keywords/i);
+        }, {timeout: 10000});
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveTextContent(/Configuration Keywords/i);
-            expect(within(dialog).getByRole('alert')).toHaveTextContent(/Invalid response format: missing items/i);
+            const alert = within(dialog).getByRole('alert');
+            expect(alert).toHaveTextContent(/Invalid response format: missing items/i);
         }, {timeout: 10000});
     });
 
@@ -777,12 +796,14 @@ size = 10GB
         await act(async () => {
             await user.click(keywordsButton);
         });
-
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Configuration Keywords/i);
+        }, {timeout: 10000});
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveTextContent(/Configuration Keywords/i);
             const table = within(dialog).getByRole('table');
-            expect(within(table).queryAllByRole('row')).toHaveLength(1); // Only header row
+            const rows = within(table).queryAllByRole('row');
+            expect(rows).toHaveLength(1); // Only header row
         }, {timeout: 10000});
     });
 
@@ -828,10 +849,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Invalid parameter: invalid_param', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=invalid_param`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=invalid_param`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -867,6 +890,8 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -902,6 +927,8 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -936,12 +963,14 @@ size = 10GB
         await act(async () => {
             await user.click(manageParamsButton);
         });
-
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
+        }, {timeout: 10000});
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveTextContent(/Manage Configuration Parameters/i);
             const alerts = within(dialog).getAllByRole('alert');
-            expect(alerts.find((alert) => alert.textContent.includes('Failed to fetch existing parameters: HTTP 500'))).toBeTruthy();
+            const errorAlert = alerts.find((alert) => alert.textContent.includes('Failed to fetch existing parameters: HTTP 500'));
+            expect(errorAlert).toBeInTheDocument();
         }, {timeout: 10000});
     });
 
@@ -1091,10 +1120,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Section index is required for parameter: size', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%23invalid.size=20GB`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%23invalid.size=20GB`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1153,10 +1184,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Section index is required for parameter: size', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=size=20GB`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=size=20GB`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1215,15 +1248,17 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%232.size=20GB`),
-                expect.objectContaining({
-                    method: 'PATCH',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                    }),
-                })
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=fs%232.size=20GB`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                }),
+            })
+        );
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1271,15 +1306,17 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
-                expect.objectContaining({
-                    method: 'PATCH',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                    }),
-                })
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                }),
+            })
+        );
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1341,6 +1378,8 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Error unsetting parameter nodes: Failed to unset parameter nodes: 500', 'error');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1379,8 +1418,10 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-            const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
-            const addParamsInput = comboboxes[0];
+        }, {timeout: 10000});
+        const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
+        const addParamsInput = comboboxes[0];
+        await waitFor(() => {
             expect(addParamsInput).toHaveValue('');
         }, {timeout: 10000});
     });
@@ -1419,8 +1460,10 @@ size = 10GB
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Manage Configuration Parameters/i);
-            const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
-            const deleteSectionsInput = comboboxes[2];
+        }, {timeout: 10000});
+        const comboboxes = within(screen.getByRole('dialog')).getAllByTestId('autocomplete-input');
+        const deleteSectionsInput = comboboxes[2];
+        await waitFor(() => {
             expect(deleteSectionsInput).toHaveValue('');
         }, {timeout: 10000});
     });
@@ -1480,11 +1523,23 @@ size = 10GB
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
+        }, {timeout: 10000});
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
             const table = within(dialog).getByRole('table');
             const rows = within(table).getAllByRole('row');
             expect(rows).toHaveLength(2); // Header row + one data row (duplicate filtered)
-            const nodesRow = within(table).getByText('nodes').closest('tr');
+        }, {timeout: 10000});
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            const table = within(dialog).getByRole('table');
+            const nodesRow = within(table).getByRole('row', {name: /nodes/});
             expect(within(nodesRow).getByText('Nodes to deploy the service')).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
+            const dialog = screen.getByRole('dialog');
+            const table = within(dialog).getByRole('table');
+            const nodesRow = within(table).getByRole('row', {name: /nodes/});
             expect(within(nodesRow).queryByText('Duplicate nodes entry')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1525,7 +1580,7 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
-
+        // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
         await act(async () => {
@@ -1539,18 +1594,22 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
-                expect.objectContaining({
-                    method: 'PUT',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                        'Content-Type': 'application/octet-stream',
-                    }),
-                    body: testFile,
-                })
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.objectContaining({
+                method: 'PUT',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                    'Content-Type': 'application/octet-stream',
+                }),
+                body: testFile,
+            })
+        );
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1599,10 +1658,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=nodes`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1651,10 +1712,12 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
-            expect(global.fetch).not.toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=fs%231`),
-                expect.any(Object)
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?delete=fs%231`),
+            expect.any(Object)
+        );
+        await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
     });
@@ -1761,15 +1824,17 @@ size = 10GB
 
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=task%231.timeout=60s`),
-                expect.objectContaining({
-                    method: 'PATCH',
-                    headers: expect.objectContaining({
-                        Authorization: 'Bearer mock-token',
-                    }),
-                })
-            );
+        }, {timeout: 10000});
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?set=task%231.timeout=60s`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                }),
+            })
+        );
+        await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
     });

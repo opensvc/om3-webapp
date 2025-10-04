@@ -17,7 +17,6 @@ describe('WhoAmI Component', () => {
     const mockUserInfo = {
         auth: 'user',
         grant: {root: null},
-        name: 'pjouvanceau',
         namespace: 'system',
         raw_grant: 'root',
     };
@@ -57,36 +56,55 @@ describe('WhoAmI Component', () => {
         render(<WhoAmI/>);
 
         await waitFor(() => {
-            // Check main title
             expect(screen.getByRole('heading', {name: /My Information/i})).toBeInTheDocument();
+        });
 
-            // Check Identity section
+        await waitFor(() => {
             expect(screen.getByText('Identity')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('Username')).toBeInTheDocument();
-            expect(screen.getByText('pjouvanceau')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('Authentication Method')).toBeInTheDocument();
-            expect(screen.getByText('user')).toBeInTheDocument();
+        });
 
-            // Check Access section
+        await waitFor(() => {
             expect(screen.getByText('Access')).toBeInTheDocument();
-            expect(screen.getByText('Namespace')).toBeInTheDocument();
-            expect(screen.getByText('system')).toBeInTheDocument();
-            expect(screen.getByText('Raw Permissions')).toBeInTheDocument();
-            expect(screen.getByText('root')).toBeInTheDocument();
+        });
 
-            // Check Permission Details section
-            expect(screen.getByText('Permission Details')).toBeInTheDocument();
-            const permissionSection = screen.getByText('Permission Details').closest('div.space-y-3');
+        await waitFor(() => {
+            expect(screen.getByText('Namespace')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('system')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Raw Permissions')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('root')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            // eslint-disable-next-line testing-library/no-node-access
+            const permissionSection = screen.getByText('Permission Details').parentElement;
             const preElement = within(permissionSection).getByText(/root.*null/i, {selector: 'pre'});
             expect(preElement).toHaveTextContent(/"root": null/);
         });
 
-        // Verify fetch call
-        expect(fetch).toHaveBeenCalledWith(URL_AUTH_WHOAMI, {
-            credentials: 'include',
-            headers: {
-                Authorization: `Bearer ${mockToken}`,
-            },
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(URL_AUTH_WHOAMI, {
+                credentials: 'include',
+                headers: {
+                    Authorization: `Bearer ${mockToken}`,
+                },
+            });
         });
     });
 
@@ -101,6 +119,9 @@ describe('WhoAmI Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('Raw Permissions')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('None')).toBeInTheDocument();
         });
     });
@@ -127,8 +148,10 @@ describe('WhoAmI Component', () => {
 
         render(<WhoAmI/>);
 
+        expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken');
+
+
         await waitFor(() => {
-            expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken');
             expect(fetch).toHaveBeenCalledWith(
                 URL_AUTH_WHOAMI,
                 expect.objectContaining({

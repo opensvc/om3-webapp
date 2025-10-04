@@ -55,21 +55,47 @@ describe('Network Component', () => {
         render(<Network/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
-            // Check lo data (sorted first)
-            const loRow = screen.getByText('lo').closest('tr');
-            expect(loRow).toHaveTextContent('lo');
-            expect(loRow).toHaveTextContent('loopback');
-            expect(loRow).toHaveTextContent('127.0.0.0/8');
-            expect(loRow).toHaveTextContent('50.0%');
-            expect(loRow.querySelector('[role="progressbar"]')).toBeInTheDocument();
+            expect(screen.getByText('lo')).toBeInTheDocument();
+        });
 
-            // Check default data
-            const defaultRow = screen.getByText('default').closest('tr');
-            expect(defaultRow).toHaveTextContent('default');
+        // Check lo data (sorted first)
+        const loRow = screen.getByRole('row', {name: /lo/i});
+        expect(loRow).toHaveTextContent('lo');
+
+        await waitFor(() => {
+            expect(loRow).toHaveTextContent('loopback');
+        });
+
+        await waitFor(() => {
+            expect(loRow).toHaveTextContent('127.0.0.0/8');
+        });
+
+        await waitFor(() => {
+            expect(loRow).toHaveTextContent('50.0%');
+        });
+
+        await waitFor(() => {
+            expect(within(loRow).getByRole('progressbar')).toBeInTheDocument();
+        });
+
+        // Check default data
+        const defaultRow = screen.getByRole('row', {name: /default/i});
+        expect(defaultRow).toHaveTextContent('default');
+
+        await waitFor(() => {
             expect(defaultRow).toHaveTextContent('bridge');
+        });
+
+        await waitFor(() => {
             expect(defaultRow).toHaveTextContent('192.168.1.0/24');
+        });
+
+        await waitFor(() => {
             expect(defaultRow).toHaveTextContent('50.0%');
-            expect(defaultRow.querySelector('[role="progressbar"]')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(defaultRow).getByRole('progressbar')).toBeInTheDocument();
         });
 
         expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {
@@ -87,12 +113,12 @@ describe('Network Component', () => {
         });
 
         // First row (lo)
-        const loRow = screen.getByText('lo').closest('tr');
+        const loRow = screen.getByRole('row', {name: /lo/i});
         const loPercentage = within(loRow).getByText('50.0%');
 
         // Hover over percentage
         fireEvent.mouseOver(loPercentage);
-        expect(await screen.findByText('50/100')).toBeInTheDocument(); // Using findByText to wait for tooltip
+        expect(await screen.findByText('50/100')).toBeInTheDocument();
 
         // Hover over progress bar
         const loProgressBar = within(loRow).getByRole('progressbar');
@@ -100,7 +126,7 @@ describe('Network Component', () => {
         expect(await screen.findByText('50/100')).toBeInTheDocument();
 
         // Second row (default)
-        const defaultRow = screen.getByText('default').closest('tr');
+        const defaultRow = screen.getByRole('row', {name: /default/i});
         const defaultPercentage = within(defaultRow).getByText('50.0%');
 
         fireEvent.mouseOver(defaultPercentage);
@@ -120,8 +146,17 @@ describe('Network Component', () => {
 
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving networks', expect.any(Error));
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('No networks available.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('lo')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.queryByText('default')).not.toBeInTheDocument();
         });
 
@@ -138,10 +173,17 @@ describe('Network Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText('test')).toBeInTheDocument();
-            const testRow = screen.getByText('test').closest('tr');
-            const usageCell = testRow.querySelector('td:last-child');
+        });
+
+        const testRow = screen.getByRole('row', {name: /test/i});
+        const usageCell = within(testRow).getByText('N/A');
+
+        await waitFor(() => {
             expect(usageCell).toHaveTextContent('N/A');
-            expect(usageCell.querySelector('[role="progressbar"]')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(testRow).queryByRole('progressbar')).not.toBeInTheDocument();
         });
     });
 
@@ -167,11 +209,25 @@ describe('Network Component', () => {
         render(<Network/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
-            const rows = screen.getAllByRole('row');
-            // Skip header row, check data rows
-            expect(rows[1]).toHaveTextContent('apple');
-            expect(rows[2]).toHaveTextContent('zebra');
+            expect(screen.getByText('apple')).toBeInTheDocument();
         });
+
+        await waitFor(() => {
+            expect(screen.getByText('zebra')).toBeInTheDocument();
+        });
+
+        const rows = screen.getAllByRole('row');
+        // Skip header row, check data rows
+        const appleRow = rows.find(row => row.textContent.includes('apple'));
+        const zebraRow = rows.find(row => row.textContent.includes('zebra'));
+
+        expect(appleRow).toBeInTheDocument();
+        expect(zebraRow).toBeInTheDocument();
+
+        // Verify order by checking row indices
+        const appleIndex = rows.indexOf(appleRow);
+        const zebraIndex = rows.indexOf(zebraRow);
+        expect(appleIndex).toBeLessThan(zebraIndex);
     });
 
     test('navigates to network details on row click', async () => {
@@ -180,12 +236,20 @@ describe('Network Component', () => {
         render(<Network/>, {wrapper: MemoryRouter});
 
         await waitFor(() => {
-            const loRow = screen.getByText('lo').closest('tr');
-            fireEvent.click(loRow);
-            expect(mockNavigate).toHaveBeenCalledWith('/network/lo');
+            expect(screen.getByText('lo')).toBeInTheDocument();
+        });
 
-            const defaultRow = screen.getByText('default').closest('tr');
-            fireEvent.click(defaultRow);
+        const loRow = screen.getByRole('row', {name: /lo/i});
+        fireEvent.click(loRow);
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith('/network/lo');
+        });
+
+        const defaultRow = screen.getByRole('row', {name: /default/i});
+        fireEvent.click(defaultRow);
+
+        await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith('/network/default');
         });
     });

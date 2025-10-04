@@ -54,7 +54,6 @@ jest.mock('react-router-dom', () => {
 });
 
 describe('NodesTable', () => {
-    let navigateMock;
 
     beforeEach(() => {
         // Mock fetch daemon hook
@@ -87,7 +86,6 @@ describe('NodesTable', () => {
         jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {
         });
 
-        navigateMock = require('react-router-dom').useNavigate();
         localStorage.setItem('authToken', 'test-token');
     });
 
@@ -136,6 +134,9 @@ describe('NodesTable', () => {
 
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText(/Confirm Freeze Action/i)).toBeInTheDocument();
         });
     });

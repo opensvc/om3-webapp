@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useCallback} from "react";
 import {Routes, Route, Navigate} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import AuthChoice from "./AuthChoice.jsx";
@@ -55,28 +55,28 @@ const OidcInitializer = ({children}) => {
     const auth = useAuth();
     const authInfo = useAuthInfo();
 
-    const handleTokenExpired = () => {
+    const handleTokenExpired = useCallback(() => {
         console.warn('Access token expired, redirecting to /ui/auth-choice');
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
         window.location.href = '/ui/auth-choice';
-    };
+    }, [authDispatch]);
 
-    const handleSilentRenewError = (error) => {
+    const handleSilentRenewError = useCallback((error) => {
         console.error('Silent renew failed:', error);
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
         window.location.href = '/ui/auth-choice';
-    };
+    }, [authDispatch]);
 
-    const onUserRefreshed = (user) => {
+    const onUserRefreshed = useCallback((user) => {
         console.log("User refreshed:", user.profile.preferred_username, "expires_at:", user.expires_at);
         authDispatch({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
-    };
+    }, [authDispatch]);
 
     // Initialize OIDC on startup if we have a token and auth choice is OIDC
     useEffect(() => {
@@ -133,7 +133,7 @@ const OidcInitializer = ({children}) => {
                 console.error("Error getting user:", err);
             });
         }
-    }, [userManager, auth.authChoice]);
+    }, [userManager, auth.authChoice, authDispatch, handleTokenExpired, handleSilentRenewError, onUserRefreshed]);
 
     // Save auth choice to localStorage
     useEffect(() => {
@@ -172,13 +172,11 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     console.log("App init");
-    const [token, setToken] = useState(localStorage.getItem("authToken"));
 
     useEffect(() => {
         const checkTokenChange = () => {
             const newToken = localStorage.getItem("authToken");
             console.log("Storage event: newToken=", newToken);
-            setToken(newToken);
         };
 
         window.addEventListener("storage", checkTokenChange);

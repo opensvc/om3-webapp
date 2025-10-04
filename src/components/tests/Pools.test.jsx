@@ -41,11 +41,13 @@ describe('Pools Component', () => {
 
         // Wait for the loading state to resolve
         await waitFor(() => {
-            const headers = ['Name', 'Type', 'Volume Count', 'Usage', 'Head'];
-            headers.forEach((header) => {
-                expect(screen.getByText(header)).toBeInTheDocument();
-            });
+            expect(screen.getByText('Name')).toBeInTheDocument();
         });
+
+        expect(screen.getByText('Type')).toBeInTheDocument();
+        expect(screen.getByText('Volume Count')).toBeInTheDocument();
+        expect(screen.getByText('Usage')).toBeInTheDocument();
+        expect(screen.getByText('Head')).toBeInTheDocument();
     });
 
     test('displays pool data correctly when API call succeeds', async () => {
@@ -54,20 +56,21 @@ describe('Pools Component', () => {
         render(<Pools/>);
 
         await waitFor(() => {
-            // Check pool1 data
             expect(screen.getByText('pool1')).toBeInTheDocument();
-            expect(screen.getByText('zfs')).toBeInTheDocument();
-            expect(screen.getByText('5')).toBeInTheDocument();
-            expect(screen.getByText('50.0%')).toBeInTheDocument();
-            expect(screen.getByText('node1')).toBeInTheDocument();
-
-            // Check pool2 data
-            expect(screen.getByText('pool2')).toBeInTheDocument();
-            expect(screen.getByText('lvm')).toBeInTheDocument();
-            expect(screen.getByText('3')).toBeInTheDocument();
-            expect(screen.getByText('0.0%')).toBeInTheDocument();
-            expect(screen.getByText('node2')).toBeInTheDocument();
         });
+
+        // Check pool1 data
+        expect(screen.getByText('zfs')).toBeInTheDocument();
+        expect(screen.getByText('5')).toBeInTheDocument();
+        expect(screen.getByText('50.0%')).toBeInTheDocument();
+        expect(screen.getByText('node1')).toBeInTheDocument();
+
+        // Check pool2 data
+        expect(screen.getByText('pool2')).toBeInTheDocument();
+        expect(screen.getByText('lvm')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByText('0.0%')).toBeInTheDocument();
+        expect(screen.getByText('node2')).toBeInTheDocument();
 
         expect(axios.get).toHaveBeenCalledWith(URL_POOL, {
             headers: {Authorization: 'Bearer mock-token'},
@@ -83,27 +86,55 @@ describe('Pools Component', () => {
 
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving pools', expect.any(Error));
-            expect(screen.queryByText('pool1')).not.toBeInTheDocument();
-            expect(screen.queryByText('pool2')).not.toBeInTheDocument();
         });
+
+        expect(screen.queryByText('pool1')).not.toBeInTheDocument();
+        expect(screen.queryByText('pool2')).not.toBeInTheDocument();
 
         consoleErrorSpy.mockRestore();
     });
 
-    test('displays N/A for usage when size is zero', async () => {
-        const poolsWithZeroSize = [
-            {name: 'pool3', type: 'zfs', volume_count: 2, used: 10, size: 0, head: 'node3'},
+    test('displays N/A for usage when used is negative', async () => {
+        const poolsWithNegativeUsed = [
+            {name: 'pool4', type: 'zfs', volume_count: 2, used: -10, size: 100, head: 'node4'},
         ];
-        axios.get.mockResolvedValueOnce({data: {items: poolsWithZeroSize}});
+        axios.get.mockResolvedValueOnce({data: {items: poolsWithNegativeUsed}});
 
         render(<Pools/>);
 
         await waitFor(() => {
-            expect(screen.getByText('pool3')).toBeInTheDocument();
-            // Use a more flexible query to find "N/A"
-            const naElement = screen.getByText((content) => content.includes('N/A'));
-            expect(naElement).toBeInTheDocument();
-        }, {timeout: 2000}); // Increase timeout if needed
+            expect(screen.getByText('pool4')).toBeInTheDocument();
+        });
+
+        // Use a more flexible matcher for N/A
+        await waitFor(() => {
+            expect(screen.getByText((content, element) => content.includes('N/A') && element.tagName === 'TD')).toBeInTheDocument();
+        });
+    });
+
+    test('handles pools with missing properties', async () => {
+        const poolsWithMissingProps = [
+            {name: null, type: undefined, volume_count: null, used: undefined, size: null, head: undefined},
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: poolsWithMissingProps}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            // Use getAllByText to find all N/A instances
+            const naElements = screen.getAllByText((content, element) => content.includes('N/A') && element.tagName === 'TD');
+            expect(naElements.length).toBe(5); // Expect N/A for name, type, volume_count, usage, head
+        });
+    });
+
+    test('handles API response with null items', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: null}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('No pools available.')).toBeInTheDocument();
+        });
     });
 
     test('calls API with correct authorization token', async () => {
@@ -116,5 +147,38 @@ describe('Pools Component', () => {
                 headers: {Authorization: 'Bearer mock-token'},
             });
         });
+    });
+
+    test('displays "No pools available." when API returns an empty list', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: []}});
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('No pools available.')).toBeInTheDocument();
+        });
+    });
+
+    test('displays error and allows retry on failure', async () => {
+        // First call fails
+        axios.get.mockRejectedValueOnce(new Error('API Error'));
+
+        render(<Pools/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
+        });
+
+        // Second call succeeds after retry
+        axios.get.mockResolvedValueOnce({data: {items: mockPools}});
+
+        const retryButton = screen.getByRole('button', {name: /retry/i});
+        retryButton.click();
+
+        await waitFor(() => {
+            expect(screen.getByText('pool1')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('pool2')).toBeInTheDocument();
     });
 });

@@ -46,7 +46,7 @@ const HeaderSection = ({
             {
                 name: "offset",
                 options: {
-                    offset: ({reference}) => {
+                    offset: () => {
                         const zoomLevel = getZoomLevel();
                         return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
                     },

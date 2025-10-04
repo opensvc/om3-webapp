@@ -26,6 +26,8 @@ import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import WarningIcon from "@mui/icons-material/Warning";
 import HelpIcon from "@mui/icons-material/Help";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
@@ -73,6 +75,8 @@ const Heartbeats = () => {
     const navigate = useNavigate();
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
+    const [sortColumn, setSortColumn] = useState("node");
+    const [sortDirection, setSortDirection] = useState("asc");
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -168,57 +172,78 @@ const Heartbeats = () => {
         return Array.from(ids).sort();
     }, [heartbeatStatus]);
 
-    const streamRows = [];
-    Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
-        (nodeData.streams || []).forEach((stream) => {
-            const cachedStream = stoppedStreamsCache[node]?.[stream.id] || {};
-            const peers = stream.state === "stopped" && Object.keys(stream.peers || {}).length === 0
-                ? cachedStream.peers || {}
-                : stream.peers || {};
+    const streamRows = useMemo(() => {
+        const rows = [];
+        Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
+            (nodeData.streams || []).forEach((stream) => {
+                const cachedStream = stoppedStreamsCache[node]?.[stream.id] || {};
+                const peers = stream.state === "stopped" && Object.keys(stream.peers || {}).length === 0
+                    ? cachedStream.peers || {}
+                    : stream.peers || {};
 
-            // Remove "hb#" prefix from stream ID
-            const cleanedId = stream.id.replace(/^hb#/, "");
+                // Remove "hb#" prefix from stream ID
+                const cleanedId = stream.id.replace(/^hb#/, "");
 
-            if (Object.keys(peers).length === 0 && stream.state === "stopped") {
-                streamRows.push({
-                    id: cleanedId,
-                    node: node,
-                    peer: "N/A",
-                    type: stream.type || cachedStream.type || "N/A",
-                    desc: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.desc || "N/A",
-                    isBeating: false,
-                    changedAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.changed_at || "N/A",
-                    lastBeatingAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.last_beating_at || "N/A",
-                    state: stream.state || "unknown",
-                });
-            } else {
-                Object.entries(peers).forEach(([peerKey, peerData]) => {
-                    streamRows.push({
+                if (Object.keys(peers).length === 0 && stream.state === "stopped") {
+                    rows.push({
                         id: cleanedId,
-                        node,
-                        peer: peerKey || "N/A",
-                        type: stream.type || "N/A",
-                        desc: peerData?.desc || "N/A",
-                        isBeating: peerData?.is_beating || false,
-                        changedAt: peerData?.changed_at || "N/A",
-                        lastBeatingAt: peerData?.last_beating_at || "N/A",
+                        node: node,
+                        peer: "N/A",
+                        type: stream.type || cachedStream.type || "N/A",
+                        desc: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.desc || "N/A",
+                        isBeating: false,
+                        changedAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.changed_at || "N/A",
+                        lastBeatingAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.last_beating_at || "N/A",
                         state: stream.state || "unknown",
                     });
-                });
-            }
+                } else {
+                    Object.entries(peers).forEach(([peerKey, peerData]) => {
+                        rows.push({
+                            id: cleanedId,
+                            node,
+                            peer: peerKey || "N/A",
+                            type: stream.type || "N/A",
+                            desc: peerData?.desc || "N/A",
+                            isBeating: peerData?.is_beating || false,
+                            changedAt: peerData?.changed_at || "N/A",
+                            lastBeatingAt: peerData?.last_beating_at || "N/A",
+                            state: stream.state || "unknown",
+                        });
+                    });
+                }
+            });
         });
-    });
+        return rows;
+    }, [heartbeatStatus, stoppedStreamsCache]);
 
-    // Sort streamRows by node, then id, then peer
-    streamRows.sort((a, b) => {
-        const nodeCompare = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
-        if (nodeCompare !== 0) return nodeCompare;
-        const idCompare = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
-        if (idCompare !== 0) return idCompare;
-        return a.peer.localeCompare(b.peer, undefined, {sensitivity: "base"});
-    });
+    const sortedRows = useMemo(() => {
+        const stateOrder = {running: 4, warning: 3, stopped: 2, failed: 1, unknown: 0};
+        return [...streamRows].sort((a, b) => {
+            let diff = 0;
+            if (sortColumn === "state") {
+                diff = stateOrder[a.state] - stateOrder[b.state];
+            } else if (sortColumn === "beating") {
+                diff = Number(a.isBeating) - Number(b.isBeating);
+            } else if (sortColumn === "id") {
+                diff = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "node") {
+                diff = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "peer") {
+                diff = a.peer.localeCompare(b.peer, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "type") {
+                diff = a.type.localeCompare(b.type, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "desc") {
+                diff = a.desc.localeCompare(b.desc, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "changed_at") {
+                diff = a.changedAt.localeCompare(b.changedAt, undefined, {sensitivity: "base"});
+            } else if (sortColumn === "last_beating_at") {
+                diff = a.lastBeatingAt.localeCompare(b.lastBeatingAt, undefined, {sensitivity: "base"});
+            }
+            return sortDirection === "asc" ? diff : -diff;
+        });
+    }, [streamRows, sortColumn, sortDirection]);
 
-    const filteredRows = streamRows.filter((row) => {
+    const filteredRows = sortedRows.filter((row) => {
         return (
             (filterBeating === "all" ||
                 (filterBeating === "beating" && row.isBeating === true) ||
@@ -228,6 +253,15 @@ const Heartbeats = () => {
             (filterId === "all" || row.id === filterId)
         );
     });
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
+    };
 
     return (
         <Box sx={{p: 4}}>
@@ -298,10 +332,21 @@ const Heartbeats = () => {
                                         key={label}
                                         sx={{
                                             fontWeight: "bold",
-                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "left" : "center"
+                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "left" : "center",
+                                            cursor: "pointer"
                                         }}
+                                        onClick={() => handleSort(label.toLowerCase())}
                                     >
-                                        {label}
+                                        <Box sx={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "flex-start" : "center"
+                                        }}>
+                                            {label}
+                                            {sortColumn === label.toLowerCase() &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
                                     </TableCell>
                                 ))}
                             </TableRow>

@@ -9,8 +9,8 @@ import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import Button from '@mui/material/Button'
 
-function Authenticating(props) {
-    const {i18n, t} = useTranslation()
+function Authenticating() {
+    const {t} = useTranslation()
     return (
         <Dialog
             open={true}

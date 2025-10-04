@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { useTranslation } from 'react-i18next';
+import {render, screen, fireEvent} from '@testing-library/react';
+import {useTranslation} from 'react-i18next';
 import Authenticating from '../Authenticating';
 
 // Mock dependencies
@@ -11,15 +11,15 @@ jest.mock('react-i18next', () => ({
 describe('Authenticating Component', () => {
     const mockReload = jest.fn();
     const mockT = jest.fn((key) => key); // Simulates the `t` function returning the key
-    const mockI18n = { language: 'en' };
+    const mockI18n = {language: 'en'};
 
     beforeEach(() => {
         jest.clearAllMocks();
-        useTranslation.mockReturnValue({ t: mockT, i18n: mockI18n });
+        useTranslation.mockReturnValue({t: mockT, i18n: mockI18n});
 
         // Mock window.location.reload
         delete window.location;
-        window.location = { reload: mockReload };
+        window.location = {reload: mockReload};
     });
 
     afterEach(() => {
@@ -28,7 +28,7 @@ describe('Authenticating Component', () => {
     });
 
     test('1. renders dialog with translated title, content, and button', () => {
-        render(<Authenticating />);
+        render(<Authenticating/>);
 
         // Check that the dialog is rendered
         const dialog = screen.getByRole('dialog');
@@ -44,12 +44,12 @@ describe('Authenticating Component', () => {
         expect(mockT).toHaveBeenCalledWith('You are being redirected to the openid provider.');
 
         // Check the translated button
-        expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Reload'})).toBeInTheDocument();
         expect(mockT).toHaveBeenCalledWith('Reload');
     });
 
     test('2. dialog is always open', () => {
-        render(<Authenticating />);
+        render(<Authenticating/>);
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeInTheDocument();
         expect(dialog).toBeVisible();
@@ -59,17 +59,17 @@ describe('Authenticating Component', () => {
     });
 
     test('3. clicking reload button calls window.location.reload', () => {
-        render(<Authenticating />);
-        const reloadButton = screen.getByRole('button', { name: 'Reload' });
+        render(<Authenticating/>);
+        const reloadButton = screen.getByRole('button', {name: 'Reload'});
         fireEvent.click(reloadButton);
         expect(mockReload).toHaveBeenCalled();
     });
 
     test('4. renders correctly with unused props', () => {
-        render(<Authenticating someUnusedProp="value" />);
+        render(<Authenticating someUnusedProp="value"/>);
         expect(screen.getByText('Authentication')).toBeInTheDocument();
         expect(screen.getByText('You are being redirected to the openid provider.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Reload'})).toBeInTheDocument();
         expect(mockT).toHaveBeenCalledWith('Authentication');
         expect(mockT).toHaveBeenCalledWith('You are being redirected to the openid provider.');
         expect(mockT).toHaveBeenCalledWith('Reload');
@@ -84,13 +84,13 @@ describe('Authenticating Component', () => {
             };
             return translations[key] || key;
         });
-        useTranslation.mockReturnValue({ t: mockTWithFrench, i18n: { language: 'fr' } });
+        useTranslation.mockReturnValue({t: mockTWithFrench, i18n: {language: 'fr'}});
 
-        render(<Authenticating />);
+        render(<Authenticating/>);
 
         expect(screen.getByText('Authentification')).toBeInTheDocument();
         expect(screen.getByText('Vous êtes redirigé vers le fournisseur OpenID.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Recharger' })).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Recharger'})).toBeInTheDocument();
         expect(mockTWithFrench).toHaveBeenCalledWith('Authentication');
         expect(mockTWithFrench).toHaveBeenCalledWith('You are being redirected to the openid provider.');
         expect(mockTWithFrench).toHaveBeenCalledWith('Reload');

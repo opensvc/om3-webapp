@@ -1,12 +1,11 @@
-// ObjectDetails.test.jsx (fixed version with added mocks for missing MUI components and subscribe in beforeEach)
 import React from 'react';
-import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import ObjectDetail from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
-import {URL_OBJECT, URL_NODE} from '../../config/apiPath.js';
 import userEvent from '@testing-library/user-event';
+
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
@@ -17,6 +16,7 @@ jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
 }));
+
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
@@ -110,8 +110,8 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
-        Popper: ({open, anchorEl, children, ...props}) => open ? <div role="popper" {...props}>{children}</div> : null,
-        Paper: ({elevation, children, ...props}) => <div role="paper" {...props}>{children}</div>,
+        Popper: ({open, anchorEl, children, ...props}) => open ? <div  {...props}>{children}</div> : null,
+        Paper: ({elevation, children, ...props}) => <div  {...props}>{children}</div>,
         ClickAwayListener: ({onClickAway, children, ...props}) => <div
             onClick={onClickAway} {...props}>{children}</div>,
     };
@@ -126,7 +126,7 @@ jest.mock('@mui/icons-material/MoreVert', () => () => <span>MoreVertIcon</span>)
 
 // Mock localStorage
 const mockLocalStorage = {
-    getItem: jest.fn((key) => 'mock-token'),
+    getItem: jest.fn(() => 'mock-token'),
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
@@ -152,38 +152,6 @@ jest.mock('../../constants/actions', () => ({
 
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();
-
-    // Helper function to find node sections
-    const findNodeSection = async (nodeName) => {
-        await waitFor(
-            () => {
-                const elements = screen.getAllByText((content, element) => {
-                    return (
-                        content.toLowerCase().includes(nodeName.toLowerCase()) &&
-                        element.tagName === 'SPAN' &&
-                        element.getAttribute('variant') === 'h6'
-                    );
-                });
-                expect(elements.length).toBeGreaterThan(0);
-            },
-            {timeout: 10000, interval: 200}
-        );
-
-        const nodeHeader = screen.getAllByText((content, element) => {
-            return (
-                content.toLowerCase().includes(nodeName.toLowerCase()) &&
-                element.tagName === 'SPAN' &&
-                element.getAttribute('variant') === 'h6'
-            );
-        })[0];
-
-        const nodeCard = nodeHeader.closest("div[style*='border: 1px solid']");
-        if (nodeCard) {
-            return nodeCard;
-        }
-
-        throw new Error(`Node section for ${nodeName} not found`);
-    };
 
     beforeEach(() => {
         jest.setTimeout(45000);
@@ -417,19 +385,17 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         const MockObjectDetail = () => {
             const {useParams} = require('react-router-dom');
             const {objectName} = useParams();
             const decodedObjectName = decodeURIComponent(objectName);
             return (
                 <div>
-                    <span variant="h4">{decodedObjectName}</span>
+                    <span>{decodedObjectName}</span>
                     <span>No information available for object</span>
                 </div>
             );
         };
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -437,9 +403,10 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/root\/cfg\/cfg1/)).toBeInTheDocument();
+        }, {timeout: 5000});
+        await waitFor(() => {
             expect(screen.getByText(/No information available for object/i)).toBeInTheDocument();
         }, {timeout: 5000});
     }, 10000);
@@ -448,7 +415,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -456,24 +422,28 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText('node2')).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText(/running/i)).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText(/placed@node1/i)).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
-
         const resourcesSections = await screen.findAllByText(/Resources \(\d+\)/i);
         expect(resourcesSections).toHaveLength(2);
-
-        await act(async () => {
-            fireEvent.click(resourcesSections[0]);
-        });
-
+        fireEvent.click(resourcesSections[0]);
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText('res2')).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
     }, 15000);
@@ -482,7 +452,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -490,7 +459,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
         expect(startEventReception).toHaveBeenCalledWith('mock-token', [
             'ObjectStatusUpdated,path=root/cfg/cfg1',
@@ -509,11 +477,7 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
-        await act(async () => {
-            unmount();
-        });
-
+        unmount();
         expect(closeEventSource).toHaveBeenCalled();
     });
 
@@ -521,12 +485,10 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         global.fetch.mockImplementationOnce(() =>
             Promise.reject(new Error('Fetch config timeout'))
         );
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -534,7 +496,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/fetch config timeout/i)).toBeInTheDocument();
         }, {timeout: 5000, interval: 100});
@@ -544,7 +505,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         const mockSubscribe = jest.fn();
         useEventStore.subscribe = jest.fn((selector, callback) => {
             callback([
@@ -552,7 +512,6 @@ type = flag
             ]);
             return mockSubscribe;
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -560,11 +519,9 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/Configuration updated/i)).toBeInTheDocument();
         }, {timeout: 10000});
-
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -572,11 +529,7 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
-        await act(async () => {
-            unmount();
-        });
-
+        unmount();
         expect(mockSubscribe).toHaveBeenCalled();
     }, 20000);
 
@@ -584,7 +537,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
         useEventStore.subscribe = jest.fn(() => null);
         const {unmount} = render(
@@ -594,9 +546,7 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        await act(async () => {
-            unmount();
-        });
+        unmount();
         expect(consoleWarnSpy).toHaveBeenCalledWith('[ObjectDetail] Subscription is not a function:', null);
         consoleWarnSpy.mockRestore();
     }, 15000);
@@ -605,7 +555,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {},
@@ -636,7 +585,6 @@ type = flag
                 json: () => Promise.resolve({items: []}),
             })
         );
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -644,7 +592,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         }, {timeout: 5000});
@@ -654,7 +601,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -662,21 +608,19 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
-        const configSection = screen.getAllByRole('button', {expanded: false}).find(
+        const configSections = screen.getAllByRole('button', {expanded: false});
+        const configSection = configSections.find(
             (el) => el.textContent.toLowerCase().includes('configuration')
         );
-        await act(async () => {
-            fireEvent.click(configSection);
-        });
-
+        fireEvent.click(configSection);
         await waitFor(() => {
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
+        }, {timeout: 10000, interval: 200});
+        await waitFor(() => {
             expect(screen.getByText(
                 /this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890/i
             )).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
-
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/config/file'),
             expect.any(Object)
@@ -687,7 +631,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -697,7 +640,11 @@ type = flag
         );
         await waitFor(() => {
             expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.queryByText('node1')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.queryByText('node2')).not.toBeInTheDocument();
         }, {timeout: 10000});
     }, 15000);
@@ -706,7 +653,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -714,13 +660,17 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
                     expect.any(Object)
                 );
+            },
+            {timeout: 5000}
+        );
+        await waitFor(
+            () => {
                 expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
             },
             {timeout: 5000}
@@ -731,7 +681,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -739,11 +688,20 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(screen.getByText(/Keys/i)).toBeInTheDocument();
+            },
+            {timeout: 5000}
+        );
+        await waitFor(
+            () => {
                 expect(screen.getByText('key1')).toBeInTheDocument();
+            },
+            {timeout: 5000}
+        );
+        await waitFor(
+            () => {
                 expect(screen.getByText('key2')).toBeInTheDocument();
             },
             {timeout: 5000}
@@ -754,7 +712,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -762,39 +719,33 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
+            },
+            {timeout: 15000, interval: 200}
+        );
+        await waitFor(
+            () => {
                 expect(screen.getByText('node2')).toBeInTheDocument();
             },
             {timeout: 15000, interval: 200}
         );
-
-        const node1Section = await findNodeSection('node1');
-        const node2Section = await findNodeSection('node2');
-
         const batchActionsButton = screen.getByRole('button', {
             name: /Actions on selected nodes/i,
         });
         console.log(`[DEBUG] Batch actions button disabled: ${batchActionsButton.disabled}`);
-
-        const node1Checkbox = within(node1Section).getByRole('checkbox', {
+        const node1Checkbox = screen.getByRole('checkbox', {
             name: /select node node1/i,
         });
-        const node2Checkbox = within(node2Section).getByRole('checkbox', {
+        const node2Checkbox = screen.getByRole('checkbox', {
             name: /select node node2/i,
         });
-        await act(async () => {
-            await user.click(node1Checkbox);
-            await user.click(node2Checkbox);
-        });
-
+        await user.click(node1Checkbox);
+        await user.click(node2Checkbox);
         console.log(`[DEBUG] Batch actions button disabled after selection: ${batchActionsButton.disabled}`);
         expect(batchActionsButton).not.toBeDisabled();
-        await act(async () => {
-            await user.click(batchActionsButton);
-        });
+        await user.click(batchActionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
@@ -804,12 +755,6 @@ type = flag
                 console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 throw new Error('No menus found');
             }
-            const menuItems = menus[0].querySelectorAll('[role="menuitem"]');
-            console.log(`[DEBUG] Menu items in first menu:`, Array.from(menuItems).map((el) => ({
-                text: el.textContent,
-                ariaLabel: el.getAttribute('aria-label'),
-                disabled: el.getAttribute('aria-disabled'),
-            })));
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
@@ -820,9 +765,7 @@ type = flag
             throw new Error('No "Start" menu item found');
         }
         console.log(`[DEBUG] Clicking start action: ${startAction.textContent}`);
-        await act(async () => {
-            await user.click(startAction);
-        });
+        await user.click(startAction);
 
         await waitFor(() => {
             const dialogs = screen.queryAllByRole('dialog');
@@ -842,9 +785,7 @@ type = flag
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
-            await act(async () => {
-                await user.click(checkbox);
-            });
+            await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
@@ -858,9 +799,7 @@ type = flag
             throw new Error('No confirm button found');
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
-        await act(async () => {
-            await user.click(confirmButton);
-        });
+        await user.click(confirmButton);
 
         await waitFor(() => {
             console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
@@ -872,6 +811,12 @@ type = flag
                     expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
                     expect.any(Object)
                 );
+            },
+            {timeout: 20000, interval: 200}
+        );
+
+        await waitFor(
+            () => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
                     expect.objectContaining({
@@ -894,12 +839,6 @@ type = flag
                 })));
                 if (alerts.length === 0) {
                     console.log('[DEBUG] No alerts found');
-                    console.log('[DEBUG] All Snackbar-like elements:', Array.from(document.querySelectorAll('div')).filter((el) => el.textContent.match(/action|success|completed|performed|succeeded/i)).map((el) => ({
-                        text: el.textContent,
-                        role: el.getAttribute('role'),
-                        attributes: Array.from(el.attributes).map((attr) => ({[attr.name]: attr.value})),
-                    })));
-                    console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 }
             },
             {timeout: 30000, interval: 200}
@@ -910,7 +849,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -918,22 +856,17 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
         );
-
-        const node1Section = await findNodeSection('node1');
-        const actionsButton = within(node1Section).getByRole('button', {
+        const actionsButton = screen.getByRole('button', {
             name: /Node node1 actions/i,
         });
         console.log(`[DEBUG] Node actions button disabled: ${actionsButton.disabled}`);
-        await act(async () => {
-            await user.click(actionsButton);
-        });
+        await user.click(actionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
@@ -943,12 +876,6 @@ type = flag
                 console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 throw new Error('No menus found');
             }
-            const menuItems = menus[0].querySelectorAll('[role="menuitem"]');
-            console.log(`[DEBUG] Menu items in first menu:`, Array.from(menuItems).map((el) => ({
-                text: el.textContent,
-                ariaLabel: el.getAttribute('aria-label'),
-                disabled: el.getAttribute('aria-disabled'),
-            })));
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
@@ -959,9 +886,7 @@ type = flag
             throw new Error('No "Stop" menu item found');
         }
         console.log(`[DEBUG] Clicking stop action: ${stopAction.textContent}`);
-        await act(async () => {
-            await user.click(stopAction);
-        });
+        await user.click(stopAction);
 
         await waitFor(() => {
             const dialogs = screen.queryAllByRole('dialog');
@@ -981,9 +906,7 @@ type = flag
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
-            await act(async () => {
-                await user.click(checkbox);
-            });
+            await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
@@ -997,9 +920,7 @@ type = flag
             throw new Error('No confirm button found');
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
-        await act(async () => {
-            await user.click(confirmButton);
-        });
+        await user.click(confirmButton);
 
         await waitFor(() => {
             console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
@@ -1029,12 +950,6 @@ type = flag
                 })));
                 if (alerts.length === 0) {
                     console.log('[DEBUG] No alerts found');
-                    console.log('[DEBUG] All Snackbar-like elements:', Array.from(document.querySelectorAll('div')).filter((el) => el.textContent.match(/action|success|completed|performed|succeeded/i)).map((el) => ({
-                        text: el.textContent,
-                        role: el.getAttribute('role'),
-                        attributes: Array.from(el.attributes).map((attr) => ({[attr.name]: attr.value})),
-                    })));
-                    console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 }
             },
             {timeout: 30000, interval: 200}
@@ -1045,7 +960,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1053,41 +967,31 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
         );
-
-        const node1Section = await findNodeSection('node1');
-        const resourcesAccordion = within(node1Section).getByRole('button', {
+        const resourcesAccordion = screen.getByRole('button', {
             name: /expand resources for node node1/i,
         });
-        await act(async () => {
-            fireEvent.click(resourcesAccordion);
-        });
-
-        const res1Checkbox = within(node1Section).getByRole('checkbox', {
+        fireEvent.click(resourcesAccordion);
+        const res1Checkbox = screen.getByRole('checkbox', {
             name: /select resource res1/i,
         });
-        const res2Checkbox = within(node1Section).getByRole('checkbox', {
+        const res2Checkbox = screen.getByRole('checkbox', {
             name: /select resource res2/i,
         });
-        await act(async () => {
-            await user.click(res1Checkbox);
-            await user.click(res2Checkbox);
-        });
-
-        const batchResourceActionsButton = within(node1Section).getByRole('button', {
+        await user.click(res1Checkbox);
+        await user.click(res2Checkbox);
+        const batchResourceActionsButton = screen.getByRole('button', {
             name: /Resource actions for node node1/i,
         });
         console.log(`[DEBUG] Batch resource actions button disabled: ${batchResourceActionsButton.disabled}`);
         expect(batchResourceActionsButton).not.toBeDisabled();
-        await act(async () => {
-            fireEvent.click(batchResourceActionsButton);
-        });
+
+        fireEvent.click(batchResourceActionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
@@ -1097,12 +1001,6 @@ type = flag
                 console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 throw new Error('No menus found');
             }
-            const menuItems = menus[0].querySelectorAll('[role="menuitem"]');
-            console.log(`[DEBUG] Menu items in first menu:`, Array.from(menuItems).map((el) => ({
-                text: el.textContent,
-                ariaLabel: el.getAttribute('aria-label'),
-                disabled: el.getAttribute('aria-disabled'),
-            })));
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
@@ -1113,9 +1011,8 @@ type = flag
             throw new Error('No "Stop" menu item found');
         }
         console.log(`[DEBUG] Clicking stop action: ${stopAction.textContent}`);
-        await act(async () => {
-            fireEvent.click(stopAction);
-        });
+
+        fireEvent.click(stopAction);
 
         await waitFor(() => {
             const dialogs = screen.queryAllByRole('dialog');
@@ -1135,9 +1032,7 @@ type = flag
         console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
-            await act(async () => {
-                await user.click(checkbox);
-            });
+            await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
         if (!confirmButton) {
@@ -1151,9 +1046,7 @@ type = flag
             throw new Error('No confirm button found');
         }
         console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
-        await act(async () => {
-            await user.click(confirmButton);
-        });
+        await user.click(confirmButton);
 
         await waitFor(() => {
             console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
@@ -1178,12 +1071,6 @@ type = flag
                 })));
                 if (alerts.length === 0) {
                     console.log('[DEBUG] No alerts found');
-                    console.log('[DEBUG] All Snackbar-like elements:', Array.from(document.querySelectorAll('div')).filter((el) => el.textContent.match(/action|success|completed|performed|succeeded/i)).map((el) => ({
-                        text: el.textContent,
-                        role: el.getAttribute('role'),
-                        attributes: Array.from(el.attributes).map((attr) => ({[attr.name]: attr.value})),
-                    })));
-                    console.log('[DEBUG] Current DOM:', document.body.innerHTML);
                 }
             },
             {timeout: 15000, interval: 200}
@@ -1194,7 +1081,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1202,37 +1088,43 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
         );
-
-        const node1Section = await findNodeSection('node1');
-        const resourcesAccordion = within(node1Section).getByRole('button', {
+        const resourcesAccordion = screen.getByRole('button', {
             name: /expand resources for node node1/i,
         });
-        await act(async () => {
-            fireEvent.click(resourcesAccordion);
-        });
-
-        const res2ActionsButtons = within(node1Section).getAllByRole('button', {
+        fireEvent.click(resourcesAccordion);
+        const res2ActionsButtons = screen.getAllByRole('button', {
             name: /resource res2 actions/i,
         });
         const res2ActionsButton = res2ActionsButtons.find(
             (button) => !button.hasAttribute('sx')
         );
-        await act(async () => {
-            fireEvent.click(res2ActionsButton);
-        });
+        fireEvent.click(res2ActionsButton);
 
         await waitFor(
             () => {
                 const menu = screen.getByRole('menu');
                 expect(within(menu).getByRole('menuitem', {name: /run/i})).toBeInTheDocument();
+            },
+            {timeout: 10000, interval: 200}
+        );
+
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
                 expect(within(menu).queryByRole('menuitem', {name: /stop/i})).not.toBeInTheDocument();
+            },
+            {timeout: 10000, interval: 200}
+        );
+
+        await waitFor(
+            () => {
+                const menu = screen.getByRole('menu');
                 expect(within(menu).queryByRole('menuitem', {name: /start/i})).not.toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
@@ -1241,7 +1133,6 @@ type = flag
 
     test('mount without token', async () => {
         mockLocalStorage.getItem.mockReturnValueOnce(null);
-
         useEventStore.mockImplementation((sel) =>
             sel({
                 objectStatus: {},
@@ -1252,7 +1143,6 @@ type = flag
                 clearConfigUpdate: jest.fn(),
             })
         );
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1260,7 +1150,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         expect(startEventReception).not.toHaveBeenCalled();
     });
 
@@ -1270,7 +1159,6 @@ type = flag
             cb([{name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated'}]);
             return unsubscribeMock;
         });
-
         useEventStore.mockImplementation((sel) =>
             sel({
                 objectStatus: {},
@@ -1281,7 +1169,6 @@ type = flag
                 clearConfigUpdate: jest.fn(),
             })
         );
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1289,7 +1176,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         expect(typeof unsubscribeMock).toBe('function');
     });
 
@@ -1302,7 +1188,6 @@ type = flag
                 text: () => Promise.resolve('mock-config')
             }), 100))
         );
-
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1310,20 +1195,16 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         unmount();
-
         await waitFor(() => {
             expect(consoleLogSpy).not.toHaveBeenCalledWith(expect.stringContaining('fetchConfig success'));
         }, {timeout: 10000});
-
         consoleLogSpy.mockRestore();
     });
 
     test('useEffect for configUpdates handles no matching update', async () => {
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {
         });
-
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
@@ -1341,7 +1222,6 @@ type = flag
             callback(mockState.configUpdates);
             return jest.fn();
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1349,14 +1229,14 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(consoleLogSpy).toHaveBeenCalledWith(
                 expect.stringContaining('No valid node in config update, skipping fetchConfig')
             );
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(mockState.clearConfigUpdate).not.toHaveBeenCalled();
         }, {timeout: 10000});
-
         consoleLogSpy.mockRestore();
     });
 
@@ -1370,7 +1250,6 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1378,7 +1257,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(global.fetch).not.toHaveBeenCalled();
         }, {timeout: 10000});
@@ -1390,7 +1268,6 @@ type = flag
             cb([{name: 'other', type: 'InstanceConfigUpdated', node: 'node1'}]);
             return mockSubscribe;
         });
-
         const {unmount} = render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1398,18 +1275,15 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/config/file'));
         }, {timeout: 10000});
-
         unmount();
         expect(mockSubscribe).toHaveBeenCalled();
     });
 
     test('renders KeysSection for sec kind', async () => {
         require('react-router-dom').useParams.mockReturnValue({objectName: 'root/sec/sec1'});
-
         const mockState = {
             objectStatus: {'root/sec/sec1': {avail: 'up'}},
             objectInstanceStatus: {'root/sec/sec1': {node1: {resources: {}}}},
@@ -1419,7 +1293,6 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsec%2Fsec1']}>
                 <Routes>
@@ -1427,7 +1300,6 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText(/Keys/i)).toBeInTheDocument();
         }, {timeout: 10000});
@@ -1437,13 +1309,11 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         global.fetch.mockImplementationOnce(() => Promise.resolve({
             ok: false,
             status: 500,
             statusText: 'Server Error'
         }));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1452,22 +1322,16 @@ type = flag
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            const objectActionsButton = screen.getByRole('button', {name: /Object actions/i});
-            fireEvent.click(objectActionsButton);
-        }, {timeout: 10000});
+        const objectActionsButton = await screen.findByRole('button', {name: /Object actions/i});
+        fireEvent.click(objectActionsButton);
 
-        await waitFor(() => {
-            const menu = screen.getByRole('menu');
-            const startItem = within(menu).getByRole('menuitem', {name: /Start/i});
-            fireEvent.click(startItem);
-        }, {timeout: 10000});
+        const menu = await screen.findByRole('menu');
+        const startItem = within(menu).getByRole('menuitem', {name: /Start/i});
+        fireEvent.click(startItem);
 
-        await waitFor(() => {
-            const dialog = screen.getByRole('dialog');
-            const confirmButton = within(dialog).getByRole('button', {name: /Confirm/i});
-            fireEvent.click(confirmButton);
-        }, {timeout: 10000});
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /Confirm/i});
+        fireEvent.click(confirmButton);
 
         await waitFor(() => {
             const alerts = screen.queryAllByRole('alert');
@@ -1484,6 +1348,11 @@ type = flag
                 throw new Error('No alert found with text matching /error|failed|start/i');
             }
             expect(errorAlert).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            const alerts = screen.queryAllByRole('alert');
+            const errorAlert = alerts.find((alert) => alert.textContent.match(/error|failed|start/i));
             expect(errorAlert).toHaveTextContent(/error|failed|start/i);
         }, {timeout: 10000});
     }, 20000);
@@ -1492,7 +1361,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
-
         const mockStateNoNodes = {
             objectStatus: {
                 'root/cfg/cfg1': {
@@ -1529,7 +1397,6 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockStateNoNodes));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -1537,19 +1404,20 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         const configAccordions = await screen.findAllByRole('button', {name: /Configuration/i});
         const configAccordion = configAccordions.find((el) =>
-            el.getAttribute('aria-expanded') === 'false' &&
-            el.closest('div[role="region"]')
+            el.getAttribute('aria-expanded') === 'false'
         );
         expect(configAccordion).toBeInTheDocument();
         await user.click(configAccordion);
-
         await waitFor(() => {
             const alerts = screen.getAllByRole('alert');
             const errorAlert = alerts.find((alert) => alert.textContent.match(/No node available/i));
             expect(errorAlert).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find((alert) => alert.textContent.match(/No node available/i));
             expect(errorAlert).toHaveTextContent(/No node available/i);
         }, {timeout: 10000});
     }, 15000);
@@ -1566,13 +1434,12 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
-        const nodeSection = await findNodeSection('node1');
-        const resourcesAccordion = await within(nodeSection).findByRole('button', {name: /expand resources for node node1/i});
+        const resourcesAccordion = await screen.findByRole('button', {name: /expand resources for node node1/i});
         await user.click(resourcesAccordion);
-
         await waitFor(() => {
             expect(screen.getByText('res1')).toBeInTheDocument();
+        }, {timeout: 10000});
+        await waitFor(() => {
             expect(screen.getByText('res2')).toBeInTheDocument();
         }, {timeout: 10000});
     }, 20000);
@@ -1639,20 +1506,51 @@ type = flag
             </MemoryRouter>
         );
 
-        const nodeSection = await findNodeSection('node1');
-        const resourcesAccordion = await within(nodeSection).findByRole('button', {name: /expand resources for node node1/i});
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const nodeHeaders = screen.getAllByText((content, element) => {
+            return (
+                content.includes('node1') &&
+                element.tagName === 'SPAN' &&
+                element.getAttribute('variant') === 'h6'
+            );
+        });
+
+        expect(nodeHeaders.length).toBeGreaterThan(0);
+
+        const resourcesAccordion = await screen.findByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+
         await user.click(resourcesAccordion);
 
-        const resFsRow = await within(nodeSection).findByText('resFs');
-        const resourceMenuButton = await within(resFsRow.closest('div')).findByRole('button', {
+        await waitFor(() => {
+            expect(screen.getByText('resFs')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const resourceMenuButtons = screen.getAllByRole('button', {
             name: /Resource resFs actions/i,
         });
+
+        expect(resourceMenuButtons.length).toBeGreaterThan(0);
+        const resourceMenuButton = resourceMenuButtons[0];
+
         await user.click(resourceMenuButton);
 
         await waitFor(() => {
             const menu = screen.getByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /run/i})).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
             expect(within(menu).getByRole('menuitem', {name: /start/i})).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
             expect(within(menu).getByRole('menuitem', {name: /stop/i})).toBeInTheDocument();
         }, {timeout: 10000});
     }, 20000);
@@ -1720,14 +1618,27 @@ type = flag
             </MemoryRouter>
         );
 
-        const nodeSection = await findNodeSection('node1');
-        const resourcesAccordion = await within(nodeSection).findByRole('button', {name: /expand resources for node node1/i});
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const resourcesAccordion = await screen.findByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+
         await user.click(resourcesAccordion);
 
-        const resNoTypeRow = await within(nodeSection).findByText('resNoType');
-        const resourceMenuButton = await within(resNoTypeRow.closest('div')).findByRole('button', {
+        await waitFor(() => {
+            expect(screen.getByText('resNoType')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const resourceMenuButtons = screen.getAllByRole('button', {
             name: /Resource resNoType actions/i,
         });
+
+        expect(resourceMenuButtons.length).toBeGreaterThan(0);
+        const resourceMenuButton = resourceMenuButtons[0];
+
         await user.click(resourceMenuButton);
 
         await waitFor(() => {

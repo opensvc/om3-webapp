@@ -2,7 +2,7 @@ import {
     extractNamespace,
     extractKind,
     isActionAllowedForSelection,
-    ALLOWED_ACTIONS_BY_KIND as ALLOWED_ACTIONS_BY_KIND
+    ALLOWED_ACTIONS_BY_KIND
 } from '../objectUtils';
 
 describe('objectUtils', () => {

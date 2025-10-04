@@ -9,14 +9,13 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
-import {URL_TOKEN} from "../config/apiPath.js";
+import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
 
 // --- Secure decodeToken ---
 export const decodeToken = (token) => {
     if (!token) return null;
     try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload;
+        return JSON.parse(atob(token.split('.')[1]));
     } catch (error) {
         console.error('Error decoding token:', error);
         return null;
@@ -25,24 +24,39 @@ export const decodeToken = (token) => {
 
 // --- Exported refreshToken ---
 export const refreshToken = async (dispatch) => {
-    const token = localStorage.getItem('authToken');
-    if (!token) return null;
+    const refresh_token = localStorage.getItem('refreshToken');
+    if (!refresh_token) return null;
+
+    const refreshExpiration = localStorage.getItem('refreshTokenExpiration');
+    if (refreshExpiration && Date.now() > parseInt(refreshExpiration)) {
+        console.error('Refresh token expired');
+        dispatch({type: SetAccessToken, data: null});
+        return null;
+    }
 
     try {
-        const response = await fetch(URL_TOKEN, {
+        const response = await fetch(URL_REFRESH, {
             method: 'POST',
-            headers: {'Authorization': `Bearer ${token}`},
+            headers: {
+                'accept': 'application/json',
+                'Authorization': `Bearer ${refresh_token}`
+            },
         });
 
-        if (!response.ok) throw new Error('Token refresh failed');
+        if (!response.ok) {
+            console.error('Error refreshing token: Token refresh failed');
+            dispatch({type: SetAccessToken, data: null});
+            return null;
+        }
+
         const data = await response.json();
 
-        localStorage.setItem('authToken', data.token);
-        const expirationTime = decodeToken(data.token)?.exp * 1000;
+        localStorage.setItem('authToken', data.access_token);
+        const expirationTime = decodeToken(data.access_token)?.exp * 1000;
         if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
 
-        dispatch({type: SetAccessToken, data: data.token});
-        return data.token;
+        dispatch({type: SetAccessToken, data: data.access_token});
+        return data.access_token;
     } catch (error) {
         console.error('Error refreshing token:', error);
         dispatch({type: SetAccessToken, data: null});
@@ -60,7 +74,7 @@ const Login = forwardRef((props, ref) => {
 
     const handleLogin = async (username, password) => {
         try {
-            const response = await fetch(URL_TOKEN, {
+            const response = await fetch(`${URL_TOKEN}?refresh=true`, {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Basic ' + btoa(`${username}:${password}`),
@@ -68,17 +82,24 @@ const Login = forwardRef((props, ref) => {
             });
 
             if (!response.ok) {
-                throw new Error('Incorrect username or password');
+                const errorMessage = t('Incorrect username or password');
+                console.error('Authentication error:', errorMessage);
+                setErrorMessage(errorMessage);
+                return;
             }
 
             const data = await response.json();
             setErrorMessage('');
 
-            localStorage.setItem('authToken', data.token);
-            const expirationTime = decodeToken(data.token)?.exp * 1000;
-            if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
+            localStorage.setItem('authToken', data.access_token);
+            localStorage.setItem('refreshToken', data.refresh_token);
+            const accessExp = decodeToken(data.access_token)?.exp * 1000;
+            if (accessExp) localStorage.setItem('tokenExpiration', accessExp);
+            const refreshDecoded = decodeToken(data.refresh_token);
+            const refreshExp = refreshDecoded?.exp * 1000;
+            if (refreshExp) localStorage.setItem('refreshTokenExpiration', refreshExp);
 
-            dispatch({type: SetAccessToken, data: data.token});
+            dispatch({type: SetAccessToken, data: data.access_token});
             navigate('/');
         } catch (error) {
             console.error('Authentication error:', error);
@@ -101,10 +122,25 @@ const Login = forwardRef((props, ref) => {
     };
 
     return (
-        <Dialog open={true} aria-labelledby="login-dialog" ref={ref}
-                PaperProps={{sx: {width: '100%', maxWidth: '448px', mx: 'auto', p: 3, borderRadius: 2, boxShadow: 3}}}>
-            <DialogTitle id="login-dialog"
-                         sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}>
+        <Dialog
+            open={true}
+            aria-labelledby="login-dialog"
+            ref={ref}
+            sx={{
+                '& .MuiPaper-root': {
+                    width: '100%',
+                    maxWidth: '448px',
+                    mx: 'auto',
+                    p: 3,
+                    borderRadius: 2,
+                    boxShadow: 3
+                }
+            }}
+        >
+            <DialogTitle
+                id="login-dialog"
+                sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}
+            >
                 {t('Login')}
             </DialogTitle>
             <DialogContent sx={{px: 3}}>

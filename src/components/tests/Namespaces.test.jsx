@@ -3,7 +3,7 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter} from 'react-router-dom';
 import Namespaces from '../Namespaces';
 import useEventStore from '../../hooks/useEventStore.js';
-import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
+import {startEventReception} from '../../eventSourceManager.jsx';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
@@ -59,12 +59,9 @@ jest.mock('@mui/icons-material/FiberManualRecord', () => ({
 }));
 
 describe('Namespaces Component', () => {
-    const mockFetchNodes = jest.fn(() => {
-    });
-    const mockStartEventReception = jest.fn(() => {
-    });
-    const mockCloseEventSource = jest.fn(() => {
-    });
+    const mockFetchNodes = jest.fn();
+    const mockStartEventReception = jest.fn();
+    const mockCloseEventSource = jest.fn();
     const mockNavigate = jest.fn();
 
     beforeEach(() => {
@@ -103,12 +100,10 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Namespaces Status Overview')).toBeInTheDocument();
-            expect(screen.getByTestId('table')).toBeInTheDocument();
-            expect(screen.getByTestId('table-head')).toBeInTheDocument();
-            expect(screen.getByTestId('table-body')).toBeInTheDocument();
-        });
+        expect(await screen.findByText('Namespaces Status Overview')).toBeInTheDocument();
+        expect(screen.getByTestId('table')).toBeInTheDocument();
+        expect(screen.getByTestId('table-head')).toBeInTheDocument();
+        expect(screen.getByTestId('table-body')).toBeInTheDocument();
     });
 
     test('renders namespaces with correct status counts', async () => {
@@ -118,23 +113,21 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            const rootRow = screen.getByText('root').closest('tr');
-            const rootCells = within(rootRow).getAllByTestId('table-cell');
-            expect(rootCells[1]).toHaveTextContent('1'); // Up
-            expect(rootCells[2]).toHaveTextContent('1'); // Down
-            expect(rootCells[3]).toHaveTextContent('0'); // Warn
-            expect(rootCells[4]).toHaveTextContent('0'); // Unknown
-            expect(rootCells[5]).toHaveTextContent('2'); // Total
+        const rootRow = await screen.findByRole('row', {name: /root/i});
+        const rootCells = within(rootRow).getAllByTestId('table-cell');
+        expect(rootCells[1]).toHaveTextContent('1'); // Up
+        expect(rootCells[2]).toHaveTextContent('1'); // Down
+        expect(rootCells[3]).toHaveTextContent('0'); // Warn
+        expect(rootCells[4]).toHaveTextContent('0'); // Unknown
+        expect(rootCells[5]).toHaveTextContent('2'); // Total
 
-            const prodRow = screen.getByText('prod').closest('tr');
-            const prodCells = within(prodRow).getAllByTestId('table-cell');
-            expect(prodCells[1]).toHaveTextContent('1'); // Up
-            expect(prodCells[2]).toHaveTextContent('0'); // Down
-            expect(prodCells[3]).toHaveTextContent('1'); // Warn
-            expect(prodCells[4]).toHaveTextContent('0'); // Unknown
-            expect(prodCells[5]).toHaveTextContent('2'); // Total
-        });
+        const prodRow = await screen.findByRole('row', {name: /prod/i});
+        const prodCells = within(prodRow).getAllByTestId('table-cell');
+        expect(prodCells[1]).toHaveTextContent('1'); // Up
+        expect(prodCells[2]).toHaveTextContent('0'); // Down
+        expect(prodCells[3]).toHaveTextContent('1'); // Warn
+        expect(prodCells[4]).toHaveTextContent('0'); // Unknown
+        expect(prodCells[5]).toHaveTextContent('2'); // Total
     });
 
     test('displays correct status icons with colors', async () => {
@@ -144,23 +137,19 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            const rootRow = screen.getByText('root').closest('tr');
-            const rootIcons = within(rootRow).getAllByTestId('status-icon');
-            expect(rootIcons).toHaveLength(4);
-            expect(rootIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
-            expect(rootIcons[1]).toHaveStyle({color: '#f44336'}); // Down
-            expect(rootIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
-            expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
+        const rootRow = await screen.findByRole('row', {name: /root/i});
+        const rootIcons = within(rootRow).getAllByTestId('status-icon');
+        expect(rootIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
+        expect(rootIcons[1]).toHaveStyle({color: '#f44336'}); // Down
+        expect(rootIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
+        expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
 
-            const prodRow = screen.getByText('prod').closest('tr');
-            const prodIcons = within(prodRow).getAllByTestId('status-icon');
-            expect(prodIcons).toHaveLength(4);
-            expect(prodIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
-            expect(prodIcons[1]).toHaveStyle({color: '#f44336'}); // Down
-            expect(prodIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
-            expect(prodIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
-        });
+        const prodRow = await screen.findByRole('row', {name: /prod/i});
+        const prodIcons = within(prodRow).getAllByTestId('status-icon');
+        expect(prodIcons[0]).toHaveStyle({color: '#4caf50'}); // Up
+        expect(prodIcons[1]).toHaveStyle({color: '#f44336'}); // Down
+        expect(prodIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
+        expect(prodIcons[3]).toHaveStyle({color: '#9e9e9e'}); // Unknown
     });
 
     test('navigates to objects page with namespace on row click', async () => {
@@ -170,11 +159,9 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            const row = screen.getByText('root').closest('tr');
-            fireEvent.click(row);
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
-        });
+        const row = await screen.findByRole('row', {name: /root/i});
+        fireEvent.click(row);
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
     });
 
     test('navigates to objects page with namespace and status on status cell click', async () => {
@@ -184,13 +171,10 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            const rootRow = screen.getByText('root').closest('tr');
-            const statusCells = within(rootRow).getAllByTestId('table-cell');
-            const naCell = statusCells[4]; // N/A status cell
-            fireEvent.click(naCell);
-            expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=n/a');
-        });
+        const rootRow = await screen.findByRole('row', {name: /root/i});
+        const statusCells = within(rootRow).getAllByTestId('table-cell');
+        fireEvent.click(statusCells[4]);
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=n/a');
     });
 
     test('startEventReception on mount with auth token', async () => {
@@ -201,7 +185,10 @@ describe('Namespaces Component', () => {
         );
 
         await waitFor(() => {
-            expect(startEventReception).toHaveBeenCalledWith("valid-token", ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceConfigUpdated"]);
+            expect(startEventReception).toHaveBeenCalledWith(
+                'valid-token',
+                ['ObjectStatusUpdated', 'InstanceStatusUpdated', 'ObjectDeleted', 'InstanceConfigUpdated']
+            );
         });
     });
 
@@ -216,12 +203,10 @@ describe('Namespaces Component', () => {
             unmount();
         });
 
-        await waitFor(() => {
-            expect(mockCloseEventSource).toHaveBeenCalled();
-        });
+        expect(mockCloseEventSource).toHaveBeenCalled();
     });
 
-    test('does not call fetchNodes or startEventReception without auth token', async () => {
+    test('does not call fetchNodes or startEventReception without auth token', () => {
         Storage.prototype.getItem = jest.fn(() => null);
 
         render(
@@ -230,10 +215,8 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(mockFetchNodes).not.toHaveBeenCalled();
-            expect(mockStartEventReception).not.toHaveBeenCalled();
-        });
+        expect(mockFetchNodes).not.toHaveBeenCalled();
+        expect(mockStartEventReception).not.toHaveBeenCalled();
     });
 
     test('displays no namespaces message when no data is available', async () => {
@@ -245,18 +228,16 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('Namespaces Status Overview')).toBeInTheDocument();
-            expect(screen.getByText(/No namespaces available/i)).toBeInTheDocument();
-            expect(screen.getByTestId('table-body').children).toHaveLength(1);
-        });
+        expect(await screen.findByText(/No namespaces available/i)).toBeInTheDocument();
+        const bodyRows = within(screen.getByTestId('table-body')).getAllByRole('row');
+        expect(bodyRows).toHaveLength(1);
     });
 
     test('handles malformed objectStatus data', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
                 objectStatus: {
-                    'invalid': {avail: 'error'}, // Invalid key, assigned to 'root' with 'unknown'
+                    'invalid': {avail: 'error'},
                     'prod/svc/valid': {avail: 'up'},
                 },
             })
@@ -268,24 +249,20 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            // Vérifier le namespace 'prod'
-            const prodRow = screen.getByText('prod').closest('tr');
-            const prodCells = within(prodRow).getAllByTestId('table-cell');
-            expect(prodCells[1]).toHaveTextContent('1'); // Up
-            expect(prodCells[2]).toHaveTextContent('0'); // Down
-            expect(prodCells[3]).toHaveTextContent('0'); // Warn
-            expect(prodCells[4]).toHaveTextContent('0'); // Unknown
-            expect(prodCells[5]).toHaveTextContent('1'); // Total
+        const prodRow = await screen.findByRole('row', {name: /prod/i});
+        const prodCells = within(prodRow).getAllByTestId('table-cell');
+        expect(prodCells[1]).toHaveTextContent('1'); // Up
+        expect(prodCells[2]).toHaveTextContent('0'); // Down
+        expect(prodCells[3]).toHaveTextContent('0'); // Warn
+        expect(prodCells[4]).toHaveTextContent('0'); // Unknown
+        expect(prodCells[5]).toHaveTextContent('1'); // Total
 
-            // Vérifier le namespace 'root' pour la clé 'invalid'
-            const rootRow = screen.getByText('root').closest('tr');
-            const rootCells = within(rootRow).getAllByTestId('table-cell');
-            expect(rootCells[1]).toHaveTextContent('0'); // Up
-            expect(rootCells[2]).toHaveTextContent('0'); // Down
-            expect(rootCells[3]).toHaveTextContent('0'); // Warn
-            expect(rootCells[4]).toHaveTextContent('1'); // Unknown (from 'error')
-            expect(rootCells[5]).toHaveTextContent('1'); // Total
-        });
+        const rootRow = await screen.findByRole('row', {name: /root/i});
+        const rootCells = within(rootRow).getAllByTestId('table-cell');
+        expect(rootCells[1]).toHaveTextContent('0'); // Up
+        expect(rootCells[2]).toHaveTextContent('0'); // Down
+        expect(rootCells[3]).toHaveTextContent('0'); // Warn
+        expect(rootCells[4]).toHaveTextContent('1'); // Unknown
+        expect(rootCells[5]).toHaveTextContent('1'); // Total
     });
 });

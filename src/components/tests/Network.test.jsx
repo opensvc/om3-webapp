@@ -28,6 +28,8 @@ Object.defineProperty(window, 'localStorage', {
 const mockNetworks = [
     {name: 'lo', type: 'loopback', network: '127.0.0.0/8', size: 100, used: 50, free: 50},
     {name: 'default', type: 'bridge', network: '192.168.1.0/24', size: 200, used: 100, free: 100},
+    {name: 'test', type: 'overlay', network: '10.0.0.0/24', size: 100, used: 90, free: 10}, // For usage > 80
+    {name: 'mid', type: 'bridge', network: '172.16.0.0/16', size: 100, used: 60, free: 40}, // For usage > 50
 ];
 
 describe('Network Component', () => {
@@ -61,39 +63,30 @@ describe('Network Component', () => {
         // Check lo data (sorted first)
         const loRow = screen.getByRole('row', {name: /lo/i});
         expect(loRow).toHaveTextContent('lo');
-
         await waitFor(() => {
             expect(loRow).toHaveTextContent('loopback');
         });
-
         await waitFor(() => {
             expect(loRow).toHaveTextContent('127.0.0.0/8');
         });
-
         await waitFor(() => {
             expect(loRow).toHaveTextContent('50.0%');
         });
-
         await waitFor(() => {
             expect(within(loRow).getByRole('progressbar')).toBeInTheDocument();
         });
 
-        // Check default data
         const defaultRow = screen.getByRole('row', {name: /default/i});
         expect(defaultRow).toHaveTextContent('default');
-
         await waitFor(() => {
             expect(defaultRow).toHaveTextContent('bridge');
         });
-
         await waitFor(() => {
             expect(defaultRow).toHaveTextContent('192.168.1.0/24');
         });
-
         await waitFor(() => {
             expect(defaultRow).toHaveTextContent('50.0%');
         });
-
         await waitFor(() => {
             expect(within(defaultRow).getByRole('progressbar')).toBeInTheDocument();
         });
@@ -128,7 +121,6 @@ describe('Network Component', () => {
         // Second row (default)
         const defaultRow = screen.getByRole('row', {name: /default/i});
         const defaultPercentage = within(defaultRow).getByText('50.0%');
-
         fireEvent.mouseOver(defaultPercentage);
         expect(await screen.findByText('100/200')).toBeInTheDocument();
 
@@ -177,11 +169,9 @@ describe('Network Component', () => {
 
         const testRow = screen.getByRole('row', {name: /test/i});
         const usageCell = within(testRow).getByText('N/A');
-
         await waitFor(() => {
             expect(usageCell).toHaveTextContent('N/A');
         });
-
         await waitFor(() => {
             expect(within(testRow).queryByRole('progressbar')).not.toBeInTheDocument();
         });
@@ -199,7 +189,7 @@ describe('Network Component', () => {
         });
     });
 
-    test('sorts networks alphabetically by name', async () => {
+    test('sorts networks alphabetically by name in ascending order', async () => {
         const unsortedNetworks = [
             {name: 'zebra', type: 'bridge', network: '10.0.0.0/24', size: 100, used: 50, free: 50},
             {name: 'apple', type: 'loopback', network: '127.0.0.0/8', size: 100, used: 50, free: 50},
@@ -223,11 +213,148 @@ describe('Network Component', () => {
 
         expect(appleRow).toBeInTheDocument();
         expect(zebraRow).toBeInTheDocument();
+        expect(rows.indexOf(appleRow)).toBeLessThan(rows.indexOf(zebraRow));
+    });
 
-        // Verify order by checking row indices
-        const appleIndex = rows.indexOf(appleRow);
-        const zebraIndex = rows.indexOf(zebraRow);
-        expect(appleIndex).toBeLessThan(zebraIndex);
+    test('sorts networks by type in ascending order', async () => {
+        const unsortedNetworks = [
+            {name: 'zebra', type: 'loopback', network: '10.0.0.0/24', size: 100, used: 50, free: 50},
+            {name: 'apple', type: 'bridge', network: '127.0.0.0/8', size: 100, used: 50, free: 50},
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: unsortedNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('apple')).toBeInTheDocument();
+        });
+
+        const typeHeader = screen.getByText('Type');
+        fireEvent.click(typeHeader);
+
+        await waitFor(() => {
+            expect(screen.getByText('bridge')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('loopback')).toBeInTheDocument();
+        });
+
+        const rows = screen.getAllByRole('row');
+        const appleRow = rows.find(row => row.textContent.includes('bridge')); // apple has type 'bridge'
+        const zebraRow = rows.find(row => row.textContent.includes('loopback')); // zebra has type 'loopback'
+
+        expect(appleRow).toBeInTheDocument();
+        expect(zebraRow).toBeInTheDocument();
+        expect(rows.indexOf(appleRow)).toBeLessThan(rows.indexOf(zebraRow)); // bridge < loopback
+    });
+
+    test('sorts networks by network in ascending order', async () => {
+        const unsortedNetworks = [
+            {name: 'zebra', type: 'bridge', network: '192.168.1.0/24', size: 100, used: 50, free: 50},
+            {name: 'apple', type: 'loopback', network: '127.0.0.0/8', size: 100, used: 50, free: 50},
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: unsortedNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('apple')).toBeInTheDocument();
+        });
+
+        const networkHeader = screen.getByText('Network');
+        fireEvent.click(networkHeader);
+
+        await waitFor(() => {
+            expect(screen.getByText('127.0.0.0/8')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('192.168.1.0/24')).toBeInTheDocument();
+        });
+
+        const rows = screen.getAllByRole('row');
+        const appleRow = rows.find(row => row.textContent.includes('127.0.0.0/8'));
+        const zebraRow = rows.find(row => row.textContent.includes('192.168.1.0/24'));
+
+        expect(appleRow).toBeInTheDocument();
+        expect(zebraRow).toBeInTheDocument();
+        expect(rows.indexOf(appleRow)).toBeLessThan(rows.indexOf(zebraRow)); // 127.0.0.0/8 < 192.168.1.0/24
+    });
+
+    test('sorts networks by usage in ascending order', async () => {
+        const unsortedNetworks = [
+            {name: 'zebra', type: 'bridge', network: '10.0.0.0/24', size: 100, used: 90, free: 10}, // 90%
+            {name: 'apple', type: 'loopback', network: '127.0.0.0/8', size: 100, used: 50, free: 50}, // 50%
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: unsortedNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('apple')).toBeInTheDocument();
+        });
+
+        const usageHeader = screen.getByText('Usage');
+        fireEvent.click(usageHeader);
+
+        await waitFor(() => {
+            expect(screen.getByText('50.0%')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('90.0%')).toBeInTheDocument();
+        });
+
+        const rows = screen.getAllByRole('row');
+        const appleRow = rows.find(row => row.textContent.includes('50.0%'));
+        const zebraRow = rows.find(row => row.textContent.includes('90.0%'));
+
+        expect(appleRow).toBeInTheDocument();
+        expect(zebraRow).toBeInTheDocument();
+        expect(rows.indexOf(appleRow)).toBeLessThan(rows.indexOf(zebraRow)); // 50% < 90%
+    });
+
+    test('sets progress bar color to success when usage <= 50%', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('lo')).toBeInTheDocument();
+        });
+
+        const loRow = screen.getByRole('row', {name: /lo/i});
+        const progressBar = within(loRow).getByRole('progressbar');
+        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('success')});
+    });
+
+    test('sets progress bar color to warning when usage > 50% and <= 80%', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('mid')).toBeInTheDocument();
+        });
+
+        const midRow = screen.getByRole('row', {name: /mid/i});
+        const progressBar = within(midRow).getByRole('progressbar');
+        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('warning')});
+    });
+
+    test('sets progress bar color to error when usage > 80%', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('test')).toBeInTheDocument();
+        });
+
+        const testRow = screen.getByRole('row', {name: /test/i});
+        const progressBar = within(testRow).getByRole('progressbar');
+        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('error')});
     });
 
     test('navigates to network details on row click', async () => {

@@ -307,85 +307,232 @@ const NodeCard = ({
             ? encapData[rid].provisioned
             : res?.provisioned?.state;
         const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
+        const logs = res.log || [];
+
+        // Calculate consistent left padding for logs based on screen size and encapsulation
+        const getLogPaddingLeft = () => {
+            if (isEncap) {
+                return {xs: "72px", sm: "72px"}; // Align with encapsulated resource content
+            } else {
+                return {xs: "56px", sm: "56px"}; // Align with regular resource content
+            }
+        };
+
         return (
             <Box
                 key={rid}
                 sx={{
                     display: "flex",
-                    flexDirection: {xs: "column", sm: "row"},
-                    alignItems: {xs: "flex-start", sm: "center"},
+                    flexDirection: "column",
                     width: "100%",
                     fontFamily: "'Roboto Mono', monospace",
                     fontSize: "0.9rem",
-                    gap: {xs: 1, sm: 2},
+                    gap: 1,
                 }}
             >
                 <Box
                     sx={{
                         display: "flex",
-                        alignItems: "center",
-                        gap: {xs: 1, sm: 2},
+                        flexDirection: {xs: "column", sm: "row"},
+                        alignItems: {xs: "flex-start", sm: "center"},
                         width: "100%",
-                        pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
+                        gap: {xs: 1, sm: 2},
                     }}
                 >
-                    <Box onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                            checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                            onChange={() => toggleResource(node, rid)}
-                            aria-label={`Select resource ${rid}`}
-                        />
-                    </Box>
-                    <Typography
-                        sx={{
-                            minWidth: {xs: "60px", sm: "80px"},
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                        }}
-                    >
-                        {rid}
-                    </Typography>
                     <Box
                         sx={{
-                            display: {xs: "none", sm: "flex"},
+                            display: "flex",
                             alignItems: "center",
-                            gap: 2,
-                            flexGrow: 0,
+                            gap: {xs: 1, sm: 2},
+                            width: "100%",
+                            pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
                         }}
                     >
-                        <Tooltip title={tooltipText}>
+                        <Box onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                                checked={(selectedResourcesByNode[node] || []).includes(rid)}
+                                onChange={() => toggleResource(node, rid)}
+                                aria-label={`Select resource ${rid}`}
+                                sx={{
+                                    padding: {xs: '4px', sm: '8px'},
+                                    '& .MuiSvgIcon-root': {fontSize: {xs: '1rem', sm: '1.25rem'}}
+                                }}
+                            />
+                        </Box>
+                        <Typography
+                            sx={{
+                                minWidth: {xs: "60px", sm: "80px"},
+                                fontFamily: "'Roboto Mono', monospace",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                fontSize: {xs: '0.8rem', sm: '0.9rem'}
+                            }}
+                        >
+                            {rid}
+                        </Typography>
+                        <Box
+                            sx={{
+                                display: {xs: "none", sm: "flex"},
+                                alignItems: "center",
+                                gap: 2,
+                                flexGrow: 0,
+                            }}
+                        >
+                            <Tooltip title={tooltipText}>
+                                <Typography
+                                    role="status"
+                                    sx={{
+                                        minWidth: {sm: "80px"},
+                                        fontFamily: "'Roboto Mono', monospace",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontSize: '0.9rem'
+                                    }}
+                                    aria-label={`Resource ${rid} status: ${statusString}`}
+                                >
+                                    {statusString}
+                                </Typography>
+                            </Tooltip>
                             <Typography
-                                role="status"
                                 sx={{
                                     minWidth: {sm: "80px"},
                                     fontFamily: "'Roboto Mono', monospace",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                {resourceType}
+                            </Typography>
+                            <Typography
+                                sx={{
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                {labelText}
+                                {infoText && (
+                                    <Typography
+                                        component="span"
+                                        sx={{
+                                            ml: 1,
+                                            color: "textSecondary",
+                                            fontFamily: "'Roboto Mono', monospace",
+                                            whiteSpace: "normal",
+                                            wordBreak: "break-word",
+                                            fontSize: '0.9rem'
+                                        }}
+                                    >
+                                        {infoText}
+                                    </Typography>
+                                )}
+                            </Typography>
+                        </Box>
+                        <Box
+                            sx={{
+                                display: {xs: "flex", sm: "none"},
+                                alignItems: "center",
+                                gap: 1,
+                                flexShrink: 0,
+                                marginLeft: "auto",
+                            }}
+                        >
+                            <Tooltip title={res.status || "unknown"}>
+                                <FiberManualRecordIcon
+                                    sx={{
+                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500],
+                                        fontSize: "1rem",
+                                    }}
+                                />
+                            </Tooltip>
+                            {isResourceNotProvisioned && (
+                                <Tooltip title="Not Provisioned">
+                                    <WarningAmberIcon
+                                        sx={{color: red[500], fontSize: "1rem"}}
+                                        aria-label={`Resource ${rid} is not provisioned`}
+                                    />
+                                </Tooltip>
+                            )}
+                            <Box onClick={(e) => e.stopPropagation()}>
+                                <IconButton
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentResourceId(rid);
+                                        handleResourceMenuOpen(node, rid, e);
+                                    }}
+                                    disabled={actionInProgress}
+                                    aria-label={`Resource ${rid} actions`}
+                                    sx={{padding: '4px'}}
+                                >
+                                    <Tooltip title="Actions">
+                                        <MoreVertIcon sx={{fontSize: '1rem'}}/>
+                                    </Tooltip>
+                                </IconButton>
+                            </Box>
+                        </Box>
+                    </Box>
+
+                    {/* Mobile view sections */}
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
+                        <Tooltip title={tooltipText}>
+                            <Typography
+                                role="status"
+                                sx={{
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: '0.8rem'
                                 }}
                                 aria-label={`Resource ${rid} status: ${statusString}`}
                             >
                                 {statusString}
                             </Typography>
                         </Tooltip>
+                    </Box>
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
                         <Typography
                             sx={{
-                                minWidth: {sm: "80px"},
                                 fontFamily: "'Roboto Mono', monospace",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
+                                fontSize: '0.8rem'
                             }}
                         >
                             {resourceType}
                         </Typography>
+                    </Box>
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
                         <Typography
                             sx={{
                                 fontFamily: "'Roboto Mono', monospace",
                                 whiteSpace: "normal",
                                 wordBreak: "break-word",
+                                fontSize: '0.8rem'
                             }}
                         >
                             {labelText}
@@ -398,6 +545,7 @@ const NodeCard = ({
                                         fontFamily: "'Roboto Mono', monospace",
                                         whiteSpace: "normal",
                                         wordBreak: "break-word",
+                                        fontSize: '0.8rem'
                                     }}
                                 >
                                     {infoText}
@@ -405,13 +553,16 @@ const NodeCard = ({
                             )}
                         </Typography>
                     </Box>
+
+                    {/* Desktop view actions */}
                     <Box
                         sx={{
-                            display: {xs: "flex", sm: "none"},
+                            display: {xs: "none", sm: "flex"},
                             alignItems: "center",
                             gap: 1,
                             flexShrink: 0,
-                            marginLeft: "auto",
+                            flexGrow: 1,
+                            justifyContent: "flex-end",
                         }}
                     >
                         <Tooltip title={res.status || "unknown"}>
@@ -439,128 +590,46 @@ const NodeCard = ({
                                 }}
                                 disabled={actionInProgress}
                                 aria-label={`Resource ${rid} actions`}
+                                sx={{p: 0.5}}
                             >
                                 <Tooltip title="Actions">
-                                    <MoreVertIcon/>
+                                    <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                 </Tooltip>
                             </IconButton>
                         </Box>
                     </Box>
                 </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Tooltip title={tooltipText}>
-                        <Typography
-                            role="status"
-                            sx={{
-                                fontFamily: "'Roboto Mono', monospace",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                            aria-label={`Resource ${rid} status: ${statusString}`}
-                        >
-                            {statusString}
-                        </Typography>
-                    </Tooltip>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
+
+                {/* Logs section with consistent alignment */}
+                {logs.length > 0 && (
+                    <Box
                         sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            pl: getLogPaddingLeft(),
+                            width: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 0.5,
+                            mt: 0.5,
                         }}
                     >
-                        {resourceType}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
-                        sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            whiteSpace: "normal",
-                            wordBreak: "break-word",
-                        }}
-                    >
-                        {labelText}
-                        {infoText && (
+                        {logs.map((log, index) => (
                             <Typography
-                                component="span"
+                                key={index}
                                 sx={{
-                                    ml: 1,
-                                    color: "textSecondary",
                                     fontFamily: "'Roboto Mono', monospace",
+                                    fontSize: "0.8rem",
+                                    color: log.level === "warn" ? orange[500] : log.level === "error" ? red[500] : "textSecondary",
                                     whiteSpace: "normal",
                                     wordBreak: "break-word",
+                                    lineHeight: 1.3,
                                 }}
+                                aria-label={`Log for resource ${rid}: ${log.level} - ${log.message}`}
                             >
-                                {infoText}
+                                {log.level}: {log.message}
                             </Typography>
-                        )}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        display: {xs: "none", sm: "flex"},
-                        alignItems: "center",
-                        gap: 1,
-                        flexShrink: 0,
-                        flexGrow: 1,
-                        justifyContent: "flex-end",
-                    }}
-                >
-                    <Tooltip title={res.status || "unknown"}>
-                        <FiberManualRecordIcon
-                            sx={{
-                                color: typeof getColor === "function" ? getColor(res.status) : grey[500],
-                                fontSize: "1rem",
-                            }}
-                        />
-                    </Tooltip>
-                    {isResourceNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <WarningAmberIcon
-                                sx={{color: red[500], fontSize: "1rem"}}
-                                aria-label={`Resource ${rid} is not provisioned`}
-                            />
-                        </Tooltip>
-                    )}
-                    <Box onClick={(e) => e.stopPropagation()}>
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentResourceId(rid);
-                                handleResourceMenuOpen(node, rid, e);
-                            }}
-                            disabled={actionInProgress}
-                            aria-label={`Resource ${rid} actions`}
-                            sx={{p: 0.5}}
-                        >
-                            <Tooltip title="Actions">
-                                <MoreVertIcon/>
-                            </Tooltip>
-                        </IconButton>
+                        ))}
                     </Box>
-                </Box>
+                )}
             </Box>
         );
     };
@@ -667,8 +736,7 @@ const NodeCard = ({
                                     resIds.reduce(
                                         (acc, rid) =>
                                             resources[rid]?.type?.toLowerCase().includes("container") &&
-                                            encapData[rid]?.resources &&
-                                            resources[rid]?.status !== "down"
+                                            encapData[rid]?.resources && resources[rid]?.status !== "down"
                                                 ? acc + Object.keys(encapData[rid].resources).length
                                                 : acc,
                                         0

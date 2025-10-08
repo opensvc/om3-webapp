@@ -62,11 +62,22 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        Checkbox: ({checked, onChange, ...props}) => (
-            <input type="checkbox" checked={checked} onChange={onChange} {...props} />
+        Checkbox: ({checked, onChange, sx, ...props}) => (
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={onChange}
+                style={{...sx}}
+                {...props}
+            />
         ),
-        IconButton: ({children, onClick, disabled, ...props}) => (
-            <button onClick={onClick} disabled={disabled} {...props}>
+        IconButton: ({children, onClick, disabled, sx, ...props}) => (
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                style={{...sx}}
+                {...props}
+            >
                 {children}
             </button>
         ),
@@ -90,7 +101,7 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        Typography: ({children, ...props}) => <span {...props}>{children}</span>,
+        Typography: ({children, sx, ...props}) => <span style={{...sx}} {...props}>{children}</span>,
         FiberManualRecordIcon: ({sx, ...props}) => (
             <svg style={{color: sx?.color, fontSize: sx?.fontSize}} {...props} />
         ),
@@ -99,11 +110,12 @@ jest.mock('@mui/material', () => {
                 {children}
             </span>
         ),
-        Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
+        Button: ({children, onClick, disabled, variant, component, htmlFor, sx, ...props}) => (
             <button
                 onClick={onClick}
                 disabled={disabled}
                 data-variant={variant}
+                style={{...sx}}
                 {...(component === 'label' ? {htmlFor} : {})}
                 {...props}
             >
@@ -731,19 +743,17 @@ type = flag
             },
             {timeout: 15000, interval: 200}
         );
+
+        const node1Checkbox = screen.getByLabelText(/select node node1/i);
+        const node2Checkbox = screen.getByLabelText(/select node node2/i);
+
+        await user.click(node1Checkbox);
+        await user.click(node2Checkbox);
+
         const batchActionsButton = screen.getByRole('button', {
             name: /Actions on selected nodes/i,
         });
-        console.log(`[DEBUG] Batch actions button disabled: ${batchActionsButton.disabled}`);
-        const node1Checkbox = screen.getByRole('checkbox', {
-            name: /select node node1/i,
-        });
-        const node2Checkbox = screen.getByRole('checkbox', {
-            name: /select node node2/i,
-        });
-        await user.click(node1Checkbox);
-        await user.click(node2Checkbox);
-        console.log(`[DEBUG] Batch actions button disabled after selection: ${batchActionsButton.disabled}`);
+
         expect(batchActionsButton).not.toBeDisabled();
         await user.click(batchActionsButton);
 
@@ -977,18 +987,17 @@ type = flag
             name: /expand resources for node node1/i,
         });
         fireEvent.click(resourcesAccordion);
-        const res1Checkbox = screen.getByRole('checkbox', {
-            name: /select resource res1/i,
-        });
-        const res2Checkbox = screen.getByRole('checkbox', {
-            name: /select resource res2/i,
-        });
+
+        const res1Checkbox = screen.getByLabelText(/select resource res1/i);
+        const res2Checkbox = screen.getByLabelText(/select resource res2/i);
+
         await user.click(res1Checkbox);
         await user.click(res2Checkbox);
+
         const batchResourceActionsButton = screen.getByRole('button', {
             name: /Resource actions for node node1/i,
         });
-        console.log(`[DEBUG] Batch resource actions button disabled: ${batchResourceActionsButton.disabled}`);
+
         expect(batchResourceActionsButton).not.toBeDisabled();
 
         fireEvent.click(batchResourceActionsButton);

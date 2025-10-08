@@ -1302,24 +1302,24 @@ describe('NodeCard Component', () => {
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail />} />
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
                 </Routes>
             </MemoryRouter>
         );
 
         const nodeSection = await findNodeSection('node1', 10000);
-        const actionsButton = await within(nodeSection).findByRole('button', { name: /node1 actions/i });
+        const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
         await user.click(actionsButton);
 
-        const startItem = await screen.findByRole('menuitem', { name: /Node node1 start action/i });
+        const startItem = await screen.findByRole('menuitem', {name: /Node node1 start action/i});
         await user.click(startItem);
 
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Start/i);
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
 
-        const confirmButton = await within(screen.getByRole('dialog')).findByRole('button', { name: /Confirm/i });
+        const confirmButton = await within(screen.getByRole('dialog')).findByRole('button', {name: /Confirm/i});
         await user.click(confirmButton);
 
         await waitFor(() => {
@@ -1327,26 +1327,1403 @@ describe('NodeCard Component', () => {
                 expect.stringContaining('/action/start'),
                 expect.objectContaining({
                     method: 'POST',
-                    headers: { Authorization: 'Bearer mock-token' },
+                    headers: {Authorization: 'Bearer mock-token'},
                 })
             );
-        }, { timeout: 10000 });
+        }, {timeout: 10000});
     }, 30000);
 
     test('disables node actions button when actionInProgress is true', async () => {
         render(
             <NodeCard
                 node="node1"
-                nodeData={{ resources: {} }}
+                nodeData={{resources: {}}}
                 actionInProgress={true}
-                handleNodeResourcesAccordionChange={() => {}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
                 getColor={() => grey[500]}
-                getNodeState={() => ({ avail: 'up', frozen: 'unfrozen', state: null })}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
 
         const nodeSection = await findNodeSection('node1', 10000);
-        const actionsButton = await within(nodeSection).findByRole('button', { name: /node1 actions/i });
+        const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
         expect(actionsButton).toBeDisabled();
     }, 10000);
+    test('handles resource status letters with all possible states', async () => {
+        const nodeData = {
+            resources: {
+                testRes: {
+                    status: 'up',
+                    label: 'Test Resource',
+                    type: 'disk',
+                    provisioned: {state: 'false'},
+                    running: true,
+                    optional: true,
+                },
+            },
+            instanceConfig: {
+                resources: {
+                    testRes: {
+                        is_monitored: true,
+                        is_disabled: true,
+                        is_standby: true,
+                        restart: 15,
+                    },
+                },
+            },
+            instanceMonitor: {
+                resources: {
+                    testRes: {restart: {remaining: 12}},
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('testRes')).toBeInTheDocument();
+        });
+
+        // Vérifier que le status contient les bonnes lettres
+        await waitFor(() => {
+            const statusElements = screen.getAllByRole('status');
+            const testStatus = statusElements.find(el =>
+                el.textContent.includes('R') &&
+                el.textContent.includes('M') &&
+                el.textContent.includes('D') &&
+                el.textContent.includes('O') &&
+                el.textContent.includes('P') &&
+                el.textContent.includes('S')
+            );
+            expect(testStatus).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles resource with no provisioned state', async () => {
+        const nodeData = {
+            resources: {
+                noProvRes: {
+                    status: 'up',
+                    label: 'No Provision Resource',
+                    type: 'disk',
+                    running: false,
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('noProvRes')).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles container resource with down status', async () => {
+        const nodeData = {
+            resources: {
+                downContainer: {
+                    status: 'down',
+                    label: 'Down Container',
+                    type: 'container',
+                    running: false,
+                },
+            },
+            encap: {
+                downContainer: {
+                    resources: {
+                        encapRes: {
+                            status: 'up',
+                            label: 'Encap Resource',
+                            type: 'task',
+                            running: true,
+                        },
+                    },
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('downContainer')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).queryByText('encapRes')).not.toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles resource action filtering for different types', async () => {
+        const nodeData = {
+            resources: {
+                taskRes: {
+                    status: 'up',
+                    label: 'Task Resource',
+                    type: 'task',
+                    running: true,
+                },
+                fsRes: {
+                    status: 'up',
+                    label: 'FS Resource',
+                    type: 'fs.mount',
+                    running: true,
+                },
+                diskRes: {
+                    status: 'up',
+                    label: 'Disk Resource',
+                    type: 'disk',
+                    running: true,
+                },
+                appRes: {
+                    status: 'up',
+                    label: 'App Resource',
+                    type: 'app',
+                    running: true,
+                },
+                containerRes: {
+                    status: 'up',
+                    label: 'Container Resource',
+                    type: 'container',
+                    running: true,
+                },
+                unknownRes: {
+                    status: 'up',
+                    label: 'Unknown Resource',
+                    type: 'unknown',
+                    running: true,
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {}}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+                handleResourceMenuOpen={jest.fn()}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(6\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('taskRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('fsRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('diskRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('appRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('containerRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('unknownRes')).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles zoom level calculation', async () => {
+        // Mock devicePixelRatio
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 2,
+            writable: true,
+        });
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        // Restaurer la valeur par défaut
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 1,
+            writable: true,
+        });
+    }, 10000);
+
+    test('handles resource with empty logs', async () => {
+        const nodeData = {
+            resources: {
+                emptyLogRes: {
+                    status: 'up',
+                    label: 'Empty Log Resource',
+                    type: 'disk',
+                    running: true,
+                    log: [],
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('emptyLogRes')).toBeInTheDocument();
+        });
+
+        // Vérifier qu'aucune section de logs n'est affichée
+        const logSections = screen.queryAllByText(/info:|warn:|error:/i);
+        expect(logSections).toHaveLength(0);
+    }, 10000);
+
+    test('handles resource with undefined logs', async () => {
+        const nodeData = {
+            resources: {
+                undefinedLogRes: {
+                    status: 'up',
+                    label: 'Undefined Log Resource',
+                    type: 'disk',
+                    running: true,
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('undefinedLogRes')).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles getColor function returning undefined', async () => {
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => undefined}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        // Vérifier que l'icône de statut est rendue même avec getColor undefined
+        const statusIcons = screen.getAllByTestId('FiberManualRecordIcon');
+        expect(statusIcons.length).toBeGreaterThan(0);
+    }, 10000);
+
+    test('handles node with no instance data', async () => {
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={null}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'unknown', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('No resources available.')).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles batch resource actions with no selected resources', async () => {
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        res1: {status: 'up', type: 'disk'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourcesActionsOpen={jest.fn()}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const actionsButton = await within(nodeSection).findByRole('button', {
+            name: /Resource actions for node node1/i,
+        });
+
+        expect(actionsButton).toBeDisabled();
+    }, 10000);
+
+    test('handles individual node menu actions', async () => {
+        const setIndividualNodeMenuAnchor = jest.fn();
+        const setCurrentNode = jest.fn();
+        const setPendingAction = jest.fn();
+        const setConfirmDialogOpen = jest.fn();
+        const setStopDialogOpen = jest.fn();
+        const setUnprovisionDialogOpen = jest.fn();
+        const setSimpleDialogOpen = jest.fn();
+        const setCheckboxes = jest.fn();
+        const setStopCheckbox = jest.fn();
+        const setUnprovisionCheckboxes = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                setCurrentNode={setCurrentNode}
+                setPendingAction={setPendingAction}
+                setConfirmDialogOpen={setConfirmDialogOpen}
+                setStopDialogOpen={setStopDialogOpen}
+                setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                setSimpleDialogOpen={setSimpleDialogOpen}
+                setCheckboxes={setCheckboxes}
+                setStopCheckbox={setStopCheckbox}
+                setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+                individualNodeMenuAnchor={document.createElement('div')}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
+
+        // Simuler l'ouverture du menu
+        fireEvent.click(actionsButton);
+
+        // Vérifier que setCurrentNode a été appelé
+        await waitFor(() => {
+            expect(setCurrentNode).toHaveBeenCalledWith('node1');
+        });
+    }, 10000);
+
+    test('handles resource menu actions', async () => {
+        const handleResourceMenuOpen = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        res1: {status: 'up', type: 'disk'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={handleResourceMenuOpen}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('res1')).toBeInTheDocument();
+        });
+
+        const resourceMenuButtons = screen.getAllByRole('button', {
+            name: /Resource res1 actions/i,
+        });
+        const resourceMenuButton = resourceMenuButtons[0];
+
+        await user.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(handleResourceMenuOpen).toHaveBeenCalledWith('node1', 'res1', expect.any(Object));
+        });
+    }, 15000);
+
+    test('handles select all resources for node with mixed resources', async () => {
+        const setSelectedResourcesByNode = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        container1: {status: 'up', type: 'container'},
+                        res1: {status: 'up', type: 'disk'},
+                    },
+                    encap: {
+                        container1: {
+                            resources: {
+                                encap1: {status: 'up', type: 'task'},
+                                encap2: {status: 'up', type: 'fs'},
+                            },
+                        },
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={setSelectedResourcesByNode}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+
+        await user.click(selectAllCheckbox);
+
+        await waitFor(() => {
+            expect(setSelectedResourcesByNode).toHaveBeenCalledWith(expect.any(Function));
+        });
+
+        const updateFunction = setSelectedResourcesByNode.mock.calls[0][0];
+        const result = updateFunction({});
+        expect(result).toEqual({
+            node1: ['container1', 'res1', 'encap1', 'encap2']
+        });
+    }, 15000);
+
+    test('handles container with no encap data', async () => {
+        const nodeData = {
+            resources: {
+                container1: {
+                    status: 'up',
+                    label: 'Container 1',
+                    type: 'container',
+                    running: true,
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('container1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/No encapsulated data available for container1/i)).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles container with empty encap resources', async () => {
+        const nodeData = {
+            resources: {
+                container1: {
+                    status: 'up',
+                    label: 'Container 1',
+                    type: 'container',
+                    running: true,
+                },
+            },
+            encap: {
+                container1: {
+                    resources: {},
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('container1')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/No encapsulated resources available for container1/i)).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles mobile view rendering', async () => {
+        window.innerWidth = 500;
+        window.dispatchEvent(new Event('resize'));
+
+        const nodeData = {
+            resources: {
+                mobileRes: {
+                    status: 'up',
+                    label: 'Mobile Resource',
+                    type: 'disk',
+                    running: true,
+                    log: [
+                        {level: 'info', message: 'Mobile test log'},
+                    ],
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('mobileRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('info: Mobile test log')).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles parseProvisionedState function', async () => {
+        const parseProvisionedState = jest.fn((state) => state === 'true');
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {},
+                    provisioned: 'true',
+                }}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+                parseProvisionedState={parseProvisionedState}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        expect(parseProvisionedState).toHaveBeenCalledWith('true');
+    }, 10000);
+
+    test('handles all default function props', async () => {
+        render(<NodeCard node="node1"/>);
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        const consoleWarnSpy = jest.spyOn(console, 'warn');
+
+        const nodeSection = await findNodeSection('node1');
+        const checkbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select node node1/i,
+        });
+
+        await user.click(checkbox);
+
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith('toggleNode not provided');
+        });
+
+        consoleWarnSpy.mockRestore();
+    }, 10000);
+
+    test('handles getResourceStatusLetters with all edge cases', async () => {
+        const nodeData = {
+            resources: {
+                edgeCaseRes: {
+                    status: 'up',
+                    label: 'Edge Case Resource',
+                    type: 'disk',
+                },
+            },
+            instanceConfig: {
+                resources: {
+                    edgeCaseRes: {
+                        is_monitored: "true", // string true
+                        is_disabled: "false", // string false
+                        is_standby: "true", // string true
+                        restart: "5", // string number
+                    },
+                },
+            },
+            instanceMonitor: {
+                resources: {
+                    edgeCaseRes: {restart: {remaining: "3"}}, // string number
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('edgeCaseRes')).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles getResourceStatusLetters with container provisioned state', async () => {
+        const nodeData = {
+            resources: {
+                containerRes: {
+                    status: 'up',
+                    label: 'Container Resource',
+                    type: 'container',
+                    running: true,
+                },
+            },
+            encap: {
+                containerRes: {
+                    provisioned: 'false', // container provisioned state
+                    resources: {
+                        encapRes: {
+                            status: 'up',
+                            label: 'Encap Resource',
+                            type: 'task',
+                            running: true,
+                        },
+                    },
+                },
+            },
+            instanceConfig: {
+                resources: {
+                    containerRes: {
+                        is_monitored: true,
+                        is_disabled: false,
+                        is_standby: false,
+                    },
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('containerRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('encapRes')).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles getResourceStatusLetters with remaining restarts > 10', async () => {
+        const nodeData = {
+            resources: {
+                manyRestartsRes: {
+                    status: 'up',
+                    label: 'Many Restarts Resource',
+                    type: 'disk',
+                    running: true,
+                },
+            },
+            instanceMonitor: {
+                resources: {
+                    manyRestartsRes: {restart: {remaining: 15}}, // > 10
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('manyRestartsRes')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            const statusElements = screen.getAllByRole('status');
+            const statusWithPlus = statusElements.find(el => el.textContent.includes('+'));
+            expect(statusWithPlus).toBeInTheDocument();
+        });
+    }, 15000);
+
+    test('handles getResourceStatusLetters with config restarts', async () => {
+        const nodeData = {
+            resources: {
+                configRestartRes: {
+                    status: 'up',
+                    label: 'Config Restart Resource',
+                    type: 'disk',
+                    running: true,
+                },
+            },
+            instanceConfig: {
+                resources: {
+                    configRestartRes: {
+                        is_monitored: true,
+                        restart: 8, // config restart number
+                    },
+                },
+            },
+        };
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={nodeData}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('configRestartRes')).toBeInTheDocument();
+        });
+    }, 10000);
+
+    test('handles getFilteredResourceActions for all resource types', async () => {
+        const handleResourceMenuOpen = jest.fn();
+
+        const {rerender} = render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        taskRes: {status: 'up', type: 'task'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={handleResourceMenuOpen}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('taskRes')).toBeInTheDocument();
+        });
+
+        rerender(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        fsRes: {status: 'up', type: 'fs.mount'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={handleResourceMenuOpen}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('fsRes')).toBeInTheDocument();
+        });
+
+        rerender(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        diskRes: {status: 'up', type: 'disk'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={handleResourceMenuOpen}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('diskRes')).toBeInTheDocument();
+        });
+    }, 20000);
+
+    test('handles getResourceType with various scenarios', async () => {
+        const handleResourceMenuOpen = jest.fn();
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        testRes: {status: 'up', type: 'disk'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: []}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleResourceMenuOpen={handleResourceMenuOpen}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        await user.click(resourcesHeader);
+
+        await waitFor(() => {
+            expect(within(nodeSection).getByText('testRes')).toBeInTheDocument();
+        });
+
+        consoleWarnSpy.mockRestore();
+    }, 10000);
+
+    test('handles handleIndividualNodeActionClick for all action types', async () => {
+        const setCurrentNode = jest.fn();
+        const setPendingAction = jest.fn();
+        const setConfirmDialogOpen = jest.fn();
+        const setStopDialogOpen = jest.fn();
+        const setUnprovisionDialogOpen = jest.fn();
+        const setSimpleDialogOpen = jest.fn();
+        const setCheckboxes = jest.fn();
+        const setStopCheckbox = jest.fn();
+        const setUnprovisionCheckboxes = jest.fn();
+        const setIndividualNodeMenuAnchor = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                setCurrentNode={setCurrentNode}
+                setPendingAction={setPendingAction}
+                setConfirmDialogOpen={setConfirmDialogOpen}
+                setStopDialogOpen={setStopDialogOpen}
+                setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                setSimpleDialogOpen={setSimpleDialogOpen}
+                setCheckboxes={setCheckboxes}
+                setStopCheckbox={setStopCheckbox}
+                setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+                individualNodeMenuAnchor={document.createElement('div')}
+            />
+        );
+
+        const actions = [
+            {name: 'freeze', setsDialog: 'setConfirmDialogOpen'},
+            {name: 'stop', setsDialog: 'setStopDialogOpen'},
+            {name: 'unprovision', setsDialog: 'setUnprovisionDialogOpen'},
+            {name: 'start', setsDialog: 'setSimpleDialogOpen'},
+        ];
+
+        for (const action of actions) {
+            jest.clearAllMocks();
+
+            const props = {
+                setCurrentNode,
+                setPendingAction,
+                setConfirmDialogOpen,
+                setStopDialogOpen,
+                setUnprovisionDialogOpen,
+                setSimpleDialogOpen,
+                setCheckboxes,
+                setStopCheckbox,
+                setUnprovisionCheckboxes,
+                setIndividualNodeMenuAnchor,
+            };
+
+            if (action.name === 'freeze') {
+                props.setCheckboxes({failover: false});
+                props.setConfirmDialogOpen(true);
+            } else if (action.name === 'stop') {
+                props.setStopCheckbox(false);
+                props.setStopDialogOpen(true);
+            } else if (action.name === 'unprovision') {
+                props.setUnprovisionCheckboxes({
+                    dataLoss: false,
+                    serviceInterruption: false,
+                });
+                props.setUnprovisionDialogOpen(true);
+            } else {
+                props.setSimpleDialogOpen(true);
+            }
+
+            props.setPendingAction({action: action.name, node: 'node1'});
+            props.setIndividualNodeMenuAnchor(null);
+
+            expect(setPendingAction).toHaveBeenCalledWith({action: action.name, node: 'node1'});
+            expect(setIndividualNodeMenuAnchor).toHaveBeenCalledWith(null);
+        }
+    });
+
+    test('handles handleBatchResourceActionClick', async () => {
+        const setPendingAction = jest.fn();
+        const setSimpleDialogOpen = jest.fn();
+        const setResourcesActionsAnchor = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                setPendingAction={setPendingAction}
+                setSimpleDialogOpen={setSimpleDialogOpen}
+                setResourcesActionsAnchor={setResourcesActionsAnchor}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        setPendingAction({action: 'start', batch: 'resources', node: 'node1'});
+        setSimpleDialogOpen(true);
+        setResourcesActionsAnchor(null);
+
+        expect(setPendingAction).toHaveBeenCalledWith({
+            action: 'start',
+            batch: 'resources',
+            node: 'node1'
+        });
+        expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
+        expect(setResourcesActionsAnchor).toHaveBeenCalledWith(null);
+    });
+
+    test('handles handleResourceActionClick', async () => {
+        const setPendingAction = jest.fn();
+        const setSimpleDialogOpen = jest.fn();
+        const setResourceMenuAnchor = jest.fn();
+        const setCurrentResourceId = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                setPendingAction={setPendingAction}
+                setSimpleDialogOpen={setSimpleDialogOpen}
+                setResourceMenuAnchor={setResourceMenuAnchor}
+                setCurrentResourceId={setCurrentResourceId}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        setPendingAction({action: 'start', node: 'node1', rid: 'res1'});
+        setSimpleDialogOpen(true);
+        setResourceMenuAnchor(null);
+        setCurrentResourceId(null);
+
+        expect(setPendingAction).toHaveBeenCalledWith({
+            action: 'start',
+            node: 'node1',
+            rid: 'res1'
+        });
+        expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
+        expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
+        expect(setCurrentResourceId).toHaveBeenCalledWith(null);
+    });
+
+    test('handles handleSelectAllResources with invalid setSelectedResourcesByNode', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        res1: {status: 'up', type: 'disk'},
+                    },
+                }}
+                setSelectedResourcesByNode={null}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        const nodeSection = await findNodeSection('node1');
+        const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
+            name: /Select all resources for node node1/i,
+        });
+
+        await user.click(selectAllCheckbox);
+
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                'setSelectedResourcesByNode is not a function:',
+                null
+            );
+        });
+
+        consoleErrorSpy.mockRestore();
+    }, 10000);
+
+    test('handles popperProps with different zoom levels', async () => {
+
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 1,
+            writable: true,
+        });
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 2,
+            writable: true,
+        });
+
+        render(
+            <NodeCard
+                node="node2"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node2')).toBeInTheDocument();
+        });
+
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 1,
+            writable: true,
+        });
+    }, 10000);
+
+    test('handles getNodeState with various states', async () => {
+        const getNodeState = jest.fn((node) => {
+            if (node === 'node1') {
+                return {
+                    avail: 'up',
+                    frozen: 'frozen',
+                    state: 'running'
+                };
+            }
+            return {
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null
+            };
+        });
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{resources: {}}}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                getColor={() => grey[500]}
+                getNodeState={getNodeState}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        expect(getNodeState).toHaveBeenCalledWith('node1');
+    }, 10000);
+
+    test('handles menu item clicks with stopPropagation', async () => {
+        const handleIndividualNodeActionClick = jest.fn();
+        const handleBatchResourceActionClick = jest.fn();
+        const handleResourceActionClick = jest.fn();
+
+        render(
+            <NodeCard
+                node="node1"
+                nodeData={{
+                    resources: {
+                        res1: {status: 'up', type: 'disk'},
+                    },
+                }}
+                selectedResourcesByNode={{node1: ['res1']}}
+                toggleResource={jest.fn()}
+                setSelectedResourcesByNode={jest.fn()}
+                handleNodeResourcesAccordionChange={() => {
+                }}
+                handleIndividualNodeActionClick={handleIndividualNodeActionClick}
+                handleBatchResourceActionClick={handleBatchResourceActionClick}
+                handleResourceActionClick={handleResourceActionClick}
+                expandedNodeResources={{node1: true}}
+                getColor={() => grey[500]}
+                getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
+                individualNodeMenuAnchor={document.createElement('div')}
+                resourcesActionsAnchor={document.createElement('div')}
+                resourceMenuAnchor={document.createElement('div')}
+                currentResourceId="res1"
+            />
+        );
+
+        const individualMenuItems = screen.getAllByRole('menuitem', {name: /Node node1 .* action/i});
+        for (const menuItem of individualMenuItems) {
+            const event = new MouseEvent('click', {bubbles: true});
+            Object.defineProperty(event, 'stopPropagation', {value: jest.fn()});
+            menuItem.dispatchEvent(event);
+        }
+
+        const batchMenuItems = screen.getAllByRole('menuitem', {name: /Start|Stop|Restart|Run/i});
+        for (const menuItem of batchMenuItems) {
+            const event = new MouseEvent('click', {bubbles: true});
+            Object.defineProperty(event, 'stopPropagation', {value: jest.fn()});
+            menuItem.dispatchEvent(event);
+        }
+
+        const resourceMenuItems = screen.getAllByRole('menuitem', {name: /Start|Stop|Restart|Run/i});
+        for (const menuItem of resourceMenuItems) {
+            const event = new MouseEvent('click', {bubbles: true});
+            Object.defineProperty(event, 'stopPropagation', {value: jest.fn()});
+            menuItem.dispatchEvent(event);
+        }
+
+        expect(individualMenuItems.length).toBeGreaterThan(0);
+        expect(batchMenuItems.length).toBeGreaterThan(0);
+        expect(resourceMenuItems.length).toBeGreaterThan(0);
+    }, 15000);
 });

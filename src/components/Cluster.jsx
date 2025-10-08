@@ -28,9 +28,9 @@ const ClusterOverview = () => {
     useEffect(() => {
         isMounted.current = true;
         const token = localStorage.getItem("authToken");
-        let subscription;
+
         if (token) {
-            subscription = startEventReception(token);
+            startEventReception(token);
             // Fetch pools
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
@@ -61,14 +61,6 @@ const ClusterOverview = () => {
                     setNetworks([]);
                 });
         }
-        return () => {
-            if (subscription && typeof subscription === "function") {
-                subscription();
-            }
-        };
-    }, []);
-
-    useEffect(() => {
         return () => {
             isMounted.current = false;
         };

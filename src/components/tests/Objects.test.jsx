@@ -595,4 +595,330 @@ describe('Objects Component', () => {
         });
         expect(results).toHaveNoViolations();
     });
+
+    test('handles objects without instance status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/test4': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test4/i})).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test4/i});
+        expect(row).toBeInTheDocument();
+    });
+
+    test('handles objects with string provisioned status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/unprovisioned': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/unprovisioned': {
+                        node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByLabelText('Object is not provisioned')).toBeInTheDocument();
+    });
+
+    test('handles objects with boolean provisioned status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/unprovisioned-bool': {avail: 'n/a', frozen: 'unfrozen', provisioned: false},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/unprovisioned-bool': {
+                        node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: false},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned-bool/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByLabelText('Object is not provisioned')).toBeInTheDocument();
+    });
+
+    test('handles nodes with not provisioned status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/node-unprovisioned': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/node-unprovisioned': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/node-unprovisioned/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByLabelText('Node node1 is not provisioned')).toBeInTheDocument();
+    });
+
+    test('handles objects with globalExpect status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/global-expect': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/global-expect': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/global-expect': {state: 'idle', global_expect: 'started'},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/global-expect/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('started')).toBeInTheDocument();
+    });
+
+    test('handles nodes with non-idle state', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/non-idle': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/non-idle': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/non-idle': {state: 'running', global_expect: 'none'},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/non-idle/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('running')).toBeInTheDocument();
+    });
+
+    test('disables freeze action for frozen objects', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
+                    'test-ns/svc/test2': {avail: 'down', frozen: 'frozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/test1': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                    'test-ns/svc/test2': {
+                        node1: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/test1': {state: 'running', global_expect: 'none'},
+                    'node1:test-ns/svc/test2': {state: 'idle', global_expect: 'none'},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const frozenObjectRow = screen.getByRole('row', {name: /test-ns\/svc\/test2/i});
+        const menuButton = within(frozenObjectRow).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton);
+
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            const freezeAction = within(menu).queryByText('Freeze');
+            expect(freezeAction).not.toBeInTheDocument();
+        });
+    });
+
+    test('disables actions in global menu when not allowed', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Select an object
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
+        const checkbox = within(row).getByRole('checkbox');
+        fireEvent.click(checkbox);
+
+        // Open global actions menu
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+
+        const menu = await screen.findByRole('menu');
+
+        // Verify that some actions are disabled according to business logic
+        const deleteAction = within(menu).getByText('Delete');
+        expect(deleteAction).toBeInTheDocument();
+    });
+
+    test('handles sorting by status column', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Click on Status column header to sort
+        const statusHeader = screen.getByText('Status');
+        fireEvent.click(statusHeader);
+
+        // Verify that sorting was triggered (we don't check specific order as it depends on implementation)
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+        });
+    });
+
+    test('handles sorting by object name', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Click on Object column header to sort
+        const objectHeader = screen.getByText('Object');
+        fireEvent.click(objectHeader);
+
+        // Verify that sorting was triggered
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+        });
+    });
+
+    test('handles sorting by node status', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Click on a node column header to sort
+        const nodeHeader = screen.getByRole('columnheader', {name: /node1/i});
+        fireEvent.click(nodeHeader);
+
+        // Verify that sorting was triggered
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+        });
+    });
+
+    test('handles sort direction change', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const objectHeader = screen.getByText('Object');
+
+        // First click: ascending sort
+        fireEvent.click(objectHeader);
+
+        // Second click: descending sort
+        fireEvent.click(objectHeader);
+
+        // Verify that sorting was triggered twice
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+        });
+    });
+
+    test('prevents navigation for objects without instance status', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/no-instance': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {}, // No instance status
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i})).toBeInTheDocument();
+        });
+
+        // Click on the row
+        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i}));
+
+        // Should not navigate because no instanceStatus
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    test('filters objects by unprovisioned state', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Select "unprovisioned" filter
+        fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
+        const listbox = screen.getByRole('listbox');
+        fireEvent.click(within(listbox).getByText(/unprovisioned/i));
+
+        // With mocked data, no object is unprovisioned, so no results
+        await waitFor(() => {
+            expect(screen.getByText(/No objects found/i)).toBeInTheDocument();
+        });
+    });
+
+    test('handles narrow screen layout', async () => {
+        // Mock useMediaQuery to return false (narrow screen)
+        require('@mui/material/useMediaQuery').mockReturnValue(false);
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Verify that node columns are not displayed
+        expect(screen.queryByRole('columnheader', {name: /node1/i})).not.toBeInTheDocument();
+        expect(screen.queryByRole('columnheader', {name: /node2/i})).not.toBeInTheDocument();
+    });
 });

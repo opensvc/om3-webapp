@@ -184,6 +184,7 @@ describe('ClusterOverview', () => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
     });
+
     test('navigates to correct routes on card clicks', async () => {
         render(
             <MemoryRouter>
@@ -357,6 +358,543 @@ describe('ClusterOverview', () => {
 
         await waitFor(() => {
             expect(screen.getByTestId('network-count')).toHaveTextContent('0');
+        });
+    });
+
+    test('handles invalid networks data structure gracefully', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url === URL_POOL) {
+                return Promise.resolve({data: {items: [{id: 'pool1'}]}});
+            }
+            if (url === URL_NETWORK) {
+                return Promise.resolve({data: {items: null}}); // invalid
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('network-count')).toHaveTextContent('0');
+        });
+    });
+
+    test('handles unprovisioned status objects without crashing', async () => {
+        Storage.prototype.getItem = jest.fn(() => 'mock-token');
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/object')) {
+                // Simulates an object with provisioned = "false"
+                return Promise.resolve({
+                    data: {
+                        items: [
+                            {
+                                metadata: {namespace: 'ns1'},
+                                status: {provisioned: 'false'},
+                            },
+                        ],
+                    },
+                });
+            }
+
+            // Default mocks for other endpoints
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        // Wait for the component to finish processing
+        await waitFor(() => {
+            expect(screen.getByText(/cluster overview/i)).toBeInTheDocument();
+        });
+    });
+
+    test('renders correctly when networks is empty', async () => {
+        Storage.prototype.getItem = jest.fn(() => 'mock-token');
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/network')) {
+                return Promise.resolve({data: {items: []}});
+            }
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            // Check that GridNetworks is not rendered or is empty
+            const networksSection = screen.queryByTestId('grid-networks');
+            expect(networksSection).toBeNull();
+        });
+    });
+
+    test('handles various frozen_at date formats', async () => {
+        const mockNodeStatus = {
+            node1: {frozen_at: '2023-01-01T00:00:00Z'}, // frozen
+            node2: {frozen_at: '0001-01-01T00:00:00Z'}, // not frozen (default value)
+            node3: {frozen_at: null}, // not frozen
+            node4: {frozen_at: undefined}, // not frozen
+            node5: {frozen_at: 'invalid-date'}, // invalid date
+            node6: {}, // no frozen_at
+        };
+
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: mockNodeStatus,
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('node-count')).toHaveTextContent('6');
+        });
+
+        const nodeStatusText = screen.getByTestId('node-status').textContent;
+        expect(nodeStatusText).toMatch(/Frozen: \d+ \| Unfrozen: \d+/);
+    });
+
+    test('handles namespace parsing edge cases', async () => {
+        const mockObjectStatus = {
+            'ns1/svc/obj1': {avail: 'up', provisioned: true},
+            'ns2/svc/obj2': {avail: 'up', provisioned: true},
+            'root/svc/obj3': {avail: 'up', provisioned: true},
+            'ns1/svc/obj4': {avail: 'up', provisioned: true},
+            'invalid-namespace': {avail: 'up', provisioned: true},
+            '': {avail: 'up', provisioned: true},
+        };
+
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: mockObjectStatus,
+            heartbeatStatus: {},
+        }));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('namespace-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles heartbeat state counting edge cases', async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {id: 'dev1.rx', state: 'running', peers: {peer1: {is_beating: true}}},
+                    {id: 'dev1.tx', state: 'running', peers: {peer1: {is_beating: true}}},
+                    {id: 'dev2.rx', state: 'stopped', peers: {peer1: {is_beating: false}}},
+                    {id: 'dev2.tx', state: 'failed', peers: {peer1: {is_beating: false}}},
+                    {id: 'dev3.rx', state: 'paused', peers: {peer1: {is_beating: true}}},
+                    {id: 'dev3.tx', state: null, peers: {peer1: {is_beating: true}}},
+                    {id: 'dev4.rx', state: undefined, peers: {peer1: {is_beating: true}}},
+                    {id: 'dev4.tx', peers: {peer1: {is_beating: true}}},
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: mockHeartbeatStatus,
+        }));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('heartbeat-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles API errors gracefully for pools', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/pools')) {
+                return Promise.reject(new Error('Pool API unavailable'));
+            }
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles API errors gracefully for networks', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/networks')) {
+                return Promise.reject(new Error('Network API unavailable'));
+            }
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('network-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles navigation for stat cards', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {node1: {frozen_at: null}},
+            objectStatus: {'obj1': {avail: 'up', provisioned: true}},
+            heartbeatStatus: {node1: {streams: []}},
+        }));
+
+        axios.get.mockResolvedValue({
+            data: {
+                items: [
+                    {id: 'pool1'},
+                    {id: 'network1'}
+                ]
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toBeInTheDocument();
+        });
+
+        // Test navigation for each card
+        const cards = [
+            {role: 'Nodes stat card', expectedRoute: '/nodes'},
+            {role: 'Objects stat card', expectedRoute: '/objects'},
+            {role: 'Namespaces stat card', expectedRoute: '/namespaces'},
+            {role: 'Heartbeats stat card', expectedRoute: '/heartbeats'},
+            {role: 'Pools stat card', expectedRoute: '/storage-pools'},
+        ];
+
+        cards.forEach(({role, expectedRoute}) => {
+            const card = screen.getByRole('button', {name: new RegExp(role, 'i')});
+            fireEvent.click(card);
+            expect(mockNavigate).toHaveBeenCalledWith(expectedRoute);
+        });
+    });
+
+    test('handles various API response formats for pools', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/pools')) {
+                return Promise.resolve({
+                    data: {
+                        items: [
+                            {id: 'pool1', name: 'Pool 1'},
+                            {id: 'pool2', name: 'Pool 2'},
+                        ]
+                    }
+                });
+            }
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles various API response formats for networks', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/networks')) {
+                return Promise.resolve({
+                    data: {
+                        items: [
+                            {id: 'net1', name: 'Network 1', type: 'bridge'},
+                            {name: 'Network 2', type: 'vlan'},
+                        ]
+                    }
+                });
+            }
+            return Promise.resolve({data: {items: []}});
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('network-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles partial node data in store', async () => {
+        useEventStore.mockImplementation((selector) => {
+            const state = {
+                nodeStatus: {node1: {frozen_at: null}},
+                objectStatus: undefined,
+                heartbeatStatus: {},
+            };
+
+            if (selector.toString().includes('nodeStatus')) {
+                return state.nodeStatus;
+            }
+            return {};
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('node-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles partial object data in store', async () => {
+        useEventStore.mockImplementation((selector) => {
+            const state = {
+                nodeStatus: {},
+                objectStatus: {'obj1': {avail: 'up', provisioned: true}},
+                heartbeatStatus: undefined,
+            };
+
+            if (selector.toString().includes('objectStatus')) {
+                return state.objectStatus;
+            }
+            return {};
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('object-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles partial heartbeat data in store', async () => {
+        useEventStore.mockImplementation((selector) => {
+            const state = {
+                nodeStatus: undefined,
+                objectStatus: {},
+                heartbeatStatus: {node1: {streams: []}},
+            };
+
+            if (selector.toString().includes('heartbeatStatus')) {
+                return state.heartbeatStatus;
+            }
+            return {};
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('heartbeat-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles empty arrays in API responses', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockResolvedValue({
+            data: {
+                items: []
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles null values in API responses', async () => {
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: {},
+        }));
+
+        axios.get.mockResolvedValue({
+            data: {
+                items: null
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles missing properties in store data', async () => {
+        useEventStore.mockImplementation((selector) => {
+            const state = {
+                nodeStatus: undefined,
+                objectStatus: undefined,
+                heartbeatStatus: undefined,
+            };
+
+            if (selector.toString().includes('nodeStatus')) {
+                return state.nodeStatus || {};
+            }
+            if (selector.toString().includes('objectStatus')) {
+                return state.objectStatus || {};
+            }
+            if (selector.toString().includes('heartbeatStatus')) {
+                return state.heartbeatStatus || {};
+            }
+            return {};
+        });
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('node-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles heartbeat peers edge cases', async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {id: 'dev1', state: 'running', peers: null},
+                    {id: 'dev2', state: 'running', peers: {}},
+                    {id: 'dev3', state: 'running'},
+                    {id: 'dev4', state: 'running', peers: {peer1: {is_beating: undefined}}},
+                    {id: 'dev5', state: 'running', peers: {peer1: {is_beating: null}}},
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: {},
+            heartbeatStatus: mockHeartbeatStatus,
+        }));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('heartbeat-count')).toBeInTheDocument();
+        });
+    });
+
+    test('handles object status with special characters in names', async () => {
+        const mockObjectStatus = {
+            'ns-with-dash/svc/obj-with-dash': {avail: 'up', provisioned: true},
+            'ns_with_underscore/svc/obj_with_underscore': {avail: 'down', provisioned: true},
+            'ns.with.dots/svc/obj.with.dots': {avail: 'warn', provisioned: true},
+            'ns/with/slashes/svc/obj': {avail: 'up', provisioned: true},
+        };
+
+        useEventStore.mockImplementation((selector) => selector({
+            nodeStatus: {},
+            objectStatus: mockObjectStatus,
+            heartbeatStatus: {},
+        }));
+
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('object-count')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('namespace-count')).toBeInTheDocument();
         });
     });
 });

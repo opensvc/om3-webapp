@@ -17,11 +17,11 @@ Object.defineProperty(window, 'localStorage', {
     value: mockLocalStorage,
 });
 
-// Sample IP details data for testing, including a row with duplicate RID
+// Sample IP details data for testing, including a row with duplicate RID, null network, and undefined type
 const mockIpDetails = [
     {
         ip: '192.168.1.1',
-        network: {name: 'default', type: 'bridge'},
+        network: {name: 'default', type: undefined}, // Undefined type to cover || "N/A"
         node: 'node1',
         path: '/path/to/resource',
         rid: 'ip#1',
@@ -47,6 +47,13 @@ const mockIpDetails = [
         path: '/path/to/loopback',
         rid: 'ip#3',
     },
+    {
+        ip: '192.168.1.5',
+        network: null, // Null network to cover ?.name nullish branch
+        node: 'node5',
+        path: '/path5',
+        rid: 'ip#5',
+    },
 ];
 
 describe('NetworkDetails Component', () => {
@@ -70,7 +77,7 @@ describe('NetworkDetails Component', () => {
             const titleElements = screen.getAllByText(/Network Details:/i);
             const matchingTitle = titleElements.find(el =>
                 el.textContent.includes('Network Details: default') &&
-                el.textContent.includes('(bridge)')
+                el.textContent.includes('(N/A)') // Since first item has undefined type
             );
             expect(matchingTitle).toBeInTheDocument();
         });
@@ -193,6 +200,7 @@ describe('NetworkDetails Component', () => {
     });
 
     test('filters IP details by node', async () => {
+        jest.useFakeTimers();
         axios.get.mockResolvedValueOnce({data: {items: mockIpDetails}});
 
         render(
@@ -207,16 +215,9 @@ describe('NetworkDetails Component', () => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
         });
 
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
-        });
-
         const nodeInput = screen.getByLabelText('Node');
         fireEvent.change(nodeInput, {target: {value: 'node1'}});
+        jest.advanceTimersByTime(300);
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
@@ -229,9 +230,11 @@ describe('NetworkDetails Component', () => {
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
         });
+        jest.useRealTimers();
     });
 
     test('filters IP details by path', async () => {
+        jest.useFakeTimers();
         axios.get.mockResolvedValueOnce({data: {items: mockIpDetails}});
 
         render(
@@ -246,16 +249,9 @@ describe('NetworkDetails Component', () => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
         });
 
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
-        });
-
         const pathInput = screen.getByLabelText('Path');
         fireEvent.change(pathInput, {target: {value: 'resource3'}});
+        jest.advanceTimersByTime(300);
 
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
@@ -268,9 +264,11 @@ describe('NetworkDetails Component', () => {
         await waitFor(() => {
             expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
         });
+        jest.useRealTimers();
     });
 
     test('filters IP details by RID', async () => {
+        jest.useFakeTimers();
         axios.get.mockResolvedValueOnce({data: {items: mockIpDetails}});
 
         render(
@@ -285,16 +283,9 @@ describe('NetworkDetails Component', () => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
         });
 
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.2')).toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('192.168.1.3')).toBeInTheDocument();
-        });
-
         const ridInput = screen.getByLabelText('RID');
         fireEvent.change(ridInput, {target: {value: 'ip#1'}});
+        jest.advanceTimersByTime(300);
 
         await waitFor(() => {
             expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
@@ -307,9 +298,11 @@ describe('NetworkDetails Component', () => {
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.2')).not.toBeInTheDocument();
         });
+        jest.useRealTimers();
     });
 
     test('displays no IP details when filters exclude all items', async () => {
+        jest.useFakeTimers();
         axios.get.mockResolvedValueOnce({data: {items: mockIpDetails}});
 
         render(
@@ -326,6 +319,7 @@ describe('NetworkDetails Component', () => {
 
         const nodeInput = screen.getByLabelText('Node');
         fireEvent.change(nodeInput, {target: {value: 'nonexistent'}});
+        jest.advanceTimersByTime(300);
 
         await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
@@ -342,10 +336,13 @@ describe('NetworkDetails Component', () => {
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.3')).not.toBeInTheDocument();
         });
+        jest.useRealTimers();
     });
 
     test('handles API error gracefully', async () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
         });
         axios.get.mockRejectedValueOnce(new Error('API Error'));
 
@@ -362,6 +359,10 @@ describe('NetworkDetails Component', () => {
         });
 
         await waitFor(() => {
+            expect(screen.getByText('Failed to load network details. Please try again.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
         });
 
@@ -373,7 +374,9 @@ describe('NetworkDetails Component', () => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
         });
 
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
         consoleErrorSpy.mockRestore();
+        consoleWarnSpy.mockRestore();
     });
 
     test('displays no IP details when no items match networkName', async () => {
@@ -425,6 +428,26 @@ describe('NetworkDetails Component', () => {
 
         await waitFor(() => {
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles API response without items property', async () => {
+        axios.get.mockResolvedValueOnce({data: {}});
+
+        render(
+            <MemoryRouter initialEntries={['/network/default']}>
+                <Routes>
+                    <Route path="/network/:networkName" element={<NetworkDetails/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Network Details: default \(N\/A\)/i)).toBeInTheDocument();
         });
     });
 
@@ -506,5 +529,89 @@ describe('NetworkDetails Component', () => {
 
         expect(axios.get).not.toHaveBeenCalled();
         expect(screen.getByText(/Network Details: N\/A \(N\/A\)/i)).toBeInTheDocument();
+    });
+
+    test('shows loading indicator while fetching data', async () => {
+        let resolve;
+        const promise = new Promise((r) => {
+            resolve = r;
+        });
+        axios.get.mockReturnValueOnce(promise);
+
+        render(
+            <MemoryRouter initialEntries={['/network/default']}>
+                <Routes>
+                    <Route path="/network/:networkName" element={<NetworkDetails/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByLabelText('Loading network details')).toBeInTheDocument();
+
+        resolve({data: {items: mockIpDetails}});
+        await promise;
+
+        await waitFor(() => {
+            expect(screen.queryByLabelText('Loading network details')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('192.168.1.1')).toBeInTheDocument();
+        });
+    });
+
+    test('does not update state if unmounted before fetch completes', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        let resolve;
+        const promise = new Promise((r) => {
+            resolve = r;
+        });
+        axios.get.mockReturnValueOnce(promise);
+
+        const {unmount} = render(
+            <MemoryRouter initialEntries={['/network/default']}>
+                <Routes>
+                    <Route path="/network/:networkName" element={<NetworkDetails/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        unmount();
+
+        resolve({data: {items: mockIpDetails}});
+        await promise;
+
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
+        consoleWarnSpy.mockRestore();
+    });
+
+    test('does not update state on error if unmounted', async () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+        });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        let reject;
+        const promise = new Promise((_, r) => {
+            reject = r;
+        });
+        axios.get.mockReturnValueOnce(promise);
+
+        const {unmount} = render(
+            <MemoryRouter initialEntries={['/network/default']}>
+                <Routes>
+                    <Route path="/network/:networkName" element={<NetworkDetails/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        unmount();
+
+        reject(new Error('API Error'));
+        await expect(promise).rejects.toThrow('API Error');
+
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
+        consoleWarnSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
     });
 });

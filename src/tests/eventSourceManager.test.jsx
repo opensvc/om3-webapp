@@ -84,6 +84,11 @@ describe('eventSourceManager', () => {
             warn: console.warn,
             info: console.info
         };
+
+        // Mock window.location
+        delete window.location;
+        window.location = { href: '' };
+        window.oidcUserManager = null;
     });
 
     afterEach(() => {
@@ -96,6 +101,7 @@ describe('eventSourceManager', () => {
 
         // Reset module state
         eventSourceManager.closeEventSource();
+        delete window.oidcUserManager;
     });
 
     describe('createEventSource', () => {
@@ -622,6 +628,67 @@ describe('eventSourceManager', () => {
             consoleErrorSpy.mockRestore();
         });
 
+        test('should handle 401 error with silent token renewal', async () => {
+            const error = { status: 401 };
+            const mockUser = {
+                access_token: 'silent-renewed-token',
+                expires_at: Date.now() + 3600000
+            };
+
+            window.oidcUserManager = {
+                signinSilent: jest.fn().mockResolvedValue(mockUser)
+            };
+
+            localStorageMock.getItem.mockReturnValue(null);
+
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
+
+            if (mockEventSource.onerror) {
+                mockEventSource.onerror(error);
+            }
+
+            // Wait for silent renew to complete
+            await Promise.resolve();
+
+            expect(window.oidcUserManager.signinSilent).toHaveBeenCalled();
+            expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'silent-renewed-token');
+        });
+
+        test('should handle max reconnection attempts reached', () => {
+            const error = { status: 500 };
+            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+
+            // Trigger error handler multiple times to exceed max attempts
+            for (let i = 0; i < 15; i++) {
+                if (mockEventSource.onerror) {
+                    mockEventSource.onerror(error);
+                }
+                jest.advanceTimersByTime(1000);
+            }
+
+            expect(consoleErrorSpy).toHaveBeenCalledWith('❌ Max reconnection attempts reached');
+            consoleErrorSpy.mockRestore();
+        });
+
+        test('should schedule reconnection with exponential backoff', () => {
+            const error = { status: 500 };
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+
+            if (mockEventSource.onerror) {
+                mockEventSource.onerror(error);
+            }
+
+            expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), expect.any(Number));
+
+            // Verify the delay is within expected bounds
+            const delay = setTimeoutSpy.mock.calls[0][1];
+            expect(delay).toBeGreaterThanOrEqual(1000);
+            expect(delay).toBeLessThanOrEqual(30000);
+        });
 
         test('should not create EventSource if no token is provided', () => {
             const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -729,6 +796,19 @@ describe('eventSourceManager', () => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('❌ No token provided for SSE!');
             consoleErrorSpy.mockRestore();
         });
+
+        test('should configure EventSource with objectName and custom filters', () => {
+            const customFilters = ['NodeStatusUpdated', 'ObjectStatusUpdated'];
+            eventSourceManager.configureEventSource('fake-token', 'test-object', customFilters);
+
+            expect(EventSourcePolyfill).toHaveBeenCalled();
+        });
+
+        test('should configure EventSource without objectName', () => {
+            eventSourceManager.configureEventSource('fake-token');
+
+            expect(EventSourcePolyfill).toHaveBeenCalled();
+        });
     });
 
     describe('startEventReception', () => {
@@ -779,6 +859,13 @@ describe('eventSourceManager', () => {
 
             expect(consoleErrorSpy).toHaveBeenCalledWith('❌ No token provided for SSE!');
             consoleErrorSpy.mockRestore();
+        });
+
+        test('should start event reception with custom filters', () => {
+            const customFilters = ['NodeStatusUpdated', 'ObjectStatusUpdated'];
+            eventSourceManager.startEventReception('fake-token', customFilters);
+
+            expect(EventSourcePolyfill).toHaveBeenCalled();
         });
     });
 
@@ -845,6 +932,55 @@ describe('eventSourceManager', () => {
 
             // Verify no errors occurred and store methods weren't called unnecessarily
             expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
+        });
+
+        test('should handle instanceConfig buffer correctly', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'InstanceConfigUpdated'
+            )[1];
+
+            // Simulate InstanceConfigUpdated event with instance_config
+            const mockEvent = {
+                data: JSON.stringify({
+                    path: 'object1',
+                    node: 'node1',
+                    instance_config: {config: 'test-value'}
+                })
+            };
+            configUpdatedHandler(mockEvent);
+
+            jest.runAllTimers();
+            expect(mockStore.setInstanceConfig).toHaveBeenCalledWith('object1', 'node1', {config: 'test-value'});
+        });
+    });
+
+    describe('connection lifecycle', () => {
+
+        test('should handle connection open event', () => {
+            const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+
+            // Trigger onopen handler
+            if (mockEventSource.onopen) {
+                mockEventSource.onopen();
+            }
+
+            expect(consoleLogSpy).toHaveBeenCalledWith('✅ EventSource connection established');
+            consoleLogSpy.mockRestore();
+        });
+    });
+
+    describe('query string creation', () => {
+        test('should create query string with default filters', () => {
+            // This tests the internal createQueryString function through public API
+            eventSourceManager.configureEventSource('fake-token');
+
+            expect(EventSourcePolyfill).toHaveBeenCalledWith(
+                expect.stringContaining('cache=true'),
+                expect.any(Object)
+            );
         });
     });
 });

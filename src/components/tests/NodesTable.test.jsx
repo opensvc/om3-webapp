@@ -60,6 +60,26 @@ jest.mock('../ActionDialogs', () => ({
                 <button onClick={onClose}>Cancel</button>
             </div>
         ) : null,
+    UnfreezeDialog: ({open, onClose, onConfirm, target}) =>
+        open ? (
+            <div role="dialog">
+                <h2>Confirm Unfreeze Action on {target}</h2>
+                <button onClick={onConfirm} aria-label="Confirm">
+                    Confirm
+                </button>
+                <button onClick={onClose}>Cancel</button>
+            </div>
+        ) : null,
+    RestartDaemonDialog: ({open, onClose, onConfirm, target}) =>
+        open ? (
+            <div role="dialog">
+                <h2>Confirm Restart Daemon Action on {target}</h2>
+                <button onClick={onConfirm} aria-label="Confirm">
+                    Confirm
+                </button>
+                <button onClick={onClose}>Cancel</button>
+            </div>
+        ) : null,
     StopDialog: ({open, onClose, onConfirm, target}) =>
         open ? (
             <div role="dialog">
@@ -88,14 +108,17 @@ describe('NodesTable', () => {
                 nodeStatus: {
                     'node-1': {state: 'idle', frozen_at: null, agent: 'v1.0'},
                     'node-2': {state: 'busy', frozen_at: null, agent: 'v2.0'},
+                    'node-3': {state: 'idle', frozen_at: null, agent: 'v3.0'},
                 },
                 nodeStats: {
                     'node-1': {score: 42, load_15m: 1.5, mem_avail: 1000, swap_avail: 500},
                     'node-2': {score: 18, load_15m: 2.0, mem_avail: 2000, swap_avail: 1000},
+                    // Intentionally missing node-3 to cover default cases in sorting
                 },
                 nodeMonitor: {
                     'node-1': {state: 'idle'},
                     'node-2': {state: 'busy'},
+                    // Intentionally missing node-3 to cover default cases in sorting
                 },
             })
         );
@@ -132,6 +155,7 @@ describe('NodesTable', () => {
         renderWithRouter(<NodesTable/>);
         expect(await screen.findByText('node-1')).toBeInTheDocument();
         expect(await screen.findByText('node-2')).toBeInTheDocument();
+        expect(await screen.findByText('node-3')).toBeInTheDocument();
     });
 
     test('enables "Actions on selected nodes" button when a node is selected', async () => {
@@ -227,6 +251,8 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/Authentication token not found/i)).toBeInTheDocument();
+        expect(useFetchDaemonStatusModule.default.mock.results[0].value.fetchNodes).not.toHaveBeenCalled();
+        expect(eventSourceManager.startEventReception).not.toHaveBeenCalled();
     });
 
     test('shows error snackbar if all requests fail', async () => {
@@ -248,6 +274,7 @@ describe('NodesTable', () => {
         const checkboxes = await screen.findAllByRole('checkbox');
         expect(checkboxes[1]).toBeChecked(); // node-1
         expect(checkboxes[2]).toBeChecked(); // node-2
+        expect(checkboxes[3]).toBeChecked(); // node-3
         expect(screen.getByRole('button', {name: /actions on selected nodes/i})).toBeEnabled();
     });
 
@@ -375,6 +402,30 @@ describe('NodesTable', () => {
         });
     });
 
+    test('constructs correct URL for restart daemon action', async () => {
+        global.fetch = jest.fn(() => Promise.resolve({ok: true}));
+        renderWithRouter(<NodesTable/>);
+        const restartButtons = await screen.findAllByText('Restart Daemon');
+        fireEvent.click(restartButtons[0]); // node-1
+        const confirmBtn = await screen.findByRole('button', {name: 'Confirm'});
+
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/daemon/action/restart'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer test-token',
+                    }),
+                })
+            );
+        });
+
+        expect(await screen.findByText(/✅ 'Restart Daemon' succeeded on 1 node\(s\)\./i)).toBeInTheDocument();
+    });
+
     test('skips freeze action on already frozen node', async () => {
         jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
             selector({
@@ -451,7 +502,7 @@ describe('NodesTable', () => {
 
         await waitFor(() => {
             const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-2'); // 18 comes first (asc)
+            expect(rows[0]).toHaveTextContent('node-3'); // 0 comes first (asc)
         });
     });
 
@@ -463,7 +514,7 @@ describe('NodesTable', () => {
 
         await waitFor(() => {
             const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-1'); // 1.5 comes first (asc)
+            expect(rows[0]).toHaveTextContent('node-3'); // 0 comes first (asc)
         });
     });
 
@@ -475,7 +526,7 @@ describe('NodesTable', () => {
 
         await waitFor(() => {
             const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-1'); // 1000 comes first (asc)
+            expect(rows[0]).toHaveTextContent('node-3'); // 0 comes first (asc)
         });
     });
 
@@ -487,7 +538,7 @@ describe('NodesTable', () => {
 
         await waitFor(() => {
             const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-1'); // 500 comes first (asc)
+            expect(rows[0]).toHaveTextContent('node-3'); // 0 comes first (asc)
         });
     });
 
@@ -536,5 +587,31 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/❌ 'Freeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
+    });
+
+    test('handles actions menu on Safari', async () => {
+        const originalUserAgent = navigator.userAgent;
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Safari',
+            configurable: true
+        });
+        jest.useFakeTimers();
+        renderWithRouter(<NodesTable/>);
+        const checkboxes = await screen.findAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]); // select node-1
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        fireEvent.click(actionsButton);
+        jest.advanceTimersByTime(100);
+        await screen.findByRole('menu');
+        // Close menu
+        fireEvent.keyDown(screen.getByRole('presentation'), {key: 'Escape'});
+        await waitFor(() => {
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        });
+        jest.useRealTimers();
+        Object.defineProperty(navigator, 'userAgent', {
+            value: originalUserAgent,
+            configurable: true
+        });
     });
 });

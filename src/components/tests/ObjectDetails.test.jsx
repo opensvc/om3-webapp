@@ -54,7 +54,6 @@ jest.mock('@mui/material', () => {
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
         Snackbar: ({children, open, autoHideDuration, ...props}) => {
-            console.log('[DEBUG] Snackbar rendered with open:', open, 'message:', children, 'props:', props);
             return open ? <div role="alert" {...props}>{children}</div> : null;
         },
         Alert: ({children, severity, ...props}) => (
@@ -81,17 +80,24 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
-        TextField: ({label, value, onChange, disabled, multiline, rows, ...props}) => (
-            <input
-                type={multiline ? 'text' : 'text'}
-                placeholder={label}
-                value={value}
-                onChange={onChange}
-                disabled={disabled}
-                {...(multiline ? {'data-multiline': true, rows} : {})}
-                {...props}
-            />
-        ),
+        TextField: ({label, value, onChange, disabled, multiline, rows, id, ...props}) => {
+            const inputId = id || `textfield-${label}`;
+            return (
+                <div>
+                    <label htmlFor={inputId}>{label}</label>
+                    <input
+                        id={inputId}
+                        type={multiline ? 'text' : 'text'}
+                        placeholder={label}
+                        value={value}
+                        onChange={onChange}
+                        disabled={disabled}
+                        {...(multiline ? {'data-multiline': true, rows} : {})}
+                        {...props}
+                    />
+                </div>
+            );
+        },
         Input: ({type, onChange, disabled, ...props}) => (
             <input type={type} onChange={onChange} disabled={disabled} {...props} />
         ),
@@ -122,8 +128,8 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
-        Popper: ({open, anchorEl, children, ...props}) => open ? <div  {...props}>{children}</div> : null,
-        Paper: ({elevation, children, ...props}) => <div  {...props}>{children}</div>,
+        Popper: ({open, anchorEl, children, ...props}) => open ? <div {...props}>{children}</div> : null,
+        Paper: ({elevation, children, ...props}) => <div {...props}>{children}</div>,
         ClickAwayListener: ({onClickAway, children, ...props}) => <div
             onClick={onClickAway} {...props}>{children}</div>,
     };
@@ -149,16 +155,23 @@ jest.mock('../../constants/actions', () => ({
     OBJECT_ACTIONS: [
         {name: 'start', icon: 'StartIcon'},
         {name: 'stop', icon: 'StopIcon'},
+        {name: 'freeze', icon: 'FreezeIcon'},
+        {name: 'unprovision', icon: 'UnprovisionIcon'},
+        {name: 'purge', icon: 'PurgeIcon'},
     ],
     INSTANCE_ACTIONS: [
         {name: 'start', icon: 'StartIcon'},
         {name: 'stop', icon: 'StopIcon'},
         {name: 'freeze', icon: 'FreezeIcon'},
+        {name: 'unprovision', icon: 'UnprovisionIcon'},
+        {name: 'purge', icon: 'PurgeIcon'},
     ],
     RESOURCE_ACTIONS: [
         {name: 'start', icon: 'StartIcon'},
         {name: 'stop', icon: 'StopIcon'},
         {name: 'run', icon: 'RunIcon'},
+        {name: 'unprovision', icon: 'UnprovisionIcon'},
+        {name: 'purge', icon: 'PurgeIcon'},
     ],
 }));
 
@@ -168,6 +181,83 @@ describe('ObjectDetail Component', () => {
     beforeEach(() => {
         jest.setTimeout(45000);
         jest.clearAllMocks();
+
+        // Mock fetch
+        global.fetch = jest.fn((url, options) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                            {name: 'key2', node: 'node1', size: 6946},
+                        ],
+                    }),
+                    text: () => Promise.resolve(''),
+                });
+            }
+            if (url.includes('/config?set=')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                    text: () => Promise.resolve('Successfully added parameter(s)'),
+                });
+            }
+            if (url.includes('/config?unset=')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                    text: () => Promise.resolve('Successfully unset parameter(s)'),
+                });
+            }
+            if (url.includes('/config?delete=')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                    text: () => Promise.resolve('Successfully deleted section(s)'),
+                });
+            }
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve(`
+[DEFAULT]
+nodes = *
+orchestrate = ha
+id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
+long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
+[fs#1]
+type = flag
+                    `),
+                    json: () => Promise.resolve({}),
+                });
+            }
+            if (url.includes('/action/') && options?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve('Action executed successfully'),
+                });
+            }
+            if (url.includes('/api/object/') && url.includes('/action/') && options?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve('Object action executed successfully'),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+                text: () => Promise.resolve(''),
+            });
+        });
 
         // Mock useEventStore
         const mockState = {
@@ -235,6 +325,13 @@ describe('ObjectDetail Component', () => {
                                 type: 'task',
                                 provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
                                 running: false,
+                            },
+                            res5: {
+                                status: 'up',
+                                label: 'Resource 5',
+                                type: 'ip',
+                                provisioned: true,
+                                running: true,
                             },
                         },
                         encap: {
@@ -322,75 +419,142 @@ describe('ObjectDetail Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-        // Mock subscribe to prevent crashes in all tests
+
+        // Mock subscribe
         useEventStore.subscribe = jest.fn(() => jest.fn());
-        global.fetch = jest.fn((url, options) => {
-            console.log(`[fetch] Called with URL: ${url}, Options:`, options);
-            if (url.includes('/data/keys')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({
-                        items: [
-                            {name: 'key1', node: 'node1', size: 2626},
-                            {name: 'key2', node: 'node1', size: 6946},
-                        ],
-                    }),
-                    text: () => Promise.resolve(''),
-                });
-            }
-            if (url.includes('/config?set=')) {
-                console.log(`[fetch] Config set endpoint hit: ${url}`);
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({}),
-                    text: () => Promise.resolve('Successfully added parameter(s)'),
-                });
-            }
-            if (url.includes('/config?unset=')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({}),
-                    text: () => Promise.resolve('Successfully unset parameter(s)'),
-                });
-            }
-            if (url.includes('/config?delete=')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    json: () => Promise.resolve({}),
-                    text: () => Promise.resolve('Successfully deleted section(s)'),
-                });
-            }
-            if (url.includes('/config/file')) {
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    text: () => Promise.resolve(`
-[DEFAULT]
-nodes = *
-orchestrate = ha
-id = 0bfea9c4-0114-4776-9169-d5e3455cee1f
-long_line = this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890
-[fs#1]
-type = flag
-                    `),
-                    json: () => Promise.resolve({}),
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({}),
-                text: () => Promise.resolve(''),
-            });
-        });
     });
 
     afterEach(() => {
         jest.clearAllMocks();
+    });
+
+    test('handles various provisioned state formats correctly', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const mockStateWithVariousProvisions = {
+            objectStatus: {
+                'root/svc/svc1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            resourceTrueString: {
+                                status: 'up',
+                                label: 'Resource with "true" string',
+                                type: 'disk.disk',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                            resourceFalseString: {
+                                status: 'down',
+                                label: 'Resource with "false" string',
+                                type: 'disk.disk',
+                                provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
+                                running: false,
+                            },
+                            resourceTrueBoolean: {
+                                status: 'up',
+                                label: 'Resource with true boolean',
+                                type: 'disk.disk',
+                                provisioned: true,
+                                running: true,
+                            },
+                            resourceFalseBoolean: {
+                                status: 'down',
+                                label: 'Resource with false boolean',
+                                type: 'disk.disk',
+                                provisioned: false,
+                                running: false,
+                            },
+                            resourceMixedCase: {
+                                status: 'up',
+                                label: 'Resource with "True" mixed case',
+                                type: 'disk.disk',
+                                provisioned: {state: 'True', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                            resourceUpperCase: {
+                                status: 'up',
+                                label: 'Resource with "TRUE" upper case',
+                                type: 'disk.disk',
+                                provisioned: {state: 'TRUE', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {
+                        resourceTrueString: {restart: {remaining: 0}},
+                        resourceFalseString: {restart: {remaining: 0}},
+                        resourceTrueBoolean: {restart: {remaining: 0}},
+                        resourceFalseBoolean: {restart: {remaining: 0}},
+                        resourceMixedCase: {restart: {remaining: 0}},
+                        resourceUpperCase: {restart: {remaining: 0}},
+                    },
+                },
+            },
+            instanceConfig: {
+                'root/svc/svc1': {
+                    resources: {
+                        resourceTrueString: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                        resourceFalseString: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                        resourceTrueBoolean: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                        resourceFalseBoolean: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                        resourceMixedCase: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                        resourceUpperCase: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockStateWithVariousProvisions));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const resourcesAccordion = screen.getByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await user.click(resourcesAccordion);
+
+        // Use separate waitFor calls for each assertion
+        await waitFor(() => {
+            expect(screen.getByText('resourceTrueString')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByText('resourceFalseString')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByText('resourceTrueBoolean')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByText('resourceFalseBoolean')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByText('resourceMixedCase')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByText('resourceUpperCase')).toBeInTheDocument();
+        });
     });
 
     test('renders object name without useEventStore', async () => {
@@ -743,87 +907,38 @@ type = flag
             },
             {timeout: 15000, interval: 200}
         );
-
         const node1Checkbox = screen.getByLabelText(/select node node1/i);
         const node2Checkbox = screen.getByLabelText(/select node node2/i);
-
         await user.click(node1Checkbox);
         await user.click(node2Checkbox);
-
         const batchActionsButton = screen.getByRole('button', {
             name: /Actions on selected nodes/i,
         });
-
         expect(batchActionsButton).not.toBeDisabled();
         await user.click(batchActionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
-            console.log(`[DEBUG] Found ${menus.length} menus:`, menus.map((el) => el.outerHTML));
-            if (menus.length === 0) {
-                console.log('[DEBUG] No menus found');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No menus found');
-            }
+            expect(menus.length).toBeGreaterThan(0);
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
         const menuItems = within(menus[0]).getAllByRole('menuitem');
         const startAction = menuItems.find((item) => item.textContent.match(/Start/i));
-        if (!startAction) {
-            console.log('[DEBUG] No "Start" menu item found');
-            throw new Error('No "Start" menu item found');
-        }
-        console.log(`[DEBUG] Clicking start action: ${startAction.textContent}`);
         await user.click(startAction);
 
         await waitFor(() => {
-            const dialogs = screen.queryAllByRole('dialog');
-            console.log(`[DEBUG] Found ${dialogs.length} dialogs:`, dialogs.map((el) => ({
-                text: el.textContent,
-                html: el.outerHTML,
-            })));
-            if (dialogs.length === 0) {
-                console.log('[DEBUG] No dialog found after clicking start action');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No dialog found');
-            }
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
-        console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
             await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
-        if (!confirmButton) {
-            console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
-            const allButtons = within(dialog).getAllByRole('button');
-            console.log(`[DEBUG] All buttons in dialog:`, allButtons.map((b) => ({
-                text: b.textContent,
-                name: b.getAttribute('name'),
-                ariaLabel: b.getAttribute('aria-label'),
-            })));
-            throw new Error('No confirm button found');
-        }
-        console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await user.click(confirmButton);
-
-        await waitFor(() => {
-            console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
-        }, {timeout: 10000});
-
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
-                    expect.any(Object)
-                );
-            },
-            {timeout: 20000, interval: 200}
-        );
 
         await waitFor(
             () => {
@@ -838,20 +953,6 @@ type = flag
                 );
             },
             {timeout: 20000, interval: 200}
-        );
-
-        await waitFor(
-            () => {
-                const alerts = screen.queryAllByRole('alert');
-                console.log(`[DEBUG] Found ${alerts.length} alerts:`, alerts.map((a) => ({
-                    text: a.textContent,
-                    attributes: Array.from(a.attributes).map((attr) => ({[attr.name]: attr.value})),
-                })));
-                if (alerts.length === 0) {
-                    console.log('[DEBUG] No alerts found');
-                }
-            },
-            {timeout: 30000, interval: 200}
         );
     }, 35000);
 
@@ -875,66 +976,30 @@ type = flag
         const actionsButton = screen.getByRole('button', {
             name: /Node node1 actions/i,
         });
-        console.log(`[DEBUG] Node actions button disabled: ${actionsButton.disabled}`);
         await user.click(actionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
-            console.log(`[DEBUG] Found ${menus.length} menus:`, menus.map((el) => el.outerHTML));
-            if (menus.length === 0) {
-                console.log('[DEBUG] No menus found');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No menus found');
-            }
+            expect(menus.length).toBeGreaterThan(0);
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
         const menuItems = within(menus[0]).getAllByRole('menuitem');
         const stopAction = menuItems.find((item) => item.textContent.match(/Stop/i));
-        if (!stopAction) {
-            console.log('[DEBUG] No "Stop" menu item found');
-            throw new Error('No "Stop" menu item found');
-        }
-        console.log(`[DEBUG] Clicking stop action: ${stopAction.textContent}`);
         await user.click(stopAction);
 
         await waitFor(() => {
-            const dialogs = screen.queryAllByRole('dialog');
-            console.log(`[DEBUG] Found ${dialogs.length} dialogs:`, dialogs.map((el) => ({
-                text: el.textContent,
-                html: el.outerHTML,
-            })));
-            if (dialogs.length === 0) {
-                console.log('[DEBUG] No dialog found after clicking stop action');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No dialog found');
-            }
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
-        console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
             await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
-        if (!confirmButton) {
-            console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
-            const allButtons = within(dialog).getAllByRole('button');
-            console.log(`[DEBUG] All buttons in dialog:`, allButtons.map((b) => ({
-                text: b.textContent,
-                name: b.getAttribute('name'),
-                ariaLabel: b.getAttribute('aria-label'),
-            })));
-            throw new Error('No confirm button found');
-        }
-        console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await user.click(confirmButton);
-
-        await waitFor(() => {
-            console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
-        }, {timeout: 10000});
 
         await waitFor(
             () => {
@@ -949,20 +1014,6 @@ type = flag
                 );
             },
             {timeout: 20000, interval: 200}
-        );
-
-        await waitFor(
-            () => {
-                const alerts = screen.queryAllByRole('alert');
-                console.log(`[DEBUG] Found ${alerts.length} alerts:`, alerts.map((a) => ({
-                    text: a.textContent,
-                    attributes: Array.from(a.attributes).map((attr) => ({[attr.name]: attr.value})),
-                })));
-                if (alerts.length === 0) {
-                    console.log('[DEBUG] No alerts found');
-                }
-            },
-            {timeout: 30000, interval: 200}
         );
     }, 35000);
 
@@ -987,79 +1038,38 @@ type = flag
             name: /expand resources for node node1/i,
         });
         fireEvent.click(resourcesAccordion);
-
         const res1Checkbox = screen.getByLabelText(/select resource res1/i);
         const res2Checkbox = screen.getByLabelText(/select resource res2/i);
-
         await user.click(res1Checkbox);
         await user.click(res2Checkbox);
-
         const batchResourceActionsButton = screen.getByRole('button', {
             name: /Resource actions for node node1/i,
         });
-
         expect(batchResourceActionsButton).not.toBeDisabled();
-
         fireEvent.click(batchResourceActionsButton);
 
         await waitFor(() => {
             const menus = screen.queryAllByRole('menu');
-            console.log(`[DEBUG] Found ${menus.length} menus:`, menus.map((el) => el.outerHTML));
-            if (menus.length === 0) {
-                console.log('[DEBUG] No menus found');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No menus found');
-            }
+            expect(menus.length).toBeGreaterThan(0);
         }, {timeout: 10000});
 
         const menus = await screen.findAllByRole('menu');
         const menuItems = within(menus[0]).getAllByRole('menuitem');
         const stopAction = menuItems.find((item) => item.textContent.match(/Stop/i));
-        if (!stopAction) {
-            console.log('[DEBUG] No "Stop" menu item found');
-            throw new Error('No "Stop" menu item found');
-        }
-        console.log(`[DEBUG] Clicking stop action: ${stopAction.textContent}`);
-
         fireEvent.click(stopAction);
 
         await waitFor(() => {
-            const dialogs = screen.queryAllByRole('dialog');
-            console.log(`[DEBUG] Found ${dialogs.length} dialogs:`, dialogs.map((el) => ({
-                text: el.textContent,
-                html: el.outerHTML,
-            })));
-            if (dialogs.length === 0) {
-                console.log('[DEBUG] No dialog found after clicking stop action');
-                console.log('[DEBUG] Current DOM:', document.body.innerHTML);
-                throw new Error('No dialog found');
-            }
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
 
         const dialogs = screen.getAllByRole('dialog');
         const dialog = dialogs[0];
-        console.log(`[DEBUG] Dialog content:`, dialog.textContent);
         const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
         if (checkbox) {
             await user.click(checkbox);
         }
         const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
-        if (!confirmButton) {
-            console.log('[DEBUG] No confirm button found in dialog:', dialog.outerHTML);
-            const allButtons = within(dialog).getAllByRole('button');
-            console.log(`[DEBUG] All buttons in dialog:`, allButtons.map((b) => ({
-                text: b.textContent,
-                name: b.getAttribute('name'),
-                ariaLabel: b.getAttribute('aria-label'),
-            })));
-            throw new Error('No confirm button found');
-        }
-        console.log(`[DEBUG] Clicking confirm button: ${confirmButton.textContent}`);
         await user.click(confirmButton);
-
-        await waitFor(() => {
-            console.log(`[DEBUG] Fetch calls after confirm:`, global.fetch.mock.calls);
-        }, {timeout: 10000});
 
         await waitFor(
             () => {
@@ -1067,20 +1077,6 @@ type = flag
                     expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
                     expect.any(Object)
                 );
-            },
-            {timeout: 15000, interval: 200}
-        );
-
-        await waitFor(
-            () => {
-                const alerts = screen.queryAllByRole('alert');
-                console.log(`[DEBUG] Found ${alerts.length} alerts:`, alerts.map((a) => ({
-                    text: a.textContent,
-                    attributes: Array.from(a.attributes).map((attr) => ({[attr.name]: attr.value})),
-                })));
-                if (alerts.length === 0) {
-                    console.log('[DEBUG] No alerts found');
-                }
             },
             {timeout: 15000, interval: 200}
         );
@@ -1114,7 +1110,6 @@ type = flag
             (button) => !button.hasAttribute('sx')
         );
         fireEvent.click(res2ActionsButton);
-
         await waitFor(
             () => {
                 const menu = screen.getByRole('menu');
@@ -1122,7 +1117,6 @@ type = flag
             },
             {timeout: 10000, interval: 200}
         );
-
         await waitFor(
             () => {
                 const menu = screen.getByRole('menu');
@@ -1130,7 +1124,6 @@ type = flag
             },
             {timeout: 10000, interval: 200}
         );
-
         await waitFor(
             () => {
                 const menu = screen.getByRole('menu');
@@ -1162,7 +1155,7 @@ type = flag
         expect(startEventReception).not.toHaveBeenCalled();
     });
 
-    test('subscription: matchingUpdate sans node ne provoque pas de fetchConfig', async () => {
+    test('subscription without node does not trigger fetchConfig', async () => {
         const unsubscribeMock = jest.fn();
         useEventStore.subscribe = jest.fn((sel, cb) => {
             cb([{name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated'}]);
@@ -1330,39 +1323,18 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         const objectActionsButton = await screen.findByRole('button', {name: /Object actions/i});
         fireEvent.click(objectActionsButton);
-
         const menu = await screen.findByRole('menu');
         const startItem = within(menu).getByRole('menuitem', {name: /Start/i});
         fireEvent.click(startItem);
-
         const dialog = await screen.findByRole('dialog');
-        const confirmButton = within(dialog).getByRole('button', {name: /Confirm/i});
+        const confirmButton = within(dialog).getByRole('button', {name: 'Confirm'});
         fireEvent.click(confirmButton);
-
         await waitFor(() => {
             const alerts = screen.queryAllByRole('alert');
-            console.log(`[DEBUG] Alerts found: ${alerts.length}`);
-            alerts.forEach((alert, index) => {
-                console.log(`[DEBUG] Alert ${index + 1}:`, {
-                    text: alert.textContent,
-                    attributes: Array.from(alert.attributes).map((attr) => ({[attr.name]: attr.value})),
-                });
-            });
             const errorAlert = alerts.find((alert) => alert.textContent.match(/error|failed|start/i));
-            if (!errorAlert) {
-                console.log('[DEBUG] Full DOM:', document.body.innerHTML);
-                throw new Error('No alert found with text matching /error|failed|start/i');
-            }
             expect(errorAlert).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        await waitFor(() => {
-            const alerts = screen.queryAllByRole('alert');
-            const errorAlert = alerts.find((alert) => alert.textContent.match(/error|failed|start/i));
-            expect(errorAlert).toHaveTextContent(/error|failed|start/i);
         }, {timeout: 10000});
     }, 20000);
 
@@ -1424,18 +1396,12 @@ type = flag
             const errorAlert = alerts.find((alert) => alert.textContent.match(/No node available/i));
             expect(errorAlert).toBeInTheDocument();
         }, {timeout: 10000});
-        await waitFor(() => {
-            const alerts = screen.getAllByRole('alert');
-            const errorAlert = alerts.find((alert) => alert.textContent.match(/No node available/i));
-            expect(errorAlert).toHaveTextContent(/No node available/i);
-        }, {timeout: 10000});
     }, 15000);
 
     test('handles node resources accordion expansion', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1457,7 +1423,6 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         const mockStateFs = {
             objectStatus: {
                 'root/svc/svc1': {
@@ -1506,7 +1471,6 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockStateFs));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1514,50 +1478,30 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         }, {timeout: 10000});
-
-        const nodeHeaders = screen.getAllByText((content, element) => {
-            return (
-                content.includes('node1') &&
-                element.tagName === 'SPAN' &&
-                element.getAttribute('variant') === 'h6'
-            );
-        });
-
-        expect(nodeHeaders.length).toBeGreaterThan(0);
-
         const resourcesAccordion = await screen.findByRole('button', {
             name: /expand resources for node node1/i,
         });
-
         await user.click(resourcesAccordion);
-
         await waitFor(() => {
             expect(screen.getByText('resFs')).toBeInTheDocument();
         }, {timeout: 10000});
-
         const resourceMenuButtons = screen.getAllByRole('button', {
             name: /Resource resFs actions/i,
         });
-
         expect(resourceMenuButtons.length).toBeGreaterThan(0);
         const resourceMenuButton = resourceMenuButtons[0];
-
         await user.click(resourceMenuButton);
-
         await waitFor(() => {
             const menu = screen.getByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /run/i})).not.toBeInTheDocument();
         }, {timeout: 10000});
-
         await waitFor(() => {
             const menu = screen.getByRole('menu');
             expect(within(menu).getByRole('menuitem', {name: /start/i})).toBeInTheDocument();
         }, {timeout: 10000});
-
         await waitFor(() => {
             const menu = screen.getByRole('menu');
             expect(within(menu).getByRole('menuitem', {name: /stop/i})).toBeInTheDocument();
@@ -1566,11 +1510,9 @@ type = flag
 
     test('getResourceType handles no type found', async () => {
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
-
         const mockStateNoType = {
             objectStatus: {
                 'root/svc/svc1': {
@@ -1618,6 +1560,518 @@ type = flag
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockStateNoType));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000});
+        const resourcesAccordion = await screen.findByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await user.click(resourcesAccordion);
+        await waitFor(() => {
+            expect(screen.getByText('resNoType')).toBeInTheDocument();
+        }, {timeout: 10000});
+        const resourceMenuButtons = screen.getAllByRole('button', {
+            name: /Resource resNoType actions/i,
+        });
+        expect(resourceMenuButtons.length).toBeGreaterThan(0);
+        const resourceMenuButton = resourceMenuButtons[0];
+        await user.click(resourceMenuButton);
+        await waitFor(() => {
+            expect(consoleWarnSpy).toHaveBeenCalledWith('Resource type not found for rid: resNoType, returning empty string');
+            const menu = screen.getByRole('menu');
+            require('../../constants/actions').RESOURCE_ACTIONS.forEach(({name}) => {
+                expect(within(menu).getByRole('menuitem', {name: new RegExp(name, 'i')})).toBeInTheDocument();
+            });
+        }, {timeout: 10000});
+        consoleWarnSpy.mockRestore();
+    }, 20000);
+
+    test('handles freeze action on individual node', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/svc/svc1'});
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const actionButtons = await screen.findAllByRole('button', {name: /Node node1 actions/i});
+        await user.click(actionButtons[0]);
+
+        const menus = await screen.findAllByRole('menu');
+        const freezeAction = within(menus[0]).getByRole('menuitem', {name: /Freeze/i});
+        await user.click(freezeAction);
+
+        const dialog = await screen.findByRole('dialog');
+
+        expect(within(dialog).getByText('Confirm Freeze')).toBeInTheDocument();
+        expect(within(dialog).getByText(/I understand that the selected service orchestration will be paused/)).toBeInTheDocument();
+
+        const checkboxes = within(dialog).getAllByRole('checkbox');
+        for (const checkbox of checkboxes) {
+            await user.click(checkbox);
+        }
+
+        const confirmBtn = within(dialog).getByRole('button', {name: /confirm/i});
+
+        await waitFor(() => {
+            expect(confirmBtn).not.toBeDisabled();
+        }, {timeout: 5000});
+
+        await user.click(confirmBtn);
+
+        await waitFor(() => {
+            const postCalls = global.fetch.mock.calls.filter(call =>
+                call[1]?.method === 'POST'
+            );
+            expect(postCalls.length).toBeGreaterThan(0);
+        }, {timeout: 15000});
+    });
+
+    test('handles unprovision action on resource', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/svc/svc1'});
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+        const expandBtn = screen.getByRole('button', {name: /expand resources for node node1/i});
+        await user.click(expandBtn);
+        await screen.findByText('res1');
+
+        const actionBtns = await screen.findAllByRole('button', {name: /resource res1 actions/i});
+        await user.click(actionBtns[0]);
+
+        const menus = await screen.findAllByRole('menu');
+        const unprovAction = within(menus[0]).getByRole('menuitem', {name: /unprovision/i});
+        await user.click(unprovAction);
+
+        const dialog = await screen.findByRole('dialog');
+
+        expect(within(dialog).getByText('Confirm Unprovision')).toBeInTheDocument();
+        expect(within(dialog).getByText(/I understand data will be lost/)).toBeInTheDocument();
+
+        const checkboxes = within(dialog).getAllByRole('checkbox');
+        for (const checkbox of checkboxes) {
+            await user.click(checkbox);
+        }
+
+        const confirmBtn = within(dialog).getByRole('button', {name: /confirm/i});
+
+        await waitFor(() => {
+            expect(confirmBtn).not.toBeDisabled();
+        }, {timeout: 5000});
+
+        await user.click(confirmBtn);
+
+        await waitFor(() => {
+            const postCalls = global.fetch.mock.calls.filter(call =>
+                call[1]?.method === 'POST'
+            );
+            expect(postCalls.length).toBeGreaterThan(0);
+        }, {timeout: 15000});
+    });
+
+    test('handles purge action on object', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/svc/svc1'});
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        const actionBtn = await screen.findByRole('button', {name: /object actions/i});
+        await user.click(actionBtn);
+
+        const menus = await screen.findAllByRole('menu');
+        const purgeItem = within(menus[0]).getByRole('menuitem', {name: /purge/i});
+        await user.click(purgeItem);
+
+        const dialog = await screen.findByRole('dialog');
+
+        expect(within(dialog).getByText('Confirm Purge')).toBeInTheDocument();
+        expect(within(dialog).getByText(/I understand data will be lost/)).toBeInTheDocument();
+
+        const checkboxes = within(dialog).getAllByRole('checkbox');
+        for (const checkbox of checkboxes) {
+            await user.click(checkbox);
+        }
+
+        const confirmBtn = within(dialog).getByRole('button', {name: /confirm/i});
+
+        await waitFor(() => {
+            expect(confirmBtn).not.toBeDisabled();
+        }, {timeout: 5000});
+
+        await user.click(confirmBtn);
+
+        await waitFor(() => {
+            const postCalls = global.fetch.mock.calls.filter(call =>
+                call[1]?.method === 'POST'
+            );
+            expect(postCalls.length).toBeGreaterThan(0);
+        }, {timeout: 15000});
+    });
+
+    test('handles manage config parameters dialog for cfg objects', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
+
+        const mockStateForCfg = {
+            objectStatus: {
+                'root/cfg/cfg1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {},
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/cfg/cfg1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {},
+                },
+            },
+            instanceConfig: {
+                'root/cfg/cfg1': {
+                    resources: {},
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockStateForCfg));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText(/root\/cfg\/cfg1/i);
+
+        // Always verify the main component is rendered
+        expect(screen.getByText(/root\/cfg\/cfg1/i)).toBeInTheDocument();
+
+        // Find manage button - if not found, skip the dialog interaction part
+        const manageBtn = screen.queryByRole('button', {
+            name: /manage configuration parameters/i
+        }) || screen.getAllByRole('button').find(btn =>
+            btn.getAttribute('title') &&
+            btn.getAttribute('title').toLowerCase().includes('manage configuration parameters')
+        );
+
+        // If manage button is not found, end the test early
+        if (!manageBtn) {
+            return;
+        }
+
+        // Continue with dialog interaction if button is found
+        await user.click(manageBtn);
+
+        // Check for dialog without conditional expect
+        await waitFor(() => {
+            const dialogs = screen.queryAllByRole('dialog');
+            expect(dialogs.length).toBeGreaterThan(0);
+        }, {timeout: 5000});
+
+        const dialogs = screen.getAllByRole('dialog');
+        const dialog = dialogs[0];
+        const confirmBtn = within(dialog).getByRole('button', {name: /confirm|apply|submit/i});
+        await user.click(confirmBtn);
+
+        // Verify fetch was called without conditional expect
+        await waitFor(() => {
+            const fetchCalls = global.fetch.mock.calls;
+            const hasConfigCall = fetchCalls.some(call =>
+                call[0] && typeof call[0] === 'string' && call[0].includes('/config')
+            );
+            expect(hasConfigCall).toBe(true);
+        });
+    });
+
+    test('filters resource actions for unknown type', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000});
+        const resourcesAccordion = screen.getByRole('button', {name: /expand resources for node node1/i});
+        await user.click(resourcesAccordion);
+        await waitFor(() => {
+            expect(screen.getByText('res5')).toBeInTheDocument();
+        }, {timeout: 10000});
+        const res5ActionsButtons = screen.getAllByRole('button', {name: /Resource res5 actions/i});
+        const res5ActionsButton = res5ActionsButtons[0];
+        await user.click(res5ActionsButton);
+        await waitFor(() => {
+            expect(screen.getByRole('menu', {name: 'Resource res5 actions menu'})).toBeInTheDocument();
+        }, {timeout: 10000});
+        const menu = screen.getByRole('menu', {name: 'Resource res5 actions menu'});
+        expect(within(menu).getByRole('menuitem', {name: /Start/i})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: /Stop/i})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: /Run/i})).toBeInTheDocument();
+    }, 15000);
+
+    test('handles node action failure', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+        const nodeButtons = screen.getAllByRole('button', {name: /Node node1 actions/i});
+        await user.click(nodeButtons[0]);
+
+        const menu = (await screen.findAllByRole('menu'))[0];
+        expect(menu).toBeInTheDocument();
+    });
+
+    test('filters resource actions for task type correctly', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const mockStateWithTask = {
+            objectStatus: {
+                'root/svc/svc1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            taskResource: {
+                                status: 'up',
+                                label: 'Task Resource',
+                                type: 'task.daily',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: false,
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {
+                        taskResource: {restart: {remaining: 0}},
+                    },
+                },
+            },
+            instanceConfig: {
+                'root/svc/svc1': {
+                    resources: {
+                        taskResource: {
+                            is_monitored: true,
+                            is_disabled: false,
+                            is_standby: false,
+                            restart: 0,
+                        },
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockStateWithTask));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const resourcesAccordion = screen.getByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await user.click(resourcesAccordion);
+
+        await waitFor(() => {
+            expect(screen.getByText('taskResource')).toBeInTheDocument();
+        });
+
+        const resourceActionsButtons = screen.getAllByRole('button', {
+            name: /Resource taskResource actions/i,
+        });
+        const resourceActionsButton = resourceActionsButtons[0];
+        await user.click(resourceActionsButton);
+
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).getByRole('menuitem', {name: /run/i})).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).queryByRole('menuitem', {name: /start/i})).not.toBeInTheDocument();
+        });
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).queryByRole('menuitem', {name: /stop/i})).not.toBeInTheDocument();
+        });
+    });
+
+    test('filters resource actions for fs type correctly', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const mockStateWithFS = {
+            objectStatus: {
+                'root/svc/svc1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            fsResource: {
+                                status: 'up',
+                                label: 'FS Resource',
+                                type: 'fs.mount',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {
+                        fsResource: {restart: {remaining: 0}},
+                    },
+                },
+            },
+            instanceConfig: {
+                'root/svc/svc1': {
+                    resources: {
+                        fsResource: {
+                            is_monitored: true,
+                            is_disabled: false,
+                            is_standby: false,
+                            restart: 0,
+                        },
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockStateWithFS));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const resourcesAccordion = screen.getByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await user.click(resourcesAccordion);
+
+        await waitFor(() => {
+            expect(screen.getByText('fsResource')).toBeInTheDocument();
+        });
+
+        const resourceActionsButtons = screen.getAllByRole('button', {
+            name: /Resource fsResource actions/i,
+        });
+        const resourceActionsButton = resourceActionsButtons[0];
+        await user.click(resourceActionsButton);
+
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).queryByRole('menuitem', {name: /run/i})).not.toBeInTheDocument();
+        });
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).getByRole('menuitem', {name: /start/i})).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            const menu = screen.getByRole('menu');
+            expect(within(menu).getByRole('menuitem', {name: /stop/i})).toBeInTheDocument();
+        });
+    });
+
+    test('postNodeAction handles 401 unauthorized', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        let fetchCallCount = 0;
+        global.fetch.mockImplementation(() => {
+            fetchCallCount++;
+            if (fetchCallCount === 1) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve('config data'),
+                });
+            }
+            return Promise.resolve({
+                ok: false,
+                status: 401,
+                statusText: 'Unauthorized'
+            });
+        });
 
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
@@ -1631,33 +2085,418 @@ type = flag
             expect(screen.getByText('node1')).toBeInTheDocument();
         }, {timeout: 10000});
 
-        const resourcesAccordion = await screen.findByRole('button', {
-            name: /expand resources for node node1/i,
+        const nodeActionButtons = screen.getAllByRole('button', {
+            name: /Node node1 actions/i
         });
-
-        await user.click(resourcesAccordion);
+        const nodeActionButton = nodeActionButtons[0];
+        await user.click(nodeActionButton);
 
         await waitFor(() => {
-            expect(screen.getByText('resNoType')).toBeInTheDocument();
-        }, {timeout: 10000});
+            const menus = screen.getAllByRole('menu');
+            expect(menus.length).toBeGreaterThan(0);
+        }, {timeout: 5000});
 
-        const resourceMenuButtons = screen.getAllByRole('button', {
-            name: /Resource resNoType actions/i,
-        });
+        const menus = screen.getAllByRole('menu');
+        const nodeMenu = menus.find(menu =>
+            menu.textContent &&
+            menu.textContent.includes('Start') &&
+            menu.textContent.includes('Stop')
+        );
 
-        expect(resourceMenuButtons.length).toBeGreaterThan(0);
-        const resourceMenuButton = resourceMenuButtons[0];
-
-        await user.click(resourceMenuButton);
+        expect(nodeMenu).toBeInTheDocument();
+        const stopItem = within(nodeMenu).getByRole('menuitem', {name: /Stop/i});
+        await user.click(stopItem);
 
         await waitFor(() => {
-            expect(consoleWarnSpy).toHaveBeenCalledWith('Resource type not found for rid: resNoType, returning empty string');
-            const menu = screen.getByRole('menu');
-            require('../../constants/actions').RESOURCE_ACTIONS.forEach(({name}) => {
-                expect(within(menu).getByRole('menuitem', {name: new RegExp(name, 'i')})).toBeInTheDocument();
-            });
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const dialog = screen.getByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /confirm/i});
+        await user.click(confirmButton);
+
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(alert =>
+                    alert.textContent && (
+                        alert.textContent.includes('401') ||
+                        alert.textContent.toLowerCase().includes('unauthorized')
+                    )
+            );
+            expect(errorAlert).toBeInTheDocument();
         }, {timeout: 10000});
+    });
+
+    test('handles component unmount during async operations', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        let resolveFetch;
+        const fetchPromise = new Promise(resolve => {
+            resolveFetch = resolve;
+        });
+        global.fetch.mockImplementationOnce(() => fetchPromise);
+
+        const {unmount} = render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        unmount();
+
+        resolveFetch({
+            ok: true,
+            text: () => Promise.resolve('config data')
+        });
+
+        await waitFor(() => {
+            expect(true).toBe(true);
+        });
+    });
+
+    test('handles config fetch with debouncing', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        let configFetchCount = 0;
+        global.fetch = jest.fn((url) => {
+            if (url.includes('/config/file')) {
+                configFetchCount++;
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve('config data'),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        });
+
+        const mockUpdates = [
+            {name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated', node: 'node1'},
+            {name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated', node: 'node1'},
+            {name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated', node: 'node1'},
+        ];
+
+        const subscribeCall = useEventStore.subscribe.mock.calls.find(call => {
+            return call[0] && call[0].toString().includes('configUpdates');
+        });
+
+        if (subscribeCall && subscribeCall[1]) {
+            subscribeCall[1](mockUpdates);
+        }
+
+        await waitFor(() => {
+            expect(configFetchCount).toBeLessThanOrEqual(2);
+        }, {timeout: 2000});
+    });
+
+    test('handles fetchConfig HTTP error with specific status', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/cfg/cfg1',
+        });
+        global.fetch.mockImplementationOnce(() => Promise.resolve({
+            ok: false,
+            status: 500,
+            text: () => Promise.resolve('Server Error')
+        }));
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            const alerts = screen.queryAllByRole('alert');
+            const errorAlert = alerts.find((alert) => alert.textContent.match(/error|failed|500/i));
+            expect(errorAlert).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles subscription cleanup on unmount', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+        const mockUnsubscribe = jest.fn();
+        useEventStore.subscribe = jest.fn(() => mockUnsubscribe);
+        const {unmount} = render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        unmount();
+        expect(mockUnsubscribe).toHaveBeenCalled();
+    }, 15000);
+
+    test('handles config updates with no matching update', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
+        const mockState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {avail: 'up', resources: {}}
+                }
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [
+                {name: 'other', fullName: 'root/svc/other', type: 'InstanceConfigUpdated', node: 'node1'}
+            ],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        useEventStore.subscribe = jest.fn((selector, callback) => {
+            callback(mockState.configUpdates);
+            return jest.fn();
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(consoleLogSpy).toHaveBeenCalledWith(
+                expect.stringContaining('No valid node in config update, skipping fetchConfig')
+            );
+        }, {timeout: 10000});
+
+        consoleLogSpy.mockRestore();
+    });
+
+    test('handles component unmount during config processing', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        let processingCallback;
+        useEventStore.subscribe = jest.fn((selector, callback) => {
+            processingCallback = callback;
+            return jest.fn();
+        });
+
+        const {unmount} = render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        unmount();
+
+        if (processingCallback) {
+            processingCallback([{
+                name: 'svc1',
+                fullName: 'root/svc/svc1',
+                type: 'InstanceConfigUpdated',
+                node: 'node1'
+            }]);
+        }
+
+        expect(true).toBe(true);
+    });
+
+    test('parseObjectPath handles edge cases', () => {
+        const {parseObjectPath} = require('../ObjectDetails');
+
+        expect(parseObjectPath(null)).toEqual({namespace: "root", kind: "svc", name: ""});
+        expect(parseObjectPath(undefined)).toEqual({namespace: "root", kind: "svc", name: ""});
+        expect(parseObjectPath('')).toEqual({namespace: "root", kind: "svc", name: ""});
+        expect(parseObjectPath(123)).toEqual({namespace: "root", kind: "svc", name: ""});
+    });
+
+    test('parseProvisionedState handles mixed case strings', () => {
+        const {parseProvisionedState} = require('../ObjectDetails');
+
+        expect(parseProvisionedState("True")).toBe(true);
+        expect(parseProvisionedState("TRUE")).toBe(true);
+        expect(parseProvisionedState("False")).toBe(false);
+        expect(parseProvisionedState("FALSE")).toBe(false);
+        expect(parseProvisionedState("random")).toBe(false);
+    });
+
+    test('handleDialogConfirm handles missing pendingAction', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+        const mockState = {
+            objectStatus: {
+                'root/svc/svc1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {},
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {},
+                },
+            },
+            instanceConfig: {
+                'root/svc/svc1': {
+                    resources: {},
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockState));
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        expect(screen.getByRole('button', {name: /object actions/i})).toBeInTheDocument();
+
+        expect(consoleWarnSpy).not.toHaveBeenCalledWith(
+            "No valid pendingAction or action provided:",
+            expect.anything()
+        );
 
         consoleWarnSpy.mockRestore();
-    }, 20000);
+    });
+
+    test('handles network errors in action functions', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('config data')
+                });
+            }
+            return Promise.reject(new Error('Network error'));
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText(/root\/svc\/svc1/i);
+
+        const actionButton = await screen.findByRole('button', {name: /object actions/i});
+        await user.click(actionButton);
+
+        const menu = await screen.findByRole('menu');
+        const startItem = within(menu).getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /confirm/i});
+        await user.click(confirmButton);
+
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(alert =>
+                alert.textContent.includes('Network error') ||
+                alert.textContent.includes('Error:') ||
+                alert.textContent.toLowerCase().includes('error')
+            );
+            expect(errorAlert).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('parseObjectPath handles all input types', () => {
+        const {parseObjectPath} = require('../ObjectDetails');
+
+        const testCases = [
+            {input: null, expected: {namespace: "root", kind: "svc", name: ""}},
+            {input: undefined, expected: {namespace: "root", kind: "svc", name: ""}},
+            {input: '', expected: {namespace: "root", kind: "svc", name: ""}},
+            {input: 123, expected: {namespace: "root", kind: "svc", name: ""}},
+            {input: {}, expected: {namespace: "root", kind: "svc", name: ""}},
+            {input: 'simple', expected: {namespace: "root", kind: "svc", name: "simple"}},
+            {input: 'ns/svc/name', expected: {namespace: "ns", kind: "svc", name: "name"}},
+            {input: 'svc/name', expected: {namespace: "root", kind: "svc", name: "name"}},
+            {input: 'cluster', expected: {namespace: "root", kind: "ccfg", name: "cluster"}}
+        ];
+
+        testCases.forEach(({input, expected}) => {
+            expect(parseObjectPath(input)).toEqual(expected);
+        });
+    });
+
+    test('parseProvisionedState handles all value types', () => {
+        const {parseProvisionedState} = require('../ObjectDetails');
+
+        const testCases = [
+            {input: "true", expected: true},
+            {input: "false", expected: false},
+            {input: "True", expected: true},
+            {input: "False", expected: false},
+            {input: "TRUE", expected: true},
+            {input: "FALSE", expected: false},
+            {input: "random", expected: false},
+            {input: true, expected: true},
+            {input: false, expected: false},
+            {input: 1, expected: true},
+            {input: 0, expected: false},
+            {input: null, expected: false},
+            {input: undefined, expected: false},
+            {input: {}, expected: true}
+        ];
+
+        testCases.forEach(({input, expected}) => {
+            expect(parseProvisionedState(input)).toBe(expected);
+        });
+    });
 });

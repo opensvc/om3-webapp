@@ -33,7 +33,7 @@ const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: fa
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
 // Helper function to filter resource actions based on type
-const getFilteredResourceActions = (resourceType) => {
+export const getFilteredResourceActions = (resourceType) => {
     if (!resourceType) {
         return RESOURCE_ACTIONS;
     }
@@ -48,7 +48,7 @@ const getFilteredResourceActions = (resourceType) => {
 };
 
 // Helper function to get resource type for a given resource ID
-const getResourceType = (rid, nodeData) => {
+export const getResourceType = (rid, nodeData) => {
     if (!rid || !nodeData) {
         return '';
     }
@@ -64,6 +64,37 @@ const getResourceType = (rid, nodeData) => {
         }
     }
     return '';
+};
+
+// Helper function to parse provisioned state
+export const parseProvisionedState = (state) => {
+    if (typeof state === "string") {
+        return state.toLowerCase() === "true";
+    }
+    return !!state;
+};
+
+// Helper functions for parsing and actions
+export const parseObjectPath = (objName) => {
+    if (!objName || typeof objName !== "string") {
+        return {namespace: "root", kind: "svc", name: ""};
+    }
+    const parts = objName.split("/");
+    let name, kind, namespace;
+    if (parts.length === 3) {
+        namespace = parts[0];
+        kind = parts[1];
+        name = parts[2];
+    } else if (parts.length === 2) {
+        namespace = "root";
+        kind = parts[0];
+        name = parts[1];
+    } else {
+        namespace = "root";
+        name = parts[0];
+        kind = name === "cluster" ? "ccfg" : "svc";
+    }
+    return {namespace, kind, name};
 };
 
 const ObjectDetail = () => {
@@ -240,37 +271,6 @@ const ObjectDetail = () => {
         setSnackbar((s) => ({...s, open: false}));
     }, []);
 
-    // Helper function to parse provisioned state
-    const parseProvisionedState = useCallback((state) => {
-        if (typeof state === "string") {
-            return state.toLowerCase() === "true";
-        }
-        return !!state;
-    }, []);
-
-    // Helper functions for parsing and actions
-    const parseObjectPath = useCallback((objName) => {
-        if (!objName || typeof objName !== "string") {
-            return {namespace: "root", kind: "svc", name: ""};
-        }
-        const parts = objName.split("/");
-        let name, kind, namespace;
-        if (parts.length === 3) {
-            namespace = parts[0];
-            kind = parts[1];
-            name = parts[2];
-        } else if (parts.length === 2) {
-            namespace = "root";
-            kind = parts[0];
-            name = parts[1];
-        } else {
-            namespace = "root";
-            name = parts[0];
-            kind = name === "cluster" ? "ccfg" : "svc";
-        }
-        return {namespace, kind, name};
-    }, []);
-
     // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
@@ -294,7 +294,7 @@ const ObjectDetail = () => {
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
-    }, [parseObjectPath]);
+    }, []); // Removed parseObjectPath from dependencies
 
     const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
@@ -318,7 +318,7 @@ const ObjectDetail = () => {
         } finally {
             setActionInProgress(false);
         }
-    }, [decodedObjectName, openSnackbar, parseObjectPath]);
+    }, [decodedObjectName, openSnackbar]);
 
     const postNodeAction = useCallback(async ({node, action}) => {
         const token = localStorage.getItem("authToken");
@@ -419,7 +419,7 @@ const ObjectDetail = () => {
                 setConfigLoading(false);
             }
         }
-    }, [decodedObjectName, configLoading, parseObjectPath]);
+    }, [decodedObjectName, configLoading]);
 
     // Color helper
     const getColor = useCallback((status) => {
@@ -694,7 +694,7 @@ const ObjectDetail = () => {
                 console.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
-    }, [decodedObjectName, clearConfigUpdate, parseObjectPath, fetchConfig, openSnackbar]);
+    }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
 
     // Effect for handling instance config updates
     useEffect(() => {

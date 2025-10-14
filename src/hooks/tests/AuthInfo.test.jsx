@@ -117,4 +117,48 @@ describe('useAuthInfo hook', () => {
 
         expect(result.current).toBeUndefined();
     });
+
+    test('does not log error after unmount on fetch failure', async () => {
+        const error = new Error('Network error');
+
+        let rejectFetch;
+        const fetchPromise = new Promise((_, rej) => (rejectFetch = rej));
+
+        global.fetch = jest.fn(() => fetchPromise);
+
+        const {result, unmount} = renderHook(() => useAuthInfo());
+
+        unmount();
+
+        await act(async () => {
+            rejectFetch(error);
+            await Promise.resolve();
+        });
+
+        expect(result.current).toBeUndefined();
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    test('does not log error after unmount on JSON parsing failure', async () => {
+        const error = new Error('Invalid JSON');
+
+        let rejectJson;
+        const jsonPromise = new Promise((_, rej) => (rejectJson = rej));
+
+        global.fetch = jest.fn().mockResolvedValue({
+            json: jest.fn(() => jsonPromise),
+        });
+
+        const {result, unmount} = renderHook(() => useAuthInfo());
+
+        unmount();
+
+        await act(async () => {
+            rejectJson(error);
+            await Promise.resolve();
+        });
+
+        expect(result.current).toBeUndefined();
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
 });

@@ -2,6 +2,7 @@ import React from "react";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
 import {MemoryRouter} from "react-router-dom";
+import userEvent from "@testing-library/user-event";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
 import {
@@ -635,5 +636,338 @@ describe("Heartbeats Component", () => {
         await waitFor(() => {
             expect(screen.getByText("1.rx")).toBeInTheDocument();
         });
+    });
+
+    test("shows healthy for single node even if not beating", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: false,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        // Rendering with is_beating false in single node covers the branch
+        const rows = await screen.findAllByRole("row");
+        expect(rows.slice(1)).toHaveLength(1);
+    });
+
+    test("sorts rows by beating", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {peer2: {is_beating: false, desc: "desc2"}},
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const beatingHeader = screen.getByText("BEATING");
+        await userEvent.click(beatingHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("2.rx")).toBeInTheDocument(); // false first in asc
+        expect(within(rows[1]).getByText("1.rx")).toBeInTheDocument();
+
+        await userEvent.click(beatingHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("1.rx")).toBeInTheDocument(); // true first
+        expect(within(rows[1]).getByText("2.rx")).toBeInTheDocument();
+    });
+
+    test("sorts rows by id", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#b.rx",
+                        state: "running",
+                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#a.rx",
+                        state: "running",
+                        peers: {peer2: {is_beating: true, desc: "desc2"}},
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const idHeader = screen.getByText("ID");
+        await userEvent.click(idHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("a.rx")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("b.rx")).toBeInTheDocument();
+
+        await userEvent.click(idHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("b.rx")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("a.rx")).toBeInTheDocument();
+    });
+
+    test("sorts rows by peer", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {b_peer: {is_beating: true, desc: "desc1"}},
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {a_peer: {is_beating: true, desc: "desc2"}},
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const peerHeader = screen.getByText("PEER");
+        await userEvent.click(peerHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("a_peer")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("b_peer")).toBeInTheDocument();
+
+        await userEvent.click(peerHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("b_peer")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("a_peer")).toBeInTheDocument();
+    });
+
+    test("sorts rows by type", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        type: "b_type",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {peer2: {is_beating: true, desc: "desc2"}},
+                        type: "a_type",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const typeHeader = screen.getByText("TYPE");
+        await userEvent.click(typeHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("a_type")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("b_type")).toBeInTheDocument();
+
+        await userEvent.click(typeHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("b_type")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("a_type")).toBeInTheDocument();
+    });
+
+    test("sorts rows by desc", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {peer1: {is_beating: true, desc: "b_desc"}},
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {peer2: {is_beating: true, desc: "a_desc"}},
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const descHeader = screen.getByText("DESC");
+        await userEvent.click(descHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("a_desc")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("b_desc")).toBeInTheDocument();
+
+        await userEvent.click(descHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("b_desc")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("a_desc")).toBeInTheDocument();
+    });
+
+    test("sorts rows by changed_at", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: "desc1",
+                                changed_at: "2024-02-01",
+                                last_beating_at: "2024-01-01"
+                            }
+                        },
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: true,
+                                desc: "desc2",
+                                changed_at: "2024-01-01",
+                                last_beating_at: "2024-01-02"
+                            }
+                        },
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const changedHeader = screen.getByText("CHANGED_AT");
+        await userEvent.click(changedHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("2024-01-01")).toBeInTheDocument(); // earlier first
+        expect(within(rows[1]).getByText("2024-02-01")).toBeInTheDocument();
+
+        await userEvent.click(changedHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("2024-02-01")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("2024-01-01")).toBeInTheDocument();
+    });
+
+    test("sorts rows by last_beating_at", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: "desc1",
+                                changed_at: "2024-01-01",
+                                last_beating_at: "2024-02-01"
+                            }
+                        },
+                        type: "type1",
+                    },
+                    {
+                        id: "hb#2.rx",
+                        state: "running",
+                        peers: {
+                            peer2: {
+                                is_beating: true,
+                                desc: "desc2",
+                                changed_at: "2024-01-02",
+                                last_beating_at: "2024-01-01"
+                            }
+                        },
+                        type: "type2",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({heartbeatStatus: mockHeartbeatStatus})
+        );
+
+        renderWithRouter(<Heartbeats/>);
+
+        const lastBeatingHeader = screen.getByText("LAST_BEATING_AT");
+        await userEvent.click(lastBeatingHeader);
+
+        let rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("2024-01-01")).toBeInTheDocument(); // earlier first
+        expect(within(rows[1]).getByText("2024-02-01")).toBeInTheDocument();
+
+        await userEvent.click(lastBeatingHeader); // desc
+
+        rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("2024-02-01")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("2024-01-01")).toBeInTheDocument();
     });
 });

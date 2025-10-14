@@ -416,4 +416,170 @@ describe('NavBar Component', () => {
 
         consoleErrorSpy.mockRestore();
     });
+
+    test('handles single network path breadcrumbs correctly', () => {
+        useLocation.mockReturnValue({
+            pathname: '/network',
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to network/i})).toBeInTheDocument();
+    });
+
+    test('handles single objects path breadcrumbs correctly', () => {
+        useLocation.mockReturnValue({
+            pathname: '/objects',
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to objects/i})).toBeInTheDocument();
+    });
+
+    test('fetches token from localStorage if not in auth', async () => {
+        localStorage.setItem('authToken', 'stored-token');
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: null,
+        });
+
+        const mockFetchNodes = jest.fn();
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: mockFetchNodes,
+            loading: false,
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockFetchNodes).toHaveBeenCalledWith('stored-token');
+        });
+    });
+
+    test('sets breadcrumbs when no token and network nested path', async () => {
+        useLocation.mockReturnValue({
+            pathname: '/network/eth0',
+        });
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: null,
+        });
+
+        const mockFetchNodes = jest.fn();
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: mockFetchNodes,
+            loading: false,
+        });
+
+        jest.useFakeTimers();
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        jest.advanceTimersByTime(3000);
+
+        await waitFor(() => {
+            expect(mockFetchNodes).not.toHaveBeenCalled();
+        });
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to network/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to eth0/i})).toBeInTheDocument();
+
+        jest.useRealTimers();
+    });
+
+    test('sets breadcrumbs when no token and objects nested path', async () => {
+        useLocation.mockReturnValue({
+            pathname: '/objects/volume1',
+        });
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: null,
+        });
+
+        const mockFetchNodes = jest.fn();
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: mockFetchNodes,
+            loading: false,
+        });
+
+        jest.useFakeTimers();
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        jest.advanceTimersByTime(3000);
+
+        await waitFor(() => {
+            expect(mockFetchNodes).not.toHaveBeenCalled();
+        });
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to objects/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to volume1/i})).toBeInTheDocument();
+
+        jest.useRealTimers();
+    });
+
+    test('sets breadcrumbs when no token and general nested path not starting with cluster', async () => {
+        useLocation.mockReturnValue({
+            pathname: '/namespaces/ns1',
+        });
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: null,
+        });
+
+        const mockFetchNodes = jest.fn();
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: mockFetchNodes,
+            loading: false,
+        });
+
+        jest.useFakeTimers();
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        jest.advanceTimersByTime(3000);
+
+        await waitFor(() => {
+            expect(mockFetchNodes).not.toHaveBeenCalled();
+        });
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to namespaces/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to ns1/i})).toBeInTheDocument();
+
+        jest.useRealTimers();
+    });
 });

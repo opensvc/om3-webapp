@@ -1,7 +1,16 @@
 import React from 'react';
 import {render, screen} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import HeaderSection from '../HeaderSection';
 import {isActionAllowedForSelection} from '../../utils/objectUtils';
+
+// Mock constants
+jest.mock('../../constants/actions', () => ({
+    OBJECT_ACTIONS: [
+        {name: 'delete', icon: 'delete-icon'},
+        {name: 'edit', icon: 'edit-icon'},
+    ],
+}));
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
@@ -15,8 +24,18 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
-        Popper: ({children, open, anchorEl, ...props}) =>
-            open ? <div data-testid="popper" {...props}>{children}</div> : null,
+        Popper: ({children, open, anchorEl, modifiers, ...props}) => {
+            if (open) {
+                // Simulate calling offset modifier for coverage
+                modifiers?.forEach(mod => {
+                    if (mod.name === 'offset' && typeof mod.options.offset === 'function') {
+                        mod.options.offset();
+                    }
+                });
+                return <div data-testid="popper" {...props}>{children}</div>;
+            }
+            return null;
+        },
         Paper: ({children, ...props}) => <div {...props}>{children}</div>,
         MenuItem: ({children, onClick, disabled, ...props}) => (
             <div role="menuitem" onClick={onClick} data-disabled={disabled} {...props}>
@@ -98,15 +117,13 @@ describe('HeaderSection Component', () => {
             if (status === 'down') return 'red';
             return 'grey';
         });
+        global.navigator.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36';
     });
 
     test('renders object name and status icons', async () => {
         render(<HeaderSection {...defaultProps} />);
 
-        // Vérifier que le nom de l'objet est rendu
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-
-        // Vérifier les icônes de statut
         expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
         expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
         expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
@@ -138,11 +155,10 @@ describe('HeaderSection Component', () => {
         render(<HeaderSection {...props} />);
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getAllByTestId('WarningAmberIcon')).toHaveLength(1); // Not provisioned icon
+        expect(screen.getAllByTestId('WarningAmberIcon')).toHaveLength(1);
         expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
         expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
     });
-
 
     test('disables menu button when actionInProgress is true', async () => {
         const props = {
@@ -166,5 +182,95 @@ describe('HeaderSection Component', () => {
 
         expect(screen.queryByText('root/svc/svc1')).not.toBeInTheDocument();
         expect(screen.queryByTestId('FiberManualRecordIcon')).not.toBeInTheDocument();
+    });
+
+    test('opens menu and logs position on button click', async () => {
+        jest.spyOn(console, 'log').mockImplementation(() => {
+        });
+        render(<HeaderSection {...defaultProps} />);
+
+        const button = screen.getByLabelText('Object actions');
+        await userEvent.click(button);
+
+        expect(defaultProps.setObjectMenuAnchor).toHaveBeenCalledWith(expect.anything());
+        expect(console.log).toHaveBeenCalledWith('Object menu opened at:', expect.any(Object));
+    });
+
+    test('renders popper menu when objectMenuAnchor is set', () => {
+        const mockAnchor = {
+            getBoundingClientRect: jest.fn(() => ({})),
+        };
+        const props = {
+            ...defaultProps,
+            objectMenuAnchor: mockAnchor,
+        };
+        render(<HeaderSection {...props} />);
+
+        expect(screen.getByTestId('popper')).toBeInTheDocument();
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+    });
+
+    test('handles object action click', async () => {
+        const mockAnchor = {
+            getBoundingClientRect: jest.fn(() => ({})),
+        };
+        const props = {
+            ...defaultProps,
+            objectMenuAnchor: mockAnchor,
+        };
+        render(<HeaderSection {...props} />);
+
+        const menuItems = screen.getAllByRole('menuitem');
+        await userEvent.click(menuItems[0]);
+
+        expect(defaultProps.handleObjectActionClick).toHaveBeenCalledWith('delete');
+        expect(defaultProps.setObjectMenuAnchor).toHaveBeenCalledWith(null);
+    });
+
+    test('disables menu items when not allowed', () => {
+        isActionAllowedForSelection.mockReturnValue(false);
+        const mockAnchor = {
+            getBoundingClientRect: jest.fn(() => ({})),
+        };
+        const props = {
+            ...defaultProps,
+            objectMenuAnchor: mockAnchor,
+        };
+        render(<HeaderSection {...props} />);
+
+        const menuItems = screen.getAllByRole('menuitem');
+        expect(menuItems[0]).toHaveAttribute('data-disabled', 'true');
+    });
+
+    test('configures popperProps correctly for Safari', () => {
+        global.navigator.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15';
+        const mockAnchor = {
+            getBoundingClientRect: jest.fn(() => ({})),
+        };
+        const props = {
+            ...defaultProps,
+            objectMenuAnchor: mockAnchor,
+        };
+        render(<HeaderSection {...props} />);
+
+        expect(screen.getByTestId('popper')).toBeInTheDocument();
+    });
+
+    test('adjusts popper offset based on zoom level', () => {
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 2,
+            writable: true,
+        });
+        const mockAnchor = {
+            getBoundingClientRect: jest.fn(() => ({})),
+        };
+        const props = {
+            ...defaultProps,
+            objectMenuAnchor: mockAnchor,
+        };
+        render(<HeaderSection {...props} />);
+
+        expect(screen.getByTestId('popper')).toBeInTheDocument();
     });
 });

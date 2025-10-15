@@ -1,6 +1,4 @@
-/* eslint-disable no-unused-vars */
-
-import {useState, useRef} from "react";
+import {useState, useRef, useCallback} from "react";
 import {fetchDaemonStatus} from "../services/api";
 
 const useFetchDaemonStatus = () => {
@@ -12,8 +10,8 @@ const useFetchDaemonStatus = () => {
     const [clusterStats, setClusterStats] = useState({});
     const [clusterName, setClusterName] = useState("");
 
-    // Function to fetch daemon statuses with token
-    const refreshDaemonStatus = async (token) => {
+    // Memoize refreshDaemonStatus with useCallback
+    const refreshDaemonStatus = useCallback(async (token) => {
         setLoading(true);
         setError("");
         try {
@@ -35,8 +33,7 @@ const useFetchDaemonStatus = () => {
         } finally {
             setLoading(false);
         }
-    };
-
+    }, []);
 
     return {
         daemon,

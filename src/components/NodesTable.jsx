@@ -81,16 +81,25 @@ const NodesTable = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let eventSourceActive = false;
+
         if (token) {
             fetchNodes(token);
-            startEventReception(token, [
-                "NodeStatusUpdated",
-                "NodeMonitorUpdated",
-                "NodeStatsUpdated",
-            ]);
+            if (!eventSourceActive) {
+                startEventReception(token, [
+                    "NodeStatusUpdated",
+                    "NodeMonitorUpdated",
+                    "NodeStatsUpdated",
+                ]);
+                eventSourceActive = true;
+            }
         }
+
         return () => {
-            closeEventSource();
+            if (eventSourceActive) {
+                closeEventSource();
+                eventSourceActive = false;
+            }
         };
     }, [fetchNodes]);
 

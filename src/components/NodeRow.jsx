@@ -14,6 +14,7 @@ import {
     ListItemText,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import ArticleIcon from "@mui/icons-material/Article";
 import {Wifi, AcUnit} from "@mui/icons-material";
 import {blue, green, red, orange} from "@mui/material/colors";
 import {NODE_ACTIONS} from "../constants/actions";
@@ -45,6 +46,7 @@ const NodeRow = ({
                      onAction,
                      onMenuClose,
                      anchorEl,
+                     onOpenLogs,
                  }) => {
     const menuAnchorRef = useRef(null);
     const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
@@ -203,6 +205,17 @@ const NodeRow = ({
                         </MenuItem>
                     ))}
                 </Menu>
+            </TableCell>
+            <TableCell>
+                <Tooltip title="View logs">
+                    <IconButton
+                        onClick={() => onOpenLogs(nodename)}
+                        color="primary"
+                        aria-label={`View logs for node ${nodename}`}
+                    >
+                        <ArticleIcon/>
+                    </IconButton>
+                </Tooltip>
             </TableCell>
         </TableRow>
     );

@@ -19,13 +19,17 @@ import {
     ListItemIcon,
     ListItemText,
     CircularProgress,
+    Drawer,
+    IconButton,
 } from "@mui/material";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import CloseIcon from "@mui/icons-material/Close";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource, startEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
+import LogsViewer from "../components/LogsViewer.jsx";
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
@@ -50,6 +54,10 @@ const NodesTable = () => {
     const [sortDirection, setSortDirection] = useState("asc");
     const actionsMenuAnchorRef = useRef(null);
     const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
+
+    // Logs drawer state
+    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
+    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
 
     // Compute the zoom level
     const getZoomLevel = () => {
@@ -77,6 +85,16 @@ const NodesTable = () => {
         } else {
             handleActionsMenuClose();
         }
+    };
+
+    // Handle opening logs for a node
+    const handleOpenLogs = (nodename) => {
+        setSelectedNodeForLogs(nodename);
+        setLogsDrawerOpen(true);
+    };
+
+    const handleCloseLogsDrawer = () => {
+        setLogsDrawerOpen(false);
     };
 
     useEffect(() => {
@@ -309,7 +327,7 @@ const NodesTable = () => {
                     Node Status
                 </Typography>
 
-                <Box sx={{mb: 2}}>
+                <Box sx={{mb: 2, display: "flex", gap: 2}}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -423,6 +441,7 @@ const NodesTable = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell><strong>Actions</strong></TableCell>
+                                    <TableCell><strong>Logs</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -440,6 +459,7 @@ const NodesTable = () => {
                                         onMenuClose={handleMenuClose}
                                         onAction={(nodename, action) => handleAction(action, nodename)}
                                         anchorEl={anchorEls[nodename]}
+                                        onOpenLogs={handleOpenLogs}
                                     />
                                 ))}
                             </TableBody>
@@ -469,6 +489,29 @@ const NodesTable = () => {
                     onClose={() => setPendingAction(null)}
                 />
             </Box>
+
+            {/* Logs Drawer */}
+            <Drawer
+                anchor="right"
+                open={logsDrawerOpen}
+                onClose={handleCloseLogsDrawer}
+                sx={{
+                    "& .MuiDrawer-paper": {
+                        width: isWideScreen ? "50vw" : "90vw",
+                        p: 2,
+                    },
+                }}
+            >
+                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2}}>
+                    <Typography variant="h6">Node Logs</Typography>
+                    <IconButton onClick={handleCloseLogsDrawer}>
+                        <CloseIcon/>
+                    </IconButton>
+                </Box>
+                {selectedNodeForLogs && (
+                    <LogsViewer nodename={selectedNodeForLogs} height="calc(100vh - 100px)"/>
+                )}
+            </Drawer>
         </Box>
     );
 };

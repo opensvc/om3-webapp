@@ -166,6 +166,26 @@ describe('OidcCallback Component', () => {
         expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
     });
 
+    test('handles getUser returning null user', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.getUser.mockResolvedValue(null);
+        mockUserManager.signinRedirectCallback.mockResolvedValue(mockUser);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
+            expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
+        });
+
+        expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
+    });
+
     test('handles getUser error', async () => {
         useOidc.mockReturnValue({
             userManager: mockUserManager,
@@ -495,5 +515,45 @@ describe('OidcCallback Component', () => {
 
         expect(broadcastChannelMock.postMessage).toHaveBeenCalledWith({type: 'logout'});
         expect(broadcastChannelMock.close).toHaveBeenCalled();
+    });
+
+    test('handles existing user session without expired property', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        const userWithoutExpired = {
+            access_token: 'mock-access-token',
+            expires_at: 1234567890,
+            profile: {
+                preferred_username: 'testuser',
+            },
+            // Missing expired property
+        };
+        mockUserManager.getUser.mockResolvedValue(userWithoutExpired);
+        mockUserManager.signinRedirectCallback.mockResolvedValue(mockUser);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        // Should treat user without expired property as valid
+        expect(mockUserManager.signinRedirectCallback).not.toHaveBeenCalled();
+        expect(mockAuthDispatch).toHaveBeenCalledWith({
+            type: SetAccessToken,
+            data: 'mock-access-token',
+        });
+    });
+
+    test('does not setup BroadcastChannel when not available', () => {
+        delete global.BroadcastChannel;
+
+        render(<OidcCallback/>);
+
+        // Should not throw errors when BroadcastChannel is not available
+        expect(() => {
+            screen.getByText('Logging ...');
+        }).not.toThrow();
     });
 });

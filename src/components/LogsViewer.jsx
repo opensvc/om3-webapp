@@ -25,7 +25,15 @@ import {
 } from "@mui/icons-material";
 import {URL_NODE} from "../config/apiPath.js";
 
-const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
+const LogsViewer = ({
+                        nodename,
+                        type = "node",
+                        namespace = "root",
+                        kind = "svc",
+                        instanceName,
+                        maxLogs = 1000,
+                        height = "500px"
+                    }) => {
     const theme = useTheme();
     const [logs, setLogs] = useState([]);
     const [filteredLogs, setFilteredLogs] = useState([]);
@@ -39,11 +47,46 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
 
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
-    const pollingIntervalRef = useRef(null);
     const isUnmountedRef = useRef(false);
-    const POLLING_INTERVAL = 2000; // 2 seconds
+    const abortControllerRef = useRef(null);
+    const logBufferRef = useRef([]);
+    const seenLogsRef = useRef(new Set());
+    const updateIntervalRef = useRef(null);
+    const isPausedRef = useRef(isPaused);
+    const logsRef = useRef(logs);
+    const isConnectedRef = useRef(isConnected);
+    const isLoadingRef = useRef(isLoading);
+    const UPDATE_INTERVAL = 2000;
 
-    // Parse log message from JSON field
+    useEffect(() => {
+        isPausedRef.current = isPaused;
+    }, [isPaused]);
+
+    useEffect(() => {
+        logsRef.current = logs;
+    }, [logs]);
+
+    const buildLogUrl = useCallback(() => {
+        if (type === "instance" && instanceName) {
+            return `${URL_NODE}/${nodename}/instance/path/${namespace}/${kind}/${instanceName}/log`;
+        }
+        return `${URL_NODE}/${nodename}/log`;
+    }, [type, nodename, namespace, kind, instanceName]);
+
+    const buildTitle = useCallback(() => {
+        if (type === "instance" && instanceName) {
+            return `Instance Logs - ${instanceName} on ${nodename}`;
+        }
+        return `Logs - ${nodename}`;
+    }, [type, nodename, instanceName]);
+
+    const buildDownloadFilename = useCallback(() => {
+        if (type === "instance" && instanceName) {
+            return `${nodename}-${instanceName}-logs-${new Date().toISOString()}.txt`;
+        }
+        return `${nodename}-logs-${new Date().toISOString()}.txt`;
+    }, [type, nodename, instanceName]);
+
     const parseLogMessage = useCallback((logData) => {
         try {
             if (logData.JSON) {
@@ -82,18 +125,31 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         }
     }, [nodename]);
 
-    // Stop polling
-    const stopPolling = useCallback(() => {
-        if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-        }
-        setIsLoading(false);
-    }, []);
+    const updateLogs = useCallback(() => {
+        if (logBufferRef.current.length === 0 || isPausedRef.current) return;
 
-    // Fetch logs using polling
-    const fetchLogs = useCallback(async () => {
+        setLogs((prev) => {
+            const newLogs = [...prev, ...logBufferRef.current].slice(-maxLogs);
+
+            if (prev.length === newLogs.length &&
+                prev.length > 0 &&
+                prev[prev.length - 1].__REALTIME_TIMESTAMP === newLogs[newLogs.length - 1].__REALTIME_TIMESTAMP) {
+                logBufferRef.current = [];
+                return prev;
+            }
+
+            logBufferRef.current = [];
+            return newLogs;
+        });
+    }, [maxLogs]);
+
+    const fetchLogs = useCallback(async (signal) => {
         if (isUnmountedRef.current || !nodename) return;
+
+        if (type === "instance" && !instanceName) {
+            setErrorMessage("Instance name is required for instance logs");
+            return;
+        }
 
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -102,33 +158,40 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         }
 
         try {
-            const url = `${URL_NODE}/${nodename}/log`;
+            const url = buildLogUrl();
+            console.log("Fetching logs from:", url);
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'Accept': 'text/event-stream',
                 },
+                signal,
             });
 
             if (!response.ok) {
-                // Return instead of throwing to avoid uncaught exception
                 console.error(`HTTP error! status: ${response.status}`);
                 setErrorMessage(`HTTP error! status: ${response.status}`);
+                if (isConnectedRef.current !== false) {
+                    setIsConnected(false);
+                }
                 return;
             }
 
-            setIsConnected(true);
+            if (isConnectedRef.current !== true) {
+                setIsConnected(true);
+            }
             setErrorMessage("");
+            if (isLoadingRef.current !== false) {
+                setIsLoading(false);
+            }
 
-            // Process the response as text stream
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
 
             while (true) {
-                if (isUnmountedRef.current) break;
-
                 const {value, done} = await reader.read();
 
                 if (done) {
@@ -136,23 +199,29 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
                     break;
                 }
 
+                if (signal.aborted) {
+                    reader.releaseLock();
+                    return;
+                }
+
                 buffer += decoder.decode(value, {stream: true});
                 const lines = buffer.split('\n');
-                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
+                    if (line.startsWith('data: ') && !isPausedRef.current) {
                         try {
-                            const jsonStr = line.slice(6);
-                            if (jsonStr.trim()) {
+                            const jsonStr = line.slice(6).trim();
+                            if (jsonStr) {
                                 const logData = JSON.parse(jsonStr);
                                 const parsedLog = parseLogMessage(logData);
-
-                                if (!isPaused) {
-                                    setLogs((prev) => {
-                                        const newLogs = [...prev, parsedLog];
-                                        return newLogs.slice(-maxLogs);
-                                    });
+                                if (parsedLog.message.includes(`GET /api/node/name/${nodename}/log`)) {
+                                    continue;
+                                }
+                                const timestamp = parsedLog.__REALTIME_TIMESTAMP;
+                                if (timestamp && !seenLogsRef.current.has(timestamp)) {
+                                    seenLogsRef.current.add(timestamp);
+                                    logBufferRef.current.push(parsedLog);
                                 }
                             }
                         } catch (e) {
@@ -162,41 +231,69 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
                 }
             }
 
+            updateLogs();
+            reader.releaseLock();
         } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
             console.error("Failed to fetch logs:", error);
-            setIsConnected(false);
+            if (isConnectedRef.current !== false) {
+                setIsConnected(false);
+            }
 
             if (error.message.includes('401')) {
                 setErrorMessage("Authentication failed. Please refresh your token.");
             } else if (error.message.includes('404')) {
-                setErrorMessage(`Logs endpoint not found for node ${nodename}`);
+                if (type === "instance") {
+                    setErrorMessage(`Instance logs endpoint not found for ${instanceName} on node ${nodename}`);
+                } else {
+                    setErrorMessage(`Logs endpoint not found for node ${nodename}`);
+                }
             } else {
                 setErrorMessage(`Failed to fetch logs: ${error.message}`);
             }
+        } finally {
+            if (isLoadingRef.current !== false) {
+                setIsLoading(false);
+            }
+            if (!signal.aborted && !isUnmountedRef.current && !isPausedRef.current) {
+                setTimeout(startStreaming, UPDATE_INTERVAL);
+            }
         }
-    }, [nodename, isPaused, maxLogs, parseLogMessage]);
+    }, [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs]);
 
-    // Start polling
-    const startPolling = useCallback(() => {
-        if (!nodename) return;
-
-        stopPolling();
+    const startStreaming = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
         setIsLoading(true);
         setErrorMessage("");
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        fetchLogs(controller.signal);
+    }, [fetchLogs]);
 
-        // Initial fetch
-        fetchLogs();
-
-        // Set up polling interval
-        pollingIntervalRef.current = setInterval(() => {
-            if (!isUnmountedRef.current && !isPaused) {
-                fetchLogs();
+    useEffect(() => {
+        if (isPausedRef.current) {
+            if (updateIntervalRef.current) {
+                clearInterval(updateIntervalRef.current);
+                updateIntervalRef.current = null;
             }
-        }, POLLING_INTERVAL);
+        } else {
+            updateIntervalRef.current = setInterval(() => {
+                if (logBufferRef.current.length > 0) {
+                    updateLogs();
+                }
+            }, UPDATE_INTERVAL);
+        }
+        return () => {
+            if (updateIntervalRef.current) {
+                clearInterval(updateIntervalRef.current);
+            }
+        };
+    }, [updateLogs]);
 
-    }, [nodename, fetchLogs, isPaused, stopPolling]);
-
-    // Filter logs based on search and level
     useEffect(() => {
         let filtered = logs;
 
@@ -218,36 +315,43 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         setFilteredLogs(filtered);
     }, [logs, searchTerm, levelFilter]);
 
-    // Auto scroll to bottom
     useEffect(() => {
         if (autoScroll && logsEndRef.current && filteredLogs.length > 0) {
             logsEndRef.current.scrollIntoView({behavior: "smooth"});
         }
     }, [filteredLogs, autoScroll]);
 
-    // Start/stop polling based on component lifecycle
     useEffect(() => {
         if (!nodename) return;
 
+        if (type === "instance" && !instanceName) {
+            setErrorMessage("Instance name is required for instance logs");
+            return;
+        }
+
         isUnmountedRef.current = false;
-        startPolling();
+        if (!isPausedRef.current) {
+            startStreaming();
+        }
 
         return () => {
             isUnmountedRef.current = true;
-            stopPolling();
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
         };
-    }, [nodename, startPolling, stopPolling]);
+    }, [nodename, type, instanceName, startStreaming]);
 
-    // Handle pause/resume
     useEffect(() => {
         if (isPaused) {
-            stopPolling();
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
         } else {
-            startPolling();
+            startStreaming();
         }
-    }, [isPaused, startPolling, stopPolling]);
+    }, [isPaused, startStreaming]);
 
-    // Handle scroll to detect manual scrolling
     const handleScroll = useCallback(() => {
         if (!logsContainerRef.current) return;
         const {scrollTop, scrollHeight, clientHeight} = logsContainerRef.current;
@@ -255,7 +359,6 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         setAutoScroll(isAtBottom);
     }, []);
 
-    // Format timestamp
     const formatTime = (timestamp) => {
         return timestamp.toLocaleTimeString("fr-FR", {
             hour: "2-digit",
@@ -265,7 +368,6 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         });
     };
 
-    // Get level color
     const getLevelColor = (level) => {
         switch (level) {
             case "error":
@@ -280,7 +382,6 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         }
     };
 
-    // Download logs
     const handleDownload = () => {
         const content = filteredLogs
             .map(
@@ -292,23 +393,24 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${nodename}-logs-${new Date().toISOString()}.txt`;
+        a.download = buildDownloadFilename();
         a.click();
         URL.revokeObjectURL(url);
     };
 
-    // Manual reconnect
     const handleManualReconnect = () => {
         setErrorMessage("");
         setLogs([]);
         setFilteredLogs([]);
-        startPolling();
+        seenLogsRef.current.clear();
+        startStreaming();
     };
 
-    // Clear logs
     const handleClearLogs = () => {
         setLogs([]);
         setFilteredLogs([]);
+        logBufferRef.current = [];
+        seenLogsRef.current.clear();
     };
 
     return (
@@ -324,7 +426,7 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
             {/* Header */}
             <Box sx={{mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap"}}>
                 <Typography variant="h6" sx={{flexGrow: 1}}>
-                    Logs - {nodename}
+                    {buildTitle()}
                     <Chip
                         label={isConnected ? "Connected" : "Disconnected"}
                         color={isConnected ? "success" : "error"}
@@ -441,7 +543,7 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
                 ) : (
                     filteredLogs.map((log, index) => (
                         <Box key={index} className="log-line">
-                            <Box sx={{display: "flex", gap: 1, alignItems: "flex-start"}}>
+                            <Box sx={{display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap"}}>
                                 <Typography
                                     component="span"
                                     sx={{color: "text.secondary", minWidth: "100px"}}
@@ -471,7 +573,12 @@ const LogsViewer = ({nodename, maxLogs = 1000, height = "500px"}) => {
                                         {log.path}
                                     </Typography>
                                 )}
-                                <Typography component="span" sx={{wordBreak: "break-word"}}>
+                                <Typography component="span" sx={{
+                                    wordBreak: "break-word",
+                                    flex: 1,
+                                    minWidth: "100%",
+                                    whiteSpace: "pre-wrap"
+                                }}>
                                     {log.message}
                                 </Typography>
                             </Box>

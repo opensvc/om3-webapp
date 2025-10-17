@@ -509,7 +509,11 @@ const NodesTable = () => {
                     </IconButton>
                 </Box>
                 {selectedNodeForLogs && (
-                    <LogsViewer nodename={selectedNodeForLogs} height="calc(100vh - 100px)"/>
+                    <LogsViewer
+                        nodename={selectedNodeForLogs}
+                        type="node"
+                        height="calc(100vh - 100px)"
+                    />
                 )}
             </Drawer>
         </Box>

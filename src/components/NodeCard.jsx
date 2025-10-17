@@ -14,14 +14,18 @@ import {
     ListItemIcon,
     ListItemText,
     Button,
+    Drawer,
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ArticleIcon from "@mui/icons-material/Article";
+import CloseIcon from "@mui/icons-material/Close";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import LogsViewer from "./LogsViewer";
 
 const NodeCard = ({
                       node,
@@ -52,13 +56,18 @@ const NodeCard = ({
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
+                      namespace = "root",
+                      kind = "svc",
+                      instanceName,
                   }) => {
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
+    const [instanceLogsOpen, setInstanceLogsOpen] = useState(false);
 
-    // Log changes to selectedResourcesByNode for test
+    const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
+
     useEffect(() => {
         console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
@@ -68,7 +77,6 @@ const NodeCard = ({
         return null;
     }
 
-    // Calculate the zoom level
     const getZoomLevel = () => {
         return window.devicePixelRatio || 1;
     };
@@ -160,14 +168,12 @@ const NodeCard = ({
         setIndividualNodeMenuAnchor(null);
     };
 
-    // Handler for batch resource actions
     const handleBatchResourceActionClick = (action) => {
         setPendingAction({action, batch: "resources", node});
         setSimpleDialogOpen(true);
         setResourcesActionsAnchor(null);
     };
 
-    // Handler for individual resource actions
     const handleResourceActionClick = (action) => {
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
@@ -175,7 +181,6 @@ const NodeCard = ({
         setCurrentResourceId(null);
     };
 
-    // Helper function to filter resource actions based on type
     const getFilteredResourceActions = (resourceType) => {
         if (!resourceType) {
             return RESOURCE_ACTIONS;
@@ -190,7 +195,6 @@ const NodeCard = ({
         return RESOURCE_ACTIONS;
     };
 
-    // Helper function to get resource type for a given resource ID
     const getResourceType = (rid) => {
         if (!rid) {
             console.warn("getResourceType called with undefined or null rid");
@@ -213,7 +217,6 @@ const NodeCard = ({
         return '';
     };
 
-    // Helper function to determine resource status letters and tooltip
     const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false, encapData = {}) => {
         const letters = [".", ".", ".", ".", ".", ".", ".", "."];
         const tooltipDescriptions = [
@@ -286,7 +289,6 @@ const NodeCard = ({
         return {statusString, tooltipText};
     };
 
-    // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
         if (!res) {
             return null;
@@ -309,12 +311,11 @@ const NodeCard = ({
         const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
         const logs = res.log || [];
 
-        // Calculate consistent left padding for logs based on screen size and encapsulation
         const getLogPaddingLeft = () => {
             if (isEncap) {
-                return {xs: "72px", sm: "72px"}; // Align with encapsulated resource content
+                return {xs: "72px", sm: "72px"};
             } else {
-                return {xs: "56px", sm: "56px"}; // Align with regular resource content
+                return {xs: "56px", sm: "56px"};
             }
         };
 
@@ -477,7 +478,6 @@ const NodeCard = ({
                         </Box>
                     </Box>
 
-                    {/* Mobile view sections */}
                     <Box
                         sx={{
                             pl: isEncap ? 4 : 2,
@@ -554,7 +554,6 @@ const NodeCard = ({
                         </Typography>
                     </Box>
 
-                    {/* Desktop view actions */}
                     <Box
                         sx={{
                             display: {xs: "none", sm: "flex"},
@@ -600,7 +599,6 @@ const NodeCard = ({
                     </Box>
                 </Box>
 
-                {/* Logs section with consistent alignment */}
                 {logs.length > 0 && (
                     <Box
                         sx={{
@@ -650,7 +648,6 @@ const NodeCard = ({
                 overflowX: "auto",
             }}
         >
-            {/* Node header */}
             <Box sx={{p: 1}}>
                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
@@ -664,6 +661,15 @@ const NodeCard = ({
                         <Typography variant="h6">{node}</Typography>
                     </Box>
                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                        <Tooltip title="View logs">
+                            <IconButton
+                                onClick={() => setInstanceLogsOpen(true)}
+                                color="primary"
+                                aria-label={`View logs for instance ${resolvedInstanceName || node}`}
+                            >
+                                <ArticleIcon/>
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title={avail || "unknown"}>
                             <FiberManualRecordIcon
                                 sx={{
@@ -708,7 +714,6 @@ const NodeCard = ({
                     </Box>
                 </Box>
             </Box>
-            {/* Resources accordion */}
             <Accordion
                 expanded={expandedNodeResources[node] || false}
                 onChange={handleNodeResourcesAccordionChange(node)}
@@ -834,7 +839,6 @@ const NodeCard = ({
                     </Box>
                 </AccordionDetails>
             </Accordion>
-            {/* Popper for node actions */}
             <Popper
                 open={Boolean(individualNodeMenuAnchor)}
                 anchorEl={individualNodeMenuAnchor}
@@ -859,7 +863,6 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-            {/* Popper for batch resource actions */}
             <Popper
                 open={Boolean(resourcesActionsAnchor)}
                 anchorEl={resourcesActionsAnchor}
@@ -884,7 +887,6 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-            {/* Popper for individual resource actions */}
             <Popper
                 open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                 anchorEl={resourceMenuAnchor}
@@ -921,6 +923,34 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
+            <Drawer
+                anchor="right"
+                open={instanceLogsOpen}
+                onClose={() => setInstanceLogsOpen(false)}
+                sx={{
+                    '& .MuiDrawer-paper': {
+                        width: '80vw',
+                        p: 2,
+                    },
+                }}
+            >
+                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                    <Typography variant="h6">
+                        {resolvedInstanceName ? `Instance Logs - ${resolvedInstanceName}` : `Node Logs - ${node}`}
+                    </Typography>
+                    <IconButton onClick={() => setInstanceLogsOpen(false)}>
+                        <CloseIcon/>
+                    </IconButton>
+                </Box>
+                <LogsViewer
+                    nodename={node}
+                    type={resolvedInstanceName ? "instance" : "node"}
+                    namespace={namespace}
+                    kind={kind}
+                    instanceName={resolvedInstanceName}
+                    height="calc(100vh - 100px)"
+                />
+            </Drawer>
         </Box>
     );
 };

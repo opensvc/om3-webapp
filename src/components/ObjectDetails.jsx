@@ -100,6 +100,7 @@ export const parseObjectPath = (objName) => {
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
+    const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const objectStatus = useEventStore((s) => s.objectStatus);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
@@ -791,7 +792,6 @@ const ObjectDetail = () => {
     }
 
     // Render empty state
-    const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
     if (!memoizedObjectData) {
         return (
@@ -945,6 +945,9 @@ const ObjectDetail = () => {
                                 individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
                                 resourcesActionsAnchorRef={resourcesActionsAnchorRef}
                                 resourceMenuAnchorRef={resourceMenuAnchorRef}
+                                namespace={namespace}
+                                kind={kind}
+                                instanceName={name}
                             />
                         ))}
                         <Popper

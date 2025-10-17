@@ -52,36 +52,30 @@ const LogsViewer = ({
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
     const updateIntervalRef = useRef(null);
-    const isPausedRef = useRef(isPaused);
-    const logsRef = useRef(logs);
-    const isConnectedRef = useRef(isConnected);
-    const isLoadingRef = useRef(isLoading);
-    const UPDATE_INTERVAL = 2000;
+    const lastFetchTimeRef = useRef(0);
+    const UPDATE_INTERVAL = 5000;
+    const MIN_FETCH_INTERVAL = 4000;
 
     useEffect(() => {
-        isPausedRef.current = isPaused;
+        isUnmountedRef.current = isPaused;
     }, [isPaused]);
 
-    useEffect(() => {
-        logsRef.current = logs;
-    }, [logs]);
-
     const buildLogUrl = useCallback(() => {
-        if (type === "instance" && instanceName) {
+        if (type === "instance" && instanceName && instanceName.trim() !== "") {
             return `${URL_NODE}/${nodename}/instance/path/${namespace}/${kind}/${instanceName}/log`;
         }
         return `${URL_NODE}/${nodename}/log`;
     }, [type, nodename, namespace, kind, instanceName]);
 
     const buildTitle = useCallback(() => {
-        if (type === "instance" && instanceName) {
+        if (type === "instance" && instanceName && instanceName.trim() !== "") {
             return `Instance Logs - ${instanceName} on ${nodename}`;
         }
-        return `Logs - ${nodename}`;
+        return `Node Logs - ${nodename}`;
     }, [type, nodename, instanceName]);
 
     const buildDownloadFilename = useCallback(() => {
-        if (type === "instance" && instanceName) {
+        if (type === "instance" && instanceName && instanceName.trim() !== "") {
             return `${nodename}-${instanceName}-logs-${new Date().toISOString()}.txt`;
         }
         return `${nodename}-logs-${new Date().toISOString()}.txt`;
@@ -126,40 +120,44 @@ const LogsViewer = ({
     }, [nodename]);
 
     const updateLogs = useCallback(() => {
-        if (logBufferRef.current.length === 0 || isPausedRef.current) return;
+        if (logBufferRef.current.length === 0 || isUnmountedRef.current) {
+            return;
+        }
 
         setLogs((prev) => {
             const newLogs = [...prev, ...logBufferRef.current].slice(-maxLogs);
-
-            if (prev.length === newLogs.length &&
-                prev.length > 0 &&
-                prev[prev.length - 1].__REALTIME_TIMESTAMP === newLogs[newLogs.length - 1].__REALTIME_TIMESTAMP) {
-                logBufferRef.current = [];
-                return prev;
-            }
-
             logBufferRef.current = [];
             return newLogs;
         });
     }, [maxLogs]);
 
-    const fetchLogs = useCallback(async (signal) => {
+    const fetchLogs = useCallback(async (signal, isInitialFetch = false) => {
         if (isUnmountedRef.current || !nodename) return;
 
-        if (type === "instance" && !instanceName) {
-            setErrorMessage("Instance name is required for instance logs");
+        if (type === "instance") {
+            if (!instanceName || instanceName.trim() === "") {
+                setErrorMessage("Instance name is required for instance logs");
+                return;
+            }
+        }
+
+        // Only apply the minimum interval for subsequent fetches, not the initial one
+        const currentTime = Date.now();
+        if (!isInitialFetch && currentTime - lastFetchTimeRef.current < MIN_FETCH_INTERVAL) {
+            setTimeout(() => fetchLogs(signal, false), MIN_FETCH_INTERVAL - (currentTime - lastFetchTimeRef.current));
             return;
         }
+        lastFetchTimeRef.current = currentTime;
 
         const token = localStorage.getItem("authToken");
         if (!token) {
             setErrorMessage("Authentication token not found");
+            setIsConnected(false);
             return;
         }
 
         try {
             const url = buildLogUrl();
-            console.log("Fetching logs from:", url);
 
             const response = await fetch(url, {
                 method: 'GET',
@@ -171,21 +169,14 @@ const LogsViewer = ({
             });
 
             if (!response.ok) {
-                console.error(`HTTP error! status: ${response.status}`);
                 setErrorMessage(`HTTP error! status: ${response.status}`);
-                if (isConnectedRef.current !== false) {
-                    setIsConnected(false);
-                }
+                setIsConnected(false);
                 return;
             }
 
-            if (isConnectedRef.current !== true) {
-                setIsConnected(true);
-            }
+            setIsConnected(true);
             setErrorMessage("");
-            if (isLoadingRef.current !== false) {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -194,10 +185,7 @@ const LogsViewer = ({
             while (true) {
                 const {value, done} = await reader.read();
 
-                if (done) {
-                    console.log("Stream completed");
-                    break;
-                }
+                if (done) break;
 
                 if (signal.aborted) {
                     reader.releaseLock();
@@ -209,15 +197,12 @@ const LogsViewer = ({
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ') && !isPausedRef.current) {
+                    if (line.startsWith('data: ') && !isUnmountedRef.current) {
                         try {
                             const jsonStr = line.slice(6).trim();
                             if (jsonStr) {
                                 const logData = JSON.parse(jsonStr);
                                 const parsedLog = parseLogMessage(logData);
-                                if (parsedLog.message.includes(`GET /api/node/name/${nodename}/log`)) {
-                                    continue;
-                                }
                                 const timestamp = parsedLog.__REALTIME_TIMESTAMP;
                                 if (timestamp && !seenLogsRef.current.has(timestamp)) {
                                     seenLogsRef.current.add(timestamp);
@@ -238,9 +223,7 @@ const LogsViewer = ({
                 return;
             }
             console.error("Failed to fetch logs:", error);
-            if (isConnectedRef.current !== false) {
-                setIsConnected(false);
-            }
+            setIsConnected(false);
 
             if (error.message.includes('401')) {
                 setErrorMessage("Authentication failed. Please refresh your token.");
@@ -248,20 +231,18 @@ const LogsViewer = ({
                 if (type === "instance") {
                     setErrorMessage(`Instance logs endpoint not found for ${instanceName} on node ${nodename}`);
                 } else {
-                    setErrorMessage(`Logs endpoint not found for node ${nodename}`);
+                    setErrorMessage(`Node logs endpoint not found for node ${nodename}`);
                 }
             } else {
                 setErrorMessage(`Failed to fetch logs: ${error.message}`);
             }
         } finally {
-            if (isLoadingRef.current !== false) {
-                setIsLoading(false);
-            }
-            if (!signal.aborted && !isUnmountedRef.current && !isPausedRef.current) {
-                setTimeout(startStreaming, UPDATE_INTERVAL);
+            setIsLoading(false);
+            if (!signal.aborted && !isUnmountedRef.current && !isPaused) {
+                setTimeout(() => fetchLogs(signal, false), UPDATE_INTERVAL);
             }
         }
-    }, [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs]);
+    }, [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs, isPaused]);
 
     const startStreaming = useCallback(() => {
         if (abortControllerRef.current) {
@@ -271,11 +252,12 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        fetchLogs(controller.signal);
+        // Pass true for initial fetch to bypass the minimum interval
+        fetchLogs(controller.signal, true);
     }, [fetchLogs]);
 
     useEffect(() => {
-        if (isPausedRef.current) {
+        if (isPaused) {
             if (updateIntervalRef.current) {
                 clearInterval(updateIntervalRef.current);
                 updateIntervalRef.current = null;
@@ -292,7 +274,7 @@ const LogsViewer = ({
                 clearInterval(updateIntervalRef.current);
             }
         };
-    }, [updateLogs]);
+    }, [updateLogs, isPaused]);
 
     useEffect(() => {
         let filtered = logs;
@@ -324,13 +306,15 @@ const LogsViewer = ({
     useEffect(() => {
         if (!nodename) return;
 
-        if (type === "instance" && !instanceName) {
-            setErrorMessage("Instance name is required for instance logs");
-            return;
+        if (type === "instance") {
+            if (!instanceName || instanceName.trim() === "") {
+                setErrorMessage("Instance name is required for instance logs");
+                return;
+            }
         }
 
         isUnmountedRef.current = false;
-        if (!isPausedRef.current) {
+        if (!isPaused) {
             startStreaming();
         }
 
@@ -340,7 +324,7 @@ const LogsViewer = ({
                 abortControllerRef.current.abort();
             }
         };
-    }, [nodename, type, instanceName, startStreaming]);
+    }, [nodename, type, instanceName, startStreaming, isPaused]);
 
     useEffect(() => {
         if (isPaused) {
@@ -423,7 +407,6 @@ const LogsViewer = ({
                 height: "100%",
             }}
         >
-            {/* Header */}
             <Box sx={{mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap"}}>
                 <Typography variant="h6" sx={{flexGrow: 1}}>
                     {buildTitle()}
@@ -438,7 +421,6 @@ const LogsViewer = ({
                     )}
                 </Typography>
 
-                {/* Controls */}
                 <Box sx={{display: "flex", gap: 1}}>
                     <Tooltip title={isPaused ? "Resume" : "Pause"}>
                         <IconButton
@@ -467,7 +449,6 @@ const LogsViewer = ({
                 </Box>
             </Box>
 
-            {/* Status messages */}
             {errorMessage && (
                 <Alert severity="error" sx={{mb: 2}}>
                     {errorMessage}
@@ -480,7 +461,6 @@ const LogsViewer = ({
                 </Alert>
             )}
 
-            {/* Filters */}
             <Box sx={{mb: 2, display: "flex", gap: 2, flexWrap: "wrap"}}>
                 <TextField
                     size="small"
@@ -513,7 +493,6 @@ const LogsViewer = ({
                 </Typography>
             </Box>
 
-            {/* Logs Container */}
             <Box
                 ref={logsContainerRef}
                 onScroll={handleScroll}

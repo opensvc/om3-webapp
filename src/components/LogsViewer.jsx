@@ -19,7 +19,7 @@ import {
 import {
     PlayArrow,
     Pause,
-    Clear,
+    DeleteOutline,
     Download,
     Search,
 } from "@mui/icons-material";
@@ -68,17 +68,25 @@ const LogsViewer = ({
     }, [type, nodename, namespace, kind, instanceName]);
 
     const buildTitle = useCallback(() => {
-        if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            return `Instance Logs - ${instanceName} on ${nodename}`;
+        if (type === "instance") {
+            return "Instance Logs";
         }
-        return `Node Logs - ${nodename}`;
+        return "Node Logs";
+    }, [type]);
+
+    const buildSubtitle = useCallback(() => {
+        if (type === "instance" && instanceName && instanceName.trim() !== "") {
+            return `${instanceName} on ${nodename}`;
+        }
+        return nodename;
     }, [type, nodename, instanceName]);
 
     const buildDownloadFilename = useCallback(() => {
+        const timestamp = new Date().toISOString();
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            return `${nodename}-${instanceName}-logs-${new Date().toISOString()}.txt`;
+            return `${nodename}-${instanceName}-logs-${timestamp}.txt`;
         }
-        return `${nodename}-logs-${new Date().toISOString()}.txt`;
+        return `${nodename}-logs-${timestamp}.txt`;
     }, [type, nodename, instanceName]);
 
     const parseLogMessage = useCallback((logData) => {
@@ -342,7 +350,7 @@ const LogsViewer = ({
     }, []);
 
     const formatTime = (timestamp) => {
-        return timestamp.toLocaleTimeString("fr-FR", {
+        return timestamp.toLocaleTimeString("en-US", {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
@@ -406,22 +414,30 @@ const LogsViewer = ({
                 bgcolor: theme.palette.background.paper,
             }}
         >
-            <Box sx={{mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap"}}>
-                <Typography variant="h6" sx={{flexGrow: 1}}>
-                    {buildTitle()}
+            <Box sx={{
+                mb: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 2
+            }}>
+                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                    <Typography variant="body2" sx={{color: "text.secondary"}}>
+                        {buildSubtitle()}
+                    </Typography>
                     <Chip
                         label={isConnected ? "Connected" : "Disconnected"}
                         color={isConnected ? "success" : "error"}
                         size="small"
-                        sx={{ml: 2}}
                     />
                     {isLoading && (
-                        <CircularProgress size={16} sx={{ml: 1}}/>
+                        <CircularProgress size={16}/>
                     )}
-                </Typography>
+                </Box>
 
                 <Box sx={{display: "flex", gap: 1}}>
-                    <Tooltip title={isPaused ? "Reprendre" : "Pause"}>
+                    <Tooltip title={isPaused ? "Resume" : "Pause"}>
                         <IconButton
                             onClick={() => setIsPaused(!isPaused)}
                             color={isPaused ? "warning" : "primary"}
@@ -430,19 +446,19 @@ const LogsViewer = ({
                             {isPaused ? <PlayArrow/> : <Pause/>}
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Effacer les logs">
+                    <Tooltip title="Clear logs">
                         <IconButton onClick={handleClearLogs} size="small" disabled={logs.length === 0}>
-                            <Clear/>
+                            <DeleteOutline/>
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Télécharger les logs">
+                    <Tooltip title="Download logs">
                         <IconButton onClick={handleDownload} size="small" disabled={filteredLogs.length === 0}>
                             <Download/>
                         </IconButton>
                     </Tooltip>
                     {errorMessage && (
                         <Button size="small" variant="outlined" onClick={handleManualReconnect}>
-                            Réessayer
+                            Retry
                         </Button>
                     )}
                 </Box>
@@ -456,14 +472,14 @@ const LogsViewer = ({
 
             {isLoading && !errorMessage && (
                 <Alert severity="info" sx={{mb: 2}}>
-                    Chargement des logs...
+                    Loading logs...
                 </Alert>
             )}
 
             <Box sx={{mb: 2, display: "flex", gap: 2, flexWrap: "wrap"}}>
                 <TextField
                     size="small"
-                    placeholder="Rechercher dans les logs..."
+                    placeholder="Search in logs..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     slotProps={{
@@ -474,16 +490,16 @@ const LogsViewer = ({
                     sx={{flexGrow: 1, minWidth: "200px"}}
                 />
                 <FormControl size="small" sx={{minWidth: "120px"}}>
-                    <InputLabel>Niveau</InputLabel>
+                    <InputLabel>Level</InputLabel>
                     <Select
                         value={levelFilter}
-                        label="Niveau"
+                        label="Level"
                         onChange={(e) => setLevelFilter(e.target.value)}
                     >
-                        <MenuItem value="all">Tous</MenuItem>
+                        <MenuItem value="all">All</MenuItem>
                         <MenuItem value="info">Info</MenuItem>
-                        <MenuItem value="warn">Avertissement</MenuItem>
-                        <MenuItem value="error">Erreur</MenuItem>
+                        <MenuItem value="warn">Warning</MenuItem>
+                        <MenuItem value="error">Error</MenuItem>
                         <MenuItem value="debug">Debug</MenuItem>
                     </Select>
                 </FormControl>
@@ -498,7 +514,7 @@ const LogsViewer = ({
                 sx={{
                     flexGrow: 1,
                     overflow: "auto",
-                    bgcolor: theme.palette.grey[100], // Light background for better readability
+                    bgcolor: theme.palette.grey[100],
                     p: 2,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,
@@ -518,7 +534,7 @@ const LogsViewer = ({
             >
                 {filteredLogs.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" align="center" sx={{pt: 2}}>
-                        {logs.length === 0 && !isLoading ? "Aucun log disponible" : "Aucun log ne correspond aux filtres actuels"}
+                        {logs.length === 0 && !isLoading ? "No logs available" : "No logs match current filters"}
                     </Typography>
                 ) : (
                     filteredLogs.map((log, index) => (
@@ -578,7 +594,7 @@ const LogsViewer = ({
                     }}
                     sx={{mt: 1, alignSelf: "center"}}
                 >
-                    Aller en bas
+                    Go to bottom
                 </Button>
             )}
         </Paper>

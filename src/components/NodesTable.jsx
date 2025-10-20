@@ -58,6 +58,9 @@ const NodesTable = () => {
     // Logs drawer state
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
+    const [drawerWidth, setDrawerWidth] = useState(600); // Initial width in pixels
+    const minDrawerWidth = 300;
+    const maxDrawerWidth = window.innerWidth * 0.9;
 
     // Compute the zoom level
     const getZoomLevel = () => {
@@ -95,6 +98,29 @@ const NodesTable = () => {
 
     const handleCloseLogsDrawer = () => {
         setLogsDrawerOpen(false);
+    };
+
+    const startResizing = (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = drawerWidth;
+
+        const doResize = (moveEvent) => {
+            const newWidth = startWidth + (startX - moveEvent.clientX); // Right-to-left resizing
+            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
+                setDrawerWidth(newWidth);
+            }
+        };
+
+        const stopResize = () => {
+            document.removeEventListener("mousemove", doResize);
+            document.removeEventListener("mouseup", stopResize);
+            document.body.style.cursor = "default";
+        };
+
+        document.addEventListener("mousemove", doResize);
+        document.addEventListener("mouseup", stopResize);
+        document.body.style.cursor = "ew-resize";
     };
 
     useEffect(() => {
@@ -497,11 +523,31 @@ const NodesTable = () => {
                 onClose={handleCloseLogsDrawer}
                 sx={{
                     "& .MuiDrawer-paper": {
-                        width: isWideScreen ? "50vw" : "90vw",
+                        width: `${drawerWidth}px`,
+                        maxWidth: "90vw",
                         p: 2,
+                        boxSizing: "border-box",
+                        backgroundColor: theme.palette.background.paper,
                     },
                 }}
             >
+                <Box
+                    sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "6px", // Slightly wider for better grip
+                        height: "100%",
+                        cursor: "ew-resize",
+                        bgcolor: theme.palette.grey[300],
+                        "&:hover": {
+                            bgcolor: theme.palette.primary.light,
+                        },
+                        transition: "background-color 0.2s",
+                    }}
+                    onMouseDown={startResizing}
+                    aria-label="Resize drawer"
+                />
                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2}}>
                     <Typography variant="h6">Node Logs</Typography>
                     <IconButton onClick={handleCloseLogsDrawer}>

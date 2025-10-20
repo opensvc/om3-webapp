@@ -141,7 +141,6 @@ const LogsViewer = ({
             }
         }
 
-        // Only apply the minimum interval for subsequent fetches, not the initial one
         const currentTime = Date.now();
         if (!isInitialFetch && currentTime - lastFetchTimeRef.current < MIN_FETCH_INTERVAL) {
             setTimeout(() => fetchLogs(signal, false), MIN_FETCH_INTERVAL - (currentTime - lastFetchTimeRef.current));
@@ -252,7 +251,6 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        // Pass true for initial fetch to bypass the minimum interval
         fetchLogs(controller.signal, true);
     }, [fetchLogs]);
 
@@ -405,6 +403,7 @@ const LogsViewer = ({
                 display: "flex",
                 flexDirection: "column",
                 height: "100%",
+                bgcolor: theme.palette.background.paper,
             }}
         >
             <Box sx={{mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap"}}>
@@ -422,7 +421,7 @@ const LogsViewer = ({
                 </Typography>
 
                 <Box sx={{display: "flex", gap: 1}}>
-                    <Tooltip title={isPaused ? "Resume" : "Pause"}>
+                    <Tooltip title={isPaused ? "Reprendre" : "Pause"}>
                         <IconButton
                             onClick={() => setIsPaused(!isPaused)}
                             color={isPaused ? "warning" : "primary"}
@@ -431,19 +430,19 @@ const LogsViewer = ({
                             {isPaused ? <PlayArrow/> : <Pause/>}
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Clear logs">
+                    <Tooltip title="Effacer les logs">
                         <IconButton onClick={handleClearLogs} size="small" disabled={logs.length === 0}>
                             <Clear/>
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Download logs">
+                    <Tooltip title="Télécharger les logs">
                         <IconButton onClick={handleDownload} size="small" disabled={filteredLogs.length === 0}>
                             <Download/>
                         </IconButton>
                     </Tooltip>
                     {errorMessage && (
                         <Button size="small" variant="outlined" onClick={handleManualReconnect}>
-                            Retry
+                            Réessayer
                         </Button>
                     )}
                 </Box>
@@ -457,14 +456,14 @@ const LogsViewer = ({
 
             {isLoading && !errorMessage && (
                 <Alert severity="info" sx={{mb: 2}}>
-                    Loading logs...
+                    Chargement des logs...
                 </Alert>
             )}
 
             <Box sx={{mb: 2, display: "flex", gap: 2, flexWrap: "wrap"}}>
                 <TextField
                     size="small"
-                    placeholder="Search logs..."
+                    placeholder="Rechercher dans les logs..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     slotProps={{
@@ -475,16 +474,16 @@ const LogsViewer = ({
                     sx={{flexGrow: 1, minWidth: "200px"}}
                 />
                 <FormControl size="small" sx={{minWidth: "120px"}}>
-                    <InputLabel>Level</InputLabel>
+                    <InputLabel>Niveau</InputLabel>
                     <Select
                         value={levelFilter}
-                        label="Level"
+                        label="Niveau"
                         onChange={(e) => setLevelFilter(e.target.value)}
                     >
-                        <MenuItem value="all">All</MenuItem>
+                        <MenuItem value="all">Tous</MenuItem>
                         <MenuItem value="info">Info</MenuItem>
-                        <MenuItem value="warn">Warning</MenuItem>
-                        <MenuItem value="error">Error</MenuItem>
+                        <MenuItem value="warn">Avertissement</MenuItem>
+                        <MenuItem value="error">Erreur</MenuItem>
                         <MenuItem value="debug">Debug</MenuItem>
                     </Select>
                 </FormControl>
@@ -499,33 +498,35 @@ const LogsViewer = ({
                 sx={{
                     flexGrow: 1,
                     overflow: "auto",
-                    bgcolor: "background.default",
+                    bgcolor: theme.palette.grey[100], // Light background for better readability
                     p: 2,
                     borderRadius: 1,
+                    border: `1px solid ${theme.palette.divider}`,
                     fontFamily: "monospace",
-                    fontSize: "0.85rem",
+                    fontSize: "0.9rem",
                     height: height,
                     "& .log-line": {
-                        py: 0.5,
-                        borderBottom: "1px solid",
-                        borderColor: "divider",
+                        py: 0.75,
+                        px: 1,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
                         "&:hover": {
-                            bgcolor: "action.hover",
+                            bgcolor: theme.palette.action.hover,
                         },
+                        transition: "background-color 0.2s",
                     },
                 }}
             >
                 {filteredLogs.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" align="center">
-                        {logs.length === 0 && !isLoading ? "No logs available" : "No logs match the current filters"}
+                    <Typography variant="body2" color="text.secondary" align="center" sx={{pt: 2}}>
+                        {logs.length === 0 && !isLoading ? "Aucun log disponible" : "Aucun log ne correspond aux filtres actuels"}
                     </Typography>
                 ) : (
                     filteredLogs.map((log, index) => (
                         <Box key={index} className="log-line">
-                            <Box sx={{display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap"}}>
+                            <Box sx={{display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap"}}>
                                 <Typography
                                     component="span"
-                                    sx={{color: "text.secondary", minWidth: "100px"}}
+                                    sx={{color: theme.palette.text.secondary, minWidth: "110px", fontWeight: "medium"}}
                                 >
                                     {formatTime(log.timestamp)}
                                 </Typography>
@@ -534,7 +535,7 @@ const LogsViewer = ({
                                     sx={{
                                         color: getLevelColor(log.level),
                                         fontWeight: "bold",
-                                        minWidth: "60px",
+                                        minWidth: "70px",
                                     }}
                                 >
                                     [{log.level.toUpperCase()}]
@@ -542,13 +543,13 @@ const LogsViewer = ({
                                 {log.method && (
                                     <Typography
                                         component="span"
-                                        sx={{color: "info.main", minWidth: "50px"}}
+                                        sx={{color: theme.palette.info.main, minWidth: "60px", fontWeight: "medium"}}
                                     >
                                         {log.method}
                                     </Typography>
                                 )}
                                 {log.path && (
-                                    <Typography component="span" sx={{color: "text.secondary"}}>
+                                    <Typography component="span" sx={{color: theme.palette.text.secondary}}>
                                         {log.path}
                                     </Typography>
                                 )}
@@ -556,7 +557,8 @@ const LogsViewer = ({
                                     wordBreak: "break-word",
                                     flex: 1,
                                     minWidth: "100%",
-                                    whiteSpace: "pre-wrap"
+                                    whiteSpace: "pre-wrap",
+                                    color: theme.palette.text.primary,
                                 }}>
                                     {log.message}
                                 </Typography>
@@ -574,9 +576,9 @@ const LogsViewer = ({
                         setAutoScroll(true);
                         logsEndRef.current?.scrollIntoView({behavior: "smooth"});
                     }}
-                    sx={{mt: 1}}
+                    sx={{mt: 1, alignSelf: "center"}}
                 >
-                    Scroll to bottom
+                    Aller en bas
                 </Button>
             )}
         </Paper>

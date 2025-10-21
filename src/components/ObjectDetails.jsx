@@ -175,7 +175,7 @@ const ObjectDetail = () => {
     const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(null);
     const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
-    const maxDrawerWidth = window.innerWidth * 0.9;
+    const maxDrawerWidth = window.innerWidth * 0.8;
 
     // Refs for debounce and mounted
     const lastFetch = useRef({});
@@ -309,7 +309,7 @@ const ObjectDetail = () => {
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
-    }, []); // Removed parseObjectPath from dependencies
+    }, []);
 
     const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
@@ -876,19 +876,27 @@ const ObjectDetail = () => {
             width: "100%",
             minHeight: "100vh",
             overflow: "hidden",
-            px: 2,
-            py: 4
+            boxSizing: "border-box",
         }}>
-            {/* Contenu principal */}
+
             <Box sx={{
-                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
-                maxWidth: "1400px",
-                transition: theme.transitions.create("flex", {
+                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
+                overflow: "auto",
+                boxSizing: "border-box",
+                maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
+                transition: theme.transitions.create(["flex", "maxWidth"], {
                     easing: theme.transitions.easing.sharp,
                     duration: theme.transitions.duration.enteringScreen,
                 }),
             }}>
-                <Box sx={{width: "100%"}}>
+                <Box sx={{
+                    width: "100%",
+                    maxWidth: "1400px",
+                    margin: "0 auto",
+                    px: 2,
+                    py: 4,
+                    boxSizing: "border-box"
+                }}>
                     <HeaderSection
                         decodedObjectName={decodedObjectName}
                         globalStatus={objectStatus[decodedObjectName]}
@@ -1144,7 +1152,6 @@ const ObjectDetail = () => {
                 </Box>
             </Box>
 
-            {/* Drawer des logs */}
             <Drawer
                 anchor="right"
                 open={logsDrawerOpen}
@@ -1152,7 +1159,7 @@ const ObjectDetail = () => {
                 sx={{
                     "& .MuiDrawer-paper": {
                         width: logsDrawerOpen ? `${drawerWidth}px` : 0,
-                        maxWidth: "90vw",
+                        maxWidth: "80vw",
                         p: 2,
                         boxSizing: "border-box",
                         backgroundColor: theme.palette.background.paper,

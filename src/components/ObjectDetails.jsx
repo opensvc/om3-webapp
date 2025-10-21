@@ -13,7 +13,11 @@ import {
     Popper,
     Snackbar,
     Typography,
+    Drawer,
+    IconButton,
+    useTheme,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import {green, grey, orange, red} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
@@ -24,6 +28,7 @@ import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
+import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
 // Constants for default checkboxes
@@ -107,6 +112,7 @@ const ObjectDetail = () => {
     const instanceConfig = useEventStore((s) => s.instanceConfig);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
+    const theme = useTheme();
 
     // States for configuration
     const [configData, setConfigData] = useState(null);
@@ -162,6 +168,14 @@ const ObjectDetail = () => {
 
     // States for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
+
+    // States for logs drawer
+    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
+    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
+    const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(null);
+    const [drawerWidth, setDrawerWidth] = useState(600);
+    const minDrawerWidth = 300;
+    const maxDrawerWidth = window.innerWidth * 0.9;
 
     // Refs for debounce and mounted
     const lastFetch = useRef({});
@@ -621,6 +635,42 @@ const ObjectDetail = () => {
         });
     }, []);
 
+    // Logs handlers
+    const handleOpenLogs = useCallback((node, instanceName = null) => {
+        setSelectedNodeForLogs(node);
+        setSelectedInstanceForLogs(instanceName);
+        setLogsDrawerOpen(true);
+    }, []);
+
+    const handleCloseLogsDrawer = useCallback(() => {
+        setLogsDrawerOpen(false);
+        setSelectedNodeForLogs(null);
+        setSelectedInstanceForLogs(null);
+    }, []);
+
+    const startResizing = useCallback((e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = drawerWidth;
+
+        const doResize = (moveEvent) => {
+            const newWidth = startWidth + (startX - moveEvent.clientX);
+            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
+                setDrawerWidth(newWidth);
+            }
+        };
+
+        const stopResize = () => {
+            document.removeEventListener("mousemove", doResize);
+            document.removeEventListener("mouseup", stopResize);
+            document.body.style.cursor = "default";
+        };
+
+        document.addEventListener("mousemove", doResize);
+        document.addEventListener("mouseup", stopResize);
+        document.body.style.cursor = "ew-resize";
+    }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
+
     // Effect for configuring EventSource
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -820,252 +870,341 @@ const ObjectDetail = () => {
     }
 
     return (
-        <Box sx={{display: "flex", justifyContent: "center", px: 2, py: 4}}>
-            <Box sx={{width: "100%", maxWidth: "1400px"}}>
-                <HeaderSection
-                    decodedObjectName={decodedObjectName}
-                    globalStatus={objectStatus[decodedObjectName]}
-                    actionInProgress={actionInProgress}
-                    objectMenuAnchor={objectMenuAnchor}
-                    setObjectMenuAnchor={setObjectMenuAnchor}
-                    handleObjectActionClick={handleObjectActionClick}
-                    getObjectStatus={getObjectStatus}
-                    getColor={getColor}
-                    objectMenuAnchorRef={objectMenuAnchorRef}
-                />
-                <ActionDialogManager
-                    pendingAction={pendingAction}
-                    handleConfirm={handleDialogConfirm}
-                    target={`object ${decodedObjectName}`}
-                    supportedActions={
-                        pendingAction?.batch === "nodes"
-                            ? INSTANCE_ACTIONS.map((action) => action.name)
-                            : pendingAction?.batch === "resources" || pendingAction?.rid
-                                ? RESOURCE_ACTIONS.map((action) => action.name)
-                                : OBJECT_ACTIONS.map((action) => action.name)
-                    }
-                    onClose={() => {
-                        setPendingAction(null);
-                        setConfirmDialogOpen(false);
-                        setStopDialogOpen(false);
-                        setUnprovisionDialogOpen(false);
-                        setPurgeDialogOpen(false);
-                        setSimpleDialogOpen(false);
-                    }}
-                    confirmDialogOpen={confirmDialogOpen}
-                    stopDialogOpen={stopDialogOpen}
-                    unprovisionDialogOpen={unprovisionDialogOpen}
-                    purgeDialogOpen={purgeDialogOpen}
-                    simpleDialogOpen={simpleDialogOpen}
-                    checkboxes={checkboxes}
-                    setCheckboxes={setCheckboxes}
-                    stopCheckbox={stopCheckbox}
-                    setStopCheckbox={setStopCheckbox}
-                    unprovisionCheckboxes={unprovisionCheckboxes}
-                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                    purgeCheckboxes={purgeCheckboxes}
-                    setPurgeCheckboxes={setPurgeCheckboxes}
-                />
-                {showKeys && (
-                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
-                )}
-                <ConfigSection
-                    decodedObjectName={decodedObjectName}
-                    configNode={configNode}
-                    setConfigNode={setConfigNode}
-                    openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
-                    configData={configData}
-                    configLoading={configLoading}
-                    configError={configError}
-                    configAccordionExpanded={configAccordionExpanded}
-                    setConfigAccordionExpanded={setConfigAccordionExpanded}
-                />
-                <ManageConfigParamsDialog
-                    open={manageParamsDialogOpen}
-                    onClose={() => setManageParamsDialogOpen(false)}
-                    onConfirm={() => setManageParamsDialogOpen(false)}
-                    paramsToSet={paramsToSet}
-                    setParamsToSet={setParamsToSet}
-                    paramsToUnset={paramsToUnset}
-                    setParamsToUnset={setParamsToUnset}
-                    paramsToDelete={paramsToDelete}
-                    setParamsToDelete={setParamsToDelete}
-                    disabled={actionInProgress}
-                />
-                {!(["sec", "cfg", "usr"].includes(kind)) && (
-                    <>
-                        <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                            <Button
-                                variant="outlined"
-                                onClick={handleNodesActionsOpen}
-                                disabled={selectedNodes.length === 0}
-                                aria-label="Actions on selected nodes"
-                                ref={nodesActionsAnchorRef}
+        <Box sx={{
+            display: "flex",
+            flexDirection: "row",
+            width: "100%",
+            minHeight: "100vh",
+            overflow: "hidden",
+            px: 2,
+            py: 4
+        }}>
+            {/* Contenu principal */}
+            <Box sx={{
+                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
+                maxWidth: "1400px",
+                transition: theme.transitions.create("flex", {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+            }}>
+                <Box sx={{width: "100%"}}>
+                    <HeaderSection
+                        decodedObjectName={decodedObjectName}
+                        globalStatus={objectStatus[decodedObjectName]}
+                        actionInProgress={actionInProgress}
+                        objectMenuAnchor={objectMenuAnchor}
+                        setObjectMenuAnchor={setObjectMenuAnchor}
+                        handleObjectActionClick={handleObjectActionClick}
+                        getObjectStatus={getObjectStatus}
+                        getColor={getColor}
+                        objectMenuAnchorRef={objectMenuAnchorRef}
+                    />
+
+                    <ActionDialogManager
+                        pendingAction={pendingAction}
+                        handleConfirm={handleDialogConfirm}
+                        target={`object ${decodedObjectName}`}
+                        supportedActions={
+                            pendingAction?.batch === "nodes"
+                                ? INSTANCE_ACTIONS.map((action) => action.name)
+                                : pendingAction?.batch === "resources" || pendingAction?.rid
+                                    ? RESOURCE_ACTIONS.map((action) => action.name)
+                                    : OBJECT_ACTIONS.map((action) => action.name)
+                        }
+                        onClose={() => {
+                            setPendingAction(null);
+                            setConfirmDialogOpen(false);
+                            setStopDialogOpen(false);
+                            setUnprovisionDialogOpen(false);
+                            setPurgeDialogOpen(false);
+                            setSimpleDialogOpen(false);
+                        }}
+                        confirmDialogOpen={confirmDialogOpen}
+                        stopDialogOpen={stopDialogOpen}
+                        unprovisionDialogOpen={unprovisionDialogOpen}
+                        purgeDialogOpen={purgeDialogOpen}
+                        simpleDialogOpen={simpleDialogOpen}
+                        checkboxes={checkboxes}
+                        setCheckboxes={setCheckboxes}
+                        stopCheckbox={stopCheckbox}
+                        setStopCheckbox={setStopCheckbox}
+                        unprovisionCheckboxes={unprovisionCheckboxes}
+                        setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                        purgeCheckboxes={purgeCheckboxes}
+                        setPurgeCheckboxes={setPurgeCheckboxes}
+                    />
+
+                    {showKeys && (
+                        <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
+                    )}
+
+                    <ConfigSection
+                        decodedObjectName={decodedObjectName}
+                        configNode={configNode}
+                        setConfigNode={setConfigNode}
+                        openSnackbar={openSnackbar}
+                        handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
+                        configData={configData}
+                        configLoading={configLoading}
+                        configError={configError}
+                        configAccordionExpanded={configAccordionExpanded}
+                        setConfigAccordionExpanded={setConfigAccordionExpanded}
+                    />
+
+                    <ManageConfigParamsDialog
+                        open={manageParamsDialogOpen}
+                        onClose={() => setManageParamsDialogOpen(false)}
+                        onConfirm={() => setManageParamsDialogOpen(false)}
+                        paramsToSet={paramsToSet}
+                        setParamsToSet={setParamsToSet}
+                        paramsToUnset={paramsToUnset}
+                        setParamsToUnset={setParamsToUnset}
+                        paramsToDelete={paramsToDelete}
+                        setParamsToDelete={setParamsToDelete}
+                        disabled={actionInProgress}
+                    />
+
+                    {!(["sec", "cfg", "usr"].includes(kind)) && (
+                        <>
+                            <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleNodesActionsOpen}
+                                    disabled={selectedNodes.length === 0}
+                                    aria-label="Actions on selected nodes"
+                                    ref={nodesActionsAnchorRef}
+                                >
+                                    Actions on Selected Nodes
+                                </Button>
+                            </Box>
+
+                            {memoizedNodes.map((node) => (
+                                <NodeCard
+                                    key={node}
+                                    node={node}
+                                    nodeData={memoizedObjectData[node] || {}}
+                                    selectedNodes={selectedNodes}
+                                    toggleNode={toggleNode}
+                                    selectedResourcesByNode={selectedResourcesByNode}
+                                    toggleResource={toggleResource}
+                                    actionInProgress={actionInProgress}
+                                    individualNodeMenuAnchor={individualNodeMenuAnchor}
+                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                                    setCurrentNode={setCurrentNode}
+                                    handleResourcesActionsOpen={handleResourcesActionsOpen}
+                                    handleResourceMenuOpen={handleResourceMenuOpen}
+                                    handleIndividualNodeActionClick={handleIndividualNodeActionClick}
+                                    handleBatchResourceActionClick={handleBatchResourceActionClick}
+                                    handleResourceActionClick={handleResourceActionClick}
+                                    expandedNodeResources={expandedNodeResources}
+                                    handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
+                                    expandedResources={expandedResources}
+                                    handleAccordionChange={handleAccordionChange}
+                                    getColor={getColor}
+                                    getNodeState={getNodeState}
+                                    parseProvisionedState={parseProvisionedState}
+                                    setPendingAction={setPendingAction}
+                                    setConfirmDialogOpen={setConfirmDialogOpen}
+                                    setStopDialogOpen={setStopDialogOpen}
+                                    setUnprovisionDialogOpen={setUnprovisionDialogOpen}
+                                    setPurgeDialogOpen={setPurgeDialogOpen}
+                                    setSimpleDialogOpen={setSimpleDialogOpen}
+                                    setCheckboxes={setCheckboxes}
+                                    setStopCheckbox={setStopCheckbox}
+                                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                                    setPurgeCheckboxes={setPurgeCheckboxes}
+                                    setSelectedResourcesByNode={setSelectedResourcesByNode}
+                                    individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
+                                    resourcesActionsAnchorRef={resourcesActionsAnchorRef}
+                                    resourceMenuAnchorRef={resourceMenuAnchorRef}
+                                    namespace={namespace}
+                                    kind={kind}
+                                    instanceName={name}
+                                    onOpenLogs={handleOpenLogs}
+                                />
+                            ))}
+
+                            <Popper
+                                open={Boolean(nodesActionsAnchor)}
+                                anchorEl={nodesActionsAnchor}
+                                {...popperProps}
                             >
-                                Actions on Selected Nodes
-                            </Button>
-                        </Box>
-                        {memoizedNodes.map((node) => (
-                            <NodeCard
-                                key={node}
-                                node={node}
-                                nodeData={memoizedObjectData[node] || {}}
-                                selectedNodes={selectedNodes}
-                                toggleNode={toggleNode}
-                                selectedResourcesByNode={selectedResourcesByNode}
-                                toggleResource={toggleResource}
-                                actionInProgress={actionInProgress}
-                                individualNodeMenuAnchor={individualNodeMenuAnchor}
-                                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                                setCurrentNode={setCurrentNode}
-                                handleResourcesActionsOpen={handleResourcesActionsOpen}
-                                handleResourceMenuOpen={handleResourceMenuOpen}
-                                handleIndividualNodeActionClick={handleIndividualNodeActionClick}
-                                handleBatchResourceActionClick={handleBatchResourceActionClick}
-                                handleResourceActionClick={handleResourceActionClick}
-                                expandedNodeResources={expandedNodeResources}
-                                handleNodeResourcesAccordionChange={handleNodeResourcesAccordionChange}
-                                expandedResources={expandedResources}
-                                handleAccordionChange={handleAccordionChange}
-                                getColor={getColor}
-                                getNodeState={getNodeState}
-                                parseProvisionedState={parseProvisionedState}
-                                setPendingAction={setPendingAction}
-                                setConfirmDialogOpen={setConfirmDialogOpen}
-                                setStopDialogOpen={setStopDialogOpen}
-                                setUnprovisionDialogOpen={setUnprovisionDialogOpen}
-                                setPurgeDialogOpen={setPurgeDialogOpen}
-                                setSimpleDialogOpen={setSimpleDialogOpen}
-                                setCheckboxes={setCheckboxes}
-                                setStopCheckbox={setStopCheckbox}
-                                setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                                setPurgeCheckboxes={setPurgeCheckboxes}
-                                setSelectedResourcesByNode={setSelectedResourcesByNode}
-                                individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
-                                resourcesActionsAnchorRef={resourcesActionsAnchorRef}
-                                resourceMenuAnchorRef={resourceMenuAnchorRef}
-                                namespace={namespace}
-                                kind={kind}
-                                instanceName={name}
-                            />
-                        ))}
-                        <Popper
-                            open={Boolean(nodesActionsAnchor)}
-                            anchorEl={nodesActionsAnchor}
-                            {...popperProps}
-                        >
-                            <ClickAwayListener onClickAway={handleNodesActionsClose}>
-                                <Paper elevation={3} role="menu" aria-label="Batch node actions menu">
-                                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => handleBatchNodeActionClick(name)}
-                                            role="menuitem"
-                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
-                                        >
-                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    ))}
-                                </Paper>
-                            </ClickAwayListener>
-                        </Popper>
-                        <Popper
-                            open={Boolean(individualNodeMenuAnchor)}
-                            anchorEl={individualNodeMenuAnchor}
-                            {...popperProps}
-                        >
-                            <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
-                                <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}>
-                                    {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => handleIndividualNodeActionClick(name)}
-                                            role="menuitem"
-                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
-                                        >
-                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    ))}
-                                </Paper>
-                            </ClickAwayListener>
-                        </Popper>
-                        <Popper
-                            open={Boolean(resourcesActionsAnchor)}
-                            anchorEl={resourcesActionsAnchor}
-                            {...popperProps}
-                        >
-                            <ClickAwayListener onClickAway={handleResourcesActionsClose}>
-                                <Paper elevation={3} role="menu"
-                                       aria-label={`Batch resource actions for node ${resGroupNode}`}>
-                                    {RESOURCE_ACTIONS.map(({name, icon}) => (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => handleBatchResourceActionClick(name)}
-                                            role="menuitem"
-                                            aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
-                                        >
-                                            <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    ))}
-                                </Paper>
-                            </ClickAwayListener>
-                        </Popper>
-                        <Popper
-                            open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
-                            anchorEl={resourceMenuAnchor}
-                            {...popperProps}
-                        >
-                            <ClickAwayListener
-                                onClickAway={() => {
-                                    setResourceMenuAnchor(null);
-                                    setCurrentResourceId(null);
-                                }}
-                            >
-                                <Paper elevation={3} role="menu"
-                                       aria-label={`Resource ${currentResourceId} actions menu`}>
-                                    {(() => {
-                                        if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
-                                            return null;
-                                        }
-                                        const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
-                                        const filteredActions = getFilteredResourceActions(resourceType);
-                                        return filteredActions.map(({name, icon}) => (
+                                <ClickAwayListener onClickAway={handleNodesActionsClose}>
+                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu">
+                                        {INSTANCE_ACTIONS.map(({name, icon}) => (
                                             <MenuItem
                                                 key={name}
-                                                onClick={() => handleResourceActionClick(name)}
+                                                onClick={() => handleBatchNodeActionClick(name)}
                                                 role="menuitem"
                                                 aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
                                             >
                                                 <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                                 <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                                             </MenuItem>
-                                        ));
-                                    })()}
-                                </Paper>
-                            </ClickAwayListener>
-                        </Popper>
-                    </>
-                )}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={5000}
-                    onClose={closeSnackbar}
-                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
-                >
-                    <Alert
+                                        ))}
+                                    </Paper>
+                                </ClickAwayListener>
+                            </Popper>
+                            <Popper
+                                open={Boolean(individualNodeMenuAnchor)}
+                                anchorEl={individualNodeMenuAnchor}
+                                {...popperProps}
+                            >
+                                <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
+                                    <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}>
+                                        {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                            <MenuItem
+                                                key={name}
+                                                onClick={() => handleIndividualNodeActionClick(name)}
+                                                role="menuitem"
+                                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                            >
+                                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                            </MenuItem>
+                                        ))}
+                                    </Paper>
+                                </ClickAwayListener>
+                            </Popper>
+                            <Popper
+                                open={Boolean(resourcesActionsAnchor)}
+                                anchorEl={resourcesActionsAnchor}
+                                {...popperProps}
+                            >
+                                <ClickAwayListener onClickAway={handleResourcesActionsClose}>
+                                    <Paper elevation={3} role="menu"
+                                           aria-label={`Batch resource actions for node ${resGroupNode}`}>
+                                        {RESOURCE_ACTIONS.map(({name, icon}) => (
+                                            <MenuItem
+                                                key={name}
+                                                onClick={() => handleBatchResourceActionClick(name)}
+                                                role="menuitem"
+                                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                            >
+                                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                            </MenuItem>
+                                        ))}
+                                    </Paper>
+                                </ClickAwayListener>
+                            </Popper>
+                            <Popper
+                                open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
+                                anchorEl={resourceMenuAnchor}
+                                {...popperProps}
+                            >
+                                <ClickAwayListener
+                                    onClickAway={() => {
+                                        setResourceMenuAnchor(null);
+                                        setCurrentResourceId(null);
+                                    }}
+                                >
+                                    <Paper elevation={3} role="menu"
+                                           aria-label={`Resource ${currentResourceId} actions menu`}>
+                                        {(() => {
+                                            if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
+                                                return null;
+                                            }
+                                            const resourceType = getResourceType(currentResourceId, memoizedObjectData[resGroupNode]);
+                                            const filteredActions = getFilteredResourceActions(resourceType);
+                                            return filteredActions.map(({name, icon}) => (
+                                                <MenuItem
+                                                    key={name}
+                                                    onClick={() => handleResourceActionClick(name)}
+                                                    role="menuitem"
+                                                    aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
+                                                >
+                                                    <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
+                                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                                </MenuItem>
+                                            ));
+                                        })()}
+                                    </Paper>
+                                </ClickAwayListener>
+                            </Popper>
+                        </>
+                    )}
+
+                    <Snackbar
+                        open={snackbar.open}
+                        autoHideDuration={5000}
                         onClose={closeSnackbar}
-                        severity={snackbar.severity}
-                        variant="filled"
-                        aria-label={snackbar.severity === "error" ? "error alert" : `${snackbar.severity} alert`}
+                        anchorOrigin={{vertical: "bottom", horizontal: "center"}}
                     >
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
+                        <Alert
+                            onClose={closeSnackbar}
+                            severity={snackbar.severity}
+                            variant="filled"
+                            aria-label={snackbar.severity === "error" ? "error alert" : `${snackbar.severity} alert`}
+                        >
+                            {snackbar.message}
+                        </Alert>
+                    </Snackbar>
+                </Box>
             </Box>
+
+            {/* Drawer des logs */}
+            <Drawer
+                anchor="right"
+                open={logsDrawerOpen}
+                variant="persistent"
+                sx={{
+                    "& .MuiDrawer-paper": {
+                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
+                        maxWidth: "90vw",
+                        p: 2,
+                        boxSizing: "border-box",
+                        backgroundColor: theme.palette.background.paper,
+                        top: 0,
+                        height: "100vh",
+                        overflow: "auto",
+                        borderLeft: `1px solid ${theme.palette.divider}`,
+                        transition: theme.transitions.create("width", {
+                            easing: theme.transitions.easing.sharp,
+                            duration: theme.transitions.duration.enteringScreen,
+                        }),
+                    },
+                }}
+            >
+                <Box
+                    sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "6px",
+                        height: "100%",
+                        cursor: "ew-resize",
+                        bgcolor: theme.palette.grey[300],
+                        "&:hover": {
+                            bgcolor: theme.palette.primary.light,
+                        },
+                        transition: "background-color 0.2s",
+                    }}
+                    onMouseDown={startResizing}
+                    aria-label="Resize drawer"
+                />
+                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                    <Typography variant="h6">
+                        {selectedInstanceForLogs
+                            ? `Instance Logs - ${selectedInstanceForLogs}`
+                            : `Node Logs - ${selectedNodeForLogs}`}
+                    </Typography>
+                    <IconButton onClick={handleCloseLogsDrawer}>
+                        <CloseIcon/>
+                    </IconButton>
+                </Box>
+                {selectedNodeForLogs && (
+                    <LogsViewer
+                        nodename={selectedNodeForLogs}
+                        type={selectedInstanceForLogs ? "instance" : "node"}
+                        namespace={namespace}
+                        kind={kind}
+                        instanceName={selectedInstanceForLogs}
+                        height="calc(100vh - 100px)"
+                    />
+                )}
+            </Drawer>
         </Box>
     );
 };

@@ -98,6 +98,7 @@ const NodesTable = () => {
 
     const handleCloseLogsDrawer = () => {
         setLogsDrawerOpen(false);
+        setSelectedNodeForLogs(null);
     };
 
     const startResizing = (e) => {
@@ -332,14 +333,16 @@ const NodesTable = () => {
                 minHeight: "100vh",
                 bgcolor: "background.default",
                 display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
+                flexDirection: "row",
+                width: "100%",
+                overflow: "hidden",
                 p: 2,
+                gap: 2,
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
+                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
                     maxWidth: isWideScreen ? "1600px" : "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
@@ -347,6 +350,11 @@ const NodesTable = () => {
                     borderRadius: 3,
                     boxShadow: 3,
                     p: 3,
+                    overflow: "auto",
+                    transition: theme.transitions.create("flex", {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.enteringScreen,
+                    }),
                 }}
             >
                 <Typography variant="h4" gutterBottom align="center">
@@ -484,8 +492,8 @@ const NodesTable = () => {
                                         onMenuOpen={handleMenuOpen}
                                         onMenuClose={handleMenuClose}
                                         onAction={(nodename, action) => handleAction(action, nodename)}
-                                        anchorEl={anchorEls[nodename]}
                                         onOpenLogs={handleOpenLogs}
+                                        anchorEl={anchorEls[nodename]}
                                     />
                                 ))}
                             </TableBody>
@@ -516,18 +524,24 @@ const NodesTable = () => {
                 />
             </Box>
 
-            {/* Logs Drawer */}
             <Drawer
                 anchor="right"
                 open={logsDrawerOpen}
-                onClose={handleCloseLogsDrawer}
+                variant="persistent"
                 sx={{
                     "& .MuiDrawer-paper": {
-                        width: `${drawerWidth}px`,
+                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
                         maxWidth: "90vw",
                         p: 2,
                         boxSizing: "border-box",
                         backgroundColor: theme.palette.background.paper,
+                        top: 0,
+                        height: "100vh",
+                        overflow: "auto",
+                        transition: theme.transitions.create("width", {
+                            easing: theme.transitions.easing.sharp,
+                            duration: theme.transitions.duration.enteringScreen,
+                        }),
                     },
                 }}
             >
@@ -536,7 +550,7 @@ const NodesTable = () => {
                         position: "absolute",
                         top: 0,
                         left: 0,
-                        width: "6px", // Slightly wider for better grip
+                        width: "6px",
                         height: "100%",
                         cursor: "ew-resize",
                         bgcolor: theme.palette.grey[300],

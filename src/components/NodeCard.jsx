@@ -14,8 +14,6 @@ import {
     ListItemIcon,
     ListItemText,
     Button,
-    Drawer,
-    useTheme,
 } from "@mui/material";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
@@ -23,10 +21,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArticleIcon from "@mui/icons-material/Article";
-import CloseIcon from "@mui/icons-material/Close";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
-import LogsViewer from "./LogsViewer";
 
 const NodeCard = ({
                       node,
@@ -57,19 +53,13 @@ const NodeCard = ({
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
-                      namespace = "root",
-                      kind = "svc",
                       instanceName,
+                      onOpenLogs = () => console.warn("onOpenLogs not provided"),
                   }) => {
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
-    const [instanceLogsOpen, setInstanceLogsOpen] = useState(false);
-    const [drawerWidth, setDrawerWidth] = useState(600); // Initial width in pixels
-    const minDrawerWidth = 300;
-    const maxDrawerWidth = window.innerWidth * 0.9;
-    const theme = useTheme();
 
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
 
@@ -637,29 +627,6 @@ const NodeCard = ({
         );
     };
 
-    const startResizing = (e) => {
-        e.preventDefault();
-        const startX = e.clientX;
-        const startWidth = drawerWidth;
-
-        const doResize = (moveEvent) => {
-            const newWidth = startWidth + (startX - moveEvent.clientX); // Right-to-left resizing
-            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
-                setDrawerWidth(newWidth);
-            }
-        };
-
-        const stopResize = () => {
-            document.removeEventListener("mousemove", doResize);
-            document.removeEventListener("mouseup", stopResize);
-            document.body.style.cursor = "default";
-        };
-
-        document.addEventListener("mousemove", doResize);
-        document.addEventListener("mouseup", stopResize);
-        document.body.style.cursor = "ew-resize";
-    };
-
     return (
         <Box
             sx={{
@@ -691,7 +658,7 @@ const NodeCard = ({
                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                         <Tooltip title="View logs">
                             <IconButton
-                                onClick={() => setInstanceLogsOpen(true)}
+                                onClick={() => onOpenLogs(node, resolvedInstanceName)}
                                 color="primary"
                                 aria-label={`View logs for instance ${resolvedInstanceName || node}`}
                             >
@@ -951,54 +918,6 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-            <Drawer
-                anchor="right"
-                open={instanceLogsOpen}
-                onClose={() => setInstanceLogsOpen(false)}
-                sx={{
-                    "& .MuiDrawer-paper": {
-                        width: `${drawerWidth}px`,
-                        maxWidth: "90vw",
-                        p: 2,
-                        boxSizing: "border-box",
-                        backgroundColor: theme.palette.background.paper,
-                    },
-                }}
-            >
-                <Box
-                    sx={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "6px", // Slightly wider for better grip
-                        height: "100%",
-                        cursor: "ew-resize",
-                        bgcolor: theme.palette.grey[300],
-                        "&:hover": {
-                            bgcolor: theme.palette.primary.light,
-                        },
-                        transition: "background-color 0.2s",
-                    }}
-                    onMouseDown={startResizing}
-                    aria-label="Resize drawer"
-                />
-                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                    <Typography variant="h6">
-                        {resolvedInstanceName ? `Instance Logs - ${resolvedInstanceName}` : `Node Logs - ${node}`}
-                    </Typography>
-                    <IconButton onClick={() => setInstanceLogsOpen(false)}>
-                        <CloseIcon/>
-                    </IconButton>
-                </Box>
-                <LogsViewer
-                    nodename={node}
-                    type={resolvedInstanceName ? "instance" : "node"}
-                    namespace={namespace}
-                    kind={kind}
-                    instanceName={resolvedInstanceName}
-                    height="calc(100vh - 100px)"
-                />
-            </Drawer>
         </Box>
     );
 };

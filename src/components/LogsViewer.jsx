@@ -15,6 +15,8 @@ import {
     useTheme,
     Alert,
     CircularProgress,
+    Checkbox,
+    ListItemText,
 } from "@mui/material";
 import {
     PlayArrow,
@@ -39,7 +41,7 @@ const LogsViewer = ({
     const [filteredLogs, setFilteredLogs] = useState([]);
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const [levelFilter, setLevelFilter] = useState("all");
+    const [levelFilter, setLevelFilter] = useState([]);
     const [autoScroll, setAutoScroll] = useState(true);
     const [isConnected, setIsConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -285,8 +287,8 @@ const LogsViewer = ({
     useEffect(() => {
         let filtered = logs;
 
-        if (levelFilter !== "all") {
-            filtered = filtered.filter((log) => log.level === levelFilter);
+        if (levelFilter.length > 0) {
+            filtered = filtered.filter((log) => levelFilter.includes(log.level));
         }
 
         if (searchTerm) {
@@ -489,18 +491,22 @@ const LogsViewer = ({
                     }}
                     sx={{flexGrow: 1, minWidth: "200px"}}
                 />
-                <FormControl size="small" sx={{minWidth: "120px"}}>
-                    <InputLabel>Level</InputLabel>
+                <FormControl size="small" sx={{minWidth: "200px"}}>
+                    <InputLabel id="log-levels-label">Select Log Levels</InputLabel>
                     <Select
+                        labelId="log-levels-label"
+                        multiple
                         value={levelFilter}
-                        label="Level"
+                        label="Select Log Levels"
                         onChange={(e) => setLevelFilter(e.target.value)}
+                        renderValue={(selected) => selected.length === 0 ? "All Levels" : selected.join(', ')}
                     >
-                        <MenuItem value="all">All</MenuItem>
-                        <MenuItem value="info">Info</MenuItem>
-                        <MenuItem value="warn">Warning</MenuItem>
-                        <MenuItem value="error">Error</MenuItem>
-                        <MenuItem value="debug">Debug</MenuItem>
+                        {['debug', 'error', 'info', 'warn'].map((level) => (
+                            <MenuItem key={level} value={level}>
+                                <Checkbox checked={levelFilter.includes(level)}/>
+                                <ListItemText primary={level.charAt(0).toUpperCase() + level.slice(1)}/>
+                            </MenuItem>
+                        ))}
                     </Select>
                 </FormControl>
                 <Typography variant="caption" sx={{alignSelf: "center", color: "text.secondary"}}>

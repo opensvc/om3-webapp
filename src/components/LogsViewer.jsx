@@ -49,24 +49,23 @@ const LogsViewer = ({
 
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
-    const isUnmountedRef = useRef(false);
+    const isPausedRef = useRef(false);
     const abortControllerRef = useRef(null);
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
-    const updateIntervalRef = useRef(null);
-    const lastFetchTimeRef = useRef(0);
-    const UPDATE_INTERVAL = 5000;
-    const MIN_FETCH_INTERVAL = 4000;
 
     useEffect(() => {
-        isUnmountedRef.current = isPaused;
+        isPausedRef.current = isPaused;
     }, [isPaused]);
 
     const buildLogUrl = useCallback(() => {
+        let baseUrl;
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
-            return `${URL_NODE}/${nodename}/instance/path/${namespace}/${kind}/${instanceName}/log`;
+            baseUrl = `${URL_NODE}/${nodename}/instance/path/${namespace}/${kind}/${instanceName}/log`;
+        } else {
+            baseUrl = `${URL_NODE}/${nodename}/log`;
         }
-        return `${URL_NODE}/${nodename}/log`;
+        return `${baseUrl}?follow=true`;
     }, [type, nodename, namespace, kind, instanceName]);
 
     const buildTitle = useCallback(() => {
@@ -130,7 +129,7 @@ const LogsViewer = ({
     }, [nodename]);
 
     const updateLogs = useCallback(() => {
-        if (logBufferRef.current.length === 0 || isUnmountedRef.current) {
+        if (logBufferRef.current.length === 0 || isPausedRef.current) {
             return;
         }
 
@@ -141,8 +140,8 @@ const LogsViewer = ({
         });
     }, [maxLogs]);
 
-    const fetchLogs = useCallback(async (signal, isInitialFetch = false) => {
-        if (isUnmountedRef.current || !nodename) return;
+    const fetchLogs = useCallback(async (signal) => {
+        if (isPausedRef.current || !nodename) return;
 
         if (type === "instance") {
             if (!instanceName || instanceName.trim() === "") {
@@ -150,13 +149,6 @@ const LogsViewer = ({
                 return;
             }
         }
-
-        const currentTime = Date.now();
-        if (!isInitialFetch && currentTime - lastFetchTimeRef.current < MIN_FETCH_INTERVAL) {
-            setTimeout(() => fetchLogs(signal, false), MIN_FETCH_INTERVAL - (currentTime - lastFetchTimeRef.current));
-            return;
-        }
-        lastFetchTimeRef.current = currentTime;
 
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -206,7 +198,7 @@ const LogsViewer = ({
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ') && !isUnmountedRef.current) {
+                    if (line.startsWith('data: ') && !isPausedRef.current) {
                         try {
                             const jsonStr = line.slice(6).trim();
                             if (jsonStr) {
@@ -223,6 +215,8 @@ const LogsViewer = ({
                         }
                     }
                 }
+
+                updateLogs();
             }
 
             updateLogs();
@@ -247,11 +241,8 @@ const LogsViewer = ({
             }
         } finally {
             setIsLoading(false);
-            if (!signal.aborted && !isUnmountedRef.current && !isPaused) {
-                setTimeout(() => fetchLogs(signal, false), UPDATE_INTERVAL);
-            }
         }
-    }, [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs, isPaused]);
+    }, [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs]);
 
     const startStreaming = useCallback(() => {
         if (abortControllerRef.current) {
@@ -261,28 +252,8 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        fetchLogs(controller.signal, true);
+        fetchLogs(controller.signal);
     }, [fetchLogs]);
-
-    useEffect(() => {
-        if (isPaused) {
-            if (updateIntervalRef.current) {
-                clearInterval(updateIntervalRef.current);
-                updateIntervalRef.current = null;
-            }
-        } else {
-            updateIntervalRef.current = setInterval(() => {
-                if (logBufferRef.current.length > 0) {
-                    updateLogs();
-                }
-            }, UPDATE_INTERVAL);
-        }
-        return () => {
-            if (updateIntervalRef.current) {
-                clearInterval(updateIntervalRef.current);
-            }
-        };
-    }, [updateLogs, isPaused]);
 
     useEffect(() => {
         let filtered = logs;
@@ -321,13 +292,11 @@ const LogsViewer = ({
             }
         }
 
-        isUnmountedRef.current = false;
         if (!isPaused) {
             startStreaming();
         }
 
         return () => {
-            isUnmountedRef.current = true;
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }

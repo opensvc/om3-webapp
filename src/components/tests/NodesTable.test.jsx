@@ -9,6 +9,7 @@ import {BrowserRouter} from 'react-router-dom';
 // Mock icons for testId
 jest.mock('@mui/icons-material/KeyboardArrowUp', () => () => <div data-testid="KeyboardArrowUpIcon"/>);
 jest.mock('@mui/icons-material/KeyboardArrowDown', () => () => <div data-testid="KeyboardArrowDownIcon"/>);
+jest.mock('@mui/icons-material/Close', () => () => <div data-testid="CloseIcon"/>);
 
 // Mock NodeRow
 jest.mock('../NodeRow.jsx', () => (props) => (
@@ -44,6 +45,11 @@ jest.mock('../NodeRow.jsx', () => (props) => (
                 CloseMenu
             </button>
         </td>
+        <td>
+            <button onClick={() => props.onOpenLogs(props.nodename)}>
+                Open Logs
+            </button>
+        </td>
     </tr>
 ));
 
@@ -54,26 +60,6 @@ jest.mock('../ActionDialogs', () => ({
         open ? (
             <div role="dialog">
                 <h2>Confirm Freeze Action on {target}</h2>
-                <button onClick={onConfirm} aria-label="Confirm">
-                    Confirm
-                </button>
-                <button onClick={onClose}>Cancel</button>
-            </div>
-        ) : null,
-    UnfreezeDialog: ({open, onClose, onConfirm, target}) =>
-        open ? (
-            <div role="dialog">
-                <h2>Confirm Unfreeze Action on {target}</h2>
-                <button onClick={onConfirm} aria-label="Confirm">
-                    Confirm
-                </button>
-                <button onClick={onClose}>Cancel</button>
-            </div>
-        ) : null,
-    RestartDaemonDialog: ({open, onClose, onConfirm, target}) =>
-        open ? (
-            <div role="dialog">
-                <h2>Confirm Restart Daemon Action on {target}</h2>
                 <button onClick={onConfirm} aria-label="Confirm">
                     Confirm
                 </button>
@@ -96,6 +82,11 @@ jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
     useNavigate: jest.fn(),
 }));
+
+// Mock LogsViewer
+jest.mock('../../components/LogsViewer.jsx', () => ({nodename, type, height}) => (
+    <div data-testid="logs-viewer">Logs for {nodename} ({type}), height: {height}</div>
+));
 
 describe('NodesTable', () => {
     beforeEach(() => {
@@ -185,6 +176,13 @@ describe('NodesTable', () => {
         });
 
         expect(screen.getByText(/Confirm Freeze Action/i)).toBeInTheDocument();
+
+        // Cancel the dialog
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
     });
 
     test('executes the action and displays a success snackbar', async () => {
@@ -554,6 +552,30 @@ describe('NodesTable', () => {
         });
     });
 
+    test('sorts table by name column descending', async () => {
+        renderWithRouter(<NodesTable/>);
+
+        const nameHeader = screen.getByText('Name');
+        fireEvent.click(nameHeader); // Toggle to desc from default asc
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-3');
+        });
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[1]).toHaveTextContent('node-2');
+        });
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[2]).toHaveTextContent('node-1');
+        });
+
+        expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+    });
+
     test('renders ActionDialogManager with correct props for multiple nodes', async () => {
         renderWithRouter(<NodesTable/>);
         const checkboxes = await screen.findAllByRole('checkbox');
@@ -613,5 +635,29 @@ describe('NodesTable', () => {
             value: originalUserAgent,
             configurable: true
         });
+    });
+
+    test('resizes the logs drawer', () => {
+        Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
+        renderWithRouter(<NodesTable/>);
+        const openLogsButtons = screen.getAllByText('Open Logs');
+        fireEvent.click(openLogsButtons[0]); // Open drawer for node-1
+
+        const resizeHandle = screen.getByLabelText('Resize drawer');
+        const startX = 800;
+        fireEvent.mouseDown(resizeHandle, {clientX: startX});
+        expect(document.body.style.cursor).toBe('ew-resize');
+
+        // Move within range (increase by 50)
+        fireEvent.mouseMove(document, {clientX: startX - 50});
+
+        // Move below min (newWidth ~ 600 - 350 = 250 < 300)
+        fireEvent.mouseMove(document, {clientX: startX + 350});
+
+        // Move above max (newWidth ~ 600 + 350 = 950 > 900)
+        fireEvent.mouseMove(document, {clientX: startX - 350});
+
+        fireEvent.mouseUp(document);
+        expect(document.body.style.cursor).toBe('default');
     });
 });

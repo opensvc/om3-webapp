@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef, useMemo, useReducer} from "react";
+import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback} from "react";
 import {
     Box,
     Typography,
@@ -28,9 +28,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import InfoIcon from "@mui/icons-material/Info";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 
-// Utility functions
 const parseObjectPath = (objName) => {
     if (!objName || typeof objName !== "string") {
         return {namespace: "root", kind: "svc", name: ""};
@@ -56,7 +56,6 @@ const parseObjectPath = (objName) => {
     return {namespace, kind, name};
 };
 
-// Custom hook for config
 const useConfig = (decodedObjectName, configNode, setConfigNode) => {
     const initialState = {
         data: null,
@@ -80,7 +79,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
     const [state, dispatch] = useReducer(reducer, initialState);
     const lastFetch = useRef({});
 
-    const fetchConfig = async (node) => {
+    const fetchConfig = useCallback(async (node) => {
         if (!node) {
             dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
             return;
@@ -114,7 +113,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
         } catch (err) {
             dispatch({type: "FETCH_ERROR", payload: `Failed to fetch config: ${err.message}`});
         }
-    };
+    }, [decodedObjectName, setConfigNode]);
 
     useEffect(() => {
         if (configNode) {
@@ -122,12 +121,11 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
         } else {
             dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
         }
-    }, [configNode, decodedObjectName]);
+    }, [configNode, decodedObjectName, fetchConfig]);
 
     return {...state, fetchConfig};
 };
 
-// Custom hook for keywords
 const useKeywords = (decodedObjectName) => {
     const initialState = {
         data: null,
@@ -183,7 +181,6 @@ const useKeywords = (decodedObjectName) => {
                 return;
             }
 
-            // Deduplicate
             const seen = new Set();
             const uniqueKeywords = data.items.filter((item) => {
                 const key = `${item.section || "default"}.${item.option}`;
@@ -202,7 +199,6 @@ const useKeywords = (decodedObjectName) => {
     return {...state, fetchKeywords};
 };
 
-// Custom hook for existing params
 const useExistingParams = (decodedObjectName) => {
     const initialState = {
         data: null,
@@ -253,7 +249,6 @@ const useExistingParams = (decodedObjectName) => {
     return {...state, fetchExistingParams};
 };
 
-// Update Config Dialog Component
 const UpdateConfigDialog = ({
                                 open,
                                 onClose,
@@ -304,7 +299,6 @@ const UpdateConfigDialog = ({
     </Dialog>
 );
 
-// Keywords Dialog Component
 const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsError}) => (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
         <DialogTitle>Configuration Keywords</DialogTitle>
@@ -355,7 +349,6 @@ const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsE
     </Dialog>
 );
 
-// Manage Params Dialog Component
 const ManageParamsDialog = ({
                                 open,
                                 onClose,
@@ -373,7 +366,10 @@ const ManageParamsDialog = ({
                                 setParamsToDelete,
                                 actionLoading,
                                 handleManageParamsSubmit,
+                                openSnackbar,
                             }) => {
+    const [selectedKeyword, setSelectedKeyword] = useState(null);
+
     const existingKeywords = useMemo(() => {
         if (!existingParams) return [];
         return existingParams.map((param) => {
@@ -397,6 +393,34 @@ const ManageParamsDialog = ({
         return Array.from(sections);
     }, [existingParams]);
 
+    const addParameter = () => {
+        if (selectedKeyword) {
+            if (typeof selectedKeyword === 'string') {
+                openSnackbar(`Invalid parameter: ${selectedKeyword}`, 'error');
+                return;
+            }
+            const isIndexed = !!selectedKeyword.section && selectedKeyword.section !== "DEFAULT";
+            const prefix = isIndexed ? selectedKeyword.section : undefined;
+            const section = isIndexed ? "" : (selectedKeyword.section === "DEFAULT" ? "DEFAULT" : selectedKeyword.section || "");
+            const newParam = {
+                section,
+                option: selectedKeyword.option,
+                value: "",
+                id: `${selectedKeyword.option}-${Date.now()}`,
+                isIndexed,
+                prefix,
+                keyword: {...selectedKeyword},
+            };
+            setParamsToSet([...paramsToSet, newParam]);
+            setSelectedKeyword(null);
+        }
+    };
+
+    const removeParameter = (index) => {
+        const newParams = paramsToSet.filter((_, i) => i !== index);
+        setParamsToSet(newParams);
+    };
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
             <DialogTitle>Manage Configuration Parameters</DialogTitle>
@@ -416,50 +440,33 @@ const ManageParamsDialog = ({
                     Add parameters
                 </Typography>
                 <Autocomplete
-                    multiple
+                    freeSolo={true}
                     options={keywordsData || []}
-                    value={paramsToSet.map((p) => keywordsData?.find((k) => k.option === p.option) || p)}
-                    getOptionLabel={(option) => `${option.section ? `${option.section}.` : ""}${option.option}`}
+                    value={selectedKeyword}
+                    getOptionLabel={(option) => typeof option === 'string' ? option : `${option.section ? `${option.section}.` : ""}${option.option}`}
                     renderInput={(params) => (
                         <TextField
                             {...params}
-                            label="Select parameters to set"
-                            placeholder="Select parameters"
-                            helperText="Select a parameter and enter its value below"
+                            label="Select parameter to add"
+                            placeholder="Select parameter"
+                            helperText="Select a parameter to add, then click Add"
                             slotProps={{
-                                inputLabel: {"aria-label": "Select parameters to set"}
+                                inputLabel: {"aria-label": "Select parameter to add"}
                             }}
                         />
                     )}
-                    onChange={(event, newValue) => {
-                        const newParams = [];
-                        const seen = new Set();
-                        const existingParamsMap = new Map(paramsToSet.map((p) => [p.option, p]));
-
-                        newValue.forEach((param, index) => {
-                            const key = param.option;
-                            if (!seen.has(key)) {
-                                seen.add(key);
-                                const existingParam = existingParamsMap.get(key);
-                                const isIndexed = !!param.section && param.section !== "DEFAULT";
-                                const prefix = isIndexed ? param.section : undefined;
-                                const section = isIndexed ? "" : (param.section === "DEFAULT" ? "DEFAULT" : param.section || "");
-                                newParams.push({
-                                    section,
-                                    option: param.option,
-                                    value: existingParam ? existingParam.value : "",
-                                    id: existingParam ? existingParam.id : `${key}-${index}`,
-                                    isIndexed,
-                                    prefix,
-                                });
-                            }
-                        });
-
-                        setParamsToSet(newParams);
-                    }}
+                    onChange={(event, newValue) => setSelectedKeyword(newValue)}
                     disabled={actionLoading || keywordsLoading}
                     sx={{mb: 2}}
                 />
+                <Button
+                    variant="contained"
+                    onClick={addParameter}
+                    disabled={!selectedKeyword || actionLoading}
+                    sx={{mb: 2}}
+                >
+                    Add Parameter
+                </Button>
                 {paramsToSet.length > 0 && (
                     <Box sx={{mb: 2}}>
                         <Box sx={{display: "flex", alignItems: "center", mb: 1, gap: 2}}>
@@ -483,31 +490,34 @@ const ManageParamsDialog = ({
                                     Description
                                 </Typography>
                             </Box>
+                            <Box sx={{flex: "0 0 40px"}}></Box>
                         </Box>
                         {paramsToSet.map((param, index) => {
-                            const keyword = keywordsData?.find((k) => k.option === param.option);
+                            const keyword = param.keyword;
                             return (
                                 <Box key={param.id} sx={{display: "flex", alignItems: "center", mb: 2, gap: 2}}>
-                                    <Box sx={{flex: "0 0 20%"}}>
+                                    <Box sx={{flex: "0 0 20%", display: "flex", alignItems: "center"}}>
                                         {param.isIndexed ? (
-                                            <TextField
-                                                fullWidth
-                                                label="Index"
-                                                value={param.section}
-                                                onChange={(e) => {
-                                                    const newParams = [...paramsToSet];
-                                                    newParams[index].section = e.target.value;
-                                                    setParamsToSet(newParams);
-                                                }}
-                                                disabled={actionLoading}
-                                                size="small"
-                                                placeholder="e.g. 1"
-                                                type="number"
-                                                slotProps={{
-                                                    htmlInput: {min: 0, step: 1},
-                                                    inputLabel: {"aria-label": "Index"}
-                                                }}
-                                            />
+                                            <>
+                                                <Typography sx={{mr: 1}}>{param.prefix}#</Typography>
+                                                <TextField
+                                                    fullWidth
+                                                    value={param.section}
+                                                    onChange={(e) => {
+                                                        const newParams = [...paramsToSet];
+                                                        newParams[index].section = e.target.value;
+                                                        setParamsToSet(newParams);
+                                                    }}
+                                                    disabled={actionLoading}
+                                                    size="small"
+                                                    placeholder="Index e.g. 1"
+                                                    type="number"
+                                                    slotProps={{
+                                                        htmlInput: {min: 0, step: 1},
+                                                        inputLabel: {"aria-label": "Index"}
+                                                    }}
+                                                />
+                                            </>
                                         ) : param.section === "DEFAULT" ? (
                                             <Typography>DEFAULT</Typography>
                                         ) : (
@@ -574,6 +584,13 @@ const ManageParamsDialog = ({
                                             {keyword?.text || "N/A"}
                                         </Typography>
                                     </Box>
+                                    <IconButton
+                                        onClick={() => removeParameter(index)}
+                                        disabled={actionLoading}
+                                        aria-label="Remove parameter"
+                                    >
+                                        <DeleteIcon/>
+                                    </IconButton>
                                 </Box>
                             );
                         })}
@@ -676,30 +693,26 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [keywordsDialogOpen, setKeywordsDialogOpen] = useState(false);
-    const [paramsToSet, setParamsToSet] = useState([]); // {section, option, value, id, isIndexed, prefix}
-    const [paramsToUnset, setParamsToUnset] = useState([]); // {section, option}
-    const [paramsToDelete, setParamsToDelete] = useState([]); // sections
+    const [paramsToSet, setParamsToSet] = useState([]);
+    const [paramsToUnset, setParamsToUnset] = useState([]);
+    const [paramsToDelete, setParamsToDelete] = useState([]);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // Handle accordion change
     const handleConfigAccordionChange = (event, isExpanded) => {
         setConfigAccordionExpanded(isExpanded);
     };
 
-    // Open keywords dialog
     const handleOpenKeywordsDialog = () => {
         setKeywordsDialogOpen(true);
         fetchKeywords();
     };
 
-    // Open manage params dialog
     const handleOpenManageParamsDialog = () => {
         setManageParamsDialogOpen(true);
         fetchKeywords();
         fetchExistingParams();
     };
 
-    // Update config handler
     const handleUpdateConfig = async () => {
         if (!newConfigFile) {
             openSnackbar("Configuration file is required.", "error");
@@ -743,7 +756,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         }
     };
 
-    // Add params handler
     const handleAddParams = async () => {
         if (!paramsToSet.length) {
             openSnackbar("Parameter input is required.", "error");
@@ -762,20 +774,28 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         let successCount = 0;
         for (const param of paramsToSet) {
             const {section, option, value, isIndexed, prefix} = param;
+            const keyword = param.keyword;
             try {
-                const keyword = keywordsData?.find((k) => k.option === option);
                 if (!keyword) {
                     openSnackbar(`Invalid parameter: ${section ? `${section}.` : ""}${option}`, "error");
                     continue;
                 }
-                if (keyword.section !== "DEFAULT" && !section) {
-                    openSnackbar(`Section${isIndexed ? " index" : ""} is required for parameter: ${option}`, "error");
-                    continue;
+
+                if (keyword.section !== "DEFAULT") {
+                    if (!section && section !== 0) {
+                        openSnackbar(`Section${isIndexed ? " index" : ""} is required for parameter: ${option}`, "error");
+                        continue;
+                    }
+
+                    if (isIndexed) {
+                        const sectionNum = Number(section);
+                        if (isNaN(sectionNum) || sectionNum < 0 || !Number.isInteger(sectionNum)) {
+                            openSnackbar(`Invalid index for ${option}: must be a non-negative integer`, "error");
+                            continue;
+                        }
+                    }
                 }
-                if (isIndexed && !/^\d+$/.test(section)) {
-                    openSnackbar(`Invalid index for ${option}: must be a non-negative integer`, "error");
-                    continue;
-                }
+
                 if (keyword.converter === "converters.TListLowercase" && value.includes(",")) {
                     const values = value.split(",").map((v) => v.trim().toLowerCase());
                     if (values.some((v) => !v)) {
@@ -815,7 +835,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         return successCount > 0;
     };
 
-    // Unset params handler
     const handleUnsetParams = async () => {
         if (!paramsToUnset.length) return false;
 
@@ -866,7 +885,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         return successCount > 0;
     };
 
-    // Delete params handler
     const handleDeleteParams = async () => {
         if (!paramsToDelete.length) return false;
 
@@ -909,7 +927,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         return successCount > 0;
     };
 
-    // Manage params submit
     const handleManageParamsSubmit = async () => {
         let anySuccess = false;
         if (paramsToSet.length) anySuccess = await handleAddParams() || anySuccess;
@@ -1073,6 +1090,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                 setParamsToDelete={setParamsToDelete}
                 actionLoading={actionLoading}
                 handleManageParamsSubmit={handleManageParamsSubmit}
+                openSnackbar={openSnackbar}
             />
 
             <KeywordsDialog

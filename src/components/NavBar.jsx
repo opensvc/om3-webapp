@@ -14,8 +14,13 @@ import {
 } from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
-import {useEffect, useState} from "react";
+import {useEffect, useState, useMemo, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import useEventStore from "../hooks/useEventStore.js";
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import {red, orange} from "@mui/material/colors";
+import Tooltip from "@mui/material/Tooltip";
 
 const NavBar = () => {
     const {userManager} = useOidc();
@@ -23,9 +28,14 @@ const NavBar = () => {
     const auth = useAuth();
     const location = useLocation();
     const authDispatch = useAuthDispatch();
-    const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
+    const {clusterName, fetchNodes, loading, daemon} = useFetchDaemonStatus();
     const [breadcrumb, setBreadcrumb] = useState([]);
     const [menuAnchor, setMenuAnchor] = useState(null);
+    const objectStatus = useEventStore((state) => state.objectStatus);
+    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
+    const instanceMonitor = useEventStore((state) => state.instanceMonitor);
+    const [downCount, setDownCount] = useState(0);
+    const [warnCount, setWarnCount] = useState(0);
 
     // Define navigation routes with display names and icons
     const navRoutes = [
@@ -38,6 +48,65 @@ const NavBar = () => {
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
+
+    const getObjectStatus = useCallback((objectName, objs) => {
+        const obj = objs[objectName] || {};
+        const rawAvail = obj?.avail;
+        const validStatuses = ["up", "down", "warn"];
+        const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
+        const frozen = obj?.frozen;
+        const provisioned = obj?.provisioned;
+        let globalExpect = null;
+        const nodes = Object.keys(objectInstanceStatus[objectName] || {});
+        for (const node of nodes) {
+            const monitorKey = `${node}:${objectName}`;
+            const monitor = instanceMonitor[monitorKey] || {};
+            if (monitor.global_expect && monitor.global_expect !== "none") {
+                globalExpect = monitor.global_expect;
+                break;
+            }
+        }
+        return {avail, frozen, globalExpect, provisioned};
+    }, [objectInstanceStatus, instanceMonitor]);
+
+    const objects = useMemo(
+        () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
+        [objectStatus, daemon]
+    );
+
+    useEffect(() => {
+        let down = 0;
+        let warn = 0;
+        Object.keys(objects).forEach((key) => {
+            const status = getObjectStatus(key, objects);
+            if (status.avail === "down") down++;
+            if (status.avail === "warn") warn++;
+        });
+        setDownCount(down);
+        setWarnCount(warn);
+    }, [objects, getObjectStatus]);
+
+    const getPathBreadcrumbs = useCallback(() => {
+        const pathParts = location.pathname.split("/").filter(Boolean);
+        const breadcrumbItems = [];
+        if (pathParts[0] !== "login" && pathParts.length > 1) {
+            if (pathParts[0] === "network" && pathParts.length === 2) {
+                breadcrumbItems.push({name: "network", path: "/network"});
+                breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
+            } else if (pathParts[0] === "objects" && pathParts.length === 2) {
+                breadcrumbItems.push({name: "Objects", path: "/objects"});
+                breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
+            } else {
+                pathParts.forEach((part, index) => {
+                    const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
+                    if (part !== "cluster") {
+                        breadcrumbItems.push({name: part, path: fullPath});
+                    }
+                });
+            }
+        }
+        return breadcrumbItems;
+    }, [location.pathname]);
 
     useEffect(() => {
         const fetchClusterData = async () => {
@@ -68,33 +137,11 @@ const NavBar = () => {
                 }
             };
 
-            const getPathBreadcrumbs = () => {
-                const pathParts = location.pathname.split("/").filter(Boolean);
-                const breadcrumbItems = [];
-                if (pathParts[0] !== "login" && pathParts.length > 1) {
-                    if (pathParts[0] === "network" && pathParts.length === 2) {
-                        breadcrumbItems.push({name: "network", path: "/network"});
-                        breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
-                    } else if (pathParts[0] === "objects" && pathParts.length === 2) {
-                        breadcrumbItems.push({name: "Objects", path: "/objects"});
-                        breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
-                    } else {
-                        pathParts.forEach((part, index) => {
-                            const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
-                            if (part !== "cluster") {
-                                breadcrumbItems.push({name: part, path: fullPath});
-                            }
-                        });
-                    }
-                }
-                return breadcrumbItems;
-            };
-
             tryFetch();
         };
 
         fetchClusterData();
-    }, [auth]);
+    }, [auth, fetchNodes, getPathBreadcrumbs]);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -179,19 +226,19 @@ const NavBar = () => {
                         open={Boolean(menuAnchor)}
                         onClose={handleMenuClose}
                         aria-labelledby="navigation-menu-label"
-                        PaperProps={{
-                            sx: {
-                                minWidth: 200,
-                                boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
-                                borderRadius: 2,
-                                backgroundColor: "background.paper",
+                        slotProps={{
+                            paper: {
+                                sx: {
+                                    minWidth: 200,
+                                    boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
+                                    borderRadius: 2,
+                                    backgroundColor: "background.paper",
+                                },
                             },
                         }}
                         transformOrigin={{vertical: "top", horizontal: "left"}}
                         anchorOrigin={{vertical: "bottom", horizontal: "left"}}
-                        TransitionProps={{
-                            timeout: 300,
-                        }}
+                        transitionDuration={300}
                     >
                         {navRoutes.map(({path, name, icon}, index) => (
                             <MenuItem
@@ -255,6 +302,46 @@ const NavBar = () => {
                                 )}
                             </Box>
                         ))}
+                    {(downCount > 0 || warnCount > 0) && (
+                        <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
+                            {downCount > 0 && (
+                                <Tooltip title="Number of down objects">
+                                    <Typography
+                                        component={Link}
+                                        to="/objects?globalState=down"
+                                        sx={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 0.5,
+                                            color: "inherit",
+                                            textDecoration: "none",
+                                        }}
+                                    >
+                                        <FiberManualRecordIcon sx={{color: red[500]}}/>
+                                        {downCount}
+                                    </Typography>
+                                </Tooltip>
+                            )}
+                            {warnCount > 0 && (
+                                <Tooltip title="Number of warn objects">
+                                    <Typography
+                                        component={Link}
+                                        to="/objects?globalState=warn"
+                                        sx={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 0.5,
+                                            color: "inherit",
+                                            textDecoration: "none",
+                                        }}
+                                    >
+                                        <WarningAmberIcon sx={{color: orange[500]}}/>
+                                        {warnCount}
+                                    </Typography>
+                                </Tooltip>
+                            )}
+                        </Box>
+                    )}
                 </Box>
 
                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>

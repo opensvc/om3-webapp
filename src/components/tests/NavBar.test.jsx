@@ -33,7 +33,13 @@ jest.mock('../../hooks/useFetchDaemonStatus', () => ({
         clusterName: null,
         fetchNodes: jest.fn(),
         loading: false,
+        daemon: null,
     }),
+}));
+
+jest.mock('../../hooks/useEventStore.js', () => ({
+    __esModule: true,
+    default: jest.fn(),
 }));
 
 describe('NavBar Component', () => {
@@ -42,6 +48,7 @@ describe('NavBar Component', () => {
     const mockLocation = {
         pathname: '/cluster',
     };
+    const mockUseEventStore = require('../../hooks/useEventStore.js').default;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -63,7 +70,14 @@ describe('NavBar Component', () => {
             clusterName: null,
             fetchNodes: jest.fn(),
             loading: false,
+            daemon: null,
         });
+
+        mockUseEventStore.mockImplementation((selector) => selector({
+            objectStatus: {},
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        }));
 
         localStorage.clear();
     });
@@ -77,6 +91,8 @@ describe('NavBar Component', () => {
 
         expect(screen.getByText('Cluster')).toBeInTheDocument();
         expect(screen.getByText('Logout')).toBeInTheDocument();
+        expect(screen.queryByRole('link', {name: /objects\?globalState=down/})).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', {name: /objects\?globalState=warn/})).not.toBeInTheDocument();
     });
 
     test('renders breadcrumbs for nested paths', () => {
@@ -581,5 +597,150 @@ describe('NavBar Component', () => {
         expect(screen.getByRole('link', {name: /navigate to ns1/i})).toBeInTheDocument();
 
         jest.useRealTimers();
+    });
+
+    test('displays down and warn counts when objects have down or warn status from event store', async () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': {avail: 'down', frozen: 'frozen', provisioned: 'true'},
+                'obj2': {avail: 'warn', frozen: 'unfrozen', provisioned: 'false'},
+                'obj3': {avail: 'up'},
+                'obj4': {avail: 'invalid'}, // n/a
+                'obj5': {avail: 'down'},
+            },
+            objectInstanceStatus: {
+                'obj1': {
+                    'node1': {avail: 'down', frozen_at: '2023-01-01T00:00:00Z', provisioned: 'true'},
+                    'node2': {avail: 'up', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
+                },
+                'obj4': {}, // no nodes
+                'obj5': {'node3': {}},
+            },
+            instanceMonitor: {
+                'node1:obj1': {global_expect: 'none', state: 'idle'},
+                'node2:obj1': {global_expect: 'something'},
+                'node3:obj5': {global_expect: null},
+            },
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const downCountEl = screen.getByText('2');
+        const warnCountEl = screen.getByText('1');
+
+        expect(downCountEl).toHaveAttribute('href', '/objects?globalState=down');
+        expect(warnCountEl).toHaveAttribute('href', '/objects?globalState=warn');
+
+        // Test tooltips
+        const downTrigger = downCountEl;
+        fireEvent.mouseOver(downTrigger);
+        await waitFor(() => {
+            expect(screen.getByRole('tooltip')).toHaveTextContent('Number of down objects');
+        });
+        fireEvent.mouseLeave(downTrigger);
+
+        const warnTrigger = warnCountEl;
+        fireEvent.mouseOver(warnTrigger);
+        await waitFor(() => {
+            expect(screen.getByRole('tooltip')).toHaveTextContent('Number of warn objects');
+        });
+        fireEvent.mouseLeave(warnTrigger);
+    });
+
+    test('displays down and warn counts from daemon when objectStatus is empty', async () => {
+        mockUseEventStore.mockImplementation((selector) => selector({
+            objectStatus: {},
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        }));
+
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: jest.fn(),
+            loading: false,
+            daemon: {
+                cluster: {
+                    object: {
+                        'obj1': {avail: 'down'},
+                        'obj2': {avail: 'warn'},
+                        'obj3': {avail: 'up'},
+                    }
+                }
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const downCountEl = screen.getByText('1', {selector: '[href="/objects?globalState=down"]'});
+        const warnCountEl = screen.getByText('1', {selector: '[href="/objects?globalState=warn"]'});
+
+        expect(downCountEl).toHaveAttribute('href', '/objects?globalState=down');
+        expect(warnCountEl).toHaveAttribute('href', '/objects?globalState=warn');
+
+        // Test tooltips
+        const downTrigger = downCountEl;
+        fireEvent.mouseOver(downTrigger);
+        await waitFor(() => {
+            expect(screen.getByRole('tooltip')).toHaveTextContent('Number of down objects');
+        });
+        fireEvent.mouseLeave(downTrigger);
+
+        const warnTrigger = warnCountEl;
+        fireEvent.mouseOver(warnTrigger);
+        await waitFor(() => {
+            expect(screen.getByRole('tooltip')).toHaveTextContent('Number of warn objects');
+        });
+        fireEvent.mouseLeave(warnTrigger);
+    });
+
+    test('displays only down count when warn count is 0', () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': {avail: 'down'},
+            },
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const downCountEl = screen.getByText('1');
+        expect(downCountEl).toHaveAttribute('href', '/objects?globalState=down');
+        expect(screen.queryByText('1', {selector: '[href="/objects?globalState=warn"]'})).not.toBeInTheDocument();
+    });
+
+    test('displays only warn count when down count is 0', () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': {avail: 'warn'},
+            },
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const warnCountEl = screen.getByText('1');
+        expect(warnCountEl).toHaveAttribute('href', '/objects?globalState=warn');
+        expect(screen.queryByText('1', {selector: '[href="/objects?globalState=down"]'})).not.toBeInTheDocument();
     });
 });

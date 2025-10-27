@@ -1,5 +1,6 @@
 import {useState, useEffect} from "react";
 import {URL_AUTH_INFO} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 function useAuthInfo() {
     const [authInfo, setAuthInfo] = useState();
@@ -16,7 +17,7 @@ function useAuthInfo() {
                 }
             } catch (e) {
                 if (isMounted) {
-                    console.log(e);
+                    logger.error(e);
                 }
             }
         }

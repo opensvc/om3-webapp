@@ -17,6 +17,7 @@ import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useMemo, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import useEventStore from "../hooks/useEventStore.js";
+import logger from '../utils/logger.js';
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {red, orange} from "@mui/material/colors";
@@ -133,7 +134,7 @@ const NavBar = () => {
                 try {
                     await fetchNodes(token);
                 } catch (error) {
-                    console.error("Error while calling fetchNodes:", error.message);
+                    logger.error("Error while calling fetchNodes:", error.message);
                 }
             };
 

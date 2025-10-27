@@ -17,6 +17,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_POOL} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 const Pools = () => {
     const [pools, setPools] = useState([]);
@@ -50,7 +51,7 @@ const Pools = () => {
                     setError("Failed to load pools. Please try again.");
                     setLoading(false);
                 }
-                console.error("Error retrieving pools", err);
+                logger.error("Error retrieving pools", err);
             }
         };
 
@@ -100,7 +101,7 @@ const Pools = () => {
                 setPools([]);
                 setError("Failed to load pools. Please try again.");
                 setLoading(false);
-                console.error("Error retrieving pools", err);
+                logger.error("Error retrieving pools", err);
             }
         };
         fetchPools();

@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from "react";
+import React, {useState, useEffect, useCallback} from "react";
 import {
     Box,
     Typography,
@@ -28,6 +28,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 const KeysSection = ({decodedObjectName, openSnackbar}) => {
     // State for keys
@@ -75,7 +76,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     };
 
     // Fetch keys for cfg or sec objects
-    const fetchKeys = async () => {
+    const fetchKeys = useCallback(async () => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         if (!["cfg", "sec"].includes(kind)) {
             setKeys([]);
@@ -85,7 +86,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         const token = localStorage.getItem("authToken");
         if (!token) {
             setKeysError("Auth token not found.");
-            console.error("❌ [fetchKeys] No auth token for:", decodedObjectName);
+            logger.error("❌ [fetchKeys] No auth token for:", decodedObjectName);
             return;
         }
 
@@ -97,16 +98,19 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
             });
-            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
+            if (!response.ok) {
+                setKeysError(`Failed to fetch keys: ${response.status}`);
+                return;
+            }
             const data = await response.json();
             setKeys(data.items || []);
         } catch (err) {
-            console.error(`💥 [fetchKeys] Error: ${err.message}`);
+            logger.error(`💥 [fetchKeys] Error: ${err.message}`);
             setKeysError(err.message);
         } finally {
             setKeysLoading(false);
         }
-    };
+    }, [decodedObjectName]);
 
     // Delete key
     const handleDeleteKey = async () => {
@@ -126,7 +130,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 method: "DELETE",
                 headers: {Authorization: `Bearer ${token}`},
             });
-            if (!response.ok) throw new Error(`Failed to delete key: ${response.status}`);
+            if (!response.ok) {
+                openSnackbar(`Failed to delete key: ${response.status}`, "error");
+                return;
+            }
             openSnackbar(`Key '${keyToDelete}' deleted successfully`);
             await fetchKeys();
         } catch (err) {
@@ -163,7 +170,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 },
                 body: newKeyFile,
             });
-            if (!response.ok) throw new Error(`Failed to create key: ${response.status}`);
+            if (!response.ok) {
+                openSnackbar(`Failed to create key: ${response.status}`, "error");
+                return;
+            }
             openSnackbar(`Key '${newKeyName}' created successfully`);
             await fetchKeys();
         } catch (err) {
@@ -201,7 +211,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 },
                 body: updateKeyFile,
             });
-            if (!response.ok) throw new Error(`Failed to update key: ${response.status}`);
+            if (!response.ok) {
+                openSnackbar(`Failed to update key: ${response.status}`, "error");
+                return;
+            }
             openSnackbar(`Key '${updateKeyName}' updated successfully`);
             await fetchKeys();
         } catch (err) {
@@ -226,7 +239,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         if (token) {
             fetchKeys();
         }
-    }, [decodedObjectName]);
+    }, [decodedObjectName, fetchKeys]);
 
     // Check if keys section should be displayed
     const {kind} = parseObjectPath(decodedObjectName);
@@ -320,33 +333,33 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                             <TableCell>{key.size} bytes</TableCell>
                                             <TableCell>
                                                 <Tooltip title="Edit">
-                          <span>
-                            <IconButton
-                                onClick={() => {
-                                    setKeyToUpdate(key.name);
-                                    setUpdateKeyName(key.name);
-                                    setUpdateDialogOpen(true);
-                                }}
-                                disabled={actionLoading}
-                                aria-label={`Edit key ${key.name}`}
-                            >
-                              <EditIcon/>
-                            </IconButton>
-                          </span>
+                                                    <span>
+                                                        <IconButton
+                                                            onClick={() => {
+                                                                setKeyToUpdate(key.name);
+                                                                setUpdateKeyName(key.name);
+                                                                setUpdateDialogOpen(true);
+                                                            }}
+                                                            disabled={actionLoading}
+                                                            aria-label={`Edit key ${key.name}`}
+                                                        >
+                                                            <EditIcon/>
+                                                        </IconButton>
+                                                    </span>
                                                 </Tooltip>
                                                 <Tooltip title="Delete">
-                          <span>
-                            <IconButton
-                                onClick={() => {
-                                    setKeyToDelete(key.name);
-                                    setDeleteDialogOpen(true);
-                                }}
-                                disabled={actionLoading}
-                                aria-label={`Delete key ${key.name}`}
-                            >
-                              <DeleteIcon/>
-                            </IconButton>
-                          </span>
+                                                    <span>
+                                                        <IconButton
+                                                            onClick={() => {
+                                                                setKeyToDelete(key.name);
+                                                                setDeleteDialogOpen(true);
+                                                            }}
+                                                            disabled={actionLoading}
+                                                            aria-label={`Delete key ${key.name}`}
+                                                        >
+                                                            <DeleteIcon/>
+                                                        </IconButton>
+                                                    </span>
                                                 </Tooltip>
                                             </TableCell>
                                         </TableRow>

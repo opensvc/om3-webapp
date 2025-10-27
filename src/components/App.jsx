@@ -29,9 +29,11 @@ import {
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 
+import logger from "../utils/logger.js";
+
 const isTokenValid = (token) => {
     if (!token) {
-        console.log("No token found in localStorage");
+        logger.debug("No token found in localStorage");
         return false;
     }
 
@@ -40,10 +42,10 @@ const isTokenValid = (token) => {
         const now = Date.now() / 1000;
         const expiration = payload.exp;
         const isValid = expiration > now;
-        console.log(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
+        logger.debug(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
         return isValid;
     } catch (error) {
-        console.error("Error while verifying token:", error);
+        logger.error("Error while verifying token:", error);
         return false;
     }
 };
@@ -56,7 +58,7 @@ const OidcInitializer = ({children}) => {
     const authInfo = useAuthInfo();
 
     const handleTokenExpired = useCallback(() => {
-        console.warn('Access token expired, redirecting to /ui/auth-choice');
+        logger.warn('Access token expired, redirecting to /ui/auth-choice');
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
@@ -64,7 +66,7 @@ const OidcInitializer = ({children}) => {
     }, [authDispatch]);
 
     const handleSilentRenewError = useCallback((error) => {
-        console.error('Silent renew failed:', error);
+        logger.error('Silent renew failed:', error);
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
@@ -72,7 +74,7 @@ const OidcInitializer = ({children}) => {
     }, [authDispatch]);
 
     const onUserRefreshed = useCallback((user) => {
-        console.log("User refreshed:", user.profile.preferred_username, "expires_at:", user.expires_at);
+        logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
         authDispatch({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
@@ -84,8 +86,8 @@ const OidcInitializer = ({children}) => {
             const savedToken = localStorage.getItem('authToken');
             const savedAuthChoice = auth.authChoice || localStorage.getItem('authChoice');
 
-            if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
-                console.log("Initializing OIDC UserManager on app startup");
+                if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
+                logger.info("Initializing OIDC UserManager on app startup");
                 try {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
@@ -94,7 +96,7 @@ const OidcInitializer = ({children}) => {
                     authDispatch({type: SetAuthChoice, data: 'openid'});
                     authDispatch({type: SetAccessToken, data: savedToken});
                 } catch (error) {
-                    console.error("Failed to initialize OIDC on startup:", error);
+                    logger.error("Failed to initialize OIDC on startup:", error);
                 }
             }
         };
@@ -104,8 +106,8 @@ const OidcInitializer = ({children}) => {
 
     // Set up OIDC event listeners once the UserManager is created
     useEffect(() => {
-        if (userManager && auth.authChoice === 'openid') {
-            console.log("Setting up OIDC event listeners");
+            if (userManager && auth.authChoice === 'openid') {
+            logger.info("Setting up OIDC event listeners");
 
             // Remove old listeners
             userManager.events.removeUserLoaded(onUserRefreshed);
@@ -115,22 +117,22 @@ const OidcInitializer = ({children}) => {
             // Add new listeners
             userManager.events.addUserLoaded(onUserRefreshed);
             userManager.events.addAccessTokenExpiring(() => {
-                console.log('Access token is about to expire, attempting silent renew...');
+                logger.debug('Access token is about to expire, attempting silent renew...');
             });
             userManager.events.addAccessTokenExpired(handleTokenExpired);
             userManager.events.addSilentRenewError(handleSilentRenewError);
 
             // Check for existing user
             userManager.getUser().then(user => {
-                if (user && !user.expired) {
-                    console.log("Found existing valid user:", user.profile.preferred_username);
+                    if (user && !user.expired) {
+                    logger.info("Found existing valid user:", user.profile?.preferred_username);
                     onUserRefreshed(user);
                     authDispatch({type: LoginAction, data: user.profile.preferred_username});
                 } else if (user && user.expired) {
-                    console.log("Found expired user, will attempt silent renew");
+                    logger.debug("Found expired user, will attempt silent renew");
                 }
             }).catch(err => {
-                console.error("Error getting user:", err);
+                logger.error("Error getting user:", err);
             });
         }
     }, [userManager, auth.authChoice, authDispatch, handleTokenExpired, handleSilentRenewError, onUserRefreshed]);
@@ -152,7 +154,7 @@ const ProtectedRoute = ({children}) => {
     // For OIDC, rely on UserManager to handle expiration
     if (authChoice === 'openid') {
         if (!token) {
-            console.log("No OIDC token found, redirecting to /auth-choice");
+            logger.warn("No OIDC token found, redirecting to /auth-choice");
             return <Navigate to="/auth-choice" replace/>;
         }
         return children;
@@ -160,7 +162,7 @@ const ProtectedRoute = ({children}) => {
 
     // For other auth methods, validate the token
     if (!isTokenValid(token)) {
-        console.log("Invalid or expired token, redirecting to /auth-choice");
+        logger.warn("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");
         localStorage.removeItem("tokenExpiration");
         localStorage.removeItem("authChoice");
@@ -171,12 +173,12 @@ const ProtectedRoute = ({children}) => {
 };
 
 const App = () => {
-    console.log("App init");
+    logger.info("App init");
 
     useEffect(() => {
         const checkTokenChange = () => {
             const newToken = localStorage.getItem("authToken");
-            console.log("Storage event: newToken=", newToken);
+            logger.debug("Storage event: newToken=", newToken);
         };
 
         window.addEventListener("storage", checkTokenChange);

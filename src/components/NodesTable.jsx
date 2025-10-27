@@ -30,6 +30,7 @@ import {closeEventSource, startEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 import LogsViewer from "../components/LogsViewer.jsx";
+import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
@@ -235,12 +236,12 @@ const NodesTable = () => {
                 });
                 if (!response.ok) {
                     errorCount++;
-                    console.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
+                    logger.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
                     return;
                 }
                 successCount++;
             } catch (error) {
-                console.error(`Failed to execute ${action} on ${node}:`, error);
+                logger.error(`Failed to execute ${action} on ${node}:`, error);
                 errorCount++;
             }
         });

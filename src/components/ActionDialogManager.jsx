@@ -1,4 +1,5 @@
 import React, {useState, useEffect, useMemo} from 'react';
+import logger from '../utils/logger.js';
 import {
     Dialog,
     DialogTitle,
@@ -145,7 +146,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                        console.error('setCheckboxes for unprovision received invalid value:', value);
+                            logger.error('setCheckboxes for unprovision received invalid value:', value);
                         return;
                     }
                     const validKeys = ['dataLoss', 'serviceInterruption', 'clusterwide'];
@@ -187,7 +188,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                        console.error('setCheckboxes for purge received invalid value:', value);
+                            logger.error('setCheckboxes for purge received invalid value:', value);
                         return;
                     }
                     const validKeys = ['dataLoss', 'configLoss', 'serviceInterruption'];
@@ -229,7 +230,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                        console.error('setCheckboxes for delete received invalid value:', value);
+                            logger.error('setCheckboxes for delete received invalid value:', value);
                         return;
                     }
                     const validKeys = ['configLoss', 'clusterwide'];
@@ -379,7 +380,7 @@ const ActionDialogManager = ({
         // Log warning for invalid non-null pendingAction in development
         if (!pendingAction?.action || typeof pendingAction.action !== 'string') {
             if (process.env.NODE_ENV !== 'production') {
-                console.warn('Invalid pendingAction provided:', pendingAction);
+                 logger.warn('Invalid pendingAction provided:', pendingAction);
             }
             if (onClose) onClose();
             return;
@@ -390,7 +391,7 @@ const ActionDialogManager = ({
             initializeDialog(action);
         } else {
             if (process.env.NODE_ENV !== 'production') {
-                console.warn(`Unsupported action: ${action}`);
+                    logger.warn(`Unsupported action: ${action}`);
             }
             if (onClose) onClose();
         }

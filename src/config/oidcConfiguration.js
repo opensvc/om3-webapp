@@ -1,5 +1,6 @@
 /* eslint-disable no-unused-vars */
 import {WebStorageStateStore} from "oidc-client-ts";
+import logger from "../utils/logger.js";
 
 const DEFAULT_SCOPES = [
     "openid",
@@ -27,44 +28,44 @@ const initData = {
  */
 function filterScopes(allowedScopes) {
     if (!Array.isArray(allowedScopes) || allowedScopes.length === 0) {
-        console.warn("No allowed scopes provided, using default scopes");
+        logger.warn("No allowed scopes provided, using default scopes");
         return DEFAULT_SCOPES.join(" ");
     }
 
     const filteredScopes = DEFAULT_SCOPES.filter(scope => allowedScopes.includes(scope));
-    console.log("Filtered scopes:", filteredScopes);
+    logger.debug("Filtered scopes:", filteredScopes);
     return filteredScopes.join(" ");
 }
 
 async function oidcConfiguration(authInfo) {
     let scopesSupported = DEFAULT_SCOPES;
     if (!authInfo?.openid?.issuer) {
-        console.warn("OIDC Configuration fallback: 'authInfo.openid.issuer' is missing. Falling back to default configuration.");
+        logger.warn("OIDC Configuration fallback: 'authInfo.openid.issuer' is missing. Falling back to default configuration.");
         return initData;
     }
 
     try {
         let url = new URL(authInfo.openid.issuer);
         if (!url.protocol || !url.host) {
-            console.error("Malformed URI: missing protocol or host");
+            logger.error("Malformed URI: missing protocol or host");
             return initData;
         }
         if (!url.pathname.endsWith("/")) {
             url.pathname += "/";
         }
         url.pathname += '.well-known/openid-configuration';
-        console.log("Fetching OIDC configuration from:", url.toString());
+        logger.info("Fetching OIDC configuration from:", url.toString());
         const response = await fetch(url);
 
         if (response.ok) {
             const wellKnown = await response.json();
             scopesSupported = wellKnown.scopes_supported || DEFAULT_SCOPES;
-            console.log("OIDC well-known configuration fetched:", wellKnown);
+            logger.debug("OIDC well-known configuration fetched:", wellKnown);
         } else {
-            console.warn("Failed to fetch .well-known/openid-configuration:", response.status);
+            logger.warn("Failed to fetch .well-known/openid-configuration:", response.status);
         }
     } catch (error) {
-        console.error("Well-formed URL required for openid.issuer", error);
+        logger.error("Well-formed URL required for openid.issuer", error);
         return initData;
     }
 
@@ -81,7 +82,7 @@ async function oidcConfiguration(authInfo) {
         post_logout_redirect_uri: `${baseUrl}/`,
         userStore: new WebStorageStateStore({store: window.localStorage}),
     };
-    console.log("Final OIDC configuration:", config);
+    logger.debug("Final OIDC configuration:", config);
     return config;
 }
 

@@ -1,5 +1,6 @@
 import {useState, useRef, useCallback} from "react";
 import {fetchDaemonStatus} from "../services/api";
+import logger from '../utils/logger.js';
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
@@ -28,7 +29,7 @@ const useFetchDaemonStatus = () => {
             setClusterName(result.cluster.config.name || "Cluster");
             cacheRef.current = nodesArray;
         } catch (err) {
-            console.error("Error while fetching daemon statuses:", err);
+            logger.error("Error while fetching daemon statuses:", err);
             setError("Failed to retrieve daemon statuses.");
         } finally {
             setLoading(false);

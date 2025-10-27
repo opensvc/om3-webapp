@@ -39,6 +39,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import debounce from "lodash/debounce";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import logger from '../utils/logger.js';
 import {closeEventSource, startEventReception} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
@@ -533,14 +534,14 @@ const Objects = () => {
                     if (!response.ok) {
                         // Create error without throwing it immediately
                         const error = new Error(`HTTP error! status: ${response.status}`);
-                        console.error(`Failed to execute ${action} on ${objectName}:`, error);
+                        logger.error(`Failed to execute ${action} on ${objectName}:`, error);
                         errorCount++;
                         return;
                     }
                     successCount++;
                     if (action === "delete") removeObject(objectName);
                 } catch (error) {
-                    console.error(`Failed to execute ${action} on ${objectName}:`, error);
+                    logger.error(`Failed to execute ${action} on ${objectName}:`, error);
                     errorCount++;
                 }
             });

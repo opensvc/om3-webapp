@@ -1,6 +1,7 @@
 import React, {createContext, useCallback, useContext, useEffect, useReducer, useRef} from 'react';
 import {decodeToken, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
+import logger from '../utils/logger.js';
 
 const initialState = {
     user: null,
@@ -73,11 +74,11 @@ export const AuthProvider = ({children}) => {
         const refreshTime = expirationTime - Date.now() - 5000;
 
         if (refreshTime > 0) {
-            console.log('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
+            logger.info('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
             refreshTimeout.current = setTimeout(async () => {
                 const latestToken = localStorage.getItem('authToken');
                 if (latestToken && latestToken !== token) {
-                    console.log('Refresh skipped, token already updated by another tab');
+                    logger.debug('Refresh skipped, token already updated by another tab');
                     scheduleRefresh(latestToken);
                     return;
                 }
@@ -90,7 +91,7 @@ export const AuthProvider = ({children}) => {
                         scheduleRefresh(newToken);
                     }
                 } catch (err) {
-                    console.error('Token refresh error:', err);
+                    logger.error('Token refresh error:', err);
                     dispatch({type: Logout});
                     if (typeof BroadcastChannel !== 'undefined' && channel.current) {
                         channel.current.postMessage({type: 'logout'});
@@ -98,7 +99,7 @@ export const AuthProvider = ({children}) => {
                 }
             }, refreshTime);
         } else {
-            console.warn('Token already expired or too close to expiration, no refresh scheduled');
+            logger.warn('Token already expired or too close to expiration, no refresh scheduled');
             dispatch({type: Logout});
             if (typeof BroadcastChannel !== 'undefined' && channel.current) {
                 channel.current.postMessage({type: 'logout'});
@@ -112,7 +113,7 @@ export const AuthProvider = ({children}) => {
         if (!userManager) return;
 
         const handleTokenExpired = () => {
-            console.warn('OpenID token expired, attempting silent renew...');
+            logger.warn('OpenID token expired, attempting silent renew...');
             userManager.signinSilent()
                 .then(user => {
                     const newToken = user.access_token;
@@ -124,7 +125,7 @@ export const AuthProvider = ({children}) => {
                     }
                 })
                 .catch(err => {
-                    console.error('Silent renew failed:', err);
+                    logger.error('Silent renew failed:', err);
                     dispatch({type: Logout});
                     if (typeof BroadcastChannel !== 'undefined' && channel.current) {
                         channel.current.postMessage({type: 'logout'});
@@ -144,14 +145,14 @@ export const AuthProvider = ({children}) => {
         channel.current = new BroadcastChannel('auth-channel');
         channel.current.onmessage = (event) => {
             const {type, data} = event.data || {};
-            if (type === 'tokenUpdated') {
-                console.log('Token updated from another tab');
+                if (type === 'tokenUpdated') {
+                logger.info('Token updated from another tab');
                 dispatch({type: SetAccessToken, data});
                 if (auth.authChoice !== 'openid') {
                     scheduleRefresh(data);
                 }
             } else if (type === 'logout') {
-                console.log('Logout triggered from another tab');
+                logger.info('Logout triggered from another tab');
                 dispatch({type: Logout});
             }
         };

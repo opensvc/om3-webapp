@@ -26,6 +26,7 @@ import {
     Search,
 } from "@mui/icons-material";
 import {URL_NODE} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 const LogsViewer = ({
                         nodename,
@@ -114,7 +115,7 @@ const LogsViewer = ({
                     __REALTIME_TIMESTAMP: logData.__REALTIME_TIMESTAMP,
                 };
             } catch (e) {
-                console.warn("Failed to parse log:", e);
+                logger.warn("Failed to parse log:", e);
                 return {
                     timestamp: new Date(),
                     level: "info",
@@ -205,7 +206,7 @@ const LogsViewer = ({
                                     }
                                 }
                             } catch (e) {
-                                console.warn("Failed to parse log line:", e, line);
+                                logger.warn("Failed to parse log line:", e, line);
                             }
                         }
                     }
@@ -218,7 +219,7 @@ const LogsViewer = ({
             } catch (error) {
                 if (error.name === "AbortError") return;
 
-                console.error("Failed to fetch logs:", error);
+                logger.error("Failed to fetch logs:", error);
                 setIsConnected(false);
 
                 if (error.message.includes("401")) {
@@ -236,7 +237,7 @@ const LogsViewer = ({
                 setIsLoading(false);
             }
         },
-        [nodename, type, instanceName, maxLogs, buildLogUrl, parseLogMessage, updateLogs]
+        [nodename, type, instanceName, buildLogUrl, parseLogMessage, updateLogs] // Removed maxLogs
     );
 
     const startStreaming = useCallback(() => {

@@ -14,6 +14,7 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import {useNavigate} from "react-router-dom";
 import {useOidc} from "../context/OidcAuthContext.tsx";
+import logger from '../utils/logger.js';
 
 function AuthChoice() {
     const {userManager, recreateUserManager} = useOidc();
@@ -23,13 +24,13 @@ function AuthChoice() {
     const handleAuthChoice = async (choice) => {
         if (choice === "openid") {
             if (!userManager) {
-                console.log("handleAuthChoice openid skipped: can't create userManager");
+                logger.info("handleAuthChoice openid skipped: can't create userManager");
                 return;
             }
             try {
                 await userManager.signinRedirect();
             } catch (err) {
-                console.error("handleAuthChoice signinRedirect:", err);
+                logger.error("handleAuthChoice signinRedirect:", err);
             }
         } else if (choice === "basic") {
             return navigate('/auth/login');
@@ -43,7 +44,7 @@ function AuthChoice() {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
                 } catch (error) {
-                    console.error("Failed to initialize OIDC config:", error);
+                    logger.error("Failed to initialize OIDC config:", error);
                 }
             })();
         }

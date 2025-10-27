@@ -1,5 +1,6 @@
 import React, {createContext, useContext, useState, useEffect} from "react";
 import {UserManager, UserManagerSettings} from "oidc-client-ts";
+import logger from "../utils/logger.js";
 
 export interface OidcContextType {
     userManager: UserManager | null;
@@ -14,7 +15,7 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
     const recreateUserManager = (settings: UserManagerSettings) => {
-        console.log("Recreating UserManager with settings:", settings);
+        logger.info("Recreating UserManager with settings:", settings);
         // Clean up the old UserManager instance
         cleanupUserManager(userManager);
         // Create and set a new UserManager
@@ -49,7 +50,7 @@ export const useOidc = () => {
 // Cleanup function to dispose of UserManager events
 export function cleanupUserManager(userManager: UserManager | null) {
     if (!userManager) return;
-    console.log("Cleaning up UserManager events");
+    logger.debug("Cleaning up UserManager events");
     userManager.events.removeUserLoaded(() => {
     });
     userManager.events.removeUserUnloaded(() => {

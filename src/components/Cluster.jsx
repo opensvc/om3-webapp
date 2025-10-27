@@ -1,3 +1,4 @@
+import logger from '../utils/logger.js';
 import React, {useEffect, useState, useRef} from "react";
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
@@ -42,7 +43,7 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                    console.error('Failed to fetch pools:', error.message);
+                        logger.error('Failed to fetch pools:', error.message);
                     setPoolCount(0);
                 });
 
@@ -57,7 +58,7 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                    console.error('Failed to fetch networks:', error.message);
+                        logger.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
                 });
         }

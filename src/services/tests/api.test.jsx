@@ -4,6 +4,14 @@ import {URL_CLUSTER_STATUS} from "../../config/apiPath";
 // Mock global fetch
 global.fetch = jest.fn();
 
+// Helper to create a mock Headers object
+const createHeaders = (contentType) => ({
+    get: (key) => key === 'content-type' ? contentType : null
+});
+
+// Helper to create a mock Headers object without get method
+const createHeadersWithoutGet = () => ({});
+
 describe("fetchDaemonStatus", () => {
     const token = "fake-token";
 
@@ -16,7 +24,9 @@ describe("fetchDaemonStatus", () => {
 
         fetch.mockResolvedValueOnce({
             ok: true,
+            headers: createHeaders("application/json"),
             json: async () => mockData,
+            text: async () => JSON.stringify(mockData),
         });
 
         const result = await fetchDaemonStatus(token);
@@ -31,13 +41,266 @@ describe("fetchDaemonStatus", () => {
         expect(result).toEqual(mockData);
     });
 
-    test("throws error when response is not ok", async () => {
+    test("throws ApiError with server message when response is not ok and has JSON body", async () => {
+        const mockErrorBody = {error: "Server error", details: "Something went wrong"};
+
         fetch.mockResolvedValueOnce({
             ok: false,
             status: 500,
-            json: async () => ({error: "Server error"}),
+            statusText: "Internal Server Error",
+            headers: createHeaders("application/json"),
+            json: async () => mockErrorBody,
+            text: async () => JSON.stringify(mockErrorBody),
         });
 
-        await expect(fetchDaemonStatus(token)).rejects.toThrow("Failed to fetch data");
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: '{"error":"Server error","details":"Something went wrong"}',
+            status: 500,
+            statusText: "Internal Server Error",
+            body: mockErrorBody
+        });
+    });
+
+    test("throws ApiError with status text when response is not ok and has no body", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+            statusText: "Not Found",
+            headers: createHeaders("text/plain"),
+            json: async () => {
+                throw new Error("No JSON");
+            },
+            text: async () => "",
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: "Not Found",
+            status: 404,
+            statusText: "Not Found",
+        });
+    });
+
+    test("throws ApiError with generic message when response is not ok and no status text", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 403,
+            statusText: "",
+            headers: createHeaders("text/plain"),
+            json: async () => {
+                throw new Error("No JSON");
+            },
+            text: async () => "",
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: "Request failed with status 403",
+            status: 403,
+            statusText: "",
+        });
+    });
+
+    test("handles network errors correctly", async () => {
+        const networkError = new Error("Network failure");
+        fetch.mockRejectedValueOnce(networkError);
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: "Network failure",
+            status: null,
+            body: null
+        });
+    });
+
+    test("works without token when token is not provided", async () => {
+        const mockData = {status: "ok"};
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("application/json"),
+            json: async () => mockData,
+            text: async () => JSON.stringify(mockData),
+        });
+
+        const result = await fetchDaemonStatus(null);
+
+        expect(fetch).toHaveBeenCalledWith(URL_CLUSTER_STATUS, {
+            method: "GET",
+            headers: {},
+        });
+
+        expect(result).toEqual(mockData);
+    });
+
+    test("handles non-JSON error response with text body", async () => {
+        const errorText = "Simple error message";
+
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+            headers: createHeaders("text/plain"),
+            json: async () => {
+                throw new Error("Not JSON");
+            },
+            text: async () => errorText,
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: errorText,
+            status: 400,
+            statusText: "Bad Request",
+            body: errorText
+        });
+    });
+
+    // New tests to improve branch coverage
+
+    test("handles response without headers.get method", async () => {
+        const mockData = {status: "ok"};
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeadersWithoutGet(), // Headers without get method
+            json: async () => mockData,
+            text: async () => JSON.stringify(mockData),
+        });
+
+        const result = await fetchDaemonStatus(token);
+
+        expect(result).toEqual(mockData);
+    });
+
+    test("handles JSON content-type with invalid JSON response", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("application/json"),
+            json: async () => {
+                throw new Error("Invalid JSON");
+            },
+            text: async () => "invalid json string",
+        });
+
+        // Expect the call to succeed despite JSON parsing error
+        await expect(fetchDaemonStatus(token)).resolves.toBeDefined();
+    });
+
+    test("handles response without json method", async () => {
+        const mockData = {status: "ok"};
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("text/plain"),
+            // No json method
+            text: async () => JSON.stringify(mockData),
+        });
+
+        const result = await fetchDaemonStatus(token);
+
+        // Should handle the case where response.json is not available
+        expect(result).toBeDefined();
+    });
+
+    test("handles response without text method", async () => {
+        const mockData = {status: "ok"};
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("text/plain"),
+            json: async () => mockData,
+            // No text method
+        });
+
+        const result = await fetchDaemonStatus(token);
+
+        // Should handle the case where response.text is not available
+        expect(result).toEqual(mockData);
+    });
+
+    test("handles error response with JSON message in body", async () => {
+        const mockErrorBody = {message: "Custom error message"};
+
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+            headers: createHeaders("application/json"),
+            json: async () => mockErrorBody,
+            text: async () => JSON.stringify(mockErrorBody),
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: "Custom error message",
+            status: 400,
+            body: mockErrorBody
+        });
+    });
+
+    test("handles error response with string body that has message property", async () => {
+        const errorString = JSON.stringify({message: "String error message"});
+
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+            headers: createHeaders("text/plain"),
+            json: async () => {
+                throw new Error("Not JSON");
+            },
+            text: async () => errorString,
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: errorString,
+            status: 400,
+            body: errorString
+        });
+    });
+
+    test("handles error with null body after all parsing attempts", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: "Server Error",
+            headers: createHeaders("application/octet-stream"), // Unrecognized type
+            json: async () => {
+                throw new Error("No JSON");
+            },
+            text: async () => {
+                throw new Error("No text");
+            },
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: "Server Error",
+            status: 500,
+            body: null
+        });
+    });
+
+    test("handles error with object body without message property", async () => {
+        const mockErrorBody = {error: "Error without message field"};
+
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+            headers: createHeaders("application/json"),
+            json: async () => mockErrorBody,
+            text: async () => JSON.stringify(mockErrorBody),
+        });
+
+        await expect(fetchDaemonStatus(token)).rejects.toMatchObject({
+            name: 'ApiError',
+            message: JSON.stringify(mockErrorBody),
+            status: 400,
+            body: mockErrorBody
+        });
     });
 });

@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 import React, {useEffect, useCallback} from "react";
 import {Routes, Route, Navigate} from "react-router-dom";
 import OidcCallback from "./OidcCallback";

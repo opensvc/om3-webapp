@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import {WebStorageStateStore} from "oidc-client-ts";
 import logger from "../utils/logger.js";
 

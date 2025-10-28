@@ -140,6 +140,16 @@ const createBufferManager = () => {
     return {buffers, scheduleFlush};
 };
 
+// Navigation service for SPA-friendly redirects
+const navigationService = {
+    redirectToAuth: () => {
+        // Use the custom event that your OidcInitializer is listening to
+        window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
+            detail: '/auth-choice'
+        }));
+    }
+};
+
 // Create EventSource with improved reconnection logic
 export const createEventSource = (url, token) => {
     if (!token) {
@@ -171,7 +181,7 @@ export const createEventSource = (url, token) => {
     };
 
     currentEventSource.onerror = (error) => {
-    logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
+        logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
 
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected');
@@ -192,7 +202,8 @@ export const createEventSource = (url, token) => {
                     })
                     .catch(silentError => {
                         logger.error('❌ Silent renew failed:', silentError);
-                        window.location.href = '/ui/auth-choice';
+                        // Use SPA-friendly navigation instead of window.location.href
+                        navigationService.redirectToAuth();
                     });
                 return;
             }
@@ -210,6 +221,8 @@ export const createEventSource = (url, token) => {
             }, delay);
         } else {
             logger.error('❌ Max reconnection attempts reached');
+            // Redirect to auth choice when max reconnection attempts are reached
+            navigationService.redirectToAuth();
         }
     };
 
@@ -346,7 +359,11 @@ export const closeEventSource = () => {
         logger.info('Closing current EventSource');
         // call cleanup if available to clear timers
         if (typeof currentEventSource._cleanup === 'function') {
-            try { currentEventSource._cleanup(); } catch (e) { logger.debug('Error during eventSource cleanup', e); }
+            try {
+                currentEventSource._cleanup();
+            } catch (e) {
+                logger.debug('Error during eventSource cleanup', e);
+            }
         }
         currentEventSource.close();
         currentEventSource = null;
@@ -375,3 +392,6 @@ export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     }
     configureEventSource(token, null, filters);
 };
+
+// Export navigation service for external use
+export {navigationService};

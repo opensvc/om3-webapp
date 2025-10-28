@@ -1,5 +1,5 @@
 import React, {useEffect, useCallback} from "react";
-import {Routes, Route, Navigate} from "react-router-dom";
+import {Routes, Route, Navigate, useNavigate} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
@@ -54,22 +54,23 @@ const OidcInitializer = ({children}) => {
     const authDispatch = useAuthDispatch();
     const auth = useAuth();
     const authInfo = useAuthInfo();
+    const navigate = useNavigate();
 
     const handleTokenExpired = useCallback(() => {
         logger.warn('Access token expired, redirecting to /ui/auth-choice');
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
-        window.location.href = '/ui/auth-choice';
-    }, [authDispatch]);
+        navigate('/auth-choice', {replace: true});
+    }, [authDispatch, navigate]);
 
     const handleSilentRenewError = useCallback((error) => {
         logger.error('Silent renew failed:', error);
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
-        window.location.href = '/ui/auth-choice';
-    }, [authDispatch]);
+        navigate('/auth-choice', {replace: true});
+    }, [authDispatch, navigate]);
 
     const onUserRefreshed = useCallback((user) => {
         logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
@@ -141,6 +142,16 @@ const OidcInitializer = ({children}) => {
             localStorage.setItem('authChoice', auth.authChoice);
         }
     }, [auth.authChoice]);
+
+    // Listen for SPA-friendly redirects triggered from non-React modules
+    useEffect(() => {
+        const handler = (e) => {
+            const path = e?.detail || '/auth-choice';
+            navigate(path, {replace: true});
+        };
+        window.addEventListener('om3:auth-redirect', handler);
+        return () => window.removeEventListener('om3:auth-redirect', handler);
+    }, [navigate]);
 
     return children;
 };

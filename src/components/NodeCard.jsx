@@ -55,8 +55,8 @@ const NodeCard = ({
                       parseProvisionedState = (state) => !!state,
                       instanceName,
                       onOpenLogs = () => console.warn("onOpenLogs not provided"),
-                      onOpenConsole = () => console.warn("onOpenConsole not provided"),
                   }) => {
+    // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
@@ -76,6 +76,7 @@ const NodeCard = ({
         return window.devicePixelRatio || 1;
     };
 
+    // Configuration of Popper props
     const popperProps = () => ({
         placement: "bottom-end",
         disablePortal: true,
@@ -106,11 +107,12 @@ const NodeCard = ({
             zIndex: 1300,
             "& .MuiPaper-root": {
                 minWidth: 200,
-                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                boxShadow: "0px 5px15px rgba(0,0,0,0.2)",
             },
         },
     });
 
+    // Extract node data with defaults
     const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
     const encapData = nodeData?.encap || {};
@@ -119,6 +121,7 @@ const NodeCard = ({
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
+    // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
         if (typeof setSelectedResourcesByNode !== "function") {
             console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
@@ -138,6 +141,7 @@ const NodeCard = ({
         }));
     };
 
+    // Handler for individual node actions
     const handleIndividualNodeActionClick = (action) => {
         setCurrentNode(node);
         setPendingAction({action, node});
@@ -166,13 +170,7 @@ const NodeCard = ({
     };
 
     const handleResourceActionClick = (action) => {
-        if (action === "console") {
-            onOpenConsole(node, currentResourceId);
-            setResourceMenuAnchor(null);
-            setCurrentResourceId(null);
-            return;
-        }
-
+        // Pour toutes les actions, y compris console, utiliser setPendingAction pour déclencher le dialogue
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);

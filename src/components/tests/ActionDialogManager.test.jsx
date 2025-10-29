@@ -143,6 +143,16 @@ jest.mock('../ActionDialogs', () => ({
             </div>
         ) : null
     ),
+    ConsoleDialog: jest.fn((props) =>
+        props.open ? (
+            <div data-testid="console-dialog">
+                <button onClick={props.onClose} disabled={props.cancelDisabled}>Cancel</button>
+                <button onClick={props.onConfirm} disabled={props.disabled}>Open Console</button>
+                <span>{props.pendingAction?.action}</span>
+                <span>{props.target}</span>
+            </div>
+        ) : null
+    ),
 }));
 
 describe('ActionDialogManager', () => {

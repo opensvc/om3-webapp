@@ -31,13 +31,11 @@ import NodeCard from "./NodeCard";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
-// Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
-// Helper function to filter resource actions based on type
 export const getFilteredResourceActions = (resourceType) => {
     if (!resourceType) {
         return RESOURCE_ACTIONS;
@@ -46,13 +44,15 @@ export const getFilteredResourceActions = (resourceType) => {
     if (typePrefix === 'task') {
         return RESOURCE_ACTIONS.filter(action => action.name === 'run');
     }
-    if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+    if (['fs', 'disk', 'app'].includes(typePrefix)) {
+        return RESOURCE_ACTIONS.filter(action => action.name !== 'run' && action.name !== 'console');
+    }
+    if (typePrefix === 'container') {
         return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
     }
     return RESOURCE_ACTIONS;
 };
 
-// Helper function to get resource type for a given resource ID
 export const getResourceType = (rid, nodeData) => {
     if (!rid || !nodeData) {
         return '';
@@ -71,7 +71,6 @@ export const getResourceType = (rid, nodeData) => {
     return '';
 };
 
-// Helper function to parse provisioned state
 export const parseProvisionedState = (state) => {
     if (typeof state === "string") {
         return state.toLowerCase() === "true";
@@ -79,7 +78,6 @@ export const parseProvisionedState = (state) => {
     return !!state;
 };
 
-// Helper functions for parsing and actions
 export const parseObjectPath = (objName) => {
     if (!objName || typeof objName !== "string") {
         return {namespace: "root", kind: "svc", name: ""};
@@ -114,7 +112,6 @@ const ObjectDetail = () => {
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const theme = useTheme();
 
-    // States for configuration
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
@@ -125,7 +122,6 @@ const ObjectDetail = () => {
     const [paramsToDelete, setParamsToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
-    // States for batch & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
     const nodesActionsAnchorRef = useRef(null);
@@ -140,13 +136,11 @@ const ObjectDetail = () => {
     const resourceMenuAnchorRef = useRef(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
 
-    // States for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
     const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
-    // States for dialog management
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
@@ -162,14 +156,11 @@ const ObjectDetail = () => {
         severity: "success",
     });
 
-    // States for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
 
-    // States for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
 
-    // States for logs drawer
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
     const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(null);
@@ -177,12 +168,10 @@ const ObjectDetail = () => {
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.8;
 
-    // Refs for debounce and mounted
     const lastFetch = useRef({});
     const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
 
-    // Configuration of Popper props
     const popperProps = {
         placement: "bottom-end",
         disablePortal: true,
@@ -215,7 +204,6 @@ const ObjectDetail = () => {
         },
     };
 
-    // Cleanup on unmount
     useEffect(() => {
         isMounted.current = true;
         return () => {
@@ -224,7 +212,6 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName]);
 
-    // Initialize and update accordion states for nodes and resources
     useEffect(() => {
         if (!objectData || !isMounted.current) return;
 
@@ -277,7 +264,6 @@ const ObjectDetail = () => {
         });
     }, [objectData, objectInstanceStatus, decodedObjectName]);
 
-    // Function to open snackbar
     const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
     }, []);
@@ -286,7 +272,6 @@ const ObjectDetail = () => {
         setSnackbar((s) => ({...s, open: false}));
     }, []);
 
-    // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
         if (action === "freeze") {
@@ -310,6 +295,47 @@ const ObjectDetail = () => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
     }, []);
+
+    const postConsoleAction = useCallback(async ({node, rid}) => {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return;
+        }
+
+        setActionInProgress(true);
+        openSnackbar(`Opening console for resource ${rid}...`, "info");
+
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(rid)}`;
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+            });
+
+            if (!response.ok) {
+                openSnackbar(`Failed to open console: HTTP error! status: ${response.status}`, "error");
+                return;
+            }
+
+            const consoleUrl = response.headers.get('Location');
+            if (consoleUrl) {
+                window.open(consoleUrl, '_blank', 'noopener,noreferrer');
+                openSnackbar(`Console opened for resource '${rid}'`);
+            } else {
+                openSnackbar('Failed to open console: Console URL not found in response', "error");
+            }
+        } catch (err) {
+            openSnackbar(`Failed to open console: ${err.message}`, "error");
+        } finally {
+            setActionInProgress(false);
+        }
+    }, [decodedObjectName, openSnackbar]);
 
     const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
@@ -383,7 +409,6 @@ const ObjectDetail = () => {
         }
     }, [decodedObjectName, openSnackbar, postActionUrl]);
 
-    // Fetch configuration for the object
     const fetchConfig = useCallback(async (node) => {
         if (!node || !decodedObjectName) {
             setConfigError("No node or object available to fetch configuration.");
@@ -436,7 +461,6 @@ const ObjectDetail = () => {
         }
     }, [decodedObjectName, configLoading]);
 
-    // Color helper
     const getColor = useCallback((status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
@@ -444,7 +468,6 @@ const ObjectDetail = () => {
         return grey[500];
     }, []);
 
-    // Node state helper
     const getNodeState = useCallback((node) => {
         const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
         const monitorKey = `${node}:${decodedObjectName}`;
@@ -460,7 +483,6 @@ const ObjectDetail = () => {
         };
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    // Object status helper
     const getObjectStatus = useCallback(() => {
         const obj = objectStatus[decodedObjectName] || {};
         const avail = obj?.avail;
@@ -478,7 +500,6 @@ const ObjectDetail = () => {
         return {avail, frozen, globalExpect};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    // Accordion handlers
     const handleNodeResourcesAccordionChange = useCallback((node) => (event, isExpanded) => {
         setExpandedNodeResources((prev) => ({
             ...prev,
@@ -493,7 +514,6 @@ const ObjectDetail = () => {
         }));
     }, []);
 
-    // Batch node actions handlers
     const handleNodesActionsOpen = useCallback((e) => {
         setNodesActionsAnchor(e.currentTarget);
         nodesActionsAnchorRef.current = e.currentTarget;
@@ -509,7 +529,6 @@ const ObjectDetail = () => {
         handleNodesActionsClose();
     }, [openActionDialog, handleNodesActionsClose]);
 
-    // Individual node actions handlers
     const handleIndividualNodeActionClick = useCallback((action) => {
         if (!currentNode) {
             console.warn("No valid pendingAction or action provided: No current node");
@@ -519,7 +538,6 @@ const ObjectDetail = () => {
         setIndividualNodeMenuAnchor(null);
     }, [openActionDialog, currentNode]);
 
-    // Batch resource actions handlers
     const handleResourcesActionsOpen = useCallback((node, e) => {
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
@@ -536,11 +554,16 @@ const ObjectDetail = () => {
             console.warn("No valid pendingAction or action provided: No resGroupNode");
             return;
         }
+
+        if (action === "console") {
+            openSnackbar("Console action is not available for multiple resources", "warning");
+            return;
+        }
+
         openActionDialog(action, {batch: "resources", node: resGroupNode});
         handleResourcesActionsClose();
-    }, [openActionDialog, resGroupNode, handleResourcesActionsClose]);
+    }, [openActionDialog, resGroupNode, handleResourcesActionsClose, openSnackbar]);
 
-    // Individual resource actions handlers
     const handleResourceMenuOpen = useCallback((node, rid, e) => {
         setCurrentResourceId(rid);
         setResGroupNode(node);
@@ -559,17 +582,26 @@ const ObjectDetail = () => {
             console.warn("No valid pendingAction or action provided: No resource details");
             return;
         }
+
+        if (action === "console") {
+            postConsoleAction({node: resGroupNode, rid: currentResourceId});
+            handleResourceMenuClose();
+            return;
+        }
+
         openActionDialog(action, {node: resGroupNode, rid: currentResourceId});
         handleResourceMenuClose();
-    }, [openActionDialog, resGroupNode, currentResourceId, handleResourceMenuClose]);
+    }, [openActionDialog, resGroupNode, currentResourceId, handleResourceMenuClose, postConsoleAction]);
 
-    // Object action handler
     const handleObjectActionClick = useCallback((action) => {
         openActionDialog(action);
         setObjectMenuAnchor(null);
     }, [openActionDialog]);
 
-    // Dialog confirm handler
+    const handleOpenConsole = useCallback((node, rid) => {
+        postConsoleAction({node, rid});
+    }, [postConsoleAction]);
+
     const handleDialogConfirm = useCallback(() => {
         if (!pendingAction || !pendingAction.action) {
             console.warn("No valid pendingAction or action provided:", pendingAction);
@@ -581,6 +613,13 @@ const ObjectDetail = () => {
             setSimpleDialogOpen(false);
             return;
         }
+
+        if (pendingAction.action === "console") {
+            setPendingAction(null);
+            setSimpleDialogOpen(false);
+            return;
+        }
+
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) => {
                 if (node) postNodeAction({node, action: pendingAction.action});
@@ -618,7 +657,6 @@ const ObjectDetail = () => {
         setSimpleDialogOpen(false);
     }, [pendingAction, selectedNodes, selectedResourcesByNode, postNodeAction, postResourceAction, postObjectAction]);
 
-    // Selection helpers
     const toggleNode = useCallback((node) => {
         setSelectedNodes((prev) =>
             prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
@@ -635,7 +673,6 @@ const ObjectDetail = () => {
         });
     }, []);
 
-    // Logs handlers
     const handleOpenLogs = useCallback((node, instanceName = null) => {
         setSelectedNodeForLogs(node);
         setSelectedInstanceForLogs(instanceName);
@@ -671,7 +708,6 @@ const ObjectDetail = () => {
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
 
-    // Effect for configuring EventSource
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -689,7 +725,6 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName]);
 
-    // Effect for handling config updates
     useEffect(() => {
         if (!isMounted.current) {
             return;
@@ -747,7 +782,6 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
 
-    // Effect for handling instance config updates
     useEffect(() => {
         if (!isMounted.current) {
             return;
@@ -784,7 +818,6 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName, configNode, openSnackbar]);
 
-    // Initial load effects
     useEffect(() => {
         const loadInitialConfig = async () => {
             if (objectData) {
@@ -812,7 +845,6 @@ const ObjectDetail = () => {
         loadInitialConfig();
     }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
 
-    // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
         const enhancedObjectData = {};
         if (objectData) {
@@ -831,7 +863,6 @@ const ObjectDetail = () => {
         return Object.keys(memoizedObjectData || {});
     }, [memoizedObjectData]);
 
-    // Render loading state
     if (initialLoading && !memoizedObjectData) {
         return (
             <Box p={4} display="flex" justifyContent="center" alignItems="center">
@@ -841,7 +872,6 @@ const ObjectDetail = () => {
         );
     }
 
-    // Render empty state
     const showKeys = ["cfg", "sec"].includes(kind);
     if (!memoizedObjectData) {
         return (
@@ -1030,6 +1060,7 @@ const ObjectDetail = () => {
                                     kind={kind}
                                     instanceName={name}
                                     onOpenLogs={handleOpenLogs}
+                                    onOpenConsole={handleOpenConsole}
                                 />
                             ))}
 

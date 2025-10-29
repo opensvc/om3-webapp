@@ -55,8 +55,8 @@ const NodeCard = ({
                       parseProvisionedState = (state) => !!state,
                       instanceName,
                       onOpenLogs = () => console.warn("onOpenLogs not provided"),
+                      onOpenConsole = () => console.warn("onOpenConsole not provided"),
                   }) => {
-    // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
@@ -76,7 +76,6 @@ const NodeCard = ({
         return window.devicePixelRatio || 1;
     };
 
-    // Configuration of Popper props
     const popperProps = () => ({
         placement: "bottom-end",
         disablePortal: true,
@@ -112,7 +111,6 @@ const NodeCard = ({
         },
     });
 
-    // Extract node data with defaults
     const resources = nodeData?.resources || {};
     const resIds = Object.keys(resources);
     const encapData = nodeData?.encap || {};
@@ -121,7 +119,6 @@ const NodeCard = ({
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
-    // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
         if (typeof setSelectedResourcesByNode !== "function") {
             console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
@@ -141,7 +138,6 @@ const NodeCard = ({
         }));
     };
 
-    // Handler for individual node actions
     const handleIndividualNodeActionClick = (action) => {
         setCurrentNode(node);
         setPendingAction({action, node});
@@ -170,6 +166,13 @@ const NodeCard = ({
     };
 
     const handleResourceActionClick = (action) => {
+        if (action === "console") {
+            onOpenConsole(node, currentResourceId);
+            setResourceMenuAnchor(null);
+            setCurrentResourceId(null);
+            return;
+        }
+
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
@@ -184,7 +187,10 @@ const NodeCard = ({
         if (typePrefix === 'task') {
             return RESOURCE_ACTIONS.filter((action) => action.name === 'run');
         }
-        if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+        if (['fs', 'disk', 'app'].includes(typePrefix)) {
+            return RESOURCE_ACTIONS.filter((action) => action.name !== 'run' && action.name !== 'console');
+        }
+        if (typePrefix === 'container') {
             return RESOURCE_ACTIONS.filter((action) => action.name !== 'run');
         }
         return RESOURCE_ACTIONS;

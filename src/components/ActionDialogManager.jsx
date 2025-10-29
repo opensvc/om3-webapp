@@ -146,7 +146,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                            logger.error('setCheckboxes for unprovision received invalid value:', value);
+                        logger.error('setCheckboxes for unprovision received invalid value:', value);
                         return;
                     }
                     const validKeys = ['dataLoss', 'serviceInterruption', 'clusterwide'];
@@ -188,7 +188,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                            logger.error('setCheckboxes for purge received invalid value:', value);
+                        logger.error('setCheckboxes for purge received invalid value:', value);
                         return;
                     }
                     const validKeys = ['dataLoss', 'configLoss', 'serviceInterruption'];
@@ -230,7 +230,7 @@ const ActionDialogManager = ({
                     } else if (typeof value === 'object' && value !== null) {
                         updates = value;
                     } else {
-                            logger.error('setCheckboxes for delete received invalid value:', value);
+                        logger.error('setCheckboxes for delete received invalid value:', value);
                         return;
                     }
                     const validKeys = ['configLoss', 'clusterwide'];
@@ -319,6 +319,11 @@ const ActionDialogManager = ({
     }), [dialogState, checkboxState, handleConfirm, pendingAction, target, onClose]);
 
     const initializeDialog = (action) => {
+        if (action === 'console') {
+            if (onClose) onClose();
+            return;
+        }
+
         const actions = {
             freeze: () => {
                 setDialogState((prev) => ({...prev, freeze: true}));
@@ -371,27 +376,31 @@ const ActionDialogManager = ({
     };
 
     useEffect(() => {
-        // If pendingAction is null, call onClose but don't log warning
         if (pendingAction === null) {
             if (onClose) onClose();
             return;
         }
 
-        // Log warning for invalid non-null pendingAction in development
         if (!pendingAction?.action || typeof pendingAction.action !== 'string') {
             if (process.env.NODE_ENV !== 'production') {
-                 logger.warn('Invalid pendingAction provided:', pendingAction);
+                logger.warn('Invalid pendingAction provided:', pendingAction);
             }
             if (onClose) onClose();
             return;
         }
 
         const action = pendingAction.action.toLowerCase();
+
+        if (action === 'console') {
+            if (onClose) onClose();
+            return;
+        }
+
         if (supportedActions.includes(action)) {
             initializeDialog(action);
         } else {
             if (process.env.NODE_ENV !== 'production') {
-                    logger.warn(`Unsupported action: ${action}`);
+                logger.warn(`Unsupported action: ${action}`);
             }
             if (onClose) onClose();
         }

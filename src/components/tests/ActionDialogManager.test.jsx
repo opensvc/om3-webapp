@@ -74,6 +74,20 @@ jest.mock('../ActionDialogs', () => ({
                     onChange={(e) => props.setCheckboxes({...props.checkboxes, dataLoss: e.target.checked})}
                     data-testid="unprovision-dataLoss-checkbox"
                 />
+                <input
+                    type="checkbox"
+                    checked={props.checkboxes.serviceInterruption}
+                    onChange={(e) => props.setCheckboxes({...props.checkboxes, serviceInterruption: e.target.checked})}
+                    data-testid="unprovision-serviceInterruption-checkbox"
+                />
+                {!props.pendingAction?.node && (
+                    <input
+                        type="checkbox"
+                        checked={props.checkboxes.clusterwide}
+                        onChange={(e) => props.setCheckboxes({...props.checkboxes, clusterwide: e.target.checked})}
+                        data-testid="unprovision-clusterwide-checkbox"
+                    />
+                )}
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
             </div>
@@ -90,6 +104,18 @@ jest.mock('../ActionDialogs', () => ({
                     onChange={(e) => props.setCheckboxes({...props.checkboxes, dataLoss: e.target.checked})}
                     data-testid="purge-dataLoss-checkbox"
                 />
+                <input
+                    type="checkbox"
+                    checked={props.checkboxes.configLoss}
+                    onChange={(e) => props.setCheckboxes({...props.checkboxes, configLoss: e.target.checked})}
+                    data-testid="purge-configLoss-checkbox"
+                />
+                <input
+                    type="checkbox"
+                    checked={props.checkboxes.serviceInterruption}
+                    onChange={(e) => props.setCheckboxes({...props.checkboxes, serviceInterruption: e.target.checked})}
+                    data-testid="purge-serviceInterruption-checkbox"
+                />
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
             </div>
@@ -105,6 +131,12 @@ jest.mock('../ActionDialogs', () => ({
                     checked={props.checkboxes.configLoss}
                     onChange={(e) => props.setCheckboxes({...props.checkboxes, configLoss: e.target.checked})}
                     data-testid="delete-configLoss-checkbox"
+                />
+                <input
+                    type="checkbox"
+                    checked={props.checkboxes.clusterwide}
+                    onChange={(e) => props.setCheckboxes({...props.checkboxes, clusterwide: e.target.checked})}
+                    data-testid="delete-clusterwide-checkbox"
                 />
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
@@ -221,9 +253,13 @@ describe('ActionDialogManager', () => {
     });
 
     test('handles unprovision checkboxes properly', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision'}}/>);
-        const checkbox = await screen.findByTestId('unprovision-dataLoss-checkbox');
-        fireEvent.click(checkbox);
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision', node: 'test-node'}}/>);
+        const dataLossCheckbox = await screen.findByTestId('unprovision-dataLoss-checkbox');
+        const serviceInterruptionCheckbox = await screen.findByTestId('unprovision-serviceInterruption-checkbox');
+
+        fireEvent.click(dataLossCheckbox);
+        fireEvent.click(serviceInterruptionCheckbox);
+
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('unprovision');
     });
@@ -258,6 +294,7 @@ describe('ActionDialogManager', () => {
         const dialog = await screen.findByTestId('delete-dialog');
         expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('delete-configLoss-checkbox'));
+        fireEvent.click(screen.getByTestId('delete-clusterwide-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('delete');
     });
@@ -292,6 +329,8 @@ describe('ActionDialogManager', () => {
         const dialog = await screen.findByTestId('purge-dialog');
         expect(dialog).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('purge-dataLoss-checkbox'));
+        fireEvent.click(screen.getByTestId('purge-configLoss-checkbox'));
+        fireEvent.click(screen.getByTestId('purge-serviceInterruption-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('purge');
     });
@@ -346,7 +385,6 @@ describe('ActionDialogManager', () => {
         setCheckboxes(42);
         expect(console.error).toHaveBeenCalledWith('setCheckboxes for delete received invalid value:', 42);
     });
-
 
     test('does not log warnings in production environment', () => {
         const originalEnv = process.env.NODE_ENV;

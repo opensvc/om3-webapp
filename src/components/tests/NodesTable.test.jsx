@@ -53,29 +53,25 @@ jest.mock('../NodeRow.jsx', () => (props) => (
     </tr>
 ));
 
-// Mock only the dialogs that are actually used in tests
-jest.mock('../ActionDialogs', () => ({
-    ...jest.requireActual('../ActionDialogs'),
-    FreezeDialog: ({open, onClose, onConfirm, target}) =>
-        open ? (
-            <div role="dialog">
-                <h2>Confirm Freeze Action on {target}</h2>
-                <button onClick={onConfirm} aria-label="Confirm">
-                    Confirm
-                </button>
+jest.mock('../ActionDialogManager', () => ({
+    __esModule: true,
+    default: ({pendingAction, handleConfirm, target, onClose}) => {
+        if (!pendingAction) return null;
+
+        const action = pendingAction.action;
+        const actionTitle = action
+            .split(" ")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+
+        return (
+            <div role="dialog" data-testid={`dialog-${action}`}>
+                <h2>Confirm {actionTitle} Action on {target}</h2>
+                <button onClick={() => handleConfirm(action)} aria-label="Confirm">Confirm</button>
                 <button onClick={onClose}>Cancel</button>
             </div>
-        ) : null,
-    StopDialog: ({open, onClose, onConfirm, target}) =>
-        open ? (
-            <div role="dialog">
-                <h2>Confirm Stop Action on {target}</h2>
-                <button onClick={onConfirm} aria-label="Confirm">
-                    Confirm
-                </button>
-                <button onClick={onClose}>Cancel</button>
-            </div>
-        ) : null,
+        );
+    },
 }));
 
 jest.mock('react-router-dom', () => ({
@@ -175,7 +171,8 @@ describe('NodesTable', () => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
 
-        expect(screen.getByText(/Confirm Freeze Action/i)).toBeInTheDocument();
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toHaveTextContent('Confirm Freeze Action on node node-1');
 
         // Cancel the dialog
         fireEvent.click(screen.getByText('Cancel'));
@@ -440,10 +437,7 @@ describe('NodesTable', () => {
 
         fireEvent.click(confirmBtn);
 
-        await waitFor(() => {
-            expect(screen.getByText(/❌ 'Freeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
-        });
-
+        expect(await screen.findByText(/❌ 'Freeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
         expect(global.fetch).not.toHaveBeenCalled();
     });
 
@@ -456,10 +450,7 @@ describe('NodesTable', () => {
 
         fireEvent.click(confirmBtn);
 
-        await waitFor(() => {
-            expect(screen.getByText(/❌ 'Unfreeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
-        });
-
+        expect(await screen.findByText(/❌ 'Unfreeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
         expect(global.fetch).not.toHaveBeenCalled();
     });
 

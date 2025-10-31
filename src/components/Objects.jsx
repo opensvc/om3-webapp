@@ -449,7 +449,6 @@ const Objects = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            // Appeler la fonction sans utiliser sa valeur de retour
             startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
@@ -490,7 +489,7 @@ const Objects = () => {
 
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
-            setPendingAction({action, node: isSingleObject ? objectName : null});
+            setPendingAction({action, target: isSingleObject ? objectName : null});
             if (isSingleObject) handleRowMenuClose();
             else handleActionsMenuClose();
         },
@@ -508,9 +507,7 @@ const Objects = () => {
             setSnackbar({open: true, message: `Executing '${action}'...`, severity: "info"});
             let successCount = 0;
             let errorCount = 0;
-
-            const objectsToProcess = pendingAction?.node ? [pendingAction.node] : selectedObjects;
-
+            const objectsToProcess = pendingAction?.target ? [pendingAction.target] : selectedObjects;
             const promises = objectsToProcess.map(async (objectName) => {
                 const rawObj = objectStatus[objectName];
                 if (!rawObj) {
@@ -832,7 +829,7 @@ const Objects = () => {
                 <ActionDialogManager
                     pendingAction={pendingAction}
                     handleConfirm={handleExecuteActionOnSelected}
-                    target={pendingAction?.node ? `object ${pendingAction.node}` : `${selectedObjects.length} objects`}
+                    target={pendingAction?.target ? `object ${pendingAction.target}` : `${selectedObjects.length} objects`}
                     supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
                     onClose={() => setPendingAction(null)}
                 />

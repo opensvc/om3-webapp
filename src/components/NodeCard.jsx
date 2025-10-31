@@ -36,9 +36,9 @@ const NodeCard = ({
                       setCurrentNode = () => console.warn("setCurrentNode not provided"),
                       handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
                       handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
-                      individualNodeMenuAnchor = null,
                       individualNodeMenuAnchorRef = null,
                       resourcesActionsAnchorRef = null,
+                      resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
@@ -60,7 +60,6 @@ const NodeCard = ({
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
-
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
 
     useEffect(() => {
@@ -160,7 +159,6 @@ const NodeCard = ({
         } else {
             setSimpleDialogOpen(true);
         }
-        setIndividualNodeMenuAnchor(null);
     };
 
     const handleBatchResourceActionClick = (action) => {
@@ -170,7 +168,6 @@ const NodeCard = ({
     };
 
     const handleResourceActionClick = (action) => {
-        // Pour toutes les actions, y compris console, utiliser setPendingAction pour déclencher le dialogue
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
@@ -309,7 +306,6 @@ const NodeCard = ({
             : res?.provisioned?.state;
         const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
         const logs = res.log || [];
-
         const getLogPaddingLeft = () => {
             if (isEncap) {
                 return {xs: "72px", sm: "72px"};
@@ -461,6 +457,7 @@ const NodeCard = ({
                             <Box onClick={(e) => e.stopPropagation()}>
                                 <IconButton
                                     onClick={(e) => {
+                                        e.persist();
                                         e.stopPropagation();
                                         setCurrentResourceId(rid);
                                         handleResourceMenuOpen(node, rid, e);
@@ -468,6 +465,7 @@ const NodeCard = ({
                                     disabled={actionInProgress}
                                     aria-label={`Resource ${rid} actions`}
                                     sx={{padding: '4px'}}
+                                    ref={resourceMenuAnchorRef}
                                 >
                                     <Tooltip title="Actions">
                                         <MoreVertIcon sx={{fontSize: '1rem'}}/>
@@ -476,7 +474,6 @@ const NodeCard = ({
                             </Box>
                         </Box>
                     </Box>
-
                     <Box
                         sx={{
                             pl: isEncap ? 4 : 2,
@@ -552,7 +549,6 @@ const NodeCard = ({
                             )}
                         </Typography>
                     </Box>
-
                     <Box
                         sx={{
                             display: {xs: "none", sm: "flex"},
@@ -582,6 +578,7 @@ const NodeCard = ({
                         <Box onClick={(e) => e.stopPropagation()}>
                             <IconButton
                                 onClick={(e) => {
+                                    e.persist();
                                     e.stopPropagation();
                                     setCurrentResourceId(rid);
                                     handleResourceMenuOpen(node, rid, e);
@@ -589,6 +586,7 @@ const NodeCard = ({
                                 disabled={actionInProgress}
                                 aria-label={`Resource ${rid} actions`}
                                 sx={{p: 0.5}}
+                                ref={resourceMenuAnchorRef}
                             >
                                 <Tooltip title="Actions">
                                     <MoreVertIcon sx={{fontSize: '1rem'}}/>
@@ -597,7 +595,6 @@ const NodeCard = ({
                         </Box>
                     </Box>
                 </Box>
-
                 {logs.length > 0 && (
                     <Box
                         sx={{
@@ -698,6 +695,7 @@ const NodeCard = ({
                         {state && <Typography variant="caption">{state}</Typography>}
                         <IconButton
                             onClick={(e) => {
+                                e.persist();
                                 e.stopPropagation();
                                 setCurrentNode(node);
                                 setIndividualNodeMenuAnchor(e.currentTarget);
@@ -758,6 +756,7 @@ const NodeCard = ({
                             <Button
                                 variant="outlined"
                                 onClick={(e) => {
+                                    e.persist();
                                     e.stopPropagation();
                                     handleResourcesActionsOpen(node, e);
                                     setResourcesActionsAnchor(e.currentTarget);
@@ -838,30 +837,8 @@ const NodeCard = ({
                     </Box>
                 </AccordionDetails>
             </Accordion>
-            <Popper
-                open={Boolean(individualNodeMenuAnchor)}
-                anchorEl={individualNodeMenuAnchor}
-                {...popperProps()}
-            >
-                <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
-                    <Paper elevation={3} role="menu" aria-label={`Node ${node} actions menu`}>
-                        {INSTANCE_ACTIONS.map(({name, icon}) => (
-                            <MenuItem
-                                key={name}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleIndividualNodeActionClick(name);
-                                }}
-                                role="menuitem"
-                                aria-label={`Node ${node} ${name} action`}
-                            >
-                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                            </MenuItem>
-                        ))}
-                    </Paper>
-                </ClickAwayListener>
-            </Popper>
+
+            {/* Resource batch actions menu */}
             <Popper
                 open={Boolean(resourcesActionsAnchor)}
                 anchorEl={resourcesActionsAnchor}
@@ -886,6 +863,8 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
+
+            {/* Individual resource actions menu */}
             <Popper
                 open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                 anchorEl={resourceMenuAnchor}

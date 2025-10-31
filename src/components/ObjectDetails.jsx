@@ -30,13 +30,11 @@ import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
-
 // Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
-
 // Helper function to filter resource actions based on type
 export const getFilteredResourceActions = (resourceType) => {
     if (!resourceType) {
@@ -54,7 +52,6 @@ export const getFilteredResourceActions = (resourceType) => {
     }
     return RESOURCE_ACTIONS;
 };
-
 // Helper function to get resource type for a given resource ID
 export const getResourceType = (rid, nodeData) => {
     if (!rid || !nodeData) {
@@ -73,7 +70,6 @@ export const getResourceType = (rid, nodeData) => {
     }
     return '';
 };
-
 // Helper function to parse provisioned state
 export const parseProvisionedState = (state) => {
     if (typeof state === "string") {
@@ -81,7 +77,6 @@ export const parseProvisionedState = (state) => {
     }
     return !!state;
 };
-
 // Helper functions for parsing and actions
 export const parseObjectPath = (objName) => {
     if (!objName || typeof objName !== "string") {
@@ -104,7 +99,6 @@ export const parseObjectPath = (objName) => {
     }
     return {namespace, kind, name};
 };
-
 const ObjectDetail = () => {
     const {objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
@@ -116,7 +110,6 @@ const ObjectDetail = () => {
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
     const objectData = objectInstanceStatus?.[decodedObjectName];
     const theme = useTheme();
-
     // States for configuration
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
@@ -127,7 +120,6 @@ const ObjectDetail = () => {
     const [paramsToUnset, setParamsToUnset] = useState("");
     const [paramsToDelete, setParamsToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
-
     // States for batch & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
@@ -142,13 +134,11 @@ const ObjectDetail = () => {
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const resourceMenuAnchorRef = useRef(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
-
     // States for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
     const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
-
     // States for dialog management
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
@@ -164,14 +154,11 @@ const ObjectDetail = () => {
         message: "",
         severity: "success",
     });
-
     // States for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
     const [expandedNodeResources, setExpandedNodeResources] = useState({});
-
     // States for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
-
     // States for logs drawer
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
@@ -179,12 +166,10 @@ const ObjectDetail = () => {
     const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.8;
-
     // Refs for debounce and mounted
     const lastFetch = useRef({});
     const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
-
     // Configuration of Popper props
     const popperProps = {
         placement: "bottom-end",
@@ -217,7 +202,6 @@ const ObjectDetail = () => {
             },
         },
     };
-
     // Cleanup on unmount
     useEffect(() => {
         isMounted.current = true;
@@ -226,11 +210,9 @@ const ObjectDetail = () => {
             closeEventSource();
         };
     }, [decodedObjectName]);
-
     // Initialize and update accordion states for nodes and resources
     useEffect(() => {
         if (!objectData || !isMounted.current) return;
-
         const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
         const updateNodeResources = (prev) => {
             const updated = {...prev};
@@ -246,7 +228,6 @@ const ObjectDetail = () => {
             });
             return updated;
         };
-
         const updateResources = (prev) => {
             const updated = {...prev};
             nodes.forEach((node) => {
@@ -269,7 +250,6 @@ const ObjectDetail = () => {
             });
             return updated;
         };
-
         setExpandedNodeResources((prev) => {
             const updated = updateNodeResources(prev);
             return JSON.stringify(prev) !== JSON.stringify(updated) ? updated : prev;
@@ -279,16 +259,13 @@ const ObjectDetail = () => {
             return JSON.stringify(prev) !== JSON.stringify(updated) ? updated : prev;
         });
     }, [objectData, objectInstanceStatus, decodedObjectName]);
-
     // Function to open snackbar
     const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
     }, []);
-
     const closeSnackbar = useCallback(() => {
         setSnackbar((s) => ({...s, open: false}));
     }, []);
-
     // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
@@ -308,12 +285,10 @@ const ObjectDetail = () => {
             setSimpleDialogOpen(true);
         }
     }, []);
-
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
     }, []);
-
     // Nouvelle fonction pour ouvrir la console
     const postConsoleAction = useCallback(async ({node, rid}) => {
         const token = localStorage.getItem("authToken");
@@ -321,13 +296,10 @@ const ObjectDetail = () => {
             openSnackbar("Auth token not found.", "error");
             return;
         }
-
         setActionInProgress(true);
         openSnackbar(`Opening console for resource ${rid}...`, "info");
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(rid)}`;
-
         try {
             const response = await fetch(url, {
                 method: "POST",
@@ -336,12 +308,10 @@ const ObjectDetail = () => {
                     "Content-Type": "application/json"
                 },
             });
-
             if (!response.ok) {
                 openSnackbar(`Failed to open console: HTTP error! status: ${response.status}`, "error");
                 return;
             }
-
             const consoleUrl = response.headers.get('Location');
             if (consoleUrl) {
                 window.open(consoleUrl, '_blank', 'noopener,noreferrer');
@@ -355,7 +325,6 @@ const ObjectDetail = () => {
             setActionInProgress(false);
         }
     }, [decodedObjectName, openSnackbar]);
-
     const postObjectAction = useCallback(async ({action}) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
@@ -379,7 +348,6 @@ const ObjectDetail = () => {
             setActionInProgress(false);
         }
     }, [decodedObjectName, openSnackbar]);
-
     const postNodeAction = useCallback(async ({node, action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
@@ -402,7 +370,6 @@ const ObjectDetail = () => {
             setActionInProgress(false);
         }
     }, [decodedObjectName, openSnackbar, postActionUrl]);
-
     const postResourceAction = useCallback(async ({node, action, rid}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
@@ -427,7 +394,6 @@ const ObjectDetail = () => {
             setActionInProgress(false);
         }
     }, [decodedObjectName, openSnackbar, postActionUrl]);
-
     // Fetch configuration for the object
     const fetchConfig = useCallback(async (node) => {
         if (!node || !decodedObjectName) {
@@ -480,7 +446,6 @@ const ObjectDetail = () => {
             }
         }
     }, [decodedObjectName, configLoading]);
-
     // Color helper
     const getColor = useCallback((status) => {
         if (status === "up" || status === true) return green[500];
@@ -488,7 +453,6 @@ const ObjectDetail = () => {
         if (status === "warn") return orange[500];
         return grey[500];
     }, []);
-
     // Node state helper
     const getNodeState = useCallback((node) => {
         const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
@@ -504,7 +468,6 @@ const ObjectDetail = () => {
             state: monitor.state !== "idle" ? monitor.state : null,
         };
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
-
     // Object status helper
     const getObjectStatus = useCallback(() => {
         const obj = objectStatus[decodedObjectName] || {};
@@ -522,7 +485,6 @@ const ObjectDetail = () => {
         }
         return {avail, frozen, globalExpect};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
-
     // Accordion handlers
     const handleNodeResourcesAccordionChange = useCallback((node) => (event, isExpanded) => {
         setExpandedNodeResources((prev) => ({
@@ -530,30 +492,25 @@ const ObjectDetail = () => {
             [node]: isExpanded,
         }));
     }, []);
-
     const handleAccordionChange = useCallback((node, rid) => (event, isExpanded) => {
         setExpandedResources((prev) => ({
             ...prev,
             [`${node}:${rid}`]: isExpanded,
         }));
     }, []);
-
     // Batch node actions handlers
     const handleNodesActionsOpen = useCallback((e) => {
         setNodesActionsAnchor(e.currentTarget);
         nodesActionsAnchorRef.current = e.currentTarget;
     }, []);
-
     const handleNodesActionsClose = useCallback(() => {
         setNodesActionsAnchor(null);
         nodesActionsAnchorRef.current = null;
     }, []);
-
     const handleBatchNodeActionClick = useCallback((action) => {
         openActionDialog(action, {batch: "nodes"});
         handleNodesActionsClose();
     }, [openActionDialog, handleNodesActionsClose]);
-
     // Individual node actions handlers
     const handleIndividualNodeActionClick = useCallback((action) => {
         if (!currentNode) {
@@ -563,35 +520,29 @@ const ObjectDetail = () => {
         openActionDialog(action, {node: currentNode});
         setIndividualNodeMenuAnchor(null);
     }, [openActionDialog, currentNode]);
-
     // Batch resource actions handlers
     const handleResourcesActionsOpen = useCallback((node, e) => {
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
         resourcesActionsAnchorRef.current = e.currentTarget;
     }, []);
-
     const handleResourcesActionsClose = useCallback(() => {
         setResourcesActionsAnchor(null);
         resourcesActionsAnchorRef.current = null;
     }, []);
-
     const handleBatchResourceActionClick = useCallback((action) => {
         if (!resGroupNode) {
             console.warn("No valid pendingAction or action provided: No resGroupNode");
             return;
         }
-
         // Exclure l'action console des actions batch
         if (action === "console") {
             openSnackbar("Console action is not available for multiple resources", "warning");
             return;
         }
-
         openActionDialog(action, {batch: "resources", node: resGroupNode});
         handleResourcesActionsClose();
     }, [openActionDialog, resGroupNode, handleResourcesActionsClose, openSnackbar]);
-
     // Individual resource actions handlers
     const handleResourceMenuOpen = useCallback((node, rid, e) => {
         setCurrentResourceId(rid);
@@ -599,30 +550,25 @@ const ObjectDetail = () => {
         setResourceMenuAnchor(e.currentTarget);
         resourceMenuAnchorRef.current = e.currentTarget;
     }, []);
-
     const handleResourceMenuClose = useCallback(() => {
         setResourceMenuAnchor(null);
         setCurrentResourceId(null);
         resourceMenuAnchorRef.current = null;
     }, []);
-
     const handleResourceActionClick = useCallback((action) => {
         if (!resGroupNode || !currentResourceId) {
             console.warn("No valid pendingAction or action provided: No resource details");
             return;
         }
-
         // Pour toutes les actions, y compris console, utiliser openActionDialog
         openActionDialog(action, {node: resGroupNode, rid: currentResourceId});
         handleResourceMenuClose();
     }, [openActionDialog, resGroupNode, currentResourceId, handleResourceMenuClose]);
-
     // Object action handler
     const handleObjectActionClick = useCallback((action) => {
         openActionDialog(action);
         setObjectMenuAnchor(null);
     }, [openActionDialog]);
-
     // Dialog confirm handler
     const handleDialogConfirm = useCallback(() => {
         if (!pendingAction || !pendingAction.action) {
@@ -635,7 +581,6 @@ const ObjectDetail = () => {
             setSimpleDialogOpen(false);
             return;
         }
-
         // Gestion spéciale pour l'action console
         if (pendingAction.action === "console") {
             if (pendingAction.node && pendingAction.rid) {
@@ -645,7 +590,6 @@ const ObjectDetail = () => {
             setSimpleDialogOpen(false);
             return;
         }
-
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) => {
                 if (node) postNodeAction({node, action: pendingAction.action});
@@ -682,14 +626,12 @@ const ObjectDetail = () => {
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
     }, [pendingAction, selectedNodes, selectedResourcesByNode, postNodeAction, postResourceAction, postObjectAction, postConsoleAction]);
-
     // Selection helpers
     const toggleNode = useCallback((node) => {
         setSelectedNodes((prev) =>
             prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
         );
     }, []);
-
     const toggleResource = useCallback((node, rid) => {
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
@@ -699,43 +641,48 @@ const ObjectDetail = () => {
             return {...prev, [node]: next};
         });
     }, []);
-
     // Logs handlers
     const handleOpenLogs = useCallback((node, instanceName = null) => {
         setSelectedNodeForLogs(node);
         setSelectedInstanceForLogs(instanceName);
         setLogsDrawerOpen(true);
     }, []);
-
     const handleCloseLogsDrawer = useCallback(() => {
         setLogsDrawerOpen(false);
         setSelectedNodeForLogs(null);
         setSelectedInstanceForLogs(null);
     }, []);
-
     const startResizing = useCallback((e) => {
         e.preventDefault();
-        const startX = e.clientX;
+        const isTouch = e.type === 'touchstart';
+        const startX = isTouch ? e.touches[0].clientX : e.clientX;
         const startWidth = drawerWidth;
-
         const doResize = (moveEvent) => {
-            const newWidth = startWidth + (startX - moveEvent.clientX);
+            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
+            const newWidth = startWidth + (startX - currentX);
             if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
                 setDrawerWidth(newWidth);
             }
         };
-
         const stopResize = () => {
-            document.removeEventListener("mousemove", doResize);
-            document.removeEventListener("mouseup", stopResize);
+            if (isTouch) {
+                document.removeEventListener("touchmove", doResize);
+                document.removeEventListener("touchend", stopResize);
+            } else {
+                document.removeEventListener("mousemove", doResize);
+                document.removeEventListener("mouseup", stopResize);
+            }
             document.body.style.cursor = "default";
         };
-
-        document.addEventListener("mousemove", doResize);
-        document.addEventListener("mouseup", stopResize);
+        if (isTouch) {
+            document.addEventListener("touchmove", doResize, {passive: false});
+            document.addEventListener("touchend", stopResize);
+        } else {
+            document.addEventListener("mousemove", doResize);
+            document.addEventListener("mouseup", stopResize);
+        }
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
-
     // Effect for configuring EventSource
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -753,7 +700,6 @@ const ObjectDetail = () => {
             closeEventSource();
         };
     }, [decodedObjectName]);
-
     // Effect for handling config updates
     useEffect(() => {
         if (!isMounted.current) {
@@ -811,7 +757,6 @@ const ObjectDetail = () => {
             }
         };
     }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
-
     // Effect for handling instance config updates
     useEffect(() => {
         if (!isMounted.current) {
@@ -848,7 +793,6 @@ const ObjectDetail = () => {
             }
         };
     }, [decodedObjectName, configNode, openSnackbar]);
-
     // Initial load effects
     useEffect(() => {
         const loadInitialConfig = async () => {
@@ -876,7 +820,6 @@ const ObjectDetail = () => {
         };
         loadInitialConfig();
     }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
-
     // Memoize data to prevent unnecessary re-renders
     const memoizedObjectData = useMemo(() => {
         const enhancedObjectData = {};
@@ -891,11 +834,9 @@ const ObjectDetail = () => {
         }
         return enhancedObjectData;
     }, [objectData, instanceConfig, instanceMonitor, decodedObjectName]);
-
     const memoizedNodes = useMemo(() => {
         return Object.keys(memoizedObjectData || {});
     }, [memoizedObjectData]);
-
     // Render loading state
     if (initialLoading && !memoizedObjectData) {
         return (
@@ -905,7 +846,6 @@ const ObjectDetail = () => {
             </Box>
         );
     }
-
     // Render empty state
     const showKeys = ["cfg", "sec"].includes(kind);
     if (!memoizedObjectData) {
@@ -933,7 +873,6 @@ const ObjectDetail = () => {
             </Box>
         );
     }
-
     return (
         <Box sx={{
             display: "flex",
@@ -943,7 +882,6 @@ const ObjectDetail = () => {
             overflow: "hidden",
             boxSizing: "border-box",
         }}>
-
             <Box sx={{
                 flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
                 overflow: "auto",
@@ -973,7 +911,6 @@ const ObjectDetail = () => {
                         getColor={getColor}
                         objectMenuAnchorRef={objectMenuAnchorRef}
                     />
-
                     <ActionDialogManager
                         pendingAction={pendingAction}
                         handleConfirm={handleDialogConfirm}
@@ -1007,11 +944,9 @@ const ObjectDetail = () => {
                         purgeCheckboxes={purgeCheckboxes}
                         setPurgeCheckboxes={setPurgeCheckboxes}
                     />
-
                     {showKeys && (
                         <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
                     )}
-
                     <ConfigSection
                         decodedObjectName={decodedObjectName}
                         configNode={configNode}
@@ -1024,7 +959,6 @@ const ObjectDetail = () => {
                         configAccordionExpanded={configAccordionExpanded}
                         setConfigAccordionExpanded={setConfigAccordionExpanded}
                     />
-
                     <ManageConfigParamsDialog
                         open={manageParamsDialogOpen}
                         onClose={() => setManageParamsDialogOpen(false)}
@@ -1037,7 +971,6 @@ const ObjectDetail = () => {
                         setParamsToDelete={setParamsToDelete}
                         disabled={actionInProgress}
                     />
-
                     {!(["sec", "cfg", "usr"].includes(kind)) && (
                         <>
                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
@@ -1051,7 +984,6 @@ const ObjectDetail = () => {
                                     Actions on Selected Nodes
                                 </Button>
                             </Box>
-
                             {memoizedNodes.map((node) => (
                                 <NodeCard
                                     key={node}
@@ -1097,7 +1029,6 @@ const ObjectDetail = () => {
                                     onOpenLogs={handleOpenLogs}
                                 />
                             ))}
-
                             <Popper
                                 open={Boolean(nodesActionsAnchor)}
                                 anchorEl={nodesActionsAnchor}
@@ -1198,7 +1129,6 @@ const ObjectDetail = () => {
                             </Popper>
                         </>
                     )}
-
                     <Snackbar
                         open={snackbar.open}
                         autoHideDuration={5000}
@@ -1216,7 +1146,6 @@ const ObjectDetail = () => {
                     </Snackbar>
                 </Box>
             </Box>
-
             <Drawer
                 anchor="right"
                 open={logsDrawerOpen}
@@ -1254,6 +1183,7 @@ const ObjectDetail = () => {
                         transition: "background-color 0.2s",
                     }}
                     onMouseDown={startResizing}
+                    onTouchStart={startResizing}
                     aria-label="Resize drawer"
                 />
                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>

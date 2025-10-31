@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef, useCallback} from "react";
+import React, {useEffect, useState, useRef, useCallback, useMemo} from "react";
 import {
     Box,
     Paper,
@@ -39,7 +39,6 @@ const LogsViewer = ({
                     }) => {
     const theme = useTheme();
     const [logs, setLogs] = useState([]);
-    const [filteredLogs, setFilteredLogs] = useState([]);
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [levelFilter, setLevelFilter] = useState([]);
@@ -47,10 +46,8 @@ const LogsViewer = ({
     const [isConnected, setIsConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [isFiltered, setIsFiltered] = useState(false);
     const [selectedLogId, setSelectedLogId] = useState(null);
     const [shouldScrollToLog, setShouldScrollToLog] = useState(false);
-
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
     const isPausedRef = useRef(false);
@@ -58,11 +55,9 @@ const LogsViewer = ({
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
     const scrollToLogTimeoutRef = useRef(null);
-
     useEffect(() => {
         isPausedRef.current = isPaused;
     }, [isPaused]);
-
     const buildLogUrl = useCallback(() => {
         let baseUrl;
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
@@ -72,14 +67,12 @@ const LogsViewer = ({
         }
         return `${baseUrl}?follow=true`;
     }, [type, nodename, namespace, kind, instanceName]);
-
     const buildSubtitle = useCallback(() => {
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
             return `${instanceName} on ${nodename}`;
         }
         return nodename;
     }, [type, nodename, instanceName]);
-
     const buildDownloadFilename = useCallback(() => {
         const timestamp = new Date().toISOString();
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
@@ -87,7 +80,6 @@ const LogsViewer = ({
         }
         return `${nodename}-logs-${timestamp}.txt`;
     }, [type, nodename, instanceName]);
-
     const parseLogMessage = useCallback(
         (logData) => {
             try {
@@ -128,33 +120,27 @@ const LogsViewer = ({
         },
         [nodename]
     );
-
     const updateLogs = useCallback(() => {
         if (logBufferRef.current.length === 0 || isPausedRef.current) return;
-
         setLogs((prev) => {
             const newLogs = [...prev, ...logBufferRef.current].slice(-maxLogs);
             logBufferRef.current = [];
             return newLogs;
         });
     }, [maxLogs]);
-
     const fetchLogs = useCallback(
         async (signal) => {
             if (isPausedRef.current || !nodename) return;
-
             if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
                 setErrorMessage("Instance name is required for instance logs");
                 return;
             }
-
             const token = localStorage.getItem("authToken");
             if (!token) {
                 setErrorMessage("Authentication token not found");
                 setIsConnected(false);
                 return;
             }
-
             try {
                 const url = buildLogUrl();
                 const response = await fetch(url, {
@@ -165,21 +151,17 @@ const LogsViewer = ({
                     },
                     signal,
                 });
-
                 if (!response.ok) {
                     setErrorMessage(`HTTP error! status: ${response.status}`);
                     setIsConnected(false);
                     return;
                 }
-
                 setIsConnected(true);
                 setErrorMessage("");
                 setIsLoading(false);
-
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = "";
-
                 while (true) {
                     const {value, done} = await reader.read();
                     if (done) break;
@@ -187,11 +169,9 @@ const LogsViewer = ({
                         reader.releaseLock();
                         return;
                     }
-
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split("\n");
                     buffer = lines.pop() || "";
-
                     for (const line of lines) {
                         if (line.startsWith("data: ") && !isPausedRef.current) {
                             try {
@@ -210,18 +190,14 @@ const LogsViewer = ({
                             }
                         }
                     }
-
                     updateLogs();
                 }
-
                 updateLogs();
                 reader.releaseLock();
             } catch (error) {
                 if (error.name === "AbortError") return;
-
                 logger.error("Failed to fetch logs:", error);
                 setIsConnected(false);
-
                 if (error.message.includes("401")) {
                     setErrorMessage("Authentication failed. Please refresh your token.");
                 } else if (error.message.includes("404")) {
@@ -237,9 +213,8 @@ const LogsViewer = ({
                 setIsLoading(false);
             }
         },
-        [nodename, type, instanceName, buildLogUrl, parseLogMessage, updateLogs] // Removed maxLogs
+        [nodename, type, instanceName, buildLogUrl, parseLogMessage, updateLogs]
     );
-
     const startStreaming = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -250,15 +225,14 @@ const LogsViewer = ({
         abortControllerRef.current = controller;
         fetchLogs(controller.signal);
     }, [fetchLogs]);
-
-    useEffect(() => {
+    const isFiltered = useMemo(() => {
+        return levelFilter.length > 0 || searchTerm !== "";
+    }, [levelFilter, searchTerm]);
+    const filteredLogs = useMemo(() => {
         let filtered = logs;
-        setIsFiltered(levelFilter.length > 0 || searchTerm !== "");
-
         if (levelFilter.length > 0) {
             filtered = filtered.filter((log) => levelFilter.includes(log.level));
         }
-
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(
@@ -269,37 +243,30 @@ const LogsViewer = ({
                     log.pkg?.toLowerCase().includes(term)
             );
         }
-
-        setFilteredLogs(filtered);
+        return filtered;
     }, [logs, searchTerm, levelFilter]);
-
     useEffect(() => {
         if (autoScroll && logsEndRef.current && filteredLogs.length > 0) {
             logsEndRef.current.scrollIntoView({behavior: "smooth"});
         }
     }, [filteredLogs, autoScroll]);
-
     useEffect(() => {
         if (shouldScrollToLog && selectedLogId) {
             if (scrollToLogTimeoutRef.current) {
                 clearTimeout(scrollToLogTimeoutRef.current);
             }
-
             scrollToLogTimeoutRef.current = setTimeout(() => {
                 const logElement = document.getElementById(`log-${selectedLogId}`);
                 if (logElement && logsContainerRef.current) {
                     setAutoScroll(false);
-
                     const container = logsContainerRef.current;
                     const elementRect = logElement.getBoundingClientRect();
                     const scrollTop =
                         logElement.offsetTop - container.clientHeight / 2 + elementRect.height / 2;
-
                     container.scrollTo({
                         top: scrollTop,
                         behavior: "smooth",
                     });
-
                     logElement.style.backgroundColor = theme.palette.action.selected;
                     setTimeout(() => {
                         if (logElement) logElement.style.backgroundColor = "";
@@ -308,27 +275,21 @@ const LogsViewer = ({
                 setShouldScrollToLog(false);
             }, 100);
         }
-
         return () => {
             if (scrollToLogTimeoutRef.current) clearTimeout(scrollToLogTimeoutRef.current);
         };
     }, [shouldScrollToLog, selectedLogId, theme]);
-
     useEffect(() => {
         if (!nodename) return;
-
         if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
             setErrorMessage("Instance name is required for instance logs");
             return;
         }
-
         if (!isPaused) startStreaming();
-
         return () => {
             if (abortControllerRef.current) abortControllerRef.current.abort();
         };
     }, [nodename, type, instanceName, startStreaming, isPaused]);
-
     useEffect(() => {
         if (isPaused) {
             if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -336,14 +297,12 @@ const LogsViewer = ({
             startStreaming();
         }
     }, [isPaused, startStreaming]);
-
     const handleScroll = useCallback(() => {
         if (!logsContainerRef.current) return;
         const {scrollTop, scrollHeight, clientHeight} = logsContainerRef.current;
         const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
         setAutoScroll(isAtBottom);
     }, []);
-
     const formatTime = (timestamp) =>
         timestamp.toLocaleTimeString("en-US", {
             hour: "2-digit",
@@ -351,7 +310,6 @@ const LogsViewer = ({
             second: "2-digit",
             fractionalSecondDigits: 3,
         });
-
     const getLevelColor = (level) => {
         switch (level) {
             case "error":
@@ -365,7 +323,6 @@ const LogsViewer = ({
                 return theme.palette.text.primary;
         }
     };
-
     const handleLogClick = (log) => {
         if (isFiltered) {
             setSearchTerm("");
@@ -374,9 +331,7 @@ const LogsViewer = ({
             setShouldScrollToLog(true);
         }
     };
-
     const getLogId = (log) => `log-${log.__REALTIME_TIMESTAMP}`;
-
     const handleDownload = () => {
         const content = filteredLogs
             .map(
@@ -391,22 +346,17 @@ const LogsViewer = ({
         a.click();
         URL.revokeObjectURL(url);
     };
-
     const handleManualReconnect = () => {
         setErrorMessage("");
         setLogs([]);
-        setFilteredLogs([]);
         seenLogsRef.current.clear();
         startStreaming();
     };
-
     const handleClearLogs = () => {
         setLogs([]);
-        setFilteredLogs([]);
         logBufferRef.current = [];
         seenLogsRef.current.clear();
     };
-
     return (
         <Paper
             elevation={3}
@@ -440,7 +390,6 @@ const LogsViewer = ({
                     />
                     {isLoading && <CircularProgress size={16}/>}
                 </Box>
-
                 <Box sx={{display: "flex", gap: 1}}>
                     <Tooltip title={isPaused ? "Resume" : "Pause"}>
                         <IconButton
@@ -472,19 +421,16 @@ const LogsViewer = ({
                     )}
                 </Box>
             </Box>
-
             {errorMessage && (
                 <Alert severity="error" sx={{mb: 2}}>
                     {errorMessage}
                 </Alert>
             )}
-
             {isLoading && !errorMessage && (
                 <Alert severity="info" sx={{mb: 2}}>
                     Loading logs...
                 </Alert>
             )}
-
             {/* Filters */}
             <Box
                 sx={{
@@ -529,7 +475,6 @@ const LogsViewer = ({
                         ))}
                     </Select>
                 </FormControl>
-
                 {isFiltered && (
                     <Chip
                         label="Filters active - Click any log to clear"
@@ -541,7 +486,6 @@ const LogsViewer = ({
                         }}
                     />
                 )}
-
                 <Typography
                     variant="caption"
                     sx={{alignSelf: "center", color: "text.secondary"}}
@@ -549,7 +493,6 @@ const LogsViewer = ({
                     {filteredLogs.length} / {logs.length} logs
                 </Typography>
             </Box>
-
             {/* Logs list */}
             <Box
                 ref={logsContainerRef}
@@ -582,9 +525,9 @@ const LogsViewer = ({
                             : "No logs match current filters"}
                     </Typography>
                 ) : (
-                    filteredLogs.map((log, index) => (
+                    filteredLogs.map((log) => (
                         <Box
-                            key={index}
+                            key={log.__REALTIME_TIMESTAMP}
                             className="log-line"
                             id={getLogId(log)}
                             onClick={() => handleLogClick(log)}
@@ -595,10 +538,10 @@ const LogsViewer = ({
                                 },
                             }}
                         >
-                            <Box sx={{display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap"}}>
+                            <Box sx={{display: "flex", flexDirection: "column", gap: 0}}>
                                 <Typography
                                     component="span"
-                                    sx={{color: theme.palette.text.secondary, minWidth: "110px", fontWeight: "medium"}}
+                                    sx={{color: theme.palette.text.secondary, fontWeight: "medium"}}
                                 >
                                     {formatTime(log.timestamp)}
                                 </Typography>
@@ -607,30 +550,31 @@ const LogsViewer = ({
                                     sx={{
                                         color: getLevelColor(log.level),
                                         fontWeight: "bold",
-                                        minWidth: "70px",
                                     }}
                                 >
                                     [{log.level.toUpperCase()}]
                                 </Typography>
-                                {log.method && (
-                                    <Typography
-                                        component="span"
-                                        sx={{color: theme.palette.info.main, minWidth: "60px", fontWeight: "medium"}}
-                                    >
-                                        {log.method}
-                                    </Typography>
-                                )}
-                                {log.path && (
-                                    <Typography component="span" sx={{color: theme.palette.text.secondary}}>
-                                        {log.path}
-                                    </Typography>
+                                {(log.method || log.path) && (
+                                    <Box sx={{display: "flex", gap: 1, alignItems: "center"}}>
+                                        {log.method && (
+                                            <Typography
+                                                component="span"
+                                                sx={{color: theme.palette.info.main, fontWeight: "medium"}}
+                                            >
+                                                {log.method}
+                                            </Typography>
+                                        )}
+                                        {log.path && (
+                                            <Typography component="span" sx={{color: theme.palette.text.secondary}}>
+                                                {log.path}
+                                            </Typography>
+                                        )}
+                                    </Box>
                                 )}
                                 <Typography
                                     component="span"
                                     sx={{
                                         wordBreak: "break-word",
-                                        flex: 1,
-                                        minWidth: "100%",
                                         whiteSpace: "pre-wrap",
                                         color: theme.palette.text.primary,
                                     }}
@@ -643,7 +587,6 @@ const LogsViewer = ({
                 )}
                 <div ref={logsEndRef}/>
             </Box>
-
             {!autoScroll && filteredLogs.length > 0 && (
                 <Button
                     size="small"
@@ -659,5 +602,4 @@ const LogsViewer = ({
         </Paper>
     );
 };
-
 export default LogsViewer;

@@ -45,6 +45,7 @@ const NodesTable = () => {
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -102,27 +103,54 @@ const NodesTable = () => {
         setSelectedNodeForLogs(null);
     };
 
+    // VERSION CORRIGÉE : Support des événements tactiles ET souris
     const startResizing = (e) => {
         e.preventDefault();
-        const startX = e.clientX;
+
+        // Déterminer si c'est un événement tactile ou souris
+        const isTouchEvent = e.type.startsWith('touch');
+        const startX = isTouchEvent ? e.touches[0].clientX : e.clientX;
         const startWidth = drawerWidth;
 
         const doResize = (moveEvent) => {
-            const newWidth = startWidth + (startX - moveEvent.clientX); // Right-to-left resizing
+            const currentX = moveEvent.type.startsWith('touch')
+                ? moveEvent.touches[0].clientX
+                : moveEvent.clientX;
+            const newWidth = startWidth + (startX - currentX); // Right-to-left resizing
+
             if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
                 setDrawerWidth(newWidth);
             }
         };
 
         const stopResize = () => {
-            document.removeEventListener("mousemove", doResize);
-            document.removeEventListener("mouseup", stopResize);
+            // Retirer les écouteurs d'événements appropriés
+            if (isTouchEvent) {
+                document.removeEventListener("touchmove", doResize);
+                document.removeEventListener("touchend", stopResize);
+                document.removeEventListener("touchcancel", stopResize);
+            } else {
+                document.removeEventListener("mousemove", doResize);
+                document.removeEventListener("mouseup", stopResize);
+            }
             document.body.style.cursor = "default";
+            document.body.style.userSelect = "";
+            document.body.style.webkitUserSelect = "";
         };
 
-        document.addEventListener("mousemove", doResize);
-        document.addEventListener("mouseup", stopResize);
+        // Ajouter les écouteurs d'événements appropriés
+        if (isTouchEvent) {
+            document.addEventListener("touchmove", doResize, {passive: false});
+            document.addEventListener("touchend", stopResize);
+            document.addEventListener("touchcancel", stopResize);
+        } else {
+            document.addEventListener("mousemove", doResize);
+            document.addEventListener("mouseup", stopResize);
+        }
+
         document.body.style.cursor = "ew-resize";
+        document.body.style.userSelect = "none";
+        document.body.style.webkitUserSelect = "none";
     };
 
     useEffect(() => {
@@ -546,21 +574,28 @@ const NodesTable = () => {
                     },
                 }}
             >
+                {/* BARRE DE REDIMENSIONNEMENT AMÉLIORÉE pour mobile */}
                 <Box
                     sx={{
                         position: "absolute",
                         top: 0,
                         left: 0,
-                        width: "6px",
+                        width: isMobile ? "12px" : "6px", // Plus large sur mobile
                         height: "100%",
                         cursor: "ew-resize",
                         bgcolor: theme.palette.grey[300],
                         "&:hover": {
                             bgcolor: theme.palette.primary.light,
                         },
+                        "&:active": {
+                            bgcolor: theme.palette.primary.main,
+                        },
                         transition: "background-color 0.2s",
+                        touchAction: "none", // Important pour le touch
+                        zIndex: 1,
                     }}
                     onMouseDown={startResizing}
+                    onTouchStart={startResizing}
                     aria-label="Resize drawer"
                 />
                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2}}>

@@ -180,6 +180,12 @@ jest.mock('../ActionDialogs', () => ({
             <div data-testid="console-dialog">
                 <button onClick={props.onClose} disabled={props.cancelDisabled}>Cancel</button>
                 <button onClick={props.onConfirm} disabled={props.disabled}>Open Console</button>
+                <input
+                    type="checkbox"
+                    checked={props.checked}
+                    onChange={(e) => props.setChecked(e.target.checked)}
+                    data-testid="console-checkbox"
+                />
                 <span>{props.pendingAction?.action}</span>
                 <span>{props.target}</span>
             </div>
@@ -192,7 +198,7 @@ describe('ActionDialogManager', () => {
         pendingAction: null,
         handleConfirm: jest.fn(),
         target: 'test-target',
-        supportedActions: ['freeze', 'stop', 'unprovision', 'purge', 'delete', 'switch', 'giveback', 'other'],
+        supportedActions: ['freeze', 'stop', 'unprovision', 'purge', 'delete', 'switch', 'giveback', 'console', 'other'],
         onClose: jest.fn(),
     };
 
@@ -317,6 +323,15 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('giveback');
     });
 
+    test('handles console dialog correctly', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'console'}}/>);
+        const dialog = await screen.findByTestId('console-dialog');
+        expect(dialog).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('console-checkbox'));
+        fireEvent.click(screen.getByText('Open Console'));
+        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('console');
+    });
+
     test('handles simpleConfirm fallback dialog', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
         expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
@@ -405,7 +420,7 @@ describe('ActionDialogManager', () => {
         const propsWithoutOnClose = {...defaultProps, onClose: undefined};
 
         // Helper function to trigger onClose and onConfirm for a given action
-        const triggerActions = async (action, checkboxTestId, dialogTestId) => {
+        const triggerActions = async (action, checkboxTestId, dialogTestId, confirmText = 'Confirm') => {
             // Render for onClose (Cancel)
             let {unmount} = render(<ActionDialogManager {...propsWithoutOnClose} pendingAction={{action}}/>);
             await screen.findByTestId(dialogTestId);
@@ -418,7 +433,7 @@ describe('ActionDialogManager', () => {
             if (checkboxTestId) {
                 fireEvent.click(screen.getByTestId(checkboxTestId)); // Enable confirm
             }
-            fireEvent.click(screen.getByText('Confirm')); // Hits false branch in onConfirm closure
+            fireEvent.click(screen.getByText(confirmText)); // Hits false branch in onConfirm closure
             unmount();
         };
 
@@ -429,6 +444,7 @@ describe('ActionDialogManager', () => {
         await triggerActions('delete', 'delete-configLoss-checkbox', 'delete-dialog');
         await triggerActions('switch', 'switch-checkbox', 'switch-dialog');
         await triggerActions('giveback', 'giveback-checkbox', 'giveback-dialog');
+        await triggerActions('console', 'console-checkbox', 'console-dialog', 'Open Console');
         await triggerActions('other', null, 'mock-dialog'); // simpleConfirm, no checkbox
     });
 });

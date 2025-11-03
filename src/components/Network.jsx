@@ -17,6 +17,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_NETWORK} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 const Network = () => {
     const [networks, setNetworks] = useState([]);
@@ -35,7 +36,7 @@ const Network = () => {
                 });
                 setNetworks(res.data.items || []);
             } catch (err) {
-                console.error("Error retrieving networks", err);
+                logger.error("Error retrieving networks", err);
             }
         };
 

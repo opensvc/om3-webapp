@@ -18,6 +18,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {orange, blue, red} from '@mui/material/colors';
 import {OBJECT_ACTIONS} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
+import logger from '../utils/logger.js';
 
 // Detect Safari
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -120,7 +121,7 @@ const HeaderSection = ({
                     <IconButton
                         onClick={(e) => {
                             setObjectMenuAnchor(e.currentTarget);
-                            console.log("Object menu opened at:", e.currentTarget.getBoundingClientRect());
+                            logger.info("Object menu opened at:", e.currentTarget.getBoundingClientRect());
                         }}
                         disabled={actionInProgress}
                         aria-label="Object actions"

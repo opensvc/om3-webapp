@@ -791,3 +791,33 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) 
         </DialogActions>
     </Dialog>
 );
+
+// Dialog for the "console" action
+export const ConsoleDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Open Console</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1" sx={{mb: 2}}>
+                This will open a terminal console for the selected container resource.
+                The console session will be accessible through your browser.
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+                You will have shell access to the container.
+            </Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={false}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                onClick={onConfirm}
+                disabled={disabled}
+                aria-label="Open console"
+            >
+                Open Console
+            </Button>
+        </DialogActions>
+    </Dialog>
+);

@@ -267,4 +267,116 @@ describe('Login Component', () => {
             expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
         }, {timeout: 2000});
     });
+
+    test('refreshToken returns null when refresh token is expired', async () => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() - 1000).toString());
+
+        const result = await refreshToken(mockDispatch);
+
+        expect(result).toBeNull();
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
+        expect(consoleSpy).toHaveBeenCalledWith('Refresh token expired');
+        consoleSpy.mockRestore();
+    });
+
+    test('refreshToken handles network error', async () => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+        fetch.mockRejectedValueOnce(new Error('Network error'));
+
+        const result = await refreshToken(mockDispatch);
+
+        expect(result).toBeNull();
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
+        expect(consoleSpy).toHaveBeenCalledWith('Error refreshing token:', expect.any(Error));
+        consoleSpy.mockRestore();
+    });
+
+    test('handles login network error', async () => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        fetch.mockRejectedValueOnce(new Error('Network error'));
+
+        render(<Login/>);
+
+        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
+        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
+        fireEvent.click(screen.getByText('Submit'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Network error')).toBeInTheDocument();
+        });
+
+        expect(consoleSpy).toHaveBeenCalledWith('Authentication error:', expect.any(Error));
+        consoleSpy.mockRestore();
+    });
+
+    test('handles successful login without expiration in tokens', async () => {
+        const payload = {
+            sub: '1234567890',
+            name: 'John Doe',
+            iat: 1516239022,
+            // No exp
+        };
+        const mockAccessToken = createMockToken(payload);
+        const mockRefreshToken = createMockToken({...payload, token_use: 'refresh'});
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({
+                access_token: mockAccessToken,
+                refresh_token: mockRefreshToken,
+            }),
+        });
+
+        render(<Login/>);
+
+        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
+        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
+        fireEvent.click(screen.getByText('Submit'));
+
+        await waitFor(() =>
+            expect(mockDispatch).toHaveBeenCalledWith({
+                type: SetAccessToken,
+                data: mockAccessToken,
+            })
+        );
+
+        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
+        expect(localStorage.getItem('refreshToken')).toBe(mockRefreshToken);
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
+        expect(mockNavigate).toHaveBeenCalledWith('/');
+    });
+
+    test('handles token refresh without expiration in access token', async () => {
+        const payload = {
+            sub: '1234567890',
+            name: 'John Doe',
+            iat: 1516239022,
+            // No exp
+        };
+        const mockAccessToken = createMockToken(payload);
+        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({access_token: mockAccessToken}),
+        });
+
+        const result = await refreshToken(mockDispatch);
+
+        expect(result).toBe(mockAccessToken);
+        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(mockDispatch).toHaveBeenCalledWith({
+            type: SetAccessToken,
+            data: mockAccessToken,
+        });
+    });
 });

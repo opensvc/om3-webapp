@@ -1,6 +1,8 @@
 import useEventStore from './hooks/useEventStore.js';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
+import logger from './utils/logger.js';
+import {cleanup} from "@testing-library/react";
 
 // Constants for event names
 const EVENT_TYPES = {
@@ -112,7 +114,7 @@ const createBufferManager = () => {
             buffers.nodeStats = {};
         }
         if (Object.keys(buffers.heartbeatStatus).length) {
-            console.log('buffer:', buffers.heartbeatStatus);
+            logger.debug('buffer:', buffers.heartbeatStatus);
             setHeartbeatStatuses({...store.heartbeatStatus, ...buffers.heartbeatStatus});
             buffers.heartbeatStatus = {};
         }
@@ -138,15 +140,25 @@ const createBufferManager = () => {
     return {buffers, scheduleFlush};
 };
 
+// Navigation service for SPA-friendly redirects
+const navigationService = {
+    redirectToAuth: () => {
+        // Use the custom event that your OidcInitializer is listening to
+        window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
+            detail: '/auth-choice'
+        }));
+    }
+};
+
 // Create EventSource with improved reconnection logic
 export const createEventSource = (url, token) => {
     if (!token) {
-        console.error('❌ Missing token for EventSource!');
+        logger.error('❌ Missing token for EventSource!');
         return null;
     }
 
     if (currentEventSource) {
-        console.log('Closing existing EventSource');
+        logger.info('Closing existing EventSource');
         currentEventSource.close();
     }
 
@@ -154,7 +166,7 @@ export const createEventSource = (url, token) => {
     const {buffers, scheduleFlush} = createBufferManager();
     const {removeObject} = useEventStore.getState();
 
-    console.log('🔗 Creating EventSource with URL:', url);
+    logger.info('🔗 Creating EventSource with URL:', url);
     currentEventSource = new EventSourcePolyfill(url, {
         headers: {
             Authorization: `Bearer ${token}`,
@@ -164,23 +176,23 @@ export const createEventSource = (url, token) => {
     });
 
     currentEventSource.onopen = () => {
-        console.log('✅ EventSource connection established');
+        logger.info('✅ EventSource connection established');
         reconnectAttempts = 0;
     };
 
     currentEventSource.onerror = (error) => {
-        console.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
+        logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
 
         if (error.status === 401) {
-            console.log('🔐 Authentication error detected');
+            logger.warn('🔐 Authentication error detected');
             const newToken = localStorage.getItem('authToken');
             if (newToken && newToken !== token) {
-                console.log('🔄 New token available, updating EventSource');
+                logger.info('🔄 New token available, updating EventSource');
                 updateEventSourceToken(newToken);
                 return;
             }
             if (window.oidcUserManager) {
-                console.log('🔄 Attempting silent token renewal...');
+                logger.info('🔄 Attempting silent token renewal...');
                 window.oidcUserManager.signinSilent()
                     .then(user => {
                         const refreshedToken = user.access_token;
@@ -189,8 +201,9 @@ export const createEventSource = (url, token) => {
                         updateEventSourceToken(refreshedToken);
                     })
                     .catch(silentError => {
-                        console.error('❌ Silent renew failed:', silentError);
-                        window.location.href = '/ui/auth-choice';
+                        logger.error('❌ Silent renew failed:', silentError);
+                        // Use SPA-friendly navigation instead of window.location.href
+                        navigationService.redirectToAuth();
                     });
                 return;
             }
@@ -199,7 +212,7 @@ export const createEventSource = (url, token) => {
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
-            console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -207,7 +220,9 @@ export const createEventSource = (url, token) => {
                 }
             }, delay);
         } else {
-            console.error('❌ Max reconnection attempts reached');
+            logger.error('❌ Max reconnection attempts reached');
+            // Redirect to auth choice when max reconnection attempts are reached
+            navigationService.redirectToAuth();
         }
     };
 
@@ -218,7 +233,7 @@ export const createEventSource = (url, token) => {
             try {
                 parsed = JSON.parse(event.data);
             } catch (e) {
-                console.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
+                logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
                 return;
             }
             handler(parsed);
@@ -283,10 +298,10 @@ export const createEventSource = (url, token) => {
     });
 
     addEventListener(EVENT_TYPES.OBJECT_DELETED, ({path, labels}) => {
-        console.log('📩 Received ObjectDeleted event:', JSON.stringify({path, labels}));
+        logger.debug('📩 Received ObjectDeleted event:', JSON.stringify({path, labels}));
         const name = path || labels?.path;
         if (!name) {
-            console.warn('⚠️ ObjectDeleted event missing objectName:', {path, labels});
+            logger.warn('⚠️ ObjectDeleted event missing objectName:', {path, labels});
             return;
         }
         delete buffers.objectStatus[name];
@@ -309,7 +324,7 @@ export const createEventSource = (url, token) => {
     addEventListener(EVENT_TYPES.INSTANCE_CONFIG_UPDATED, ({path, labels, node, instance_config}) => {
         const name = path || labels?.path;
         if (!name || !node) {
-            console.warn('⚠️ InstanceConfigUpdated event missing name or node:', {path, labels, node});
+            logger.warn('⚠️ InstanceConfigUpdated event missing name or node:', {path, labels, node});
             return;
         }
         if (instance_config) {
@@ -319,7 +334,10 @@ export const createEventSource = (url, token) => {
         scheduleFlush();
     });
 
-    return currentEventSource;
+    // attach cleanup to returned object (so callers can call .cleanup())
+    const returned = currentEventSource;
+    returned._cleanup = cleanup;
+    return returned;
 };
 
 // Update EventSource token
@@ -327,7 +345,7 @@ export const updateEventSourceToken = (newToken) => {
     if (!newToken) return;
     currentToken = newToken;
     if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
-        console.log('🔄 Token updated, restarting EventSource');
+        logger.info('🔄 Token updated, restarting EventSource');
         closeEventSource();
         const queryString = createQueryString(DEFAULT_FILTERS, null);
         const url = `${URL_NODE_EVENT}?${queryString}`;
@@ -338,7 +356,15 @@ export const updateEventSourceToken = (newToken) => {
 // Close EventSource
 export const closeEventSource = () => {
     if (currentEventSource) {
-        console.log('Closing current EventSource');
+        logger.info('Closing current EventSource');
+        // call cleanup if available to clear timers
+        if (typeof currentEventSource._cleanup === 'function') {
+            try {
+                currentEventSource._cleanup();
+            } catch (e) {
+                logger.debug('Error during eventSource cleanup', e);
+            }
+        }
         currentEventSource.close();
         currentEventSource = null;
         currentToken = null;
@@ -349,7 +375,7 @@ export const closeEventSource = () => {
 // Configure EventSource
 export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
     if (!token) {
-        console.error('❌ No token provided for SSE!');
+        logger.error('❌ No token provided for SSE!');
         return;
     }
     const queryString = createQueryString(filters, objectName);
@@ -361,8 +387,11 @@ export const configureEventSource = (token, objectName = null, filters = DEFAULT
 // Start Event Reception
 export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     if (!token) {
-        console.error('❌ No token provided for SSE!');
+        logger.error('❌ No token provided for SSE!');
         return;
     }
     configureEventSource(token, null, filters);
 };
+
+// Export navigation service for external use
+export {navigationService};

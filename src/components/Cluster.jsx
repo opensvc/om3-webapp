@@ -1,3 +1,4 @@
+import logger from '../utils/logger.js';
 import React, {useEffect, useState, useRef} from "react";
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
@@ -28,9 +29,9 @@ const ClusterOverview = () => {
     useEffect(() => {
         isMounted.current = true;
         const token = localStorage.getItem("authToken");
-        let subscription;
+
         if (token) {
-            subscription = startEventReception(token);
+            startEventReception(token);
             // Fetch pools
             axios.get(URL_POOL, {
                 headers: {Authorization: `Bearer ${token}`}
@@ -42,7 +43,7 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                    console.error('Failed to fetch pools:', error.message);
+                        logger.error('Failed to fetch pools:', error.message);
                     setPoolCount(0);
                 });
 
@@ -57,18 +58,10 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                    console.error('Failed to fetch networks:', error.message);
+                        logger.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
                 });
         }
-        return () => {
-            if (subscription && typeof subscription === "function") {
-                subscription();
-            }
-        };
-    }, []);
-
-    useEffect(() => {
         return () => {
             isMounted.current = false;
         };

@@ -1,9 +1,10 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useCallback} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login} from "../context/AuthProvider.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import {useOidc} from "../context/OidcAuthContext.tsx";
+import logger from '../utils/logger.js';
 
 const OidcCallback = () => {
     const {userManager, recreateUserManager} = useOidc();
@@ -11,8 +12,8 @@ const OidcCallback = () => {
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
 
-    const onUserRefreshed = (user) => {
-        console.log("User refreshed:", user.profile.preferred_username, "expires_at:", user.expires_at);
+    const onUserRefreshed = useCallback((user) => {
+        logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
         authDispatch({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
@@ -23,10 +24,10 @@ const OidcCallback = () => {
             channel.postMessage({type: 'tokenUpdated', data: user.access_token, expires_at: user.expires_at});
             channel.close();
         }
-    };
+    }, [authDispatch]);
 
-    const handleTokenExpired = () => {
-        console.warn('Access token expired, redirecting to /auth-choice');
+    const handleTokenExpired = useCallback(() => {
+        logger.warn('Access token expired, redirecting to /auth-choice');
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
@@ -38,10 +39,10 @@ const OidcCallback = () => {
             channel.close();
         }
         navigate('/auth-choice');
-    };
+    }, [authDispatch, navigate]);
 
-    const handleSilentRenewError = (error) => {
-        console.error('Silent renew failed:', error);
+    const handleSilentRenewError = useCallback((error) => {
+        logger.error('Silent renew failed:', error);
         authDispatch({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
@@ -53,17 +54,37 @@ const OidcCallback = () => {
             channel.close();
         }
         navigate('/auth-choice');
-    };
+    }, [authDispatch, navigate]);
+
+    const handleSigninRedirect = useCallback(() => {
+        userManager.signinRedirectCallback()
+            .then((user) => {
+                onUserRefreshed(user);
+                authDispatch({type: SetAuthChoice, data: "openid"});
+                authDispatch({type: Login, data: user.profile.preferred_username});
+                userManager.events.addUserLoaded(onUserRefreshed);
+                userManager.events.addAccessTokenExpiring(() => {
+                    logger.debug('Access token is about to expire, attempting silent renew...');
+                });
+                userManager.events.addAccessTokenExpired(handleTokenExpired);
+                userManager.events.addSilentRenewError(handleSilentRenewError);
+                navigate('/');
+            })
+            .catch((err) => {
+                logger.error("signinRedirectCallback failed:", err);
+                navigate('/auth-choice');
+            });
+    }, [userManager, authDispatch, navigate, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
 
     useEffect(() => {
         const initializeUserManager = async () => {
             if (authInfo && !userManager) {
-                console.log("Initializing UserManager with authInfo");
+                logger.info("Initializing UserManager with authInfo");
                 try {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
                 } catch (error) {
-                    console.error("Failed to initialize OIDC config:", error);
+                    logger.error("Failed to initialize OIDC config:", error);
                     navigate('/auth-choice');
                 }
             }
@@ -73,17 +94,17 @@ const OidcCallback = () => {
 
     useEffect(() => {
         if (userManager) {
-            console.log("Handling OIDC callback or session check");
+            logger.debug("Handling OIDC callback or session check");
 
             // Use getUser only if it exists (for testing compatibility)
             if (typeof userManager.getUser === 'function') {
                 userManager.getUser().then((user) => {
                     if (user && !user.expired) {
-                        console.log("Existing user session found:", user.profile.preferred_username);
+                        logger.info("Existing user session found:", user.profile?.preferred_username);
                         onUserRefreshed(user);
                         userManager.events.addUserLoaded(onUserRefreshed);
                         userManager.events.addAccessTokenExpiring(() => {
-                            console.log('Access token is about to expire, attempting silent renew...');
+                            logger.debug('Access token is about to expire, attempting silent renew...');
                         });
                         userManager.events.addAccessTokenExpired(handleTokenExpired);
                         userManager.events.addSilentRenewError(handleSilentRenewError);
@@ -92,7 +113,7 @@ const OidcCallback = () => {
                         handleSigninRedirect();
                     }
                 }).catch((err) => {
-                    console.error("Failed to get user:", err);
+                    logger.error("Failed to get user:", err);
                     handleSigninRedirect();
                 });
             } else {
@@ -100,27 +121,7 @@ const OidcCallback = () => {
                 handleSigninRedirect();
             }
         }
-    }, [userManager, authDispatch, navigate]);
-
-    const handleSigninRedirect = () => {
-        userManager.signinRedirectCallback()
-            .then((user) => {
-                onUserRefreshed(user);
-                authDispatch({type: SetAuthChoice, data: "openid"});
-                authDispatch({type: Login, data: user.profile.preferred_username});
-                userManager.events.addUserLoaded(onUserRefreshed);
-                userManager.events.addAccessTokenExpiring(() => {
-                    console.log('Access token is about to expire, attempting silent renew...');
-                });
-                userManager.events.addAccessTokenExpired(handleTokenExpired);
-                userManager.events.addSilentRenewError(handleSilentRenewError);
-                navigate('/');
-            })
-            .catch((err) => {
-                console.error("signinRedirectCallback failed:", err);
-                navigate('/auth-choice');
-            });
-    };
+    }, [userManager, authDispatch, navigate, handleSigninRedirect, handleSilentRenewError, handleTokenExpired, onUserRefreshed]);
 
     useEffect(() => {
         // Only set up BroadcastChannel in browser environment
@@ -130,14 +131,14 @@ const OidcCallback = () => {
         channel.onmessage = (event) => {
             const {type, data, expires_at} = event.data || {};
             if (type === 'logout') {
-                console.log('Logout triggered from another tab');
+                logger.info('Logout triggered from another tab');
                 authDispatch({type: SetAccessToken, data: null});
                 localStorage.removeItem('authToken');
                 localStorage.removeItem('tokenExpiration');
                 localStorage.removeItem('authChoice');
                 navigate('/auth-choice');
             } else if (type === 'tokenUpdated' && data && expires_at) {
-                console.log('Token updated from another tab');
+                logger.info('Token updated from another tab');
                 authDispatch({type: SetAccessToken, data});
                 localStorage.setItem('authToken', data);
                 localStorage.setItem('tokenExpiration', expires_at.toString());

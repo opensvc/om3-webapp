@@ -21,6 +21,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import axios from "axios";
 import debounce from "lodash.debounce";
 import {URL_NETWORK_IP} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 const NetworkDetails = () => {
     const [ipDetails, setIpDetails] = useState([]);
@@ -58,7 +59,7 @@ const NetworkDetails = () => {
                     );
                 }
             } catch (err) {
-                console.error("Error retrieving network IP details", err);
+                logger.error("Error retrieving network IP details", err);
                 if (isMounted) {
                     setError("Failed to load network details. Please try again.");
                     setIpDetails([]);

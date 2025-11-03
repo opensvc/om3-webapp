@@ -19,13 +19,18 @@ import {
     ListItemIcon,
     ListItemText,
     CircularProgress,
+    Drawer,
+    IconButton,
 } from "@mui/material";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import CloseIcon from "@mui/icons-material/Close";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {closeEventSource, startEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
+import LogsViewer from "../components/LogsViewer.jsx";
+import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
@@ -40,6 +45,7 @@ const NodesTable = () => {
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     const [anchorEls, setAnchorEls] = useState({});
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -50,6 +56,13 @@ const NodesTable = () => {
     const [sortDirection, setSortDirection] = useState("asc");
     const actionsMenuAnchorRef = useRef(null);
     const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
+
+    // Logs drawer state
+    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
+    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
+    const [drawerWidth, setDrawerWidth] = useState(600); // Initial width in pixels
+    const minDrawerWidth = 300;
+    const maxDrawerWidth = window.innerWidth * 0.9;
 
     // Compute the zoom level
     const getZoomLevel = () => {
@@ -79,18 +92,88 @@ const NodesTable = () => {
         }
     };
 
+    // Handle opening logs for a node
+    const handleOpenLogs = (nodename) => {
+        setSelectedNodeForLogs(nodename);
+        setLogsDrawerOpen(true);
+    };
+
+    const handleCloseLogsDrawer = () => {
+        setLogsDrawerOpen(false);
+        setSelectedNodeForLogs(null);
+    };
+
+    // VERSION CORRIGÉE : Support des événements tactiles ET souris
+    const startResizing = (e) => {
+        e.preventDefault();
+
+        // Déterminer si c'est un événement tactile ou souris
+        const isTouchEvent = e.type.startsWith('touch');
+        const startX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+        const startWidth = drawerWidth;
+
+        const doResize = (moveEvent) => {
+            const currentX = moveEvent.type.startsWith('touch')
+                ? moveEvent.touches[0].clientX
+                : moveEvent.clientX;
+            const newWidth = startWidth + (startX - currentX); // Right-to-left resizing
+
+            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
+                setDrawerWidth(newWidth);
+            }
+        };
+
+        const stopResize = () => {
+            // Retirer les écouteurs d'événements appropriés
+            if (isTouchEvent) {
+                document.removeEventListener("touchmove", doResize);
+                document.removeEventListener("touchend", stopResize);
+                document.removeEventListener("touchcancel", stopResize);
+            } else {
+                document.removeEventListener("mousemove", doResize);
+                document.removeEventListener("mouseup", stopResize);
+            }
+            document.body.style.cursor = "default";
+            document.body.style.userSelect = "";
+            document.body.style.webkitUserSelect = "";
+        };
+
+        // Ajouter les écouteurs d'événements appropriés
+        if (isTouchEvent) {
+            document.addEventListener("touchmove", doResize, {passive: false});
+            document.addEventListener("touchend", stopResize);
+            document.addEventListener("touchcancel", stopResize);
+        } else {
+            document.addEventListener("mousemove", doResize);
+            document.addEventListener("mouseup", stopResize);
+        }
+
+        document.body.style.cursor = "ew-resize";
+        document.body.style.userSelect = "none";
+        document.body.style.webkitUserSelect = "none";
+    };
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let eventSourceActive = false;
+
         if (token) {
             fetchNodes(token);
-            startEventReception(token, [
-                "NodeStatusUpdated",
-                "NodeMonitorUpdated",
-                "NodeStatsUpdated",
-            ]);
+            if (!eventSourceActive) {
+                startEventReception(token, [
+                    "NodeStatusUpdated",
+                    "NodeMonitorUpdated",
+                    "NodeStatsUpdated",
+                ]);
+                eventSourceActive = true;
+            }
         }
+
         return () => {
-            closeEventSource();
+            if (eventSourceActive) {
+                closeEventSource();
+                eventSourceActive = false;
+            }
         };
     }, [fetchNodes]);
 
@@ -181,12 +264,12 @@ const NodesTable = () => {
                 });
                 if (!response.ok) {
                     errorCount++;
-                    console.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
+                    logger.error(`Failed to execute ${action} on ${node}: HTTP error! status: ${response.status}`);
                     return;
                 }
                 successCount++;
             } catch (error) {
-                console.error(`Failed to execute ${action} on ${node}:`, error);
+                logger.error(`Failed to execute ${action} on ${node}:`, error);
                 errorCount++;
             }
         });
@@ -279,14 +362,16 @@ const NodesTable = () => {
                 minHeight: "100vh",
                 bgcolor: "background.default",
                 display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
+                flexDirection: "row",
+                width: "100%",
+                overflow: "hidden",
                 p: 2,
+                gap: 2,
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
+                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
                     maxWidth: isWideScreen ? "1600px" : "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
@@ -294,13 +379,18 @@ const NodesTable = () => {
                     borderRadius: 3,
                     boxShadow: 3,
                     p: 3,
+                    overflow: "auto",
+                    transition: theme.transitions.create("flex", {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.enteringScreen,
+                    }),
                 }}
             >
                 <Typography variant="h4" gutterBottom align="center">
                     Node Status
                 </Typography>
 
-                <Box sx={{mb: 2}}>
+                <Box sx={{mb: 2, display: "flex", gap: 2}}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -414,6 +504,7 @@ const NodesTable = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell><strong>Actions</strong></TableCell>
+                                    <TableCell><strong>Logs</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -430,6 +521,7 @@ const NodesTable = () => {
                                         onMenuOpen={handleMenuOpen}
                                         onMenuClose={handleMenuClose}
                                         onAction={(nodename, action) => handleAction(action, nodename)}
+                                        onOpenLogs={handleOpenLogs}
                                         anchorEl={anchorEls[nodename]}
                                     />
                                 ))}
@@ -460,6 +552,66 @@ const NodesTable = () => {
                     onClose={() => setPendingAction(null)}
                 />
             </Box>
+
+            <Drawer
+                anchor="right"
+                open={logsDrawerOpen}
+                variant="persistent"
+                sx={{
+                    "& .MuiDrawer-paper": {
+                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
+                        maxWidth: "90vw",
+                        p: 2,
+                        boxSizing: "border-box",
+                        backgroundColor: theme.palette.background.paper,
+                        top: 0,
+                        height: "100vh",
+                        overflow: "auto",
+                        transition: theme.transitions.create("width", {
+                            easing: theme.transitions.easing.sharp,
+                            duration: theme.transitions.duration.enteringScreen,
+                        }),
+                    },
+                }}
+            >
+                {/* BARRE DE REDIMENSIONNEMENT AMÉLIORÉE pour mobile */}
+                <Box
+                    sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: isMobile ? "12px" : "6px", // Plus large sur mobile
+                        height: "100%",
+                        cursor: "ew-resize",
+                        bgcolor: theme.palette.grey[300],
+                        "&:hover": {
+                            bgcolor: theme.palette.primary.light,
+                        },
+                        "&:active": {
+                            bgcolor: theme.palette.primary.main,
+                        },
+                        transition: "background-color 0.2s",
+                        touchAction: "none", // Important pour le touch
+                        zIndex: 1,
+                    }}
+                    onMouseDown={startResizing}
+                    onTouchStart={startResizing}
+                    aria-label="Resize drawer"
+                />
+                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2}}>
+                    <Typography variant="h6">Node Logs</Typography>
+                    <IconButton onClick={handleCloseLogsDrawer}>
+                        <CloseIcon/>
+                    </IconButton>
+                </Box>
+                {selectedNodeForLogs && (
+                    <LogsViewer
+                        nodename={selectedNodeForLogs}
+                        type="node"
+                        height="calc(100vh - 100px)"
+                    />
+                )}
+            </Drawer>
         </Box>
     );
 };

@@ -1,7 +1,6 @@
-/* eslint-disable no-unused-vars */
-
-import {useState, useRef} from "react";
+import {useState, useRef, useCallback} from "react";
 import {fetchDaemonStatus} from "../services/api";
+import logger from '../utils/logger.js';
 
 const useFetchDaemonStatus = () => {
     const [nodes, setNodes] = useState([]);
@@ -12,8 +11,8 @@ const useFetchDaemonStatus = () => {
     const [clusterStats, setClusterStats] = useState({});
     const [clusterName, setClusterName] = useState("");
 
-    // Function to fetch daemon statuses with token
-    const refreshDaemonStatus = async (token) => {
+    // Memoize refreshDaemonStatus with useCallback
+    const refreshDaemonStatus = useCallback(async (token) => {
         setLoading(true);
         setError("");
         try {
@@ -30,13 +29,12 @@ const useFetchDaemonStatus = () => {
             setClusterName(result.cluster.config.name || "Cluster");
             cacheRef.current = nodesArray;
         } catch (err) {
-            console.error("Error while fetching daemon statuses:", err);
+            logger.error("Error while fetching daemon statuses:", err);
             setError("Failed to retrieve daemon statuses.");
         } finally {
             setLoading(false);
         }
-    };
-
+    }, []);
 
     return {
         daemon,

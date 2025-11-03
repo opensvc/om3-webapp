@@ -19,6 +19,7 @@ import {
     Archive,
     Psychology,
     Description,
+    Terminal,
 } from "@mui/icons-material";
 
 export const OBJECT_ACTIONS = [
@@ -52,6 +53,7 @@ export const RESOURCE_ACTIONS = [
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart", icon: <RestartAlt sx={{fontSize: 24}}/>},
     {name: "run", icon: <PlayCircleFilled sx={{fontSize: 24}}/>},
+    {name: 'console', icon: <Terminal/>},
 ];
 
 export const NODE_ACTIONS = [

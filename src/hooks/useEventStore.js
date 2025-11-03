@@ -1,4 +1,5 @@
 import {create} from "zustand";
+import logger from '../utils/logger.js';
 
 const useEventStore = create((set) => ({
     nodeStatus: {},
@@ -125,7 +126,7 @@ const useEventStore = create((set) => ({
                             return {name: parsed.name, fullName, node: parsed.node};
                         }
                     } catch (e) {
-                        console.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
+                        logger.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
                         return null;
                     }
                 }

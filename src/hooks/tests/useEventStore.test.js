@@ -214,6 +214,97 @@ describe('useEventStore', () => {
         });
     });
 
+    test('should preserve encapsulated resources when encap not provided in setInstanceStatuses', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        // Set initial state with encapsulated resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'active',
+                        encap: {
+                            container1: {
+                                resources: {cpu: 100, memory: 200}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Update without encap
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'updated'
+                    }
+                }
+            });
+        });
+
+        const state = useEventStore.getState();
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'updated',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {
+                        container1: {
+                            resources: {cpu: 100, memory: 200} // Preserved
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    test('should drop encapsulated resources when empty encap provided in setInstanceStatuses', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        // Set initial state with encapsulated resources
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'active',
+                        encap: {
+                            container1: {
+                                resources: {cpu: 100, memory: 200}
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Update with empty encap
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'updated',
+                        encap: {}
+                    }
+                }
+            });
+        });
+
+        const state = useEventStore.getState();
+        expect(state.objectInstanceStatus).toEqual({
+            object1: {
+                node1: {
+                    status: 'updated',
+                    node: 'node1',
+                    path: 'object1',
+                    encap: {} // Dropped
+                }
+            }
+        });
+    });
+
     test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
         const {setHeartbeatStatuses} = useEventStore.getState();
 
@@ -399,6 +490,40 @@ describe('useEventStore', () => {
         consoleWarnSpy.mockRestore();
     });
 
+    test('should handle valid JSON string updates in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            '{"name":"service3","node":"node3"}',
+            '{"name":"cluster","node":"node4"}'
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([
+            {name: 'service3', fullName: 'root/svc/service3', node: 'node3'},
+            {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node4'},
+        ]);
+    });
+
+    test('should handle valid but incomplete JSON string in setConfigUpdated', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        const updates = [
+            '{"name":"service4"}' // missing node
+        ];
+
+        act(() => {
+            setConfigUpdated(updates);
+        });
+
+        const state = useEventStore.getState();
+        expect(state.configUpdates).toEqual([]);
+    });
+
     test('should handle invalid update format in setConfigUpdated', () => {
         const {setConfigUpdated} = useEventStore.getState();
 
@@ -425,24 +550,68 @@ describe('useEventStore', () => {
             setConfigUpdated([
                 {name: 'service1', node: 'node1'},
                 {name: 'service2', node: 'node2'},
+                {
+                    kind: 'InstanceConfigUpdated',
+                    data: {path: 'service3', node: 'node3', labels: {namespace: 'ns1'}},
+                },
+                {name: 'cluster', node: 'node4'},
             ]);
         });
 
-        // Clear one update
+        expect(useEventStore.getState().configUpdates).toHaveLength(4);
+
+        // Clear one update with full name
         act(() => {
             clearConfigUpdate('root/svc/service1');
         });
 
-        const state = useEventStore.getState();
-        expect(state.configUpdates).toEqual([
-            {name: 'service2', fullName: 'root/svc/service2', node: 'node2'},
-        ]);
+        expect(useEventStore.getState().configUpdates).toHaveLength(3);
 
         // Clear using short name
         act(() => {
             clearConfigUpdate('service2');
         });
 
+        expect(useEventStore.getState().configUpdates).toHaveLength(2);
+
+        // Clear with namespace full name
+        act(() => {
+            clearConfigUpdate('ns1/svc/service3');
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(1);
+
+        // Clear cluster with short name
+        act(() => {
+            clearConfigUpdate('cluster');
+        });
+
         expect(useEventStore.getState().configUpdates).toEqual([]);
+    });
+
+    test('should not clear config updates with invalid objectName', () => {
+        const {setConfigUpdated, clearConfigUpdate} = useEventStore.getState();
+
+        act(() => {
+            setConfigUpdated([{name: 'service1', node: 'node1'}]);
+        });
+
+        act(() => {
+            clearConfigUpdate(null);
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(1);
+
+        act(() => {
+            clearConfigUpdate('');
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(1);
+
+        act(() => {
+            clearConfigUpdate(123);
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(1);
     });
 });

@@ -20,6 +20,7 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 
@@ -35,9 +36,9 @@ const NodeCard = ({
                       setCurrentNode = () => console.warn("setCurrentNode not provided"),
                       handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
                       handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
-                      individualNodeMenuAnchor = null,
                       individualNodeMenuAnchorRef = null,
                       resourcesActionsAnchorRef = null,
+                      resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
                       handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
@@ -52,13 +53,15 @@ const NodeCard = ({
                       setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
+                      instanceName,
+                      onOpenLogs = () => console.warn("onOpenLogs not provided"),
                   }) => {
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
     const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
     const [currentResourceId, setCurrentResourceId] = useState(null);
+    const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
 
-    // Log changes to selectedResourcesByNode for test
     useEffect(() => {
         console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
@@ -68,7 +71,6 @@ const NodeCard = ({
         return null;
     }
 
-    // Calculate the zoom level
     const getZoomLevel = () => {
         return window.devicePixelRatio || 1;
     };
@@ -104,7 +106,7 @@ const NodeCard = ({
             zIndex: 1300,
             "& .MuiPaper-root": {
                 minWidth: 200,
-                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                boxShadow: "0px 5px15px rgba(0,0,0,0.2)",
             },
         },
     });
@@ -157,17 +159,14 @@ const NodeCard = ({
         } else {
             setSimpleDialogOpen(true);
         }
-        setIndividualNodeMenuAnchor(null);
     };
 
-    // Handler for batch resource actions
     const handleBatchResourceActionClick = (action) => {
         setPendingAction({action, batch: "resources", node});
         setSimpleDialogOpen(true);
         setResourcesActionsAnchor(null);
     };
 
-    // Handler for individual resource actions
     const handleResourceActionClick = (action) => {
         setPendingAction({action, node, rid: currentResourceId});
         setSimpleDialogOpen(true);
@@ -175,7 +174,6 @@ const NodeCard = ({
         setCurrentResourceId(null);
     };
 
-    // Helper function to filter resource actions based on type
     const getFilteredResourceActions = (resourceType) => {
         if (!resourceType) {
             return RESOURCE_ACTIONS;
@@ -184,13 +182,15 @@ const NodeCard = ({
         if (typePrefix === 'task') {
             return RESOURCE_ACTIONS.filter((action) => action.name === 'run');
         }
-        if (['fs', 'disk', 'app', 'container'].includes(typePrefix)) {
+        if (['fs', 'disk', 'app'].includes(typePrefix)) {
+            return RESOURCE_ACTIONS.filter((action) => action.name !== 'run' && action.name !== 'console');
+        }
+        if (typePrefix === 'container') {
             return RESOURCE_ACTIONS.filter((action) => action.name !== 'run');
         }
         return RESOURCE_ACTIONS;
     };
 
-    // Helper function to get resource type for a given resource ID
     const getResourceType = (rid) => {
         if (!rid) {
             console.warn("getResourceType called with undefined or null rid");
@@ -213,7 +213,6 @@ const NodeCard = ({
         return '';
     };
 
-    // Helper function to determine resource status letters and tooltip
     const getResourceStatusLetters = (rid, resourceData, instanceConfig, instanceMonitor, isEncap = false, encapData = {}) => {
         const letters = [".", ".", ".", ".", ".", ".", ".", "."];
         const tooltipDescriptions = [
@@ -286,7 +285,6 @@ const NodeCard = ({
         return {statusString, tooltipText};
     };
 
-    // Helper function to render a resource row
     const renderResourceRow = (rid, res, instanceConfig, instanceMonitor, isEncap = false) => {
         if (!res) {
             return null;
@@ -307,85 +305,230 @@ const NodeCard = ({
             ? encapData[rid].provisioned
             : res?.provisioned?.state;
         const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
+        const logs = res.log || [];
+        const getLogPaddingLeft = () => {
+            if (isEncap) {
+                return {xs: "72px", sm: "72px"};
+            } else {
+                return {xs: "56px", sm: "56px"};
+            }
+        };
+
         return (
             <Box
                 key={rid}
                 sx={{
                     display: "flex",
-                    flexDirection: {xs: "column", sm: "row"},
-                    alignItems: {xs: "flex-start", sm: "center"},
+                    flexDirection: "column",
                     width: "100%",
                     fontFamily: "'Roboto Mono', monospace",
                     fontSize: "0.9rem",
-                    gap: {xs: 1, sm: 2},
+                    gap: 1,
                 }}
             >
                 <Box
                     sx={{
                         display: "flex",
-                        alignItems: "center",
-                        gap: {xs: 1, sm: 2},
+                        flexDirection: {xs: "column", sm: "row"},
+                        alignItems: {xs: "flex-start", sm: "center"},
                         width: "100%",
-                        pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
+                        gap: {xs: 1, sm: 2},
                     }}
                 >
-                    <Box onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                            checked={(selectedResourcesByNode[node] || []).includes(rid)}
-                            onChange={() => toggleResource(node, rid)}
-                            aria-label={`Select resource ${rid}`}
-                        />
-                    </Box>
-                    <Typography
-                        sx={{
-                            minWidth: {xs: "60px", sm: "80px"},
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                        }}
-                    >
-                        {rid}
-                    </Typography>
                     <Box
                         sx={{
-                            display: {xs: "none", sm: "flex"},
+                            display: "flex",
                             alignItems: "center",
-                            gap: 2,
-                            flexGrow: 0,
+                            gap: {xs: 1, sm: 2},
+                            width: "100%",
+                            pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
                         }}
                     >
-                        <Tooltip title={tooltipText}>
+                        <Box onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                                checked={(selectedResourcesByNode[node] || []).includes(rid)}
+                                onChange={() => toggleResource(node, rid)}
+                                aria-label={`Select resource ${rid}`}
+                                sx={{
+                                    padding: {xs: '4px', sm: '8px'},
+                                    '& .MuiSvgIcon-root': {fontSize: {xs: '1rem', sm: '1.25rem'}}
+                                }}
+                            />
+                        </Box>
+                        <Typography
+                            sx={{
+                                minWidth: {xs: "60px", sm: "80px"},
+                                fontFamily: "'Roboto Mono', monospace",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                fontSize: {xs: '0.8rem', sm: '0.9rem'}
+                            }}
+                        >
+                            {rid}
+                        </Typography>
+                        <Box
+                            sx={{
+                                display: {xs: "none", sm: "flex"},
+                                alignItems: "center",
+                                gap: 2,
+                                flexGrow: 0,
+                            }}
+                        >
+                            <Tooltip title={tooltipText}>
+                                <Typography
+                                    role="status"
+                                    sx={{
+                                        minWidth: {sm: "80px"},
+                                        fontFamily: "'Roboto Mono', monospace",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontSize: '0.9rem'
+                                    }}
+                                    aria-label={`Resource ${rid} status: ${statusString}`}
+                                >
+                                    {statusString}
+                                </Typography>
+                            </Tooltip>
                             <Typography
-                                role="status"
                                 sx={{
                                     minWidth: {sm: "80px"},
                                     fontFamily: "'Roboto Mono', monospace",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                {resourceType}
+                            </Typography>
+                            <Typography
+                                sx={{
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                {labelText}
+                                {infoText && (
+                                    <Typography
+                                        component="span"
+                                        sx={{
+                                            ml: 1,
+                                            color: "textSecondary",
+                                            fontFamily: "'Roboto Mono', monospace",
+                                            whiteSpace: "normal",
+                                            wordBreak: "break-word",
+                                            fontSize: '0.9rem'
+                                        }}
+                                    >
+                                        {infoText}
+                                    </Typography>
+                                )}
+                            </Typography>
+                        </Box>
+                        <Box
+                            sx={{
+                                display: {xs: "flex", sm: "none"},
+                                alignItems: "center",
+                                gap: 1,
+                                flexShrink: 0,
+                                marginLeft: "auto",
+                            }}
+                        >
+                            <Tooltip title={res.status || "unknown"}>
+                                <FiberManualRecordIcon
+                                    sx={{
+                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500],
+                                        fontSize: "1rem",
+                                    }}
+                                />
+                            </Tooltip>
+                            {isResourceNotProvisioned && (
+                                <Tooltip title="Not Provisioned">
+                                    <WarningAmberIcon
+                                        sx={{color: red[500], fontSize: "1rem"}}
+                                        aria-label={`Resource ${rid} is not provisioned`}
+                                    />
+                                </Tooltip>
+                            )}
+                            <Box onClick={(e) => e.stopPropagation()}>
+                                <IconButton
+                                    onClick={(e) => {
+                                        e.persist();
+                                        e.stopPropagation();
+                                        setCurrentResourceId(rid);
+                                        handleResourceMenuOpen(node, rid, e);
+                                    }}
+                                    disabled={actionInProgress}
+                                    aria-label={`Resource ${rid} actions`}
+                                    sx={{padding: '4px'}}
+                                    ref={resourceMenuAnchorRef}
+                                >
+                                    <Tooltip title="Actions">
+                                        <MoreVertIcon sx={{fontSize: '1rem'}}/>
+                                    </Tooltip>
+                                </IconButton>
+                            </Box>
+                        </Box>
+                    </Box>
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
+                        <Tooltip title={tooltipText}>
+                            <Typography
+                                role="status"
+                                sx={{
+                                    fontFamily: "'Roboto Mono', monospace",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: '0.8rem'
                                 }}
                                 aria-label={`Resource ${rid} status: ${statusString}`}
                             >
                                 {statusString}
                             </Typography>
                         </Tooltip>
+                    </Box>
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
                         <Typography
                             sx={{
-                                minWidth: {sm: "80px"},
                                 fontFamily: "'Roboto Mono', monospace",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
+                                fontSize: '0.8rem'
                             }}
                         >
                             {resourceType}
                         </Typography>
+                    </Box>
+                    <Box
+                        sx={{
+                            pl: isEncap ? 4 : 2,
+                            display: {xs: "block", sm: "none"},
+                            width: "100%",
+                        }}
+                    >
                         <Typography
                             sx={{
                                 fontFamily: "'Roboto Mono', monospace",
                                 whiteSpace: "normal",
                                 wordBreak: "break-word",
+                                fontSize: '0.8rem'
                             }}
                         >
                             {labelText}
@@ -398,6 +541,7 @@ const NodeCard = ({
                                         fontFamily: "'Roboto Mono', monospace",
                                         whiteSpace: "normal",
                                         wordBreak: "break-word",
+                                        fontSize: '0.8rem'
                                     }}
                                 >
                                     {infoText}
@@ -407,11 +551,12 @@ const NodeCard = ({
                     </Box>
                     <Box
                         sx={{
-                            display: {xs: "flex", sm: "none"},
+                            display: {xs: "none", sm: "flex"},
                             alignItems: "center",
                             gap: 1,
                             flexShrink: 0,
-                            marginLeft: "auto",
+                            flexGrow: 1,
+                            justifyContent: "flex-end",
                         }}
                     >
                         <Tooltip title={res.status || "unknown"}>
@@ -433,134 +578,52 @@ const NodeCard = ({
                         <Box onClick={(e) => e.stopPropagation()}>
                             <IconButton
                                 onClick={(e) => {
+                                    e.persist();
                                     e.stopPropagation();
                                     setCurrentResourceId(rid);
                                     handleResourceMenuOpen(node, rid, e);
                                 }}
                                 disabled={actionInProgress}
                                 aria-label={`Resource ${rid} actions`}
+                                sx={{p: 0.5}}
+                                ref={resourceMenuAnchorRef}
                             >
                                 <Tooltip title="Actions">
-                                    <MoreVertIcon/>
+                                    <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                 </Tooltip>
                             </IconButton>
                         </Box>
                     </Box>
                 </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Tooltip title={tooltipText}>
-                        <Typography
-                            role="status"
-                            sx={{
-                                fontFamily: "'Roboto Mono', monospace",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                            aria-label={`Resource ${rid} status: ${statusString}`}
-                        >
-                            {statusString}
-                        </Typography>
-                    </Tooltip>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
+                {logs.length > 0 && (
+                    <Box
                         sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            pl: getLogPaddingLeft(),
+                            width: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 0.5,
+                            mt: 0.5,
                         }}
                     >
-                        {resourceType}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
-                        sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            whiteSpace: "normal",
-                            wordBreak: "break-word",
-                        }}
-                    >
-                        {labelText}
-                        {infoText && (
+                        {logs.map((log, index) => (
                             <Typography
-                                component="span"
+                                key={index}
                                 sx={{
-                                    ml: 1,
-                                    color: "textSecondary",
                                     fontFamily: "'Roboto Mono', monospace",
+                                    fontSize: "0.8rem",
+                                    color: log.level === "warn" ? orange[500] : log.level === "error" ? red[500] : "textSecondary",
                                     whiteSpace: "normal",
                                     wordBreak: "break-word",
+                                    lineHeight: 1.3,
                                 }}
+                                aria-label={`Log for resource ${rid}: ${log.level} - ${log.message}`}
                             >
-                                {infoText}
+                                {log.level}: {log.message}
                             </Typography>
-                        )}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        display: {xs: "none", sm: "flex"},
-                        alignItems: "center",
-                        gap: 1,
-                        flexShrink: 0,
-                        flexGrow: 1,
-                        justifyContent: "flex-end",
-                    }}
-                >
-                    <Tooltip title={res.status || "unknown"}>
-                        <FiberManualRecordIcon
-                            sx={{
-                                color: typeof getColor === "function" ? getColor(res.status) : grey[500],
-                                fontSize: "1rem",
-                            }}
-                        />
-                    </Tooltip>
-                    {isResourceNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <WarningAmberIcon
-                                sx={{color: red[500], fontSize: "1rem"}}
-                                aria-label={`Resource ${rid} is not provisioned`}
-                            />
-                        </Tooltip>
-                    )}
-                    <Box onClick={(e) => e.stopPropagation()}>
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentResourceId(rid);
-                                handleResourceMenuOpen(node, rid, e);
-                            }}
-                            disabled={actionInProgress}
-                            aria-label={`Resource ${rid} actions`}
-                            sx={{p: 0.5}}
-                        >
-                            <Tooltip title="Actions">
-                                <MoreVertIcon/>
-                            </Tooltip>
-                        </IconButton>
+                        ))}
                     </Box>
-                </Box>
+                )}
             </Box>
         );
     };
@@ -581,7 +644,6 @@ const NodeCard = ({
                 overflowX: "auto",
             }}
         >
-            {/* Node header */}
             <Box sx={{p: 1}}>
                 <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
@@ -595,6 +657,15 @@ const NodeCard = ({
                         <Typography variant="h6">{node}</Typography>
                     </Box>
                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                        <Tooltip title="View logs">
+                            <IconButton
+                                onClick={() => onOpenLogs(node, resolvedInstanceName)}
+                                color="primary"
+                                aria-label={`View logs for instance ${resolvedInstanceName || node}`}
+                            >
+                                <ArticleIcon/>
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title={avail || "unknown"}>
                             <FiberManualRecordIcon
                                 sx={{
@@ -624,6 +695,7 @@ const NodeCard = ({
                         {state && <Typography variant="caption">{state}</Typography>}
                         <IconButton
                             onClick={(e) => {
+                                e.persist();
                                 e.stopPropagation();
                                 setCurrentNode(node);
                                 setIndividualNodeMenuAnchor(e.currentTarget);
@@ -639,7 +711,6 @@ const NodeCard = ({
                     </Box>
                 </Box>
             </Box>
-            {/* Resources accordion */}
             <Accordion
                 expanded={expandedNodeResources[node] || false}
                 onChange={handleNodeResourcesAccordionChange(node)}
@@ -667,8 +738,7 @@ const NodeCard = ({
                                     resIds.reduce(
                                         (acc, rid) =>
                                             resources[rid]?.type?.toLowerCase().includes("container") &&
-                                            encapData[rid]?.resources &&
-                                            resources[rid]?.status !== "down"
+                                            encapData[rid]?.resources && resources[rid]?.status !== "down"
                                                 ? acc + Object.keys(encapData[rid].resources).length
                                                 : acc,
                                         0
@@ -686,6 +756,7 @@ const NodeCard = ({
                             <Button
                                 variant="outlined"
                                 onClick={(e) => {
+                                    e.persist();
                                     e.stopPropagation();
                                     handleResourcesActionsOpen(node, e);
                                     setResourcesActionsAnchor(e.currentTarget);
@@ -766,32 +837,8 @@ const NodeCard = ({
                     </Box>
                 </AccordionDetails>
             </Accordion>
-            {/* Popper for node actions */}
-            <Popper
-                open={Boolean(individualNodeMenuAnchor)}
-                anchorEl={individualNodeMenuAnchor}
-                {...popperProps()}
-            >
-                <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
-                    <Paper elevation={3} role="menu" aria-label={`Node ${node} actions menu`}>
-                        {INSTANCE_ACTIONS.map(({name, icon}) => (
-                            <MenuItem
-                                key={name}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleIndividualNodeActionClick(name);
-                                }}
-                                role="menuitem"
-                                aria-label={`Node ${node} ${name} action`}
-                            >
-                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                            </MenuItem>
-                        ))}
-                    </Paper>
-                </ClickAwayListener>
-            </Popper>
-            {/* Popper for batch resource actions */}
+
+            {/* Resource batch actions menu */}
             <Popper
                 open={Boolean(resourcesActionsAnchor)}
                 anchorEl={resourcesActionsAnchor}
@@ -816,7 +863,8 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-            {/* Popper for individual resource actions */}
+
+            {/* Individual resource actions menu */}
             <Popper
                 open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                 anchorEl={resourceMenuAnchor}

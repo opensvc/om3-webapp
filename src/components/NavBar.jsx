@@ -37,6 +37,7 @@ const NavBar = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const [downCount, setDownCount] = useState(0);
     const [warnCount, setWarnCount] = useState(0);
+    const [appVersion, setAppVersion] = useState(null);
 
     // Define navigation routes with display names and icons
     const navRoutes = [
@@ -49,6 +50,39 @@ const NavBar = () => {
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
+
+    // Fetch app version from GitHub API
+    useEffect(() => {
+        const fetchVersion = async () => {
+            // Check cache (1 hour)
+            const cached = localStorage.getItem('appVersion');
+            const cacheTime = localStorage.getItem('appVersionTime');
+            const now = Date.now();
+
+            if (cached && cacheTime && (now - parseInt(cacheTime)) < 3600000) {
+                setAppVersion(cached);
+                return;
+            }
+
+            try {
+                const response = await fetch('https://api.github.com/repos/opensvc/om3-webapp/releases', {
+                    headers: {'User-Agent': 'MonTestCurl'}
+                });
+                const data = await response.json();
+                const latestVersion = data[0]?.tag_name || 'Unknown';
+                const cleanVersion = latestVersion.startsWith('v') ? latestVersion.slice(1) : latestVersion;
+
+                setAppVersion(cleanVersion);
+                localStorage.setItem('appVersion', cleanVersion);
+                localStorage.setItem('appVersionTime', now.toString());
+            } catch (error) {
+                console.error('Error fetching version:', error);
+                setAppVersion(cached || 'Unknown');
+            }
+        };
+
+        fetchVersion();
+    }, []);
 
     const getObjectStatus = useCallback((objectName, objs) => {
         const obj = objs[objectName] || {};
@@ -303,6 +337,26 @@ const NavBar = () => {
                                 )}
                             </Box>
                         ))}
+
+                    {/* Version display */}
+                    <Tooltip title="Application version">
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                ml: 2,
+                                px: 1,
+                                py: 0.5,
+                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                borderRadius: 1,
+                                fontFamily: 'monospace',
+                                fontSize: '0.8rem',
+                                color: 'white'
+                            }}
+                        >
+                            v{appVersion || '...'}
+                        </Typography>
+                    </Tooltip>
+
                     {(downCount > 0 || warnCount > 0) && (
                         <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
                             {downCount > 0 && (

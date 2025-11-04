@@ -3236,4 +3236,88 @@ type = flag
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         });
     });
+
+    test('handles drawer resize with touch events', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const logsButtons = screen.getAllByRole('button', {name: /logs/i});
+
+        expect(logsButtons.length).toBeGreaterThan(0);
+
+        await user.click(logsButtons[0]);
+
+        const resizeHandle = screen.getByLabelText('Resize drawer');
+        expect(resizeHandle).toBeInTheDocument();
+
+        fireEvent.touchStart(resizeHandle, {
+            touches: [{clientX: 100}]
+        });
+        fireEvent.touchMove(document, {
+            touches: [{clientX: 200}]
+        });
+        fireEvent.touchEnd(document);
+
+        expect(document.body.style.cursor).toBe('default');
+    });
+
+    test('handles batch resource action click callback', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await screen.findByText('node1');
+
+        const resourcesAccordion = screen.getByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await user.click(resourcesAccordion);
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const res1Checkbox = screen.getByLabelText(/select resource res1/i);
+        const res2Checkbox = screen.getByLabelText(/select resource res2/i);
+        await user.click(res1Checkbox);
+        await user.click(res2Checkbox);
+
+        const batchResourceActionsButton = screen.getByRole('button', {
+            name: /Resource actions for node node1/i,
+        });
+        await user.click(batchResourceActionsButton);
+
+        const menus = await screen.findAllByRole('menu');
+        const menuItems = within(menus[0]).getAllByRole('menuitem');
+        const startAction = menuItems.find((item) => item.textContent.match(/Start/i));
+
+        await user.click(startAction);
+
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /confirm/i});
+        await user.click(confirmButton);
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalled();
+        });
+    });
 });

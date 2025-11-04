@@ -22,7 +22,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
-import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {RESOURCE_ACTIONS} from "../constants/actions";
 
 const NodeCard = ({
                       node,
@@ -44,13 +44,7 @@ const NodeCard = ({
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
                       setPendingAction = () => console.warn("setPendingAction not provided"),
-                      setConfirmDialogOpen = () => console.warn("setConfirmDialogOpen not provided"),
-                      setStopDialogOpen = () => console.warn("setStopDialogOpen not provided"),
-                      setUnprovisionDialogOpen = () => console.warn("setUnprovisionDialogOpen not provided"),
                       setSimpleDialogOpen = () => console.warn("setSimpleDialogOpen not provided"),
-                      setCheckboxes = () => console.warn("setCheckboxes not provided"),
-                      setStopCheckbox = () => console.warn("setStopCheckbox not provided"),
-                      setUnprovisionCheckboxes = () => console.warn("setUnprovisionCheckboxes not provided"),
                       setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                       instanceName,
@@ -138,27 +132,6 @@ const NodeCard = ({
             ...prev,
             [node]: checked ? allResourceIds : [],
         }));
-    };
-
-    // Handler for individual node actions
-    const handleIndividualNodeActionClick = (action) => {
-        setCurrentNode(node);
-        setPendingAction({action, node});
-        if (action === "freeze") {
-            setCheckboxes({failover: false});
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(false);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionCheckboxes({
-                dataLoss: false,
-                serviceInterruption: false,
-            });
-            setUnprovisionDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
     };
 
     const handleBatchResourceActionClick = (action) => {

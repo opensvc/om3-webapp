@@ -1,4 +1,4 @@
-import React, {useState, forwardRef} from 'react';
+import React, {useState, forwardRef, useRef} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router-dom';
 import Button from '@mui/material/Button';
@@ -8,8 +8,12 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
-import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
+import {
+    SetAccessToken,
+    SetAuthChoice,
+    useAuthDispatch,
+} from '../context/AuthProvider.jsx';
+import {URL_TOKEN, URL_REFRESH} from '../config/apiPath.js';
 
 // --- Secure decodeToken ---
 export const decodeToken = (token) => {
@@ -22,8 +26,18 @@ export const decodeToken = (token) => {
     }
 };
 
-// --- Exported refreshToken ---
+// --- Refresh token queue lock to handle concurrency ---
+let refreshInProgress = false;
+let refreshQueue = [];
+
 export const refreshToken = async (dispatch) => {
+    // If refresh already in progress, return a promise that resolves when complete
+    if (refreshInProgress) {
+        return new Promise((resolve, reject) => {
+            refreshQueue.push({resolve, reject});
+        });
+    }
+
     const refresh_token = localStorage.getItem('refreshToken');
     if (!refresh_token) return null;
 
@@ -34,18 +48,25 @@ export const refreshToken = async (dispatch) => {
         return null;
     }
 
+    refreshInProgress = true;
+
     try {
         const response = await fetch(URL_REFRESH, {
             method: 'POST',
             headers: {
-                'accept': 'application/json',
-                'Authorization': `Bearer ${refresh_token}`
+                accept: 'application/json',
+                Authorization: `Bearer ${refresh_token}`,
             },
         });
 
         if (!response.ok) {
             console.error('Error refreshing token: Token refresh failed');
             dispatch({type: SetAccessToken, data: null});
+            refreshInProgress = false;
+            refreshQueue.forEach(({reject}) =>
+                reject(new Error('Token refresh failed'))
+            );
+            refreshQueue = [];
             return null;
         }
 
@@ -56,10 +77,18 @@ export const refreshToken = async (dispatch) => {
         if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
 
         dispatch({type: SetAccessToken, data: data.access_token});
+
+        refreshInProgress = false;
+        refreshQueue.forEach(({resolve}) => resolve(data.access_token));
+        refreshQueue = [];
+
         return data.access_token;
     } catch (error) {
         console.error('Error refreshing token:', error);
         dispatch({type: SetAccessToken, data: null});
+        refreshInProgress = false;
+        refreshQueue.forEach(({reject}) => reject(error));
+        refreshQueue = [];
         return null;
     }
 };
@@ -72,12 +101,19 @@ const Login = forwardRef((props, ref) => {
     const dispatch = useAuthDispatch();
     const {t} = useTranslation();
 
+    const isMounted = useRef(true);
+    React.useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
     const handleLogin = async (username, password) => {
         try {
             const response = await fetch(`${URL_TOKEN}?refresh=true`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': 'Basic ' + btoa(`${username}:${password}`),
+                    Authorization: 'Basic ' + btoa(`${username}:${password}`),
                 },
             });
 
@@ -103,13 +139,13 @@ const Login = forwardRef((props, ref) => {
             navigate('/');
         } catch (error) {
             console.error('Authentication error:', error);
-            setErrorMessage(error.message);
+            setErrorMessage(error.message || t('Network or server error'));
         }
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        handleLogin(username, password);
+        if (username && password) handleLogin(username, password);
     };
 
     const handleKeyDown = (e) => {
@@ -133,8 +169,8 @@ const Login = forwardRef((props, ref) => {
                     mx: 'auto',
                     p: 3,
                     borderRadius: 2,
-                    boxShadow: 3
-                }
+                    boxShadow: 3,
+                },
             }}
         >
             <DialogTitle
@@ -144,21 +180,59 @@ const Login = forwardRef((props, ref) => {
                 {t('Login')}
             </DialogTitle>
             <DialogContent sx={{px: 3}}>
-                <TextField margin="normal" fullWidth label={t('Username')} value={username}
-                           onChange={(e) => setUsername(e.target.value)} autoFocus sx={{mb: 2}}/>
-                <TextField margin="normal" fullWidth label={t('Password')} type="password" value={password}
-                           onChange={(e) => setPassword(e.target.value)} onKeyDown={handleKeyDown} sx={{mb: 2}}/>
-                {errorMessage && <Typography color="error" variant="body2" sx={{
-                    mt: 1,
-                    textAlign: 'center',
-                    animation: 'pulse 1.5s infinite'
-                }}>{errorMessage}</Typography>}
+                <TextField
+                    margin="normal"
+                    fullWidth
+                    label={t('Username')}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoFocus
+                    sx={{mb: 2}}
+                    inputProps={{autoComplete: 'username'}}
+                />
+                <TextField
+                    margin="normal"
+                    label={t('Password')}
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    sx={{mb: 2}}
+                    inputProps={{autoComplete: 'current-password'}}
+                />
+                {errorMessage && (
+                    <Typography
+                        variant="body2"
+                        sx={{mt: 1, textAlign: 'center', animation: 'pulse 1.5s infinite'}}
+                    >
+                        {errorMessage}
+                    </Typography>
+                )}
             </DialogContent>
-            <DialogActions sx={{display: 'flex', justifyContent: 'center', gap: 2, px: 3, pb: 3}}>
-                <Button variant="contained" onClick={handleSubmit} disabled={!username || !password}
-                        sx={{px: 4, py: 1, borderRadius: 1}}>{t('Submit')}</Button>
-                <Button variant="outlined" onClick={handleChangeMethod}
-                        sx={{px: 4, py: 1, borderRadius: 1}}>{t('Change Method')}</Button>
+            <DialogActions
+                sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 2,
+                    px: 3,
+                    pb: 3,
+                }}
+            >
+                <Button
+                    variant="contained"
+                    onClick={handleSubmit}
+                    disabled={!username || !password}
+                    sx={{px: 4, py: 1, borderRadius: 1}}
+                >
+                    {t('Submit')}
+                </Button>
+                <Button
+                    variant="outlined"
+                    onClick={handleChangeMethod}
+                    sx={{px: 4, py: 1, borderRadius: 1}}
+                >
+                    {t('Change Method')}
+                </Button>
             </DialogActions>
         </Dialog>
     );

@@ -39,7 +39,8 @@ const NavBar = () => {
     const [warnCount, setWarnCount] = useState(0);
     const [appVersion, setAppVersion] = useState(null);
 
-    // Define navigation routes with display names and icons
+    const [storedClusterName, setStoredClusterName] = useState(null);
+
     const navRoutes = [
         {path: "/cluster", name: "Cluster Overview", icon: <FaHome/>},
         {path: "/namespaces", name: "Namespaces", icon: <FaList/>},
@@ -54,7 +55,6 @@ const NavBar = () => {
     // Fetch app version from GitHub API
     useEffect(() => {
         const fetchVersion = async () => {
-            // Check cache (1 hour)
             const cached = localStorage.getItem('appVersion');
             const cacheTime = localStorage.getItem('appVersionTime');
             const now = Date.now();
@@ -145,38 +145,28 @@ const NavBar = () => {
 
     useEffect(() => {
         const fetchClusterData = async () => {
-            let retryCount = 0;
-            const maxRetries = 3;
-            const retryInterval = 1000;
-
-            const tryFetch = async () => {
-                const token = auth?.authToken || localStorage.getItem("authToken");
-
-                if (!token) {
-                    if (retryCount < maxRetries) {
-                        retryCount++;
-                        setTimeout(tryFetch, retryInterval);
-                        return;
-                    }
-                    setBreadcrumb([
-                        {name: "Cluster", path: "/cluster"},
-                        ...getPathBreadcrumbs(),
-                    ]);
-                    return;
+            const token = auth?.authToken || localStorage.getItem("authToken");
+            if (!token) {
+                setBreadcrumb([
+                    {name: "Cluster", path: "/cluster"},
+                    ...getPathBreadcrumbs(),
+                ]);
+                return;
+            }
+            try {
+                await fetchNodes(token);
+                if (!storedClusterName && clusterName) {
+                    setStoredClusterName(clusterName);
                 }
-
-                try {
-                    await fetchNodes(token);
-                } catch (error) {
-                    logger.error("Error while calling fetchNodes:", error.message);
-                }
-            };
-
-            tryFetch();
+            } catch (error) {
+                logger.error("Error while calling fetchNodes:", error.message);
+            }
         };
 
-        fetchClusterData();
-    }, [auth, fetchNodes, getPathBreadcrumbs]);
+        if (!storedClusterName) {
+            fetchClusterData();
+        }
+    }, [auth, fetchNodes, getPathBreadcrumbs, storedClusterName, clusterName]);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -184,7 +174,7 @@ const NavBar = () => {
 
         if (pathParts[0] !== "login") {
             breadcrumbItems.push({
-                name: loading ? "Loading..." : (clusterName || "Cluster"),
+                name: storedClusterName || (loading ? "Loading..." : "Cluster"),
                 path: "/cluster",
             });
 
@@ -209,7 +199,7 @@ const NavBar = () => {
         }
 
         setBreadcrumb(breadcrumbItems);
-    }, [location.pathname, clusterName, loading]);
+    }, [location.pathname, storedClusterName, loading]);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {

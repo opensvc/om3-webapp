@@ -1,4 +1,4 @@
-import React, {useState, forwardRef, useRef} from 'react';
+import React, {useState, forwardRef} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router-dom';
 import Button from '@mui/material/Button';
@@ -8,89 +8,112 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import {
-    SetAccessToken,
-    SetAuthChoice,
-    useAuthDispatch,
-} from '../context/AuthProvider.jsx';
-import {URL_TOKEN, URL_REFRESH} from '../config/apiPath.js';
+import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
+import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
 
-// --- Secure decodeToken ---
+// --- Custom decodeToken using safe Base64url decoding for compatibility with tests ---
 export const decodeToken = (token) => {
     if (!token) return null;
+
+    // Base64url decode function
+    const base64UrlDecode = (str) => {
+        try {
+            let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) base64 += '=';
+            // atob decodes base64 encoded string
+            return atob(base64);
+        } catch (e) {
+            throw new Error('Failed to decode base64url string');
+        }
+    };
+
     try {
-        return JSON.parse(atob(token.split('.')[1]));
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            throw new Error('Invalid token format: expected 3 parts');
+        }
+        const payloadBase64 = parts[1];
+        const decodedPayload = base64UrlDecode(payloadBase64);
+        if (!decodedPayload) {
+            throw new Error('Failed to decode payload');
+        }
+        return JSON.parse(decodedPayload);
     } catch (error) {
         console.error('Error decoding token:', error);
         return null;
     }
 };
 
-// --- Refresh token queue lock to handle concurrency ---
-let refreshInProgress = false;
-let refreshQueue = [];
+// Queue mechanism for concurrent refresh token calls
+let refreshTokenPromise = null;
 
+// --- Exported refreshToken with robust error and expiration handling ---
 export const refreshToken = async (dispatch) => {
-    // If refresh already in progress, return a promise that resolves when complete
-    if (refreshInProgress) {
-        return new Promise((resolve, reject) => {
-            refreshQueue.push({resolve, reject});
-        });
+    // If a refresh is already in progress, return the existing promise
+    if (refreshTokenPromise) {
+        return refreshTokenPromise;
     }
 
     const refresh_token = localStorage.getItem('refreshToken');
     if (!refresh_token) return null;
 
     const refreshExpiration = localStorage.getItem('refreshTokenExpiration');
-    if (refreshExpiration && Date.now() > parseInt(refreshExpiration)) {
+    if (refreshExpiration && Date.now() > parseInt(refreshExpiration, 10)) {
         console.error('Refresh token expired');
         dispatch({type: SetAccessToken, data: null});
         return null;
     }
 
-    refreshInProgress = true;
+    // Create the refresh promise
+    refreshTokenPromise = (async () => {
+        try {
+            const response = await fetch(URL_REFRESH, {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'Authorization': `Bearer ${refresh_token}`
+                },
+            });
 
-    try {
-        const response = await fetch(URL_REFRESH, {
-            method: 'POST',
-            headers: {
-                accept: 'application/json',
-                Authorization: `Bearer ${refresh_token}`,
-            },
-        });
+            if (!response.ok) {
+                console.error('Error refreshing token: Token refresh failed');
+                dispatch({type: SetAccessToken, data: null});
+                return null;
+            }
 
-        if (!response.ok) {
-            console.error('Error refreshing token: Token refresh failed');
+            const data = await response.json();
+
+            localStorage.setItem('authToken', data.access_token);
+            const accessExp = decodeToken(data.access_token)?.exp;
+            if (accessExp) {
+                localStorage.setItem('tokenExpiration', accessExp * 1000);
+            } else {
+                localStorage.removeItem('tokenExpiration');
+            }
+
+            if (data.refresh_token) {
+                localStorage.setItem('refreshToken', data.refresh_token);
+                const refreshExp = decodeToken(data.refresh_token)?.exp;
+                if (refreshExp) {
+                    localStorage.setItem('refreshTokenExpiration', refreshExp * 1000);
+                } else {
+                    localStorage.removeItem('refreshTokenExpiration');
+                }
+            }
+
+            dispatch({type: SetAccessToken, data: data.access_token});
+            return data.access_token;
+        } catch (error) {
+            console.error('Error refreshing token:', error);
             dispatch({type: SetAccessToken, data: null});
-            refreshInProgress = false;
-            refreshQueue.forEach(({reject}) =>
-                reject(new Error('Token refresh failed'))
-            );
-            refreshQueue = [];
             return null;
+        } finally {
+            // Clear the promise once completed
+            refreshTokenPromise = null;
         }
+    })();
 
-        const data = await response.json();
-
-        localStorage.setItem('authToken', data.access_token);
-        const expirationTime = decodeToken(data.access_token)?.exp * 1000;
-        if (expirationTime) localStorage.setItem('tokenExpiration', expirationTime);
-
-        dispatch({type: SetAccessToken, data: data.access_token});
-
-        refreshInProgress = false;
-        refreshQueue.forEach(({resolve}) => resolve(data.access_token));
-        refreshQueue = [];
-
-        return data.access_token;
-    } catch (error) {
-        console.error('Error refreshing token:', error);
-        dispatch({type: SetAccessToken, data: null});
-        refreshInProgress = false;
-        refreshQueue.forEach(({reject}) => reject(error));
-        refreshQueue = [];
-        return null;
-    }
+    return refreshTokenPromise;
 };
 
 const Login = forwardRef((props, ref) => {
@@ -98,29 +121,25 @@ const Login = forwardRef((props, ref) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
+    const [loading, setLoading] = useState(false);
     const dispatch = useAuthDispatch();
     const {t} = useTranslation();
 
-    const isMounted = useRef(true);
-    React.useEffect(() => {
-        return () => {
-            isMounted.current = false;
-        };
-    }, []);
-
     const handleLogin = async (username, password) => {
+        setLoading(true);
         try {
             const response = await fetch(`${URL_TOKEN}?refresh=true`, {
                 method: 'POST',
                 headers: {
-                    Authorization: 'Basic ' + btoa(`${username}:${password}`),
+                    'Authorization': 'Basic ' + btoa(`${username}:${password}`),
                 },
             });
 
             if (!response.ok) {
-                const errorMessage = t('Incorrect username or password');
-                console.error('Authentication error:', errorMessage);
-                setErrorMessage(errorMessage);
+                const errorMsg = t('Incorrect username or password');
+                console.error('Authentication error:', errorMsg);
+                setErrorMessage(errorMsg);
+                setLoading(false);
                 return;
             }
 
@@ -129,23 +148,28 @@ const Login = forwardRef((props, ref) => {
 
             localStorage.setItem('authToken', data.access_token);
             localStorage.setItem('refreshToken', data.refresh_token);
-            const accessExp = decodeToken(data.access_token)?.exp * 1000;
-            if (accessExp) localStorage.setItem('tokenExpiration', accessExp);
-            const refreshDecoded = decodeToken(data.refresh_token);
-            const refreshExp = refreshDecoded?.exp * 1000;
-            if (refreshExp) localStorage.setItem('refreshTokenExpiration', refreshExp);
+
+            const accessExp = decodeToken(data.access_token)?.exp;
+            if (accessExp) localStorage.setItem('tokenExpiration', accessExp * 1000);
+            else localStorage.removeItem('tokenExpiration');
+
+            const refreshExp = decodeToken(data.refresh_token)?.exp;
+            if (refreshExp) localStorage.setItem('refreshTokenExpiration', refreshExp * 1000);
+            else localStorage.removeItem('refreshTokenExpiration');
 
             dispatch({type: SetAccessToken, data: data.access_token});
+            setLoading(false);
             navigate('/');
         } catch (error) {
             console.error('Authentication error:', error);
-            setErrorMessage(error.message || t('Network or server error'));
+            setErrorMessage(error.message || t('An error occurred during authentication'));
+            setLoading(false);
         }
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (username && password) handleLogin(username, password);
+        if (!loading) handleLogin(username, password);
     };
 
     const handleKeyDown = (e) => {
@@ -169,8 +193,8 @@ const Login = forwardRef((props, ref) => {
                     mx: 'auto',
                     p: 3,
                     borderRadius: 2,
-                    boxShadow: 3,
-                },
+                    boxShadow: 3
+                }
             }}
         >
             <DialogTitle
@@ -187,21 +211,23 @@ const Login = forwardRef((props, ref) => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     autoFocus
+                    disabled={loading}
                     sx={{mb: 2}}
-                    inputProps={{autoComplete: 'username'}}
                 />
                 <TextField
                     margin="normal"
+                    fullWidth
                     label={t('Password')}
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
+                    disabled={loading}
                     sx={{mb: 2}}
-                    inputProps={{autoComplete: 'current-password'}}
                 />
                 {errorMessage && (
                     <Typography
+                        color="error"
                         variant="body2"
                         sx={{mt: 1, textAlign: 'center', animation: 'pulse 1.5s infinite'}}
                     >
@@ -209,26 +235,19 @@ const Login = forwardRef((props, ref) => {
                     </Typography>
                 )}
             </DialogContent>
-            <DialogActions
-                sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    gap: 2,
-                    px: 3,
-                    pb: 3,
-                }}
-            >
+            <DialogActions sx={{display: 'flex', justifyContent: 'center', gap: 2, px: 3, pb: 3}}>
                 <Button
                     variant="contained"
                     onClick={handleSubmit}
-                    disabled={!username || !password}
+                    disabled={!username || !password || loading}
                     sx={{px: 4, py: 1, borderRadius: 1}}
                 >
-                    {t('Submit')}
+                    {loading ? t('Loading...') : t('Submit')}
                 </Button>
                 <Button
                     variant="outlined"
                     onClick={handleChangeMethod}
+                    disabled={loading}
                     sx={{px: 4, py: 1, borderRadius: 1}}
                 >
                     {t('Change Method')}

@@ -6,6 +6,10 @@ import {
     Button,
     CircularProgress,
     ClickAwayListener,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     ListItemIcon,
     ListItemText,
     MenuItem,
@@ -15,6 +19,7 @@ import {
     Typography,
     Drawer,
     IconButton,
+    TextField,
     useTheme,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -145,6 +150,9 @@ const ObjectDetail = () => {
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
+    const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
+    const [seats, setSeats] = useState(1);
+    const [greetTimeout, setGreetTimeout] = useState("5s");
     const [checkboxes, setCheckboxes] = useState(DEFAULT_CHECKBOXES);
     const [stopCheckbox, setStopCheckbox] = useState(DEFAULT_STOP_CHECKBOX);
     const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
@@ -269,7 +277,11 @@ const ObjectDetail = () => {
     // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
-        if (action === "freeze") {
+        setSeats(1);
+        setGreetTimeout("5s");
+        if (action === "console") {
+            setConsoleDialogOpen(true);
+        } else if (action === "freeze") {
             setCheckboxes(DEFAULT_CHECKBOXES);
             setConfirmDialogOpen(true);
         } else if (action === "stop") {
@@ -289,8 +301,8 @@ const ObjectDetail = () => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
     }, []);
-    // Nouvelle fonction pour ouvrir la console
-    const postConsoleAction = useCallback(async ({node, rid}) => {
+
+    const postConsoleAction = useCallback(async ({node, rid, seats = 1, greet_timeout = "5s"}) => {
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
@@ -299,7 +311,7 @@ const ObjectDetail = () => {
         setActionInProgress(true);
         openSnackbar(`Opening console for resource ${rid}...`, "info");
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(rid)}`;
+        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greet_timeout)}`;
         try {
             const response = await fetch(url, {
                 method: "POST",
@@ -535,7 +547,6 @@ const ObjectDetail = () => {
             console.warn("No valid pendingAction or action provided: No resGroupNode");
             return;
         }
-        // Exclure l'action console des actions batch
         if (action === "console") {
             openSnackbar("Console action is not available for multiple resources", "warning");
             return;
@@ -560,7 +571,6 @@ const ObjectDetail = () => {
             console.warn("No valid pendingAction or action provided: No resource details");
             return;
         }
-        // Pour toutes les actions, y compris console, utiliser openActionDialog
         openActionDialog(action, {node: resGroupNode, rid: currentResourceId});
         handleResourceMenuClose();
     }, [openActionDialog, resGroupNode, currentResourceId, handleResourceMenuClose]);
@@ -578,15 +588,6 @@ const ObjectDetail = () => {
             setStopDialogOpen(false);
             setUnprovisionDialogOpen(false);
             setPurgeDialogOpen(false);
-            setSimpleDialogOpen(false);
-            return;
-        }
-        // Gestion spéciale pour l'action console
-        if (pendingAction.action === "console") {
-            if (pendingAction.node && pendingAction.rid) {
-                postConsoleAction({node: pendingAction.node, rid: pendingAction.rid});
-            }
-            setPendingAction(null);
             setSimpleDialogOpen(false);
             return;
         }
@@ -625,7 +626,14 @@ const ObjectDetail = () => {
         setUnprovisionDialogOpen(false);
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
-    }, [pendingAction, selectedNodes, selectedResourcesByNode, postNodeAction, postResourceAction, postObjectAction, postConsoleAction]);
+    }, [pendingAction, selectedNodes, selectedResourcesByNode, postNodeAction, postResourceAction, postObjectAction]);
+    const handleConsoleConfirm = useCallback(() => {
+        if (pendingAction && pendingAction.action === "console" && pendingAction.node && pendingAction.rid) {
+            postConsoleAction({node: pendingAction.node, rid: pendingAction.rid, seats, greet_timeout: greetTimeout});
+        }
+        setConsoleDialogOpen(false);
+        setPendingAction(null);
+    }, [pendingAction, seats, greetTimeout, postConsoleAction]);
     // Selection helpers
     const toggleNode = useCallback((node) => {
         setSelectedNodes((prev) =>
@@ -911,39 +919,100 @@ const ObjectDetail = () => {
                         getColor={getColor}
                         objectMenuAnchorRef={objectMenuAnchorRef}
                     />
-                    <ActionDialogManager
-                        pendingAction={pendingAction}
-                        handleConfirm={handleDialogConfirm}
-                        target={`object ${decodedObjectName}`}
-                        supportedActions={
-                            pendingAction?.batch === "nodes"
-                                ? INSTANCE_ACTIONS.map((action) => action.name)
-                                : pendingAction?.batch === "resources" || pendingAction?.rid
-                                    ? [...RESOURCE_ACTIONS.map((action) => action.name), "console"] // Inclure console
-                                    : OBJECT_ACTIONS.map((action) => action.name)
-                        }
-                        onClose={() => {
-                            setPendingAction(null);
-                            setConfirmDialogOpen(false);
-                            setStopDialogOpen(false);
-                            setUnprovisionDialogOpen(false);
-                            setPurgeDialogOpen(false);
-                            setSimpleDialogOpen(false);
-                        }}
-                        confirmDialogOpen={confirmDialogOpen}
-                        stopDialogOpen={stopDialogOpen}
-                        unprovisionDialogOpen={unprovisionDialogOpen}
-                        purgeDialogOpen={purgeDialogOpen}
-                        simpleDialogOpen={simpleDialogOpen}
-                        checkboxes={checkboxes}
-                        setCheckboxes={setCheckboxes}
-                        stopCheckbox={stopCheckbox}
-                        setStopCheckbox={setStopCheckbox}
-                        unprovisionCheckboxes={unprovisionCheckboxes}
-                        setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                        purgeCheckboxes={purgeCheckboxes}
-                        setPurgeCheckboxes={setPurgeCheckboxes}
-                    />
+
+                    {/* ActionDialogManager pour toutes les actions SAUF console */}
+                    {pendingAction && pendingAction.action !== "console" && (
+                        <ActionDialogManager
+                            pendingAction={pendingAction}
+                            handleConfirm={handleDialogConfirm}
+                            target={`object ${decodedObjectName}`}
+                            supportedActions={
+                                pendingAction?.batch === "nodes"
+                                    ? INSTANCE_ACTIONS.map((action) => action.name)
+                                    : pendingAction?.batch === "resources" || pendingAction?.rid
+                                        ? RESOURCE_ACTIONS.map((action) => action.name)
+                                        : OBJECT_ACTIONS.map((action) => action.name)
+                            }
+                            onClose={() => {
+                                setPendingAction(null);
+                                setConfirmDialogOpen(false);
+                                setStopDialogOpen(false);
+                                setUnprovisionDialogOpen(false);
+                                setPurgeDialogOpen(false);
+                                setSimpleDialogOpen(false);
+                            }}
+                            confirmDialogOpen={confirmDialogOpen}
+                            stopDialogOpen={stopDialogOpen}
+                            unprovisionDialogOpen={unprovisionDialogOpen}
+                            purgeDialogOpen={purgeDialogOpen}
+                            simpleDialogOpen={simpleDialogOpen}
+                            checkboxes={checkboxes}
+                            setCheckboxes={setCheckboxes}
+                            stopCheckbox={stopCheckbox}
+                            setStopCheckbox={setStopCheckbox}
+                            unprovisionCheckboxes={unprovisionCheckboxes}
+                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                            purgeCheckboxes={purgeCheckboxes}
+                            setPurgeCheckboxes={setPurgeCheckboxes}
+                        />
+                    )}
+
+                    <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
+                            fullWidth>
+                        <DialogTitle>Open Console</DialogTitle>
+                        <DialogContent>
+                            <Typography variant="body1" sx={{mb: 2}}>
+                                This will open a terminal console for the selected resource.
+                            </Typography>
+
+                            {pendingAction?.rid && (
+                                <Typography variant="body2" color="primary" sx={{mb: 2, fontWeight: 'bold'}}>
+                                    Resource: {pendingAction.rid}
+                                </Typography>
+                            )}
+
+                            {pendingAction?.node && (
+                                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                                    Node: {pendingAction.node}
+                                </Typography>
+                            )}
+
+                            <Typography variant="body2" sx={{mb: 3}}>
+                                The console session will open in a new browser tab and provide shell access to the
+                                container.
+                            </Typography>
+
+                            <Box sx={{mb: 2}}>
+                                <TextField
+                                    autoFocus
+                                    margin="dense"
+                                    label="Number of Seats"
+                                    type="number"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={seats}
+                                    onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
+                                    helperText="Number of simultaneous users allowed in the console"
+                                />
+                            </Box>
+
+                            <TextField
+                                margin="dense"
+                                label="Greet Timeout"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={greetTimeout}
+                                onChange={(e) => setGreetTimeout(e.target.value)}
+                                helperText="Time to wait for console connection (e.g., 5s, 10s)"
+                            />
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setConsoleDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={handleConsoleConfirm}>Open Console</Button>
+                        </DialogActions>
+                    </Dialog>
+
                     {showKeys && (
                         <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
                     )}

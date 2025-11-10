@@ -158,6 +158,9 @@ const ObjectDetail = () => {
     const lastFetch = useRef({});
     const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
+    // States for console URL display
+    const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
+    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
     // Configuration of Popper props
     const popperProps = {
         placement: "bottom-end",
@@ -305,8 +308,9 @@ const ObjectDetail = () => {
             }
             const consoleUrl = response.headers.get('Location');
             if (consoleUrl) {
-                window.open(consoleUrl, '_blank', 'noopener,noreferrer');
-                openSnackbar(`Console opened for resource '${rid}'`);
+                setCurrentConsoleUrl(consoleUrl);
+                setConsoleUrlDialogOpen(true);
+                openSnackbar(`Console URL retrieved for resource '${rid}'`);
             } else {
                 openSnackbar('Failed to open console: Console URL not found in response', "error");
             }
@@ -982,6 +986,64 @@ const ObjectDetail = () => {
                         <DialogActions>
                             <Button onClick={() => setConsoleDialogOpen(false)}>Cancel</Button>
                             <Button onClick={handleConsoleConfirm}>Open Console</Button>
+                        </DialogActions>
+                    </Dialog>
+                    <Dialog
+                        open={consoleUrlDialogOpen}
+                        onClose={() => setConsoleUrlDialogOpen(false)}
+                        maxWidth="lg" // Changé à "lg" pour plus de largeur
+                        fullWidth
+                        sx={{
+                            '& .MuiDialog-paper': {
+                                minWidth: '600px', // Largeur minimale garantie
+                                maxWidth: '90vw',  // Maximum 90% de la largeur de la vue
+                            }
+                        }}
+                    >
+                        <DialogTitle>Console URL</DialogTitle>
+                        <DialogContent>
+                            <Box sx={{
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                padding: '12px 14px',
+                                backgroundColor: '#f5f5f5',
+                                marginBottom: 2,
+                                overflow: 'auto',
+                                maxHeight: '100px',
+                                fontFamily: 'monospace',
+                                fontSize: '0.875rem',
+                                whiteSpace: 'nowrap'
+                            }}>
+                                {currentConsoleUrl || 'No URL available'}
+                            </Box>
+                            <Box sx={{display: 'flex', gap: 2, flexWrap: 'wrap'}}>
+                                <Button
+                                    variant="outlined"
+                                    onClick={() => {
+                                        if (currentConsoleUrl) {
+                                            navigator.clipboard.writeText(currentConsoleUrl);
+                                            openSnackbar('URL copied to clipboard', 'success');
+                                        }
+                                    }}
+                                    disabled={!currentConsoleUrl}
+                                >
+                                    Copy URL
+                                </Button>
+                                <Button
+                                    variant="contained"
+                                    onClick={() => {
+                                        if (currentConsoleUrl) {
+                                            window.open(currentConsoleUrl, '_blank', 'noopener,noreferrer');
+                                        }
+                                    }}
+                                    disabled={!currentConsoleUrl}
+                                >
+                                    Open in New Tab
+                                </Button>
+                            </Box>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setConsoleUrlDialogOpen(false)}>Close</Button>
                         </DialogActions>
                     </Dialog>
                     {showKeys && (

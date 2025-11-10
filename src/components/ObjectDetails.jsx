@@ -35,6 +35,8 @@ import KeysSection from "./KeysSection";
 import NodeCard from "./NodeCard";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
+import {parseObjectPath} from "../utils/objectUtils.jsx";
+
 // Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
@@ -81,28 +83,6 @@ export const parseProvisionedState = (state) => {
         return state.toLowerCase() === "true";
     }
     return !!state;
-};
-// Helper functions for parsing and actions
-export const parseObjectPath = (objName) => {
-    if (!objName || typeof objName !== "string") {
-        return {namespace: "root", kind: "svc", name: ""};
-    }
-    const parts = objName.split("/");
-    let name, kind, namespace;
-    if (parts.length === 3) {
-        namespace = parts[0];
-        kind = parts[1];
-        name = parts[2];
-    } else if (parts.length === 2) {
-        namespace = "root";
-        kind = parts[0];
-        name = parts[1];
-    } else {
-        namespace = "root";
-        name = parts[0];
-        kind = name === "cluster" ? "ccfg" : "svc";
-    }
-    return {namespace, kind, name};
 };
 const ObjectDetail = () => {
     const {objectName} = useParams();
@@ -301,7 +281,6 @@ const ObjectDetail = () => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
     }, []);
-
     const postConsoleAction = useCallback(async ({node, rid, seats = 1, greet_timeout = "5s"}) => {
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -919,7 +898,6 @@ const ObjectDetail = () => {
                         getColor={getColor}
                         objectMenuAnchorRef={objectMenuAnchorRef}
                     />
-
                     {/* ActionDialogManager pour toutes les actions SAUF console */}
                     {pendingAction && pendingAction.action !== "console" && (
                         <ActionDialogManager
@@ -956,7 +934,6 @@ const ObjectDetail = () => {
                             setPurgeCheckboxes={setPurgeCheckboxes}
                         />
                     )}
-
                     <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
                             fullWidth>
                         <DialogTitle>Open Console</DialogTitle>
@@ -964,24 +941,20 @@ const ObjectDetail = () => {
                             <Typography variant="body1" sx={{mb: 2}}>
                                 This will open a terminal console for the selected resource.
                             </Typography>
-
                             {pendingAction?.rid && (
                                 <Typography variant="body2" color="primary" sx={{mb: 2, fontWeight: 'bold'}}>
                                     Resource: {pendingAction.rid}
                                 </Typography>
                             )}
-
                             {pendingAction?.node && (
                                 <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
                                     Node: {pendingAction.node}
                                 </Typography>
                             )}
-
                             <Typography variant="body2" sx={{mb: 3}}>
                                 The console session will open in a new browser tab and provide shell access to the
                                 container.
                             </Typography>
-
                             <Box sx={{mb: 2}}>
                                 <TextField
                                     autoFocus
@@ -995,7 +968,6 @@ const ObjectDetail = () => {
                                     helperText="Number of simultaneous users allowed in the console"
                                 />
                             </Box>
-
                             <TextField
                                 margin="dense"
                                 label="Greet Timeout"
@@ -1012,7 +984,6 @@ const ObjectDetail = () => {
                             <Button onClick={handleConsoleConfirm}>Open Console</Button>
                         </DialogActions>
                     </Dialog>
-
                     {showKeys && (
                         <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
                     )}

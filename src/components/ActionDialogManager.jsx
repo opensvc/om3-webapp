@@ -18,7 +18,6 @@ import {
     SwitchDialog,
     GivebackDialog,
 } from './ActionDialogs';
-
 // ConsoleDialog component for ActionDialogManager
 const ConsoleDialog = ({
                            open,
@@ -95,7 +94,6 @@ const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled
     const dialogTitle = typeof action === 'string' && action
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
         : 'Confirm Action';
-
     return (
         <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
             <DialogTitle>{dialogTitle}</DialogTitle>
@@ -121,7 +119,6 @@ const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled
         </Dialog>
     );
 };
-
 const ActionDialogManager = ({
                                  pendingAction,
                                  handleConfirm,
@@ -146,7 +143,7 @@ const ActionDialogManager = ({
         console: false,
         simpleConfirm: false,
     });
-
+    const [lastAction, setLastAction] = useState(null);
     const dialogConfig = useMemo(() => ({
         freeze: {
             component: FreezeDialog,
@@ -368,6 +365,7 @@ const ActionDialogManager = ({
     }), [checkboxState, handleConfirm, pendingAction, target, onClose, seats, setSeats, greetTimeout, setGreetTimeout]);
     useEffect(() => {
         if (pendingAction === null) {
+            setLastAction(null);
             if (onClose) onClose();
             return;
         }
@@ -386,32 +384,35 @@ const ActionDialogManager = ({
             if (onClose) onClose();
             return;
         }
-        // Initialize checkbox state for the action
-        const initCheckbox = {
-            freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
-            stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
-            unprovision: () => setCheckboxState((prev) => ({
-                ...prev,
-                unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
-            })),
-            purge: () => setCheckboxState((prev) => ({
-                ...prev,
-                purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
-            })),
-            "delete": () => setCheckboxState((prev) => ({
-                ...prev,
-                "delete": {configLoss: false, clusterwide: false},
-            })),
-            "switch": () => setCheckboxState((prev) => ({...prev, "switch": false})),
-            giveback: () => setCheckboxState((prev) => ({...prev, giveback: false})),
-            simpleConfirm: () => setCheckboxState((prev) => ({...prev, simpleConfirm: false})),
-        };
-        if (initCheckbox[action]) {
-            initCheckbox[action]();
-        } else {
-            initCheckbox.simpleConfirm();
+        // Initialize checkbox state for the action only if the action has changed
+        if (action !== lastAction) {
+            const initCheckbox = {
+                freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
+                stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
+                unprovision: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
+                })),
+                purge: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
+                })),
+                "delete": () => setCheckboxState((prev) => ({
+                    ...prev,
+                    "delete": {configLoss: false, clusterwide: false},
+                })),
+                "switch": () => setCheckboxState((prev) => ({...prev, "switch": false})),
+                giveback: () => setCheckboxState((prev) => ({...prev, giveback: false})),
+                simpleConfirm: () => setCheckboxState((prev) => ({...prev, simpleConfirm: false})),
+            };
+            if (initCheckbox[action]) {
+                initCheckbox[action]();
+            } else {
+                initCheckbox.simpleConfirm();
+            }
+            setLastAction(action);
         }
-    }, [pendingAction, supportedActions, onClose]);
+    }, [pendingAction, supportedActions, onClose, lastAction]);
     if (!pendingAction || !pendingAction.action) return null;
     const action = pendingAction.action.toLowerCase();
     const config = dialogConfig[action] || dialogConfig.simpleConfirm;

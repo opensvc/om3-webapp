@@ -530,73 +530,6 @@ export const CreateKeyDialog = ({
     </Dialog>
 );
 
-// Dialog for the "update key" action
-export const UpdateKeyDialog = ({
-                                    open,
-                                    onClose,
-                                    onConfirm,
-                                    updateKeyName,
-                                    setUpdateKeyName,
-                                    updateKeyFile,
-                                    setUpdateKeyFile,
-                                    disabled,
-                                }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Update Key</DialogTitle>
-        <DialogContent>
-            <TextField
-                autoFocus
-                margin="dense"
-                label="Key Name"
-                fullWidth
-                variant="outlined"
-                value={updateKeyName}
-                onChange={(e) => setUpdateKeyName(e.target.value)}
-                disabled={disabled}
-                aria-label="Key name input"
-            />
-            <Box sx={{mt: 2}}>
-                <input
-                    id="update-key-file-upload"
-                    type="file"
-                    hidden
-                    onChange={(e) => setUpdateKeyFile(e.target.files[0])}
-                    disabled={disabled}
-                />
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <Button
-                        variant="outlined"
-                        component="label"
-                        htmlFor="update-key-file-upload"
-                        disabled={disabled}
-                    >
-                        Choose File
-                    </Button>
-                    <Typography
-                        variant="body2"
-                        color={updateKeyFile ? 'textPrimary' : 'textSecondary'}
-                    >
-                        {updateKeyFile ? updateKeyFile.name : 'No file chosen'}
-                    </Typography>
-                </Box>
-            </Box>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled || !updateKeyName || !updateKeyFile}
-                aria-label="Confirm update key action"
-            >
-                Update
-            </Button>
-        </DialogActions>
-    </Dialog>
-);
 
 // Dialog for the "update config" action
 export const UpdateConfigDialog = ({
@@ -792,32 +725,3 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) 
     </Dialog>
 );
 
-// Dialog for the "console" action
-export const ConsoleDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Open Console</DialogTitle>
-        <DialogContent>
-            <Typography variant="body1" sx={{mb: 2}}>
-                This will open a terminal console for the selected container resource.
-                The console session will be accessible through your browser.
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-                You will have shell access to the container.
-            </Typography>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled}
-                aria-label="Open console"
-            >
-                Open Console
-            </Button>
-        </DialogActions>
-    </Dialog>
-);

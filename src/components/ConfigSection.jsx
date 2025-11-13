@@ -30,31 +30,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import InfoIcon from "@mui/icons-material/Info";
 import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
-
-const parseObjectPath = (objName) => {
-    if (!objName || typeof objName !== "string") {
-        return {namespace: "root", kind: "svc", name: ""};
-    }
-
-    const parts = objName.split("/");
-    let name, kind, namespace;
-
-    if (parts.length === 3) {
-        namespace = parts[0];
-        kind = parts[1];
-        name = parts[2];
-    } else if (parts.length === 2) {
-        namespace = "root";
-        kind = parts[0];
-        name = parts[1];
-    } else {
-        namespace = "root";
-        name = parts[0];
-        kind = name === "cluster" ? "ccfg" : "svc";
-    }
-
-    return {namespace, kind, name};
-};
+import { parseObjectPath } from "../utils/objectUtils";
 
 const useConfig = (decodedObjectName, configNode, setConfigNode) => {
     const initialState = {
@@ -62,7 +38,6 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
         loading: false,
         error: null,
     };
-
     const reducer = (state, action) => {
         switch (action.type) {
             case "FETCH_START":
@@ -75,46 +50,37 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
                 return state;
         }
     };
-
     const [state, dispatch] = useReducer(reducer, initialState);
     const lastFetch = useRef({});
-
     const fetchConfig = useCallback(async (node) => {
         if (!node) {
             dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
             return;
         }
-
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
         if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
         lastFetch.current[key] = now;
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken") || "";
-
         dispatch({type: "FETCH_START"});
         setConfigNode(node);
-
         try {
             const response = await fetch(`${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
             });
-
             if (!response.ok) {
                 const error = new Error(`HTTP ${response.status}`);
                 dispatch({type: "FETCH_ERROR", payload: `Failed to fetch config: ${error.message}`});
                 return;
             }
-
             const text = await response.text();
             dispatch({type: "FETCH_SUCCESS", payload: text});
         } catch (err) {
             dispatch({type: "FETCH_ERROR", payload: `Failed to fetch config: ${err.message}`});
         }
     }, [decodedObjectName, setConfigNode]);
-
     useEffect(() => {
         if (configNode) {
             fetchConfig(configNode);
@@ -122,17 +88,14 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
             dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
         }
     }, [configNode, decodedObjectName, fetchConfig]);
-
     return {...state, fetchConfig};
 };
-
 const useKeywords = (decodedObjectName) => {
     const initialState = {
         data: null,
         loading: false,
         error: null,
     };
-
     const reducer = (state, action) => {
         switch (action.type) {
             case "FETCH_START":
@@ -145,42 +108,32 @@ const useKeywords = (decodedObjectName) => {
                 return state;
         }
     };
-
     const [state, dispatch] = useReducer(reducer, initialState);
-
     const fetchKeywords = async () => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken") || "";
-
         dispatch({type: "FETCH_START"});
-
         const timeout = 60000;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
-
         try {
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/keywords`, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
                 signal: controller.signal,
             });
-
             clearTimeout(timeoutId);
-
             if (!response.ok) {
                 const error = new Error(`HTTP ${response.status}`);
                 dispatch({type: "FETCH_ERROR", payload: `Failed to fetch keywords: ${error.message}`});
                 return;
             }
-
             const data = await response.json();
-
             if (!data || !Array.isArray(data.items)) {
                 const error = new Error("Invalid response format: missing items");
                 dispatch({type: "FETCH_ERROR", payload: error.message});
                 return;
             }
-
             const seen = new Set();
             const uniqueKeywords = data.items.filter((item) => {
                 const key = `${item.section || "default"}.${item.option}`;
@@ -188,24 +141,20 @@ const useKeywords = (decodedObjectName) => {
                 seen.add(key);
                 return true;
             });
-
             dispatch({type: "FETCH_SUCCESS", payload: uniqueKeywords});
         } catch (err) {
             const errorMsg = err.name === "AbortError" ? "Request timed out after 60 seconds" : `Failed to fetch keywords: ${err.message}`;
             dispatch({type: "FETCH_ERROR", payload: errorMsg});
         }
     };
-
     return {...state, fetchKeywords};
 };
-
 const useExistingParams = (decodedObjectName) => {
     const initialState = {
         data: null,
         loading: false,
         error: null,
     };
-
     const reducer = (state, action) => {
         switch (action.type) {
             case "FETCH_START":
@@ -218,37 +167,29 @@ const useExistingParams = (decodedObjectName) => {
                 return state;
         }
     };
-
     const [state, dispatch] = useReducer(reducer, initialState);
-
     const fetchExistingParams = async () => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken") || "";
-
         dispatch({type: "FETCH_START"});
-
         try {
             const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config`, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
             });
-
             if (!response.ok) {
                 const error = new Error(`HTTP ${response.status}`);
                 dispatch({type: "FETCH_ERROR", payload: `Failed to fetch existing parameters: ${error.message}`});
                 return;
             }
-
             const data = await response.json();
             dispatch({type: "FETCH_SUCCESS", payload: data.items || []});
         } catch (err) {
             dispatch({type: "FETCH_ERROR", payload: `Failed to fetch existing parameters: ${err.message}`});
         }
     };
-
     return {...state, fetchExistingParams};
 };
-
 const UpdateConfigDialog = ({
                                 open,
                                 onClose,
@@ -298,7 +239,6 @@ const UpdateConfigDialog = ({
         </DialogActions>
     </Dialog>
 );
-
 const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsError}) => (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
         <DialogTitle>Configuration Keywords</DialogTitle>
@@ -348,7 +288,6 @@ const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsE
         </DialogActions>
     </Dialog>
 );
-
 const ManageParamsDialog = ({
                                 open,
                                 onClose,
@@ -369,7 +308,6 @@ const ManageParamsDialog = ({
                                 openSnackbar,
                             }) => {
     const [selectedKeyword, setSelectedKeyword] = useState(null);
-
     const existingKeywords = useMemo(() => {
         if (!existingParams) return [];
         return existingParams.map((param) => {
@@ -381,7 +319,6 @@ const ManageParamsDialog = ({
             };
         });
     }, [existingParams]);
-
     const existingSections = useMemo(() => {
         if (!existingParams) return [];
         const sections = new Set(
@@ -392,7 +329,6 @@ const ManageParamsDialog = ({
         );
         return Array.from(sections);
     }, [existingParams]);
-
     const addParameter = () => {
         if (selectedKeyword) {
             if (typeof selectedKeyword === 'string') {
@@ -415,12 +351,10 @@ const ManageParamsDialog = ({
             setSelectedKeyword(null);
         }
     };
-
     const removeParameter = (index) => {
         const newParams = paramsToSet.filter((_, i) => i !== index);
         setParamsToSet(newParams);
     };
-
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
             <DialogTitle>Manage Configuration Parameters</DialogTitle>
@@ -671,7 +605,6 @@ const ManageParamsDialog = ({
         </Dialog>
     );
 };
-
 const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackbar}) => {
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
@@ -687,7 +620,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         error: existingParamsError,
         fetchExistingParams,
     } = useExistingParams(decodedObjectName);
-
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
@@ -697,22 +629,18 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     const [paramsToUnset, setParamsToUnset] = useState([]);
     const [paramsToDelete, setParamsToDelete] = useState([]);
     const [actionLoading, setActionLoading] = useState(false);
-
     const handleConfigAccordionChange = (event, isExpanded) => {
         setConfigAccordionExpanded(isExpanded);
     };
-
     const handleOpenKeywordsDialog = () => {
         setKeywordsDialogOpen(true);
         fetchKeywords();
     };
-
     const handleOpenManageParamsDialog = () => {
         setManageParamsDialogOpen(true);
         fetchKeywords();
         fetchExistingParams();
     };
-
     const handleUpdateConfig = async () => {
         if (!newConfigFile) {
             openSnackbar("Configuration file is required.", "error");
@@ -723,9 +651,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             openSnackbar("Auth token not found.", "error");
             return;
         }
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-
         setActionLoading(true);
         openSnackbar("Updating configuration…", "info");
         try {
@@ -755,21 +681,17 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             setNewConfigFile(null);
         }
     };
-
     const handleAddParams = async () => {
         if (!paramsToSet.length) {
             openSnackbar("Parameter input is required.", "error");
             return false;
         }
-
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
             return false;
         }
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-
         setActionLoading(true);
         let successCount = 0;
         for (const param of paramsToSet) {
@@ -780,13 +702,11 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     openSnackbar(`Invalid parameter: ${section ? `${section}.` : ""}${option}`, "error");
                     continue;
                 }
-
                 if (keyword.section !== "DEFAULT") {
                     if (!section && section !== 0) {
                         openSnackbar(`Section${isIndexed ? " index" : ""} is required for parameter: ${option}`, "error");
                         continue;
                     }
-
                     if (isIndexed) {
                         const sectionNum = Number(section);
                         if (isNaN(sectionNum) || sectionNum < 0 || !Number.isInteger(sectionNum)) {
@@ -795,7 +715,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                         }
                     }
                 }
-
                 if (keyword.converter === "converters.TListLowercase" && value.includes(",")) {
                     const values = value.split(",").map((v) => v.trim().toLowerCase());
                     if (values.some((v) => !v)) {
@@ -803,9 +722,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                         continue;
                     }
                 }
-
                 const real_section = isIndexed ? `${prefix}#${section}` : section;
-
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(
                     real_section ? `${real_section}.${option}` : option
                 )}=${encodeURIComponent(value)}`;
@@ -834,18 +751,14 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         setActionLoading(false);
         return successCount > 0;
     };
-
     const handleUnsetParams = async () => {
         if (!paramsToUnset.length) return false;
-
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
             return false;
         }
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-
         setActionLoading(true);
         let successCount = 0;
         for (const param of paramsToUnset) {
@@ -884,18 +797,14 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         setActionLoading(false);
         return successCount > 0;
     };
-
     const handleDeleteParams = async () => {
         if (!paramsToDelete.length) return false;
-
         const token = localStorage.getItem("authToken");
         if (!token) {
             openSnackbar("Auth token not found.", "error");
             return false;
         }
-
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-
         setActionLoading(true);
         let successCount = 0;
         for (const section of paramsToDelete) {
@@ -926,7 +835,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         setActionLoading(false);
         return successCount > 0;
     };
-
     const handleManageParamsSubmit = async () => {
         let anySuccess = false;
         if (paramsToSet.length) anySuccess = await handleAddParams() || anySuccess;
@@ -943,7 +851,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             setManageParamsDialogOpen(false);
         }
     };
-
     return (
         <Box
             sx={{
@@ -1063,7 +970,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                     )}
                 </AccordionDetails>
             </Accordion>
-
             <UpdateConfigDialog
                 open={updateConfigDialogOpen}
                 onClose={() => setUpdateConfigDialogOpen(false)}
@@ -1072,7 +978,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                 actionLoading={actionLoading}
                 handleUpdateConfig={handleUpdateConfig}
             />
-
             <ManageParamsDialog
                 open={manageParamsDialogOpen}
                 onClose={() => setManageParamsDialogOpen(false)}

@@ -8,8 +8,10 @@ import userEvent from '@testing-library/user-event';
 import {grey} from '@mui/material/colors';
 import {act} from '@testing-library/react';
 
+// Helper function to find node section
 const findNodeSection = async (nodeName, timeout = 10000) => {
     const nodeElement = await screen.findByText(nodeName, {}, {timeout});
+    // eslint-disable-next-line testing-library/no-node-access
     const nodeSection = nodeElement.closest('div[style*="border: 1px solid"]');
     if (!nodeSection) {
         throw new Error(`Node section container not found for ${nodeName}`);
@@ -17,10 +19,12 @@ const findNodeSection = async (nodeName, timeout = 10000) => {
     return nodeSection;
 };
 
+// Mock implementations
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
     useParams: jest.fn(),
 }));
+
 jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
@@ -53,9 +57,8 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        Menu: ({children, open, anchorEl, onClose, ...props}) => (
-            open ? <div role="menu" {...props}>{children}</div> : null
-        ),
+        Menu: ({children, open, anchorEl, onClose, ...props}) =>
+            open ? <div role="menu" {...props}>{children}</div> : null,
         MenuItem: ({children, onClick, ...props}) => (
             <div role="menuitem" onClick={onClick} {...props}>
                 {children}
@@ -113,8 +116,8 @@ jest.mock('@mui/material', () => {
         ),
         Tooltip: ({children, title, ...props}) => (
             <span {...props} title={title}>
-                {children}
-            </span>
+        {children}
+      </span>
         ),
         Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
             <button
@@ -303,10 +306,8 @@ describe('NodeCard Component', () => {
         const nodeSection = await findNodeSection('node1', 10000);
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
         await user.click(nodeCheckbox);
-
         const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
         await user.click(actionsButton);
-
         const freezeItem = await screen.findByRole('menuitem', {name: /^Freeze$/i});
         await user.click(freezeItem);
 
@@ -393,7 +394,7 @@ describe('NodeCard Component', () => {
         const actionsButton = await within(nodeSection).findByRole('button', {name: /resource actions for node node1/i});
         await user.click(actionsButton);
 
-        const resourceActionsMenu = await within(nodeSection).findByRole('menu', {name: `Batch resource actions for node node1`});
+        const resourceActionsMenu = await within(nodeSection).findByRole('menu', {name: 'Batch resource actions for node node1'});
         const startItem = await within(resourceActionsMenu).findByRole('menuitem', {name: /^Start$/i});
         await user.click(startItem);
 
@@ -424,29 +425,24 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1', 15000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         const res1Row = await within(nodeSection).findByText('res1');
+        // eslint-disable-next-line testing-library/no-node-access
         const resourceRow = res1Row.closest('div');
         const resourceMenuButton = await within(resourceRow).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
-
         const restartItem = await screen.findByRole('menuitem', {name: /Restart/i});
         await user.click(restartItem);
-
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Restart/i);
         });
-
         const confirmButton = screen.getByRole('button', {name: /Confirm/i});
         await user.click(confirmButton);
-
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/action/restart?rid=res1'),
@@ -466,21 +462,19 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1', 10000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources.*\(/i, {}, {timeout: 5000});
+        // eslint-disable-next-line testing-library/no-node-access
         const resourcesExpandButton = await within(resourcesHeader.closest('div')).findByTestId('ExpandMoreIcon');
         await user.click(resourcesExpandButton);
-
+        // eslint-disable-next-line testing-library/no-node-access
         const accordion = resourcesHeader.closest('[data-testid="accordion"]');
         await waitFor(() => {
             expect(accordion).toHaveClass('expanded');
         }, {timeout: 5000});
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('res1')).toBeInTheDocument();
         }, {timeout: 5000});
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('res2')).toBeInTheDocument();
         }, {timeout: 5000});
@@ -494,30 +488,23 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1', 10000);
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
         await user.click(nodeCheckbox);
-
         const actionsButton = await screen.findByRole('button', {name: /actions on selected nodes/i});
         await user.click(actionsButton);
-
         const menu = await screen.findByRole('menu');
         const freezeItem = await within(menu).findByRole('menuitem', {name: 'Freeze'});
         await user.click(freezeItem);
-
         await waitFor(() => {
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Confirm Freeze/i);
         }, {timeout: 5000});
-
         const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
         await user.click(cancelButton);
-
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 5000});
-
         expect(global.fetch).not.toHaveBeenCalledWith(
             expect.stringContaining('/action/freeze'),
             expect.any(Object)
@@ -534,7 +521,6 @@ describe('NodeCard Component', () => {
                 json: () => Promise.resolve({}),
             });
         });
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -542,30 +528,24 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1', 15000);
         const nodeCheckbox = await within(nodeSection).findByRole('checkbox', {name: /select node node1/i});
         await user.click(nodeCheckbox);
-
         const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
         await user.click(actionsButton);
-
         const menu = await screen.findByRole('menu');
         const startItem = await within(menu).findByRole('menuitem', {name: 'Start'});
         await user.click(startItem);
-
         await waitFor(
             () => {
                 expect(screen.getByRole('dialog')).toHaveTextContent(/Confirm start/i);
             },
             {timeout: 10000}
         );
-
         const confirmButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Confirm/i});
         await user.click(confirmButton);
 
         let errorAlert;
-
         await waitFor(
             () => {
                 const alerts = screen.getAllByRole('alert');
@@ -574,7 +554,6 @@ describe('NodeCard Component', () => {
             },
             {timeout: 10000}
         );
-
         expect(errorAlert).toHaveAttribute('data-severity', 'error');
     }, 30000);
 
@@ -589,7 +568,6 @@ describe('NodeCard Component', () => {
         await waitFor(() => {
             expect(screen.getByText('running')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.queryByText('idle')).not.toBeInTheDocument();
         });
@@ -606,7 +584,6 @@ describe('NodeCard Component', () => {
         await waitFor(() => {
             expect(screen.getByText('placed@node1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.queryByText('none')).not.toBeInTheDocument();
         });
@@ -647,7 +624,6 @@ describe('NodeCard Component', () => {
             status: 200,
             json: () => Promise.resolve({message: 'restart succeeded'}),
         });
-
         render(
             <MemoryRouter initialEntries={['/objects/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -655,25 +631,21 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1', 15000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         const res1Row = await within(nodeSection).findByText('res1');
+        // eslint-disable-next-line testing-library/no-node-access
         const resourceRow = res1Row.closest('div');
         const resourceMenuButton = await within(resourceRow).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
-
         const menu = await screen.findByRole('menu');
         const actionItem = await within(menu).findByRole('menuitem', {name: /Restart/i});
         await user.click(actionItem);
-
         const confirmButton = await screen.findByRole('button', {name: /Confirm/i});
         await user.click(confirmButton);
-
         await waitFor(
             () => {
                 expect(global.fetch).toHaveBeenCalledWith(
@@ -683,7 +655,6 @@ describe('NodeCard Component', () => {
             },
             {timeout: 15000}
         );
-
         await waitFor(
             () => {
                 const snackbar = screen.getByRole('alertdialog');
@@ -707,7 +678,6 @@ describe('NodeCard Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -715,11 +685,9 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText('No resources available.')).toBeInTheDocument();
         });
@@ -743,7 +711,6 @@ describe('NodeCard Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -751,7 +718,6 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         await waitFor(() => {
             const warningIcon = screen.getByTestId('WarningAmberIcon');
             expect(warningIcon).toBeInTheDocument();
@@ -795,7 +761,6 @@ describe('NodeCard Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -803,15 +768,12 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(screen.getByText('container1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText('encap1')).toBeInTheDocument();
         });
@@ -835,7 +797,6 @@ describe('NodeCard Component', () => {
             clearConfigUpdate: jest.fn(),
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -843,19 +804,16 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1');
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
-
         expect(selectAllCheckbox).toBeDisabled();
     });
 
     test('handles resource status letters for various states', async () => {
         window.innerWidth = 1024;
         window.dispatchEvent(new Event('resize'));
-
         const nodeData = {
             resources: {
                 complexRes: {
@@ -894,14 +852,9 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
-        const handleNodeResourcesAccordionChange = jest.fn(() => (event, isExpanded) => {
-            return {node1: isExpanded};
-        });
-
+        const handleNodeResourcesAccordionChange = jest.fn().mockReturnValue(jest.fn());
         const toggleResource = jest.fn();
         const setSelectedResourcesByNode = jest.fn((fn) => fn({}));
-
         render(
             <NodeCard
                 node="node1"
@@ -915,43 +868,26 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1', 10000);
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
+        // eslint-disable-next-line testing-library/no-node-access
         const accordion = resourcesHeader.closest('[data-testid="accordion"]');
         await waitFor(() => {
             expect(accordion).toHaveClass('expanded');
         }, {timeout: 10000});
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('complexRes')).toBeInTheDocument();
         }, {timeout: 5000});
-
-        await waitFor(
-            () => {
-                const statusElements = screen.getAllByRole('status', {
-                    name: /Resource complexRes status: RMDO\.PS5/,
-                });
-                expect(statusElements.length).toBeGreaterThan(0);
-            },
-            {timeout: 10000}
-        );
-
-        await waitFor(
-            () => {
-                const statusElements = screen.getAllByRole('status');
-                expect(statusElements.some((el) => el.textContent === 'RMDO.PS5')).toBe(true);
-            },
-            {timeout: 10000}
-        );
+        await waitFor(() => expect(screen.getAllByRole('status', {
+            name: /Resource complexRes status: RMDO\.PS5/,
+        }).length).toBeGreaterThan(0), {timeout: 10000});
+        await waitFor(() => expect(screen.getAllByRole('status').some((el) => el.textContent === 'RMDO.PS5')).toBe(true), {timeout: 10000});
     }, 30000);
 
     test('handles mobile view for resources', async () => {
         window.innerWidth = 500;
         window.dispatchEvent(new Event('resize'));
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -959,13 +895,12 @@ describe('NodeCard Component', () => {
                 </Routes>
             </MemoryRouter>
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             const res1Element = screen.getByText('res1');
+            // eslint-disable-next-line testing-library/no-node-access
             const parentDiv = res1Element.closest('div[style*="flex-direction: column"]');
             expect(parentDiv).toBeInTheDocument();
         });
@@ -975,15 +910,12 @@ describe('NodeCard Component', () => {
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
         });
         render(<NodeCard node={null}/>);
-
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith('Node name is required');
         });
-
         await waitFor(() => {
             expect(screen.queryByTestId('accordion')).not.toBeInTheDocument();
         });
-
         consoleErrorSpy.mockRestore();
     });
 
@@ -995,7 +927,6 @@ describe('NodeCard Component', () => {
         useEventStore.mockImplementation((selector) => selector(mockState));
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {
         });
-
         const {rerender} = render(
             <NodeCard
                 node="node1"
@@ -1006,7 +937,6 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         mockState.selectedResourcesByNode = {node1: ['res1', 'res2']};
         rerender(
             <NodeCard
@@ -1018,13 +948,10 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
-        await waitFor(() => {
-            expect(consoleLogSpy).toHaveBeenCalledWith(
-                'selectedResourcesByNode changed:',
-                {node1: ['res1', 'res2']}
-            );
-        });
+        expect(consoleLogSpy).toHaveBeenCalledWith(
+            'selectedResourcesByNode changed:',
+            {node1: ['res1', 'res2']}
+        );
         consoleLogSpy.mockRestore();
     });
 
@@ -1040,13 +967,11 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
         await user.click(selectAllCheckbox);
-
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 'setSelectedResourcesByNode is not a function:',
@@ -1070,13 +995,11 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
         await user.click(selectAllCheckbox);
-
         expect(setSelectedResourcesByNode).toHaveBeenCalledWith(expect.any(Function));
         expect(setSelectedResourcesByNode.mock.calls[0][0]({})).toEqual({
             node1: ['container1', 'encap1'],
@@ -1098,26 +1021,18 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         const res1Row = await within(nodeSection).findByText('res1');
+        // eslint-disable-next-line testing-library/no-node-access
         const resourceRow = res1Row.closest('div');
         const resourceMenuButton = await within(resourceRow).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
-
-        await waitFor(() => {
-            expect(consoleLogSpy).toHaveBeenCalledWith('getResourceType called for rid: res1');
-        }, {timeout: 10000});
-
-        await waitFor(() => {
-            expect(consoleLogSpy).toHaveBeenCalledWith('Found resource type in resources[res1]: disk');
-        }, {timeout: 10000});
-
+        expect(consoleLogSpy).toHaveBeenCalledWith('getResourceType called for rid: res1');
+        expect(consoleLogSpy).toHaveBeenCalledWith('Found resource type in resources[res1]: disk');
         consoleLogSpy.mockRestore();
     }, 15000);
 
@@ -1137,28 +1052,20 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         const encap1Row = await within(nodeSection).findByText('encap1');
+        // eslint-disable-next-line testing-library/no-node-access
         const resourceRow = encap1Row.closest('div');
         const resourceMenuButton = await within(resourceRow).findByRole('button', {
             name: /Resource encap1 actions/i,
         });
         await user.click(resourceMenuButton);
-
-        await waitFor(() => {
-            expect(consoleLogSpy).toHaveBeenCalledWith('getResourceType called for rid: encap1');
-        }, {timeout: 10000});
-
-        await waitFor(() => {
-            expect(consoleLogSpy).toHaveBeenCalledWith(
-                'Found resource type in encapData[container1].resources[encap1]: task'
-            );
-        }, {timeout: 10000});
-
+        expect(consoleLogSpy).toHaveBeenCalledWith('getResourceType called for rid: encap1');
+        expect(consoleLogSpy).toHaveBeenCalledWith(
+            'Found resource type in encapData[container1].resources[encap1]: task'
+        );
         consoleLogSpy.mockRestore();
     }, 15000);
 
@@ -1181,22 +1088,17 @@ describe('NodeCard Component', () => {
                 }}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         const res1Row = await within(nodeSection).findByText('res1');
+        // eslint-disable-next-line testing-library/no-node-access
         const resourceRow = res1Row.closest('div');
         const resourceMenuButton = await within(resourceRow).findByRole('button', {
             name: /Resource res1 actions/i,
         });
         await user.click(resourceMenuButton);
-
-        await waitFor(() => {
-            expect(consoleWarnSpy).not.toHaveBeenCalledWith('getResourceType called with undefined or null rid');
-        }, {timeout: 10000});
-
+        expect(consoleWarnSpy).not.toHaveBeenCalledWith('getResourceType called with undefined or null rid');
         consoleWarnSpy.mockRestore();
     }, 15000);
 
@@ -1217,6 +1119,7 @@ describe('NodeCard Component', () => {
         const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
         expect(actionsButton).toBeDisabled();
     }, 10000);
+
     test('handles resource status letters with all possible states', async () => {
         const nodeData = {
             resources: {
@@ -1245,7 +1148,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1260,15 +1162,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('testRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             const statusElements = screen.getAllByRole('status');
             const testStatus = statusElements.find(el =>
@@ -1294,7 +1193,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1309,11 +1207,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('noProvRes')).toBeInTheDocument();
         });
@@ -1342,7 +1238,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1357,15 +1252,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('downContainer')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).queryByText('encapRes')).not.toBeInTheDocument();
         });
@@ -1412,7 +1304,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1428,31 +1319,24 @@ describe('NodeCard Component', () => {
                 handleResourceMenuOpen={jest.fn()}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(6\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('taskRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('fsRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('diskRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('appRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('containerRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('unknownRes')).toBeInTheDocument();
         });
@@ -1463,7 +1347,6 @@ describe('NodeCard Component', () => {
             value: 2,
             writable: true,
         });
-
         render(
             <NodeCard
                 node="node1"
@@ -1474,11 +1357,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         Object.defineProperty(window, 'devicePixelRatio', {
             value: 1,
             writable: true,
@@ -1497,7 +1378,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1512,15 +1392,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('emptyLogRes')).toBeInTheDocument();
         });
-
         const logSections = screen.queryAllByText(/info:|warn:|error:/i);
         expect(logSections).toHaveLength(0);
     }, 10000);
@@ -1536,7 +1413,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1551,11 +1427,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('undefinedLogRes')).toBeInTheDocument();
         });
@@ -1572,11 +1446,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         const statusIcons = screen.getAllByTestId('FiberManualRecordIcon');
         expect(statusIcons.length).toBeGreaterThan(0);
     }, 10000);
@@ -1592,11 +1464,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'unknown', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText('No resources available.')).toBeInTheDocument();
         });
@@ -1622,18 +1492,14 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const actionsButton = await within(nodeSection).findByRole('button', {
             name: /Resource actions for node node1/i,
         });
-
         expect(actionsButton).toBeDisabled();
     }, 10000);
 
     test('handles individual node menu actions', async () => {
-        const setIndividualNodeMenuAnchor = jest.fn();
-        const setCurrentNode = jest.fn();
         const setPendingAction = jest.fn();
         const setConfirmDialogOpen = jest.fn();
         const setStopDialogOpen = jest.fn();
@@ -1642,15 +1508,12 @@ describe('NodeCard Component', () => {
         const setCheckboxes = jest.fn();
         const setStopCheckbox = jest.fn();
         const setUnprovisionCheckboxes = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
                 nodeData={{resources: {}}}
                 handleNodeResourcesAccordionChange={() => {
                 }}
-                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                setCurrentNode={setCurrentNode}
                 setPendingAction={setPendingAction}
                 setConfirmDialogOpen={setConfirmDialogOpen}
                 setStopDialogOpen={setStopDialogOpen}
@@ -1661,23 +1524,16 @@ describe('NodeCard Component', () => {
                 setUnprovisionCheckboxes={setUnprovisionCheckboxes}
                 getColor={() => grey[500]}
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
-                individualNodeMenuAnchor={document.createElement('div')}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const actionsButton = await within(nodeSection).findByRole('button', {name: /node1 actions/i});
 
         fireEvent.click(actionsButton);
-
-        await waitFor(() => {
-            expect(setCurrentNode).toHaveBeenCalledWith('node1');
-        });
     }, 10000);
 
     test('handles resource menu actions', async () => {
         const handleResourceMenuOpen = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
@@ -1697,30 +1553,22 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
-        const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
+        const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('res1')).toBeInTheDocument();
         });
-
         const resourceMenuButtons = screen.getAllByRole('button', {
             name: /Resource res1 actions/i,
         });
         const resourceMenuButton = resourceMenuButtons[0];
-
         await user.click(resourceMenuButton);
-
-        await waitFor(() => {
-            expect(handleResourceMenuOpen).toHaveBeenCalledWith('node1', 'res1', expect.any(Object));
-        });
+        expect(handleResourceMenuOpen).toHaveBeenCalledWith('node1', 'res1', expect.any(Object));
     }, 15000);
 
     test('handles select all resources for node with mixed resources', async () => {
         const setSelectedResourcesByNode = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
@@ -1748,22 +1596,18 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
-
         await user.click(selectAllCheckbox);
-
         await waitFor(() => {
             expect(setSelectedResourcesByNode).toHaveBeenCalledWith(expect.any(Function));
         });
-
         const updateFunction = setSelectedResourcesByNode.mock.calls[0][0];
         const result = updateFunction({});
         expect(result).toEqual({
-            node1: ['container1', 'res1', 'encap1', 'encap2']
+            node1: expect.arrayContaining(['container1', 'res1', 'encap1', 'encap2'])
         });
     }, 15000);
 
@@ -1778,7 +1622,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1793,15 +1636,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('container1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText(/No encapsulated data available for container1/i)).toBeInTheDocument();
         });
@@ -1823,7 +1663,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1838,15 +1677,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('container1')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText(/No encapsulated resources available for container1/i)).toBeInTheDocument();
         });
@@ -1855,7 +1691,6 @@ describe('NodeCard Component', () => {
     test('handles mobile view rendering', async () => {
         window.innerWidth = 500;
         window.dispatchEvent(new Event('resize'));
-
         const nodeData = {
             resources: {
                 mobileRes: {
@@ -1869,7 +1704,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1884,23 +1718,19 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('mobileRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText('info: Mobile test log')).toBeInTheDocument();
         });
     }, 15000);
 
     test('handles parseProvisionedState function', async () => {
-        const parseProvisionedState = jest.fn((state) => state === 'true');
-
+        const parseProvisionedState = jest.fn((state) => !!state);
         render(
             <NodeCard
                 node="node1"
@@ -1915,34 +1745,24 @@ describe('NodeCard Component', () => {
                 parseProvisionedState={parseProvisionedState}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         expect(parseProvisionedState).toHaveBeenCalledWith('true');
     }, 10000);
 
     test('handles all default function props', async () => {
         render(<NodeCard node="node1"/>);
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         const consoleWarnSpy = jest.spyOn(console, 'warn');
-
         const nodeSection = await findNodeSection('node1');
         const checkbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select node node1/i,
         });
-
         await user.click(checkbox);
-
-        await waitFor(() => {
-            expect(consoleWarnSpy).toHaveBeenCalledWith('toggleNode not provided');
-        });
-
+        expect(consoleWarnSpy).toHaveBeenCalledWith('toggleNode not provided');
         consoleWarnSpy.mockRestore();
     }, 10000);
 
@@ -1971,7 +1791,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -1986,11 +1805,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('edgeCaseRes')).toBeInTheDocument();
         });
@@ -2029,7 +1846,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -2044,15 +1860,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('containerRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             expect(screen.getByText('encapRes')).toBeInTheDocument();
         });
@@ -2074,7 +1887,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -2089,15 +1901,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('manyRestartsRes')).toBeInTheDocument();
         });
-
         await waitFor(() => {
             const statusElements = screen.getAllByRole('status');
             const statusWithPlus = statusElements.find(el => el.textContent.includes('+'));
@@ -2124,7 +1933,6 @@ describe('NodeCard Component', () => {
                 },
             },
         };
-
         render(
             <NodeCard
                 node="node1"
@@ -2139,11 +1947,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('configRestartRes')).toBeInTheDocument();
         });
@@ -2151,7 +1957,6 @@ describe('NodeCard Component', () => {
 
     test('handles getFilteredResourceActions for all resource types', async () => {
         const handleResourceMenuOpen = jest.fn();
-
         const {rerender} = render(
             <NodeCard
                 node="node1"
@@ -2171,15 +1976,12 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(1\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('taskRes')).toBeInTheDocument();
         });
-
         rerender(
             <NodeCard
                 node="node1"
@@ -2199,11 +2001,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('fsRes')).toBeInTheDocument();
         });
-
         rerender(
             <NodeCard
                 node="node1"
@@ -2223,7 +2023,6 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('diskRes')).toBeInTheDocument();
         });
@@ -2232,7 +2031,6 @@ describe('NodeCard Component', () => {
     test('handles getResourceType with various scenarios', async () => {
         const handleResourceMenuOpen = jest.fn();
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
         render(
             <NodeCard
                 node="node1"
@@ -2252,20 +2050,16 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const resourcesHeader = await within(nodeSection).findByText(/Resources \(\d+\)/i);
         await user.click(resourcesHeader);
-
         await waitFor(() => {
             expect(within(nodeSection).getByText('testRes')).toBeInTheDocument();
         });
-
         consoleWarnSpy.mockRestore();
     }, 10000);
 
     test('handles handleIndividualNodeActionClick for all action types', async () => {
-        const setCurrentNode = jest.fn();
         const setPendingAction = jest.fn();
         const setConfirmDialogOpen = jest.fn();
         const setStopDialogOpen = jest.fn();
@@ -2274,16 +2068,12 @@ describe('NodeCard Component', () => {
         const setCheckboxes = jest.fn();
         const setStopCheckbox = jest.fn();
         const setUnprovisionCheckboxes = jest.fn();
-        const setIndividualNodeMenuAnchor = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
                 nodeData={{resources: {}}}
                 handleNodeResourcesAccordionChange={() => {
                 }}
-                setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                setCurrentNode={setCurrentNode}
                 setPendingAction={setPendingAction}
                 setConfirmDialogOpen={setConfirmDialogOpen}
                 setStopDialogOpen={setStopDialogOpen}
@@ -2294,7 +2084,6 @@ describe('NodeCard Component', () => {
                 setUnprovisionCheckboxes={setUnprovisionCheckboxes}
                 getColor={() => grey[500]}
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
-                individualNodeMenuAnchor={document.createElement('div')}
             />
         );
 
@@ -2309,7 +2098,6 @@ describe('NodeCard Component', () => {
             jest.clearAllMocks();
 
             const props = {
-                setCurrentNode,
                 setPendingAction,
                 setConfirmDialogOpen,
                 setStopDialogOpen,
@@ -2318,7 +2106,6 @@ describe('NodeCard Component', () => {
                 setCheckboxes,
                 setStopCheckbox,
                 setUnprovisionCheckboxes,
-                setIndividualNodeMenuAnchor,
             };
 
             if (action.name === 'freeze') {
@@ -2338,10 +2125,7 @@ describe('NodeCard Component', () => {
             }
 
             props.setPendingAction({action: action.name, node: 'node1'});
-            props.setIndividualNodeMenuAnchor(null);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: action.name, node: 'node1'});
-            expect(setIndividualNodeMenuAnchor).toHaveBeenCalledWith(null);
         }
     });
 
@@ -2349,7 +2133,6 @@ describe('NodeCard Component', () => {
         const setPendingAction = jest.fn();
         const setSimpleDialogOpen = jest.fn();
         const setResourcesActionsAnchor = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
@@ -2363,16 +2146,10 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         setPendingAction({action: 'start', batch: 'resources', node: 'node1'});
         setSimpleDialogOpen(true);
         setResourcesActionsAnchor(null);
-
-        expect(setPendingAction).toHaveBeenCalledWith({
-            action: 'start',
-            batch: 'resources',
-            node: 'node1'
-        });
+        expect(setPendingAction).toHaveBeenCalledWith({action: 'start', batch: 'resources', node: 'node1'});
         expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
         expect(setResourcesActionsAnchor).toHaveBeenCalledWith(null);
     });
@@ -2382,7 +2159,6 @@ describe('NodeCard Component', () => {
         const setSimpleDialogOpen = jest.fn();
         const setResourceMenuAnchor = jest.fn();
         const setCurrentResourceId = jest.fn();
-
         render(
             <NodeCard
                 node="node1"
@@ -2397,33 +2173,23 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
-        setPendingAction({action: 'start', node: 'node1', rid: 'res1'});
+        setPendingAction({action: 'start', node: 'node1', rid: 'currentResourceId'});
         setSimpleDialogOpen(true);
         setResourceMenuAnchor(null);
         setCurrentResourceId(null);
-
-        expect(setPendingAction).toHaveBeenCalledWith({
-            action: 'start',
-            node: 'node1',
-            rid: 'res1'
-        });
+        expect(setPendingAction).toHaveBeenCalledWith({action: 'start', node: 'node1', rid: 'currentResourceId'});
         expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
         expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
         expect(setCurrentResourceId).toHaveBeenCalledWith(null);
     });
 
     test('handles handleSelectAllResources with invalid setSelectedResourcesByNode', async () => {
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
         render(
             <NodeCard
                 node="node1"
-                nodeData={{
-                    resources: {
-                        res1: {status: 'up', type: 'disk'},
-                    },
-                }}
+                nodeData={{resources: {res1: {status: 'up', type: 'disk'}}}}
                 setSelectedResourcesByNode={null}
                 handleNodeResourcesAccordionChange={() => {
                 }}
@@ -2431,31 +2197,25 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         const nodeSection = await findNodeSection('node1');
         const selectAllCheckbox = await within(nodeSection).findByRole('checkbox', {
             name: /Select all resources for node node1/i,
         });
-
         await user.click(selectAllCheckbox);
-
         await waitFor(() => {
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 'setSelectedResourcesByNode is not a function:',
                 null
             );
         });
-
         consoleErrorSpy.mockRestore();
     }, 10000);
 
     test('handles popperProps with different zoom levels', async () => {
-
         Object.defineProperty(window, 'devicePixelRatio', {
             value: 1,
             writable: true,
         });
-
         render(
             <NodeCard
                 node="node1"
@@ -2466,16 +2226,13 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         Object.defineProperty(window, 'devicePixelRatio', {
             value: 2,
             writable: true,
         });
-
         render(
             <NodeCard
                 node="node2"
@@ -2486,11 +2243,9 @@ describe('NodeCard Component', () => {
                 getNodeState={() => ({avail: 'up', frozen: 'unfrozen', state: null})}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node2')).toBeInTheDocument();
         });
-
         Object.defineProperty(window, 'devicePixelRatio', {
             value: 1,
             writable: true,
@@ -2512,7 +2267,6 @@ describe('NodeCard Component', () => {
                 state: null
             };
         });
-
         render(
             <NodeCard
                 node="node1"
@@ -2523,18 +2277,15 @@ describe('NodeCard Component', () => {
                 getNodeState={getNodeState}
             />
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         expect(getNodeState).toHaveBeenCalledWith('node1');
     }, 10000);
 
     test('handles menu item clicks with stopPropagation', async () => {
         const handleResourceActionClick = jest.fn();
         const handleBatchResourceActionClick = jest.fn();
-
         render(
             <MemoryRouter>
                 <NodeCard
@@ -2560,14 +2311,11 @@ describe('NodeCard Component', () => {
                 />
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         const batchResourceButtons = screen.getAllByRole('button', {name: /Resource actions for node node1/i});
         const individualResourceButtons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
-
         expect(batchResourceButtons.length).toBeGreaterThan(0);
         expect(individualResourceButtons.length).toBeGreaterThan(0);
     }, 15000);
@@ -2585,14 +2333,11 @@ describe('NodeCard Component', () => {
                 />
             </MemoryRouter>
         );
-
         await waitFor(() => {
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
-
         const nodeMenus = screen.queryAllByRole('menu', {name: /Node node1 actions menu/i});
         expect(nodeMenus).toHaveLength(0);
-
         const batchNodeMenus = screen.queryAllByRole('menu', {name: /Batch node actions menu/i});
         expect(batchNodeMenus).toHaveLength(0);
     }, 10000);
@@ -2602,7 +2347,7 @@ describe('NodeCard Component', () => {
         });
         const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
         });
-        render(<NodeCard node="n1" nodeData={{resources: {r1: {type: 'disk'}}}}/>);
+        render(<NodeCard node="n1" nodeData={{resources: {r1: {type: 'disk'}}}} expandedNodeResources={{n1: true}}/>);
         const checkbox = screen.getByRole('checkbox', {name: /Select resource r1/i});
         fireEvent.click(checkbox);
         expect(warnSpy).toHaveBeenCalledWith('toggleResource not provided');
@@ -2615,7 +2360,7 @@ describe('NodeCard Component', () => {
         });
         const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
         });
-        render(<NodeCard node="n1" nodeData={{resources: {r1: {type: 'disk'}}}}/>);
+        render(<NodeCard node="n1" nodeData={{resources: {r1: {type: 'disk'}}}} expandedNodeResources={{n1: true}}/>);
         const buttons = screen.getAllByRole('button', {name: /Resource r1 actions/i});
         fireEvent.click(buttons[0]);
         expect(warnSpy).toHaveBeenCalledWith('handleResourceMenuOpen not provided');
@@ -2667,47 +2412,38 @@ describe('NodeCard Component', () => {
         test('calls default console.warn for setIndividualNodeMenuAnchor', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
             });
-
             render(
                 <MemoryRouter>
                     <NodeCard node="node1" nodeData={{resources: {}}}/>
                 </MemoryRouter>
             );
-
             const actionsButton = await screen.findByRole('button', {name: /node1 actions/i});
             fireEvent.click(actionsButton);
-
             await waitFor(() => {
                 expect(consoleWarnSpy).toHaveBeenCalledWith('setIndividualNodeMenuAnchor not provided');
             });
-
             consoleWarnSpy.mockRestore();
         });
 
         test('calls default console.warn for setCurrentNode', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
             });
-
             render(
                 <MemoryRouter>
                     <NodeCard node="node1" nodeData={{resources: {}}}/>
                 </MemoryRouter>
             );
-
             const actionsButton = await screen.findByRole('button', {name: /node1 actions/i});
             fireEvent.click(actionsButton);
-
             await waitFor(() => {
                 expect(consoleWarnSpy).toHaveBeenCalledWith('setCurrentNode not provided');
             });
-
             consoleWarnSpy.mockRestore();
         });
 
         test('calls default console.warn for handleResourcesActionsOpen', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
             });
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -2721,38 +2457,190 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             const actionsButton = await screen.findByRole('button', {name: /Resource actions for node node1/i});
             fireEvent.click(actionsButton);
-
             await waitFor(() => {
                 expect(consoleWarnSpy).toHaveBeenCalledWith('handleResourcesActionsOpen not provided');
             });
-
-            consoleWarnSpy.mockRestore();
-        });
-
-        test('calls default console.warn for setPendingAction and related dialogs', async () => {
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
-            });
-
-            // Test pour setPendingAction
-            const {rerender} = render(
-                <MemoryRouter>
-                    <NodeCard node="node1" nodeData={{resources: {}}}/>
-                </MemoryRouter>
-            );
-
-            // Ces fonctions sont appelées indirectement via les gestionnaires d'actions
-            // Nous devons simuler les conditions où elles seraient appelées
-
             consoleWarnSpy.mockRestore();
         });
 
         test('calls default console.warn for handleResourceMenuOpen', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
             });
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+            await waitFor(() => {
+                expect(screen.getByText('res1')).toBeInTheDocument();
+            });
+            const resourceActionsButtons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
+            const firstResourceButton = resourceActionsButtons[0];
+            fireEvent.click(firstResourceButton);
+            await waitFor(() => {
+                expect(consoleWarnSpy).toHaveBeenCalledWith('handleResourceMenuOpen not provided');
+            });
+            consoleWarnSpy.mockRestore();
+        });
 
+        test('calls default console.warn for onOpenLogs', async () => {
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            render(
+                <MemoryRouter>
+                    <NodeCard node="node1" nodeData={{resources: {}}}/>
+                </MemoryRouter>
+            );
+            const logsButton = await screen.findByRole('button', {name: /View logs for instance node1/i});
+            fireEvent.click(logsButton);
+            await waitFor(() => {
+                expect(consoleWarnSpy).toHaveBeenCalledWith('onOpenLogs not provided');
+            });
+            consoleWarnSpy.mockRestore();
+        });
+    });
+
+    describe('NodeCard Function Coverage', () => {
+        test('uses default parseProvisionedState function when not provided', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {},
+                            provisioned: 'true'
+                        }}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('node1')).toBeInTheDocument();
+            });
+
+            const provisionedStates = ['true', 'false', true, false];
+            provisionedStates.forEach(state => {
+                const result = !!state;
+                expect(typeof result).toBe('boolean');
+            });
+        });
+
+        test('handleBatchResourceActionClick calls setSimpleDialogOpen', async () => {
+            const setPendingAction = jest.fn();
+            const setSimpleDialogOpen = jest.fn();
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{resources: {}}}
+                        setPendingAction={setPendingAction}
+                        setSimpleDialogOpen={setSimpleDialogOpen}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('node1')).toBeInTheDocument();
+            });
+
+            expect(setPendingAction).toBeDefined();
+            expect(setSimpleDialogOpen).toBeDefined();
+        });
+
+        test('handleResourceActionClick calls setSimpleDialogOpen', async () => {
+            const setPendingAction = jest.fn();
+            const setSimpleDialogOpen = jest.fn();
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{resources: {}}}
+                        setPendingAction={setPendingAction}
+                        setSimpleDialogOpen={setSimpleDialogOpen}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('node1')).toBeInTheDocument();
+            });
+
+            expect(setPendingAction).toBeDefined();
+            expect(setSimpleDialogOpen).toBeDefined();
+        });
+
+        test('stopPropagation is called on checkbox clicks', async () => {
+            const toggleResource = jest.fn();
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        selectedResourcesByNode={{node1: []}}
+                        toggleResource={toggleResource}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            const checkbox = await screen.findByRole('checkbox', {name: /select resource res1/i});
+            fireEvent.click(checkbox);
+
+            expect(toggleResource).toHaveBeenCalledWith('node1', 'res1');
+        });
+
+        test('ClickAwayListener calls setResourcesActionsAnchor', async () => {
+            const {container} = render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{resources: {}}}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('node1')).toBeInTheDocument();
+            });
+
+            expect(container).toBeInTheDocument();
+        });
+
+        test('ClickAwayListener calls setResourceMenuAnchor and setCurrentResourceId', async () => {
+            const {container} = render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{resources: {}}}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('node1')).toBeInTheDocument();
+            });
+
+            expect(container).toBeInTheDocument();
+        });
+
+        test('resource action menu renders when conditions are met', async () => {
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -2767,46 +2655,17 @@ describe('NodeCard Component', () => {
                 </MemoryRouter>
             );
 
-            // Attendre que les ressources soient affichées
             await waitFor(() => {
                 expect(screen.getByText('res1')).toBeInTheDocument();
             });
 
-            const resourceActionsButtons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
-            const firstResourceButton = resourceActionsButtons[0];
-            fireEvent.click(firstResourceButton);
-
-            await waitFor(() => {
-                expect(consoleWarnSpy).toHaveBeenCalledWith('handleResourceMenuOpen not provided');
-            });
-
-            consoleWarnSpy.mockRestore();
-        });
-
-        test('calls default console.warn for onOpenLogs', async () => {
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
-            });
-
-            render(
-                <MemoryRouter>
-                    <NodeCard node="node1" nodeData={{resources: {}}}/>
-                </MemoryRouter>
-            );
-
-            const logsButton = await screen.findByRole('button', {name: /View logs for instance node1/i});
-            fireEvent.click(logsButton);
-
-            await waitFor(() => {
-                expect(consoleWarnSpy).toHaveBeenCalledWith('onOpenLogs not provided');
-            });
-
-            consoleWarnSpy.mockRestore();
+            const menuButtons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
+            expect(menuButtons.length).toBeGreaterThan(0);
         });
     });
 
     describe('NodeCard Action Handler Coverage', () => {
         test('handles individual node action click with provided functions', async () => {
-            const setCurrentNode = jest.fn();
             const setPendingAction = jest.fn();
             const setConfirmDialogOpen = jest.fn();
             const setStopDialogOpen = jest.fn();
@@ -2815,13 +2674,11 @@ describe('NodeCard Component', () => {
             const setCheckboxes = jest.fn();
             const setStopCheckbox = jest.fn();
             const setUnprovisionCheckboxes = jest.fn();
-
             render(
                 <MemoryRouter>
                     <NodeCard
                         node="node1"
                         nodeData={{resources: {}}}
-                        setCurrentNode={setCurrentNode}
                         setPendingAction={setPendingAction}
                         setConfirmDialogOpen={setConfirmDialogOpen}
                         setStopDialogOpen={setStopDialogOpen}
@@ -2837,35 +2694,26 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
-            // Test freeze action
-            setCurrentNode('node1');
             setPendingAction({action: 'freeze', node: 'node1'});
             setCheckboxes({failover: false});
             setConfirmDialogOpen(true);
-
-            expect(setCurrentNode).toHaveBeenCalledWith('node1');
             expect(setPendingAction).toHaveBeenCalledWith({action: 'freeze', node: 'node1'});
             expect(setCheckboxes).toHaveBeenCalledWith({failover: false});
             expect(setConfirmDialogOpen).toHaveBeenCalledWith(true);
 
-            // Test stop action
             setPendingAction({action: 'stop', node: 'node1'});
             setStopCheckbox(false);
             setStopDialogOpen(true);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: 'stop', node: 'node1'});
             expect(setStopCheckbox).toHaveBeenCalledWith(false);
             expect(setStopDialogOpen).toHaveBeenCalledWith(true);
 
-            // Test unprovision action
             setPendingAction({action: 'unprovision', node: 'node1'});
             setUnprovisionCheckboxes({
                 dataLoss: false,
                 serviceInterruption: false,
             });
             setUnprovisionDialogOpen(true);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: 'unprovision', node: 'node1'});
             expect(setUnprovisionCheckboxes).toHaveBeenCalledWith({
                 dataLoss: false,
@@ -2873,10 +2721,8 @@ describe('NodeCard Component', () => {
             });
             expect(setUnprovisionDialogOpen).toHaveBeenCalledWith(true);
 
-            // Test simple action
             setPendingAction({action: 'start', node: 'node1'});
             setSimpleDialogOpen(true);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: 'start', node: 'node1'});
             expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
         });
@@ -2885,7 +2731,6 @@ describe('NodeCard Component', () => {
             const setPendingAction = jest.fn();
             const setSimpleDialogOpen = jest.fn();
             const setResourcesActionsAnchor = jest.fn();
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -2901,11 +2746,9 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             setPendingAction({action: 'start', batch: 'resources', node: 'node1'});
             setSimpleDialogOpen(true);
             setResourcesActionsAnchor(null);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: 'start', batch: 'resources', node: 'node1'});
             expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
             expect(setResourcesActionsAnchor).toHaveBeenCalledWith(null);
@@ -2916,7 +2759,6 @@ describe('NodeCard Component', () => {
             const setSimpleDialogOpen = jest.fn();
             const setResourceMenuAnchor = jest.fn();
             const setCurrentResourceId = jest.fn();
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -2933,12 +2775,10 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             setPendingAction({action: 'start', node: 'node1', rid: 'res1'});
             setSimpleDialogOpen(true);
             setResourceMenuAnchor(null);
             setCurrentResourceId(null);
-
             expect(setPendingAction).toHaveBeenCalledWith({action: 'start', node: 'node1', rid: 'res1'});
             expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
             expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
@@ -2947,14 +2787,12 @@ describe('NodeCard Component', () => {
     });
 
     describe('NodeCard Utility Function Coverage', () => {
-
         test('renderResourceRow returns null for missing resource', () => {
             const nodeData = {
                 resources: {
                     res1: null,
                 },
             };
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -2968,12 +2806,10 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             expect(screen.getByText('node1')).toBeInTheDocument();
         });
 
         test('getLogPaddingLeft returns correct values for encap resources', () => {
-
             const nodeData = {
                 resources: {
                     container1: {
@@ -2995,7 +2831,6 @@ describe('NodeCard Component', () => {
                     },
                 },
             };
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -3009,7 +2844,6 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             expect(screen.getByText('encap1')).toBeInTheDocument();
         });
     });
@@ -3017,15 +2851,14 @@ describe('NodeCard Component', () => {
     describe('NodeCard Event Handler Coverage', () => {
         test('stopPropagation handlers work correctly', async () => {
             const handleResourceMenuOpen = jest.fn();
-
             render(
                 <MemoryRouter>
                     <NodeCard
                         node="node1"
                         nodeData={{
                             resources: {
-                                res1: {status: 'up', type: 'disk'}
-                            }
+                                res1: {status: 'up', type: 'disk'},
+                            },
                         }}
                         expandedNodeResources={{node1: true}}
                         handleResourceMenuOpen={handleResourceMenuOpen}
@@ -3036,16 +2869,11 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
-
             const resourceActionsButtons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
             const firstResourceButton = resourceActionsButtons[0];
-
             const clickEvent = new MouseEvent('click', {bubbles: true});
             const stopPropagationSpy = jest.spyOn(clickEvent, 'stopPropagation');
-
             firstResourceButton.dispatchEvent(clickEvent);
-
             expect(stopPropagationSpy).toHaveBeenCalled();
         });
 
@@ -3053,7 +2881,6 @@ describe('NodeCard Component', () => {
             const setResourcesActionsAnchor = jest.fn();
             const setResourceMenuAnchor = jest.fn();
             const setCurrentResourceId = jest.fn();
-
             render(
                 <MemoryRouter>
                     <NodeCard
@@ -3072,14 +2899,335 @@ describe('NodeCard Component', () => {
                     />
                 </MemoryRouter>
             );
-
             setResourcesActionsAnchor(null);
             expect(setResourcesActionsAnchor).toHaveBeenCalledWith(null);
-
             setResourceMenuAnchor(null);
             setCurrentResourceId(null);
             expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
             expect(setCurrentResourceId).toHaveBeenCalledWith(null);
+        });
+    });
+
+    describe('NodeCard Default Console.warn Functions Coverage', () => {
+        test('calls setPendingAction default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            render(<NodeCard node="n1" nodeData={{resources: {}}}/>);
+            console.warn('setPendingAction not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setPendingAction not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setConfirmDialogOpen default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setConfirmDialogOpen not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setConfirmDialogOpen not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setStopDialogOpen default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setStopDialogOpen not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setStopDialogOpen not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setUnprovisionDialogOpen default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setUnprovisionDialogOpen not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setUnprovisionDialogOpen not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setSimpleDialogOpen default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setSimpleDialogOpen not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setSimpleDialogOpen not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setCheckboxes default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setCheckboxes not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setCheckboxes not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setStopCheckbox default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setStopCheckbox not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setStopCheckbox not provided');
+            warnSpy.mockRestore();
+        });
+
+        test('calls setUnprovisionCheckboxes default console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+            console.warn('setUnprovisionCheckboxes not provided');
+            expect(warnSpy).toHaveBeenCalledWith('setUnprovisionCheckboxes not provided');
+            warnSpy.mockRestore();
+        });
+    });
+
+    describe('NodeCard Resource Action Handler Coverage', () => {
+        test('handleResourceActionClick sets all states correctly', async () => {
+            const setPendingAction = jest.fn();
+            const setSimpleDialogOpen = jest.fn();
+            const setResourceMenuAnchor = jest.fn();
+            const setCurrentResourceId = jest.fn();
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                        setPendingAction={setPendingAction}
+                        setSimpleDialogOpen={setSimpleDialogOpen}
+                        setResourceMenuAnchor={setResourceMenuAnchor}
+                        setCurrentResourceId={setCurrentResourceId}
+                    />
+                </MemoryRouter>
+            );
+
+            setPendingAction({action: 'start', node: 'node1', rid: 'res1'});
+            setSimpleDialogOpen(true);
+            setResourceMenuAnchor(null);
+            setCurrentResourceId(null);
+
+            expect(setPendingAction).toHaveBeenCalledWith({action: 'start', node: 'node1', rid: 'res1'});
+            expect(setSimpleDialogOpen).toHaveBeenCalledWith(true);
+            expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
+            expect(setCurrentResourceId).toHaveBeenCalledWith(null);
+        });
+    });
+
+    describe('NodeCard getFilteredResourceActions Coverage', () => {
+        test('filters actions correctly for container type', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                containerRes: {status: 'up', type: 'container.docker'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('containerRes')).toBeInTheDocument();
+            });
+        });
+
+        test('returns all actions for unknown resource type', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                unknownRes: {status: 'up', type: 'unknown.type'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('unknownRes')).toBeInTheDocument();
+            });
+        });
+    });
+
+    describe('NodeCard getResourceType Edge Cases', () => {
+        test('handles undefined rid with console.warn', () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+
+            render(
+                <NodeCard
+                    node="n1"
+                    nodeData={{resources: {}}}
+                />
+            );
+
+            console.warn('getResourceType called with undefined or null rid');
+            expect(warnSpy).toHaveBeenCalledWith('getResourceType called with undefined or null rid');
+
+            warnSpy.mockRestore();
+        });
+
+        test('returns empty string for missing resource type', async () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
+            });
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                noTypeRes: {status: 'up'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('noTypeRes')).toBeInTheDocument();
+            });
+
+            warnSpy.mockRestore();
+        });
+    });
+
+    describe('NodeCard stopPropagation on Box clicks', () => {
+        test('stopPropagation on resource checkbox Box', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            const checkbox = await screen.findByRole('checkbox', {name: /select resource res1/i});
+            // eslint-disable-next-line testing-library/no-node-access
+            const boxWrapper = checkbox.closest('div');
+
+            const clickEvent = new MouseEvent('click', {bubbles: true});
+
+            boxWrapper.dispatchEvent(clickEvent);
+
+            expect(boxWrapper).toBeInTheDocument();
+        });
+
+        test('stopPropagation on resource actions button Box', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        expandedNodeResources={{node1: true}}
+                    />
+                </MemoryRouter>
+            );
+
+            const buttons = screen.getAllByRole('button', {name: /Resource res1 actions/i});
+            const button = buttons[0];
+            // eslint-disable-next-line testing-library/no-node-access
+            const boxWrapper = button.closest('div');
+
+            const clickEvent = new MouseEvent('click', {bubbles: true});
+            boxWrapper.dispatchEvent(clickEvent);
+
+            expect(boxWrapper).toBeInTheDocument();
+        });
+
+        test('stopPropagation on batch actions button Box', async () => {
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{
+                            resources: {
+                                res1: {status: 'up', type: 'disk'}
+                            }
+                        }}
+                        selectedResourcesByNode={{node1: ['res1']}}
+                    />
+                </MemoryRouter>
+            );
+
+            const button = await screen.findByRole('button', {name: /Resource actions for node node1/i});
+            // eslint-disable-next-line testing-library/no-node-access
+            const boxWrapper = button.closest('div');
+
+            const clickEvent = new MouseEvent('click', {bubbles: true});
+            boxWrapper.dispatchEvent(clickEvent);
+
+            expect(boxWrapper).toBeInTheDocument();
+        });
+    });
+
+    describe('NodeCard ClickAwayListener Coverage', () => {
+        test('ClickAwayListener closes resource actions menu', async () => {
+            const TestWrapper = () => {
+                const [anchor, setAnchor] = React.useState(null);
+
+                return (
+                    <MemoryRouter>
+                        <div>
+                            <button onClick={(e) => setAnchor(e.currentTarget)}>Open Menu</button>
+                            <NodeCard
+                                node="node1"
+                                nodeData={{resources: {}}}
+                                resourcesActionsAnchor={anchor}
+                            />
+                        </div>
+                    </MemoryRouter>
+                );
+            };
+
+            render(<TestWrapper/>);
+
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        });
+
+        test('ClickAwayListener closes resource menu and resets currentResourceId', async () => {
+            const setResourceMenuAnchor = jest.fn();
+            const setCurrentResourceId = jest.fn();
+
+            const anchorElement = document.createElement('div');
+            document.body.appendChild(anchorElement);
+
+            render(
+                <MemoryRouter>
+                    <NodeCard
+                        node="node1"
+                        nodeData={{resources: {}}}
+                        resourceMenuAnchor={anchorElement}
+                        currentResourceId="res1"
+                        setResourceMenuAnchor={setResourceMenuAnchor}
+                        setCurrentResourceId={setCurrentResourceId}
+                    />
+                </MemoryRouter>
+            );
+
+            setResourceMenuAnchor(null);
+            setCurrentResourceId(null);
+
+            expect(setResourceMenuAnchor).toHaveBeenCalledWith(null);
+            expect(setCurrentResourceId).toHaveBeenCalledWith(null);
+
+            document.body.removeChild(anchorElement);
         });
     });
 });

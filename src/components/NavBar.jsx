@@ -37,8 +37,10 @@ const NavBar = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const [downCount, setDownCount] = useState(0);
     const [warnCount, setWarnCount] = useState(0);
+    const [appVersion, setAppVersion] = useState(null);
 
-    // Define navigation routes with display names and icons
+    const [storedClusterName, setStoredClusterName] = useState(null);
+
     const navRoutes = [
         {path: "/cluster", name: "Cluster Overview", icon: <FaHome/>},
         {path: "/namespaces", name: "Namespaces", icon: <FaList/>},
@@ -49,6 +51,38 @@ const NavBar = () => {
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
+
+    // Fetch app version from GitHub API
+    useEffect(() => {
+        const fetchVersion = async () => {
+            const cached = localStorage.getItem('appVersion');
+            const cacheTime = localStorage.getItem('appVersionTime');
+            const now = Date.now();
+
+            if (cached && cacheTime && (now - parseInt(cacheTime)) < 3600000) {
+                setAppVersion(cached);
+                return;
+            }
+
+            try {
+                const response = await fetch('https://api.github.com/repos/opensvc/om3-webapp/releases', {
+                    headers: {'User-Agent': 'MonTestCurl'}
+                });
+                const data = await response.json();
+                const latestVersion = data[0]?.tag_name || 'Unknown';
+                const cleanVersion = latestVersion.startsWith('v') ? latestVersion.slice(1) : latestVersion;
+
+                setAppVersion(cleanVersion);
+                localStorage.setItem('appVersion', cleanVersion);
+                localStorage.setItem('appVersionTime', now.toString());
+            } catch (error) {
+                console.error('Error fetching version:', error);
+                setAppVersion(cached || 'Unknown');
+            }
+        };
+
+        fetchVersion();
+    }, []);
 
     const getObjectStatus = useCallback((objectName, objs) => {
         const obj = objs[objectName] || {};
@@ -111,38 +145,28 @@ const NavBar = () => {
 
     useEffect(() => {
         const fetchClusterData = async () => {
-            let retryCount = 0;
-            const maxRetries = 3;
-            const retryInterval = 1000;
-
-            const tryFetch = async () => {
-                const token = auth?.authToken || localStorage.getItem("authToken");
-
-                if (!token) {
-                    if (retryCount < maxRetries) {
-                        retryCount++;
-                        setTimeout(tryFetch, retryInterval);
-                        return;
-                    }
-                    setBreadcrumb([
-                        {name: "Cluster", path: "/cluster"},
-                        ...getPathBreadcrumbs(),
-                    ]);
-                    return;
+            const token = auth?.authToken || localStorage.getItem("authToken");
+            if (!token) {
+                setBreadcrumb([
+                    {name: "Cluster", path: "/cluster"},
+                    ...getPathBreadcrumbs(),
+                ]);
+                return;
+            }
+            try {
+                await fetchNodes(token);
+                if (!storedClusterName && clusterName) {
+                    setStoredClusterName(clusterName);
                 }
-
-                try {
-                    await fetchNodes(token);
-                } catch (error) {
-                    logger.error("Error while calling fetchNodes:", error.message);
-                }
-            };
-
-            tryFetch();
+            } catch (error) {
+                logger.error("Error while calling fetchNodes:", error.message);
+            }
         };
 
-        fetchClusterData();
-    }, [auth, fetchNodes, getPathBreadcrumbs]);
+        if (!storedClusterName) {
+            fetchClusterData();
+        }
+    }, [auth, fetchNodes, getPathBreadcrumbs, storedClusterName, clusterName]);
 
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -150,7 +174,7 @@ const NavBar = () => {
 
         if (pathParts[0] !== "login") {
             breadcrumbItems.push({
-                name: loading ? "Loading..." : (clusterName || "Cluster"),
+                name: storedClusterName || (loading ? "Loading..." : "Cluster"),
                 path: "/cluster",
             });
 
@@ -175,7 +199,7 @@ const NavBar = () => {
         }
 
         setBreadcrumb(breadcrumbItems);
-    }, [location.pathname, clusterName, loading]);
+    }, [location.pathname, storedClusterName, loading]);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {
@@ -303,6 +327,26 @@ const NavBar = () => {
                                 )}
                             </Box>
                         ))}
+
+                    {/* Version display */}
+                    <Tooltip title="Application version">
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                ml: 2,
+                                px: 1,
+                                py: 0.5,
+                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                borderRadius: 1,
+                                fontFamily: 'monospace',
+                                fontSize: '0.8rem',
+                                color: 'white'
+                            }}
+                        >
+                            v{appVersion || '...'}
+                        </Typography>
+                    </Tooltip>
+
                     {(downCount > 0 || warnCount > 0) && (
                         <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
                             {downCount > 0 && (

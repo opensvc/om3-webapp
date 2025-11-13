@@ -29,8 +29,6 @@ import {
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -64,9 +62,18 @@ const parseObjectName = (objectName) => {
     };
 };
 
-// StatusIcon component with correct aria-labels
-const StatusIcon = React.memo(({avail, isNotProvisioned, frozen, globalExpect}) => (
-    <Box display="flex" alignItems="center" gap={0.5}>
+const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
+    <Box
+        display="flex"
+        alignItems="center"
+        gap={0.5}
+        sx={{
+            width: "80px",
+            justifyContent: "center",
+            position: "absolute",
+            left: "0px"
+        }}
+    >
         {avail === "up" && (
             <Tooltip title="up">
                 <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
@@ -97,63 +104,148 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen, globalExpect}) 
                 <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
             </Tooltip>
         )}
+    </Box>
+));
+
+const GlobalExpectDisplay = React.memo(({globalExpect}) => (
+    <Box
+        sx={{
+            width: "70px",
+            display: "flex",
+            justifyContent: "center",
+            position: "absolute",
+            right: "0px"
+        }}
+    >
         {globalExpect && (
             <Tooltip title={globalExpect}>
-                <Typography variant="caption">{globalExpect}</Typography>
+                <Typography
+                    variant="caption"
+                    sx={{
+                        fontSize: "0.75rem",
+                        lineHeight: "1.2",
+                        maxWidth: "70px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                    }}
+                >
+                    {globalExpect}
+                </Typography>
             </Tooltip>
         )}
     </Box>
 ));
 
-// NodeStatus component with correct aria-labels
+const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
+    <Box
+        display="flex"
+        alignItems="center"
+        gap={0.5}
+        sx={{
+            width: "80px",
+            justifyContent: "center",
+            position: "absolute",
+            left: "0px"
+        }}
+    >
+        {nodeAvail === "up" && (
+            <Tooltip title="up">
+                <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+            </Tooltip>
+        )}
+        {nodeAvail === "down" && (
+            <Tooltip title="down">
+                <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+            </Tooltip>
+        )}
+        {nodeAvail === "warn" && (
+            <Tooltip title="warn">
+                <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+            </Tooltip>
+        )}
+        {isNodeNotProvisioned && (
+            <Tooltip title="Not Provisioned">
+                <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                                  aria-label={`Node ${node} is not provisioned`}/>
+            </Tooltip>
+        )}
+        {nodeFrozen === "frozen" && (
+            <Tooltip title="frozen">
+                <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+            </Tooltip>
+        )}
+    </Box>
+));
+
+const NodeStateDisplay = React.memo(({nodeState, node}) => (
+    <Box
+        sx={{
+            width: "50px",
+            display: "flex",
+            justifyContent: "center",
+            position: "absolute",
+            right: "0px"
+        }}
+    >
+        {nodeState && (
+            <Tooltip title={nodeState}>
+                <Typography
+                    variant="caption"
+                    sx={{
+                        fontSize: "0.75rem",
+                        lineHeight: "1.2",
+                        maxWidth: "50px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                    }}
+                    aria-label={`Node ${node} state: ${nodeState}`}
+                >
+                    {nodeState}
+                </Typography>
+            </Tooltip>
+        )}
+    </Box>
+));
+
 const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
     const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState, provisioned: nodeProvisioned} = getNodeState(
         objectName,
         node
     );
     const isNodeNotProvisioned = nodeProvisioned === "false" || nodeProvisioned === false;
+
     return nodeAvail ? (
-        <Box display="flex" justifyContent="center" alignItems="center" gap={0.5}>
-            {nodeAvail === "up" && (
-                <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
-                </Tooltip>
-            )}
-            {nodeAvail === "down" && (
-                <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
-                </Tooltip>
-            )}
-            {nodeAvail === "warn" && (
-                <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
-                </Tooltip>
-            )}
-            {isNodeNotProvisioned && (
-                <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
-                                      aria-label={`Node ${node} is not provisioned`}/>
-                </Tooltip>
-            )}
-            {nodeFrozen === "frozen" && (
-                <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
-                </Tooltip>
-            )}
-            {nodeState && (
-                <Tooltip title={nodeState}>
-                    <Typography variant="caption">{nodeState}</Typography>
-                </Tooltip>
-            )}
+        <Box sx={{
+            position: "relative",
+            width: "130px",
+            height: "100%",
+            display: "flex",
+            alignItems: "center"
+        }}>
+            <NodeStatusIcons
+                nodeAvail={nodeAvail}
+                isNodeNotProvisioned={isNodeNotProvisioned}
+                nodeFrozen={nodeFrozen}
+                node={node}
+            />
+            <NodeStateDisplay nodeState={nodeState} node={node}/>
         </Box>
     ) : (
-        <Typography variant="caption" color="textSecondary">
-            -
-        </Typography>
+        <Box sx={{
+            width: "130px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
+            <Typography variant="caption" color="textSecondary">
+                -
+            </Typography>
+        </Box>
     );
 });
 
-// TableRow component for better memoization
 const TableRowComponent = React.memo(
     ({
          objectName,
@@ -200,16 +292,37 @@ const TableRowComponent = React.memo(
                         aria-label={`Select object ${objectName}`}
                     />
                 </TableCell>
-                <TableCell>
-                    <StatusIcon avail={avail} isNotProvisioned={isNotProvisioned} frozen={frozen}
-                                globalExpect={globalExpect}/>
+                <TableCell sx={{
+                    minWidth: "150px",
+                    width: "150px",
+                    position: "relative",
+                    height: "100%"
+                }}>
+                    <Box sx={{
+                        position: "relative",
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center"
+                    }}>
+                        <StatusIcon
+                            avail={avail}
+                            isNotProvisioned={isNotProvisioned}
+                            frozen={frozen}
+                        />
+                        <GlobalExpectDisplay globalExpect={globalExpect}/>
+                    </Box>
                 </TableCell>
                 <TableCell>
                     <Typography>{objectName}</Typography>
                 </TableCell>
                 {isWideScreen &&
                     allNodes.map((node) => (
-                        <TableCell key={node} align="center">
+                        <TableCell key={node} align="center" sx={{
+                            minWidth: "130px",
+                            width: "130px",
+                            position: "relative"
+                        }}>
                             <NodeStatus objectName={objectName} node={node} getNodeState={getNodeState}/>
                         </TableCell>
                     ))}
@@ -401,7 +514,6 @@ const Objects = () => {
         });
     }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
 
-    // Update URL query parameters with debounce (state to URL)
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
@@ -529,7 +641,6 @@ const Objects = () => {
                         headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
                     });
                     if (!response.ok) {
-                        // Create error without throwing it immediately
                         const error = new Error(`HTTP error! status: ${response.status}`);
                         logger.error(`Failed to execute ${action} on ${objectName}:`, error);
                         errorCount++;
@@ -548,10 +659,10 @@ const Objects = () => {
                 open: true,
                 message:
                     successCount && !errorCount
-                        ? `✅ '${action}' succeeded on ${successCount} object(s).`
+                        ? `'${action}' succeeded on ${successCount} object(s).`
                         : successCount
-                            ? `⚠️ '${action}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
-                            : `❌ '${action}' failed on all ${objectsToProcess.length} object(s).`,
+                            ? `'${action}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
+                            : `'${action}' failed on all ${objectsToProcess.length} object(s).`,
                 severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
             });
 
@@ -566,18 +677,6 @@ const Objects = () => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
-    );
-
-    const handleSort = useCallback(
-        (column) => {
-            if (sortColumn === column) {
-                setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-            } else {
-                setSortColumn(column);
-                setSortDirection("asc");
-            }
-        },
-        [sortColumn, sortDirection]
     );
 
     const popperProps = useCallback(
@@ -747,35 +846,66 @@ const Objects = () => {
                                         aria-label="Select all objects"
                                     />
                                 </TableCell>
-                                <TableCell onClick={() => handleSort("status")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Status</strong>
-                                        {sortColumn === "status" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
+                                <TableCell
+                                    sx={{
+                                        minWidth: "150px",
+                                        width: "150px",
+                                        position: "relative"
+                                    }}
+                                >
+                                    <Box sx={{
+                                        position: "relative",
+                                        width: "100%",
+                                        height: "100%",
+                                        display: "flex",
+                                        alignItems: "center"
+                                    }}>
+                                        <Box
+                                            sx={{
+                                                width: "80px",
+                                                display: "flex",
+                                                justifyContent: "center",
+                                                position: "absolute",
+                                                left: "0px"
+                                            }}
+                                        >
+                                            <strong>Status</strong>
+                                        </Box>
                                     </Box>
                                 </TableCell>
-                                <TableCell onClick={() => handleSort("object")} sx={{cursor: "pointer"}}>
+                                <TableCell>
                                     <Box sx={{display: "flex", alignItems: "center"}}>
                                         <strong>Object</strong>
-                                        {sortColumn === "object" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
                                     </Box>
                                 </TableCell>
                                 {isWideScreen &&
                                     allNodes.map((node) => (
                                         <TableCell
                                             key={node}
-                                            align="center"
-                                            onClick={() => handleSort(node)}
-                                            sx={{cursor: "pointer"}}
+                                            sx={{
+                                                minWidth: "130px",
+                                                width: "130px",
+                                                position: "relative"
+                                            }}
                                         >
-                                            <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                                <strong>{node}</strong>
-                                                {sortColumn === node &&
-                                                    (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                        <KeyboardArrowDownIcon/>)}
+                                            <Box sx={{
+                                                position: "relative",
+                                                width: "100%",
+                                                height: "100%",
+                                                display: "flex",
+                                                alignItems: "center"
+                                            }}>
+                                                <Box
+                                                    sx={{
+                                                        width: "80px",
+                                                        display: "flex",
+                                                        justifyContent: "center",
+                                                        position: "absolute",
+                                                        left: "0px"
+                                                    }}
+                                                >
+                                                    <strong>{node}</strong>
+                                                </Box>
                                             </Box>
                                         </TableCell>
                                     ))}

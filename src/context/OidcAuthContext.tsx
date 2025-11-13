@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState, useEffect} from "react";
+import React, {createContext, useContext, useState, useRef, useEffect} from "react";
 import {UserManager, UserManagerSettings} from "oidc-client-ts";
 import logger from "../utils/logger.js";
 
@@ -13,23 +13,23 @@ const OidcContext = createContext<OidcContextType | null>(null);
 export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     const [userManager, setUserManager] = useState<UserManager | null>(null);
     const [isInitialized, setIsInitialized] = useState<boolean>(false);
+    const userManagerRef = useRef<UserManager | null>(null);
 
     const recreateUserManager = (settings: UserManagerSettings) => {
         logger.info("Recreating UserManager with settings:", settings);
-        // Clean up the old UserManager instance
-        cleanupUserManager(userManager);
-        // Create and set a new UserManager
+        cleanupUserManager(userManagerRef.current);
         const newUserManager = new UserManager(settings);
         setUserManager(newUserManager);
+        userManagerRef.current = newUserManager;
         setIsInitialized(true);
     };
 
     // Cleanup on component unmount
     useEffect(() => {
         return () => {
-            cleanupUserManager(userManager);
+            cleanupUserManager(userManagerRef.current);
         };
-    }, [userManager]);
+    }, []);
 
     return (
         <OidcContext.Provider value={{userManager, recreateUserManager, isInitialized}}>

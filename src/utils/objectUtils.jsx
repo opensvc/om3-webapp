@@ -19,21 +19,36 @@ const ALLOWED_ACTIONS_BY_KIND = {
     ],
 };
 
+export const parseObjectPath = (objName) => {
+    if (!objName || typeof objName !== "string") {
+        return {namespace: "root", kind: "svc", name: ""};
+    }
+    const parts = objName.split("/");
+    let name, kind, namespace;
+    if (parts.length === 3) {
+        namespace = parts[0];
+        kind = parts[1];
+        name = parts[2];
+    } else if (parts.length === 2) {
+        namespace = "root";
+        kind = parts[0];
+        name = parts[1];
+    } else {
+        namespace = "root";
+        name = parts[0];
+        kind = name === "cluster" ? "ccfg" : "svc";
+    }
+    return {namespace, kind, name};
+};
+
 const extractNamespace = (name) => {
-    const parts = name.split("/");
-    return parts.length === 3 ? parts[0] : "root";
+    const {namespace} = parseObjectPath(name);
+    return namespace;
 };
 
 const extractKind = (name) => {
-    const parts = name.split("/");
-    if (parts.length === 3) {
-        return parts[1];
-    } else if (parts.length === 2) {
-        return parts[0];
-    } else {
-        const objName = parts[0];
-        return objName === "cluster" ? "ccfg" : "svc";
-    }
+    const {kind} = parseObjectPath(name);
+    return kind;
 };
 
 const isActionAllowedForSelection = (actionName, selectedObjects) => {

@@ -34,48 +34,27 @@ const HeaderSection = ({
                            getColor,
                            objectMenuAnchorRef,
                        }) => {
-    // Calculate the zoom level
-    const getZoomLevel = () => {
-        return window.devicePixelRatio || 1;
-    };
+    const getZoomLevel = () => window.devicePixelRatio || 1;
 
-    // Configuration of Popper props
     const popperProps = () => ({
         placement: "bottom-end",
-        disablePortal: isSafari, // Disable portal for Safari
+        disablePortal: isSafari,
         modifiers: [
             {
                 name: "offset",
-                options: {
-                    offset: () => {
-                        const zoomLevel = getZoomLevel();
-                        return [0, 8 / zoomLevel]; // Adjust the offset based on the zoom level
-                    },
-                },
+                options: {offset: [0, 8 / getZoomLevel()]},
             },
-            {
-                name: "preventOverflow",
-                options: {
-                    boundariesElement: "viewport",
-                },
-            },
-            {
-                name: "flip",
-                options: {
-                    enabled: true,
-                },
-            },
+            {name: "preventOverflow", options: {boundariesElement: "viewport"}},
+            {name: "flip", options: {enabled: true}},
         ],
         sx: {
             zIndex: 1300,
-            "& .MuiPaper-root": {
-                minWidth: 200,
-                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-            },
+            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
         },
     });
 
     const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
+    const {globalExpect} = getObjectStatus();
 
     return (
         globalStatus && (
@@ -91,33 +70,52 @@ const HeaderSection = ({
                 <Typography variant="h4" fontWeight="bold">
                     {decodedObjectName}
                 </Typography>
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <Tooltip title={getObjectStatus().avail || 'unknown'}>
-                        <FiberManualRecordIcon
-                            sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
-                        />
-                    </Tooltip>
-                    {getObjectStatus().avail === 'warn' && (
-                        <Tooltip title="warn">
-                            <WarningAmberIcon sx={{color: orange[500], fontSize: '1.2rem'}}/>
-                        </Tooltip>
+
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 2, position: 'relative'}}>
+                    {globalExpect && (
+                        <Box
+                            sx={{
+                                width: "70px",
+                                display: "flex",
+                                justifyContent: "center",
+                                position: "absolute",
+                                left: 0,
+                            }}
+                        >
+                            <Tooltip title={globalExpect}>
+                                <Typography variant="caption" sx={{fontSize: "0.75rem"}}>
+                                    {globalExpect}
+                                </Typography>
+                            </Tooltip>
+                        </Box>
                     )}
-                    {getObjectStatus().frozen === 'frozen' && (
-                        <Tooltip title="frozen">
-                            <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>
-                        </Tooltip>
-                    )}
-                    {isNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <WarningAmberIcon
-                                sx={{color: red[500], fontSize: '1.2rem'}}
-                                aria-label="Object is not provisioned"
+
+                    <Box sx={{ml: globalExpect ? "70px" : 0, display: 'flex', alignItems: 'center', gap: 1}}>
+                        <Tooltip title={getObjectStatus().avail || 'unknown'}>
+                            <FiberManualRecordIcon
+                                sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
                             />
                         </Tooltip>
-                    )}
-                    {getObjectStatus().globalExpect && (
-                        <Typography variant="caption">{getObjectStatus().globalExpect}</Typography>
-                    )}
+                        {getObjectStatus().avail === 'warn' && (
+                            <Tooltip title="warn">
+                                <WarningAmberIcon sx={{color: orange[500], fontSize: '1.2rem'}}/>
+                            </Tooltip>
+                        )}
+                        {getObjectStatus().frozen === 'frozen' && (
+                            <Tooltip title="frozen">
+                                <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>
+                            </Tooltip>
+                        )}
+                        {isNotProvisioned && (
+                            <Tooltip title="Not Provisioned">
+                                <WarningAmberIcon
+                                    sx={{color: red[500], fontSize: '1.2rem'}}
+                                    aria-label="Object is not provisioned"
+                                />
+                            </Tooltip>
+                        )}
+                    </Box>
+
                     <IconButton
                         onClick={(e) => {
                             setObjectMenuAnchor(e.currentTarget);
@@ -131,11 +129,8 @@ const HeaderSection = ({
                             <MoreVertIcon sx={{fontSize: '1.2rem'}}/>
                         </Tooltip>
                     </IconButton>
-                    <Popper
-                        open={Boolean(objectMenuAnchor)}
-                        anchorEl={objectMenuAnchor}
-                        {...popperProps()}
-                    >
+
+                    <Popper open={Boolean(objectMenuAnchor)} anchorEl={objectMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={() => setObjectMenuAnchor(null)}>
                             <Paper elevation={3} role="menu">
                                 {OBJECT_ACTIONS.map(({name, icon}) => {
@@ -150,15 +145,12 @@ const HeaderSection = ({
                                             disabled={!isAllowed || actionInProgress}
                                             sx={{
                                                 color: isAllowed ? 'inherit' : 'text.disabled',
-                                                '&.Mui-disabled': {
-                                                    opacity: 0.5,
-                                                },
+                                                '&.Mui-disabled': {opacity: 0.5},
                                             }}
                                             aria-label={`Object ${name} action`}
                                         >
                                             <ListItemIcon
-                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}
-                                            >
+                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}>
                                                 {icon}
                                             </ListItemIcon>
                                             <ListItemText>

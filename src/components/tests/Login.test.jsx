@@ -379,4 +379,36 @@ describe('Login Component', () => {
             data: mockAccessToken,
         });
     });
+
+    test('refreshToken queues and resolves concurrent refresh token calls', async () => {
+        const payload = { sub: '123', iat: 1, exp: Math.floor(Date.now() / 1000) + 3600 };
+        const mockAccessToken = createMockToken(payload);
+
+        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+
+        let resolveFetch;
+        const fetchPromise = new Promise((resolve) => {
+            resolveFetch = resolve;
+        });
+        fetch.mockReturnValueOnce(fetchPromise);
+
+        const firstCall = refreshToken(mockDispatch);
+
+        const secondCall = refreshToken(mockDispatch);
+
+        expect(secondCall).toBeInstanceOf(Promise);
+
+        // Terminer le premier fetch avec succès
+        resolveFetch({
+            ok: true,
+            json: () => Promise.resolve({ access_token: mockAccessToken }),
+        });
+
+        // Attendre la résolution des promesses
+        const tokens = await Promise.all([firstCall, secondCall]);
+
+        expect(tokens[0]).toBe(mockAccessToken);
+        expect(tokens[1]).toBe(mockAccessToken);
+    });
 });

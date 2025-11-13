@@ -1,4 +1,4 @@
-import React, {useEffect, useCallback} from 'react';
+import React, {useEffect, useCallback, useRef} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login} from "../context/AuthProvider.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
@@ -11,12 +11,13 @@ const OidcCallback = () => {
     const authDispatch = useAuthDispatch();
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
+    const eventHandlersSet = useRef(false);
 
     const onUserRefreshed = useCallback((user) => {
         logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
         authDispatch({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
-        localStorage.setItem('tokenExpiration', user.expires_at.toString());
+        localStorage.setItem('tokenExpiration', user.expires_at?.toString() || '');
 
         // Use BroadcastChannel only if available (browser environment)
         if (typeof BroadcastChannel !== 'undefined') {
@@ -62,12 +63,7 @@ const OidcCallback = () => {
                 onUserRefreshed(user);
                 authDispatch({type: SetAuthChoice, data: "openid"});
                 authDispatch({type: Login, data: user.profile.preferred_username});
-                userManager.events.addUserLoaded(onUserRefreshed);
-                userManager.events.addAccessTokenExpiring(() => {
-                    logger.debug('Access token is about to expire, attempting silent renew...');
-                });
-                userManager.events.addAccessTokenExpired(handleTokenExpired);
-                userManager.events.addSilentRenewError(handleSilentRenewError);
+                setupEventHandlers();
                 navigate('/');
             })
             .catch((err) => {
@@ -75,6 +71,17 @@ const OidcCallback = () => {
                 navigate('/auth-choice');
             });
     }, [userManager, authDispatch, navigate, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
+
+    const setupEventHandlers = useCallback(() => {
+        if (eventHandlersSet.current || !userManager) return;
+        userManager.events.addUserLoaded(onUserRefreshed);
+        userManager.events.addAccessTokenExpiring(() => {
+            logger.debug('Access token is about to expire, attempting silent renew...');
+        });
+        userManager.events.addAccessTokenExpired(handleTokenExpired);
+        userManager.events.addSilentRenewError(handleSilentRenewError);
+        eventHandlersSet.current = true;
+    }, [userManager, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
 
     useEffect(() => {
         const initializeUserManager = async () => {
@@ -102,12 +109,7 @@ const OidcCallback = () => {
                     if (user && !user.expired) {
                         logger.info("Existing user session found:", user.profile?.preferred_username);
                         onUserRefreshed(user);
-                        userManager.events.addUserLoaded(onUserRefreshed);
-                        userManager.events.addAccessTokenExpiring(() => {
-                            logger.debug('Access token is about to expire, attempting silent renew...');
-                        });
-                        userManager.events.addAccessTokenExpired(handleTokenExpired);
-                        userManager.events.addSilentRenewError(handleSilentRenewError);
+                        setupEventHandlers();
                         navigate('/');
                     } else {
                         handleSigninRedirect();
@@ -121,7 +123,7 @@ const OidcCallback = () => {
                 handleSigninRedirect();
             }
         }
-    }, [userManager, authDispatch, navigate, handleSigninRedirect, handleSilentRenewError, handleTokenExpired, onUserRefreshed]);
+    }, [userManager, authDispatch, navigate, handleSigninRedirect, setupEventHandlers, onUserRefreshed]);
 
     useEffect(() => {
         // Only set up BroadcastChannel in browser environment

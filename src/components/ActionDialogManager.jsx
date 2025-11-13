@@ -6,6 +6,8 @@ import {
     DialogActions,
     Button,
     Typography,
+    TextField,
+    Box,
 } from '@mui/material';
 import {
     FreezeDialog,
@@ -15,14 +17,83 @@ import {
     DeleteDialog,
     SwitchDialog,
     GivebackDialog,
-    ConsoleDialog,
 } from './ActionDialogs';
-
+// ConsoleDialog component for ActionDialogManager
+const ConsoleDialog = ({
+                           open,
+                           onClose,
+                           onConfirm,
+                           seats,
+                           setSeats,
+                           greetTimeout,
+                           setGreetTimeout,
+                           disabled,
+                           pendingAction
+                       }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Open Console</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1" sx={{mb: 2}}>
+                This will open a terminal console for the selected resource.
+            </Typography>
+            {pendingAction?.rid && (
+                <Typography variant="body2" color="primary" sx={{mb: 2, fontWeight: 'bold'}}>
+                    Resource: {pendingAction.rid}
+                </Typography>
+            )}
+            {pendingAction?.node && (
+                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                    Node: {pendingAction.node}
+                </Typography>
+            )}
+            <Typography variant="body2" sx={{mb: 3}}>
+                The console session will open in a new browser tab and provide shell access to the container.
+            </Typography>
+            <Box sx={{mb: 2}}>
+                <TextField
+                    autoFocus
+                    margin="dense"
+                    label="Number of Seats"
+                    type="number"
+                    fullWidth
+                    variant="outlined"
+                    value={seats}
+                    onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
+                    disabled={disabled}
+                    helperText="Number of simultaneous users allowed in the console"
+                />
+            </Box>
+            <TextField
+                margin="dense"
+                label="Greet Timeout"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={greetTimeout}
+                onChange={(e) => setGreetTimeout(e.target.value)}
+                disabled={disabled}
+                helperText="Time to wait for console connection (e.g., 5s, 10s)"
+            />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={disabled}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                onClick={onConfirm}
+                disabled={disabled}
+            >
+                Open Console
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
 const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled, cancelDisabled}) => {
     const dialogTitle = typeof action === 'string' && action
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
         : 'Confirm Action';
-
     return (
         <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
             <DialogTitle>{dialogTitle}</DialogTitle>
@@ -48,13 +119,18 @@ const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled
         </Dialog>
     );
 };
-
 const ActionDialogManager = ({
                                  pendingAction,
                                  handleConfirm,
                                  target,
                                  supportedActions = [],
                                  onClose,
+                                 seats = 1,
+                                 setSeats = () => {
+                                 },
+                                 greetTimeout = "5s",
+                                 setGreetTimeout = () => {
+                                 },
                              }) => {
     const [checkboxState, setCheckboxState] = useState({
         freeze: false,
@@ -67,7 +143,7 @@ const ActionDialogManager = ({
         console: false,
         simpleConfirm: false,
     });
-
+    const [lastAction, setLastAction] = useState(null);
     const dialogConfig = useMemo(() => ({
         freeze: {
             component: FreezeDialog,
@@ -262,10 +338,10 @@ const ActionDialogManager = ({
                     handleConfirm(pendingAction?.action);
                     if (onClose) onClose();
                 },
-                checked: checkboxState.console,
-                setChecked: (value) => {
-                    setCheckboxState((prev) => ({...prev, console: value}));
-                },
+                seats,
+                setSeats,
+                greetTimeout,
+                setGreetTimeout,
                 pendingAction,
                 target,
             },
@@ -286,9 +362,10 @@ const ActionDialogManager = ({
                 cancelDisabled: false,
             },
         },
-    }), [checkboxState, handleConfirm, pendingAction, target, onClose]);
+    }), [checkboxState, handleConfirm, pendingAction, target, onClose, seats, setSeats, greetTimeout, setGreetTimeout]);
     useEffect(() => {
         if (pendingAction === null) {
+            setLastAction(null);
             if (onClose) onClose();
             return;
         }
@@ -307,33 +384,35 @@ const ActionDialogManager = ({
             if (onClose) onClose();
             return;
         }
-        // Initialize checkbox state for the action
-        const initCheckbox = {
-            freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
-            stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
-            unprovision: () => setCheckboxState((prev) => ({
-                ...prev,
-                unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
-            })),
-            purge: () => setCheckboxState((prev) => ({
-                ...prev,
-                purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
-            })),
-            "delete": () => setCheckboxState((prev) => ({
-                ...prev,
-                "delete": {configLoss: false, clusterwide: false},
-            })),
-            "switch": () => setCheckboxState((prev) => ({...prev, "switch": false})),
-            giveback: () => setCheckboxState((prev) => ({...prev, giveback: false})),
-            console: () => setCheckboxState((prev) => ({...prev, console: false})),
-            simpleConfirm: () => setCheckboxState((prev) => ({...prev, simpleConfirm: false})),
-        };
-        if (initCheckbox[action]) {
-            initCheckbox[action]();
-        } else {
-            initCheckbox.simpleConfirm();
+        // Initialize checkbox state for the action only if the action has changed
+        if (action !== lastAction) {
+            const initCheckbox = {
+                freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
+                stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
+                unprovision: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
+                })),
+                purge: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
+                })),
+                "delete": () => setCheckboxState((prev) => ({
+                    ...prev,
+                    "delete": {configLoss: false, clusterwide: false},
+                })),
+                "switch": () => setCheckboxState((prev) => ({...prev, "switch": false})),
+                giveback: () => setCheckboxState((prev) => ({...prev, giveback: false})),
+                simpleConfirm: () => setCheckboxState((prev) => ({...prev, simpleConfirm: false})),
+            };
+            if (initCheckbox[action]) {
+                initCheckbox[action]();
+            } else {
+                initCheckbox.simpleConfirm();
+            }
+            setLastAction(action);
         }
-    }, [pendingAction, supportedActions, onClose]);
+    }, [pendingAction, supportedActions, onClose, lastAction]);
     if (!pendingAction || !pendingAction.action) return null;
     const action = pendingAction.action.toLowerCase();
     const config = dialogConfig[action] || dialogConfig.simpleConfirm;

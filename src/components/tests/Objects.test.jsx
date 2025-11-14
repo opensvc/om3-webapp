@@ -920,5 +920,94 @@ describe('Objects Component', () => {
         // Verify that node columns are not displayed
         expect(screen.queryByRole('columnheader', {name: /node1/i})).not.toBeInTheDocument();
         expect(screen.queryByRole('columnheader', {name: /node2/i})).not.toBeInTheDocument();
+    })
+
+    test('handles URL parameter synchronization with invalid globalState', () => {
+        require('react-router-dom').useLocation.mockReturnValue({
+            search: '?globalState=invalid&namespace=test&kind=svc&name=obj1',
+            pathname: '/objects'
+        });
+
+        render(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+
+        return waitFor(() => {
+            expect(screen.getByLabelText('Global State')).toHaveValue('all');
+        });
+    });
+
+    test('handles event source setup without auth token', () => {
+        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+
+        render(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+
+        return waitFor(() => {
+            expect(startEventReception).not.toHaveBeenCalled();
+        });
+    });
+
+    test('handles action execution with single object target', async () => {
+        render(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+
+        await waitForComponentToLoad();
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
+        const menuButton = within(row).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test1/action/restart'),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('handles debounced URL updates', async () => {
+        jest.useFakeTimers();
+
+        render(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+
+        await waitForComponentToLoad();
+
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'test'}});
+
+        jest.advanceTimersByTime(400);
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith(
+                expect.stringContaining('name=test'),
+                expect.any(Object)
+            );
+        });
+
+        jest.useRealTimers();
     });
 });

@@ -991,34 +991,48 @@ const ObjectDetail = () => {
                     <Dialog
                         open={consoleUrlDialogOpen}
                         onClose={() => setConsoleUrlDialogOpen(false)}
-                        maxWidth="lg" // Changé à "lg" pour plus de largeur
+                        maxWidth="sm"
                         fullWidth
                         sx={{
                             '& .MuiDialog-paper': {
-                                minWidth: '600px', // Largeur minimale garantie
-                                maxWidth: '90vw',  // Maximum 90% de la largeur de la vue
+                                minWidth: {xs: '90vw', sm: '500px'},
+                                maxWidth: '90vw',
+                                mx: {xs: 2, sm: 0},
+                                my: {xs: 2, sm: 0},
                             }
                         }}
                     >
-                        <DialogTitle>Console URL</DialogTitle>
+                        <DialogTitle sx={{
+                            pb: 1,
+                            typography: {xs: 'h6', sm: 'h5'}
+                        }}>
+                            Console URL
+                        </DialogTitle>
                         <DialogContent>
                             <Box sx={{
                                 border: '1px solid #ccc',
                                 borderRadius: '4px',
-                                padding: '12px 14px',
+                                padding: {xs: '8px 10px', sm: '12px 14px'},
                                 backgroundColor: '#f5f5f5',
                                 marginBottom: 2,
                                 overflow: 'auto',
                                 maxHeight: '100px',
                                 fontFamily: 'monospace',
-                                fontSize: '0.875rem',
-                                whiteSpace: 'nowrap'
+                                fontSize: {xs: '0.75rem', sm: '0.875rem'},
+                                wordBreak: 'break-all',
+                                whiteSpace: 'pre-wrap'
                             }}>
                                 {currentConsoleUrl || 'No URL available'}
                             </Box>
-                            <Box sx={{display: 'flex', gap: 2, flexWrap: 'wrap'}}>
+                            <Box sx={{
+                                display: 'flex',
+                                gap: 2,
+                                flexWrap: 'wrap',
+                                justifyContent: {xs: 'center', sm: 'flex-start'}
+                            }}>
                                 <Button
                                     variant="outlined"
+                                    size={window.innerWidth < 600 ? "small" : "medium"}
                                     onClick={() => {
                                         if (currentConsoleUrl) {
                                             navigator.clipboard.writeText(currentConsoleUrl);
@@ -1031,6 +1045,7 @@ const ObjectDetail = () => {
                                 </Button>
                                 <Button
                                     variant="contained"
+                                    size={window.innerWidth < 600 ? "small" : "medium"}
                                     onClick={() => {
                                         if (currentConsoleUrl) {
                                             window.open(currentConsoleUrl, '_blank', 'noopener,noreferrer');
@@ -1042,8 +1057,16 @@ const ObjectDetail = () => {
                                 </Button>
                             </Box>
                         </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setConsoleUrlDialogOpen(false)}>Close</Button>
+                        <DialogActions sx={{
+                            px: {xs: 2, sm: 3},
+                            pb: {xs: 2, sm: 1}
+                        }}>
+                            <Button
+                                onClick={() => setConsoleUrlDialogOpen(false)}
+                                size={window.innerWidth < 600 ? "small" : "medium"}
+                            >
+                                Close
+                            </Button>
                         </DialogActions>
                     </Dialog>
                     {showKeys && (

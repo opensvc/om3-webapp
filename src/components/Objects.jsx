@@ -64,45 +64,80 @@ const parseObjectName = (objectName) => {
 
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
-        display="flex"
-        alignItems="center"
-        gap={0.5}
         sx={{
             width: "80px",
+            height: "24px",
+            position: "relative",
+            display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            left: "0px"
+            alignItems: "center"
         }}
     >
-        {avail === "up" && (
-            <Tooltip title="up">
-                <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
-            </Tooltip>
-        )}
-        {avail === "down" && (
-            <Tooltip title="down">
-                <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
-            </Tooltip>
-        )}
-        {avail === "warn" && (
-            <Tooltip title="warn">
-                <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
-            </Tooltip>
-        )}
-        {avail === "n/a" && (
-            <Tooltip title="n/a">
-                <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
-            </Tooltip>
-        )}
+        {/* Icône de statut principale - TOUJOURS au centre */}
+        <Box
+            sx={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1
+            }}
+        >
+            {avail === "up" && (
+                <Tooltip title="up">
+                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
+                </Tooltip>
+            )}
+            {avail === "down" && (
+                <Tooltip title="down">
+                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
+                </Tooltip>
+            )}
+            {avail === "warn" && (
+                <Tooltip title="warn">
+                    <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
+                </Tooltip>
+            )}
+            {avail === "n/a" && (
+                <Tooltip title="n/a">
+                    <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
+                </Tooltip>
+            )}
+        </Box>
+
+        {/* Icône non provisionné - positionnée à gauche */}
         {isNotProvisioned && (
-            <Tooltip title="Not Provisioned">
-                <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}} aria-label="Object is not provisioned"/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    left: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="Not Provisioned">
+                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                                      aria-label="Object is not provisioned"/>
+                </Tooltip>
+            </Box>
         )}
+
+        {/* Icône frozen - positionnée à droite */}
         {frozen === "frozen" && (
-            <Tooltip title="frozen">
-                <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    right: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="frozen">
+                    <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
+                </Tooltip>
+            </Box>
         )}
     </Box>
 ));
@@ -113,8 +148,6 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
             width: "70px",
             display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            right: "0px"
         }}
     >
         {globalExpect && (
@@ -139,41 +172,75 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
 
 const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
     <Box
-        display="flex"
-        alignItems="center"
-        gap={0.5}
         sx={{
             width: "80px",
+            height: "24px",
+            position: "relative",
+            display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            left: "0px"
+            alignItems: "center"
         }}
     >
-        {nodeAvail === "up" && (
-            <Tooltip title="up">
-                <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
-            </Tooltip>
-        )}
-        {nodeAvail === "down" && (
-            <Tooltip title="down">
-                <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
-            </Tooltip>
-        )}
-        {nodeAvail === "warn" && (
-            <Tooltip title="warn">
-                <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
-            </Tooltip>
-        )}
+        {/* Icône de statut principale - TOUJOURS au centre */}
+        <Box
+            sx={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1
+            }}
+        >
+            {nodeAvail === "up" && (
+                <Tooltip title="up">
+                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+                </Tooltip>
+            )}
+            {nodeAvail === "down" && (
+                <Tooltip title="down">
+                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+                </Tooltip>
+            )}
+            {nodeAvail === "warn" && (
+                <Tooltip title="warn">
+                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+                </Tooltip>
+            )}
+        </Box>
+
+        {/* Icône non provisionné - positionnée à gauche */}
         {isNodeNotProvisioned && (
-            <Tooltip title="Not Provisioned">
-                <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
-                                  aria-label={`Node ${node} is not provisioned`}/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    left: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="Not Provisioned">
+                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                                      aria-label={`Node ${node} is not provisioned`}/>
+                </Tooltip>
+            </Box>
         )}
+
+        {/* Icône frozen - positionnée à droite */}
         {nodeFrozen === "frozen" && (
-            <Tooltip title="frozen">
-                <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    right: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="frozen">
+                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+                </Tooltip>
+            </Box>
         )}
     </Box>
 ));
@@ -184,8 +251,6 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => (
             width: "50px",
             display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            right: "0px"
         }}
     >
         {nodeState && (
@@ -218,11 +283,11 @@ const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
 
     return nodeAvail ? (
         <Box sx={{
-            position: "relative",
             width: "130px",
             height: "100%",
             display: "flex",
-            alignItems: "center"
+            alignItems: "center",
+            justifyContent: "space-between"
         }}>
             <NodeStatusIcons
                 nodeAvail={nodeAvail}
@@ -299,11 +364,11 @@ const TableRowComponent = React.memo(
                     height: "100%"
                 }}>
                     <Box sx={{
-                        position: "relative",
                         width: "100%",
                         height: "100%",
                         display: "flex",
-                        alignItems: "center"
+                        alignItems: "center",
+                        justifyContent: "space-between"
                     }}>
                         <StatusIcon
                             avail={avail}
@@ -837,7 +902,12 @@ const Objects = () => {
                 {/* Objects table */}
                 <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                     <Table>
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
+                        <TableHead sx={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 3, // Augmenté le z-index pour être au-dessus du contenu
+                            backgroundColor: "background.paper"
+                        }}>
                             <TableRow>
                                 <TableCell>
                                     <Checkbox
@@ -854,23 +924,22 @@ const Objects = () => {
                                     }}
                                 >
                                     <Box sx={{
-                                        position: "relative",
                                         width: "100%",
                                         height: "100%",
                                         display: "flex",
-                                        alignItems: "center"
+                                        alignItems: "center",
+                                        justifyContent: "space-between"
                                     }}>
                                         <Box
                                             sx={{
                                                 width: "80px",
                                                 display: "flex",
                                                 justifyContent: "center",
-                                                position: "absolute",
-                                                left: "0px"
                                             }}
                                         >
                                             <strong>Status</strong>
                                         </Box>
+                                        <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
                                 <TableCell>
@@ -889,23 +958,22 @@ const Objects = () => {
                                             }}
                                         >
                                             <Box sx={{
-                                                position: "relative",
                                                 width: "100%",
                                                 height: "100%",
                                                 display: "flex",
-                                                alignItems: "center"
+                                                alignItems: "center",
+                                                justifyContent: "space-between"
                                             }}>
                                                 <Box
                                                     sx={{
                                                         width: "80px",
                                                         display: "flex",
                                                         justifyContent: "center",
-                                                        position: "absolute",
-                                                        left: "0px"
                                                     }}
                                                 >
                                                     <strong>{node}</strong>
                                                 </Box>
+                                                <Box sx={{width: "50px"}}></Box>
                                             </Box>
                                         </TableCell>
                                     ))}

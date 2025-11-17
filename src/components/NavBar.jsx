@@ -17,6 +17,7 @@ import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useMemo, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import useEventStore from "../hooks/useEventStore.js";
+import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -40,6 +41,7 @@ const NavBar = () => {
     const [appVersion, setAppVersion] = useState(null);
 
     const [storedClusterName, setStoredClusterName] = useState(null);
+        const online = useOnlineStatus();
 
     const navRoutes = [
         {path: "/cluster", name: "Cluster Overview", icon: <FaHome/>},
@@ -390,6 +392,30 @@ const NavBar = () => {
                 </Box>
 
                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                    {!online && (
+                        <Tooltip title="You are offline — some features may be limited">
+                            <span>
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        mr: 1,
+                                        px: 1,
+                                        py: 0.5,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 0.5,
+                                        borderRadius: 1,
+                                        backgroundColor: 'rgba(255, 0, 0, 0.12)',
+                                        color: 'white',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}} />
+                                    Offline
+                                </Typography>
+                            </span>
+                        </Tooltip>
+                    )}
                     <Button
                         component={Link}
                         to="/whoami"

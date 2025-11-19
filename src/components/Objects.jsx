@@ -43,6 +43,7 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
+import EventLogger from "../components/EventLogger";
 
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -73,7 +74,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
             alignItems: "center"
         }}
     >
-        {/* Icône de statut principale - TOUJOURS au centre */}
         <Box
             sx={{
                 position: "absolute",
@@ -105,7 +105,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
             )}
         </Box>
 
-        {/* Icône non provisionné - positionnée à gauche */}
         {isNotProvisioned && (
             <Box
                 sx={{
@@ -123,7 +122,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
             </Box>
         )}
 
-        {/* Icône frozen - positionnée à droite */}
         {frozen === "frozen" && (
             <Box
                 sx={{
@@ -181,7 +179,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
             alignItems: "center"
         }}
     >
-        {/* Icône de statut principale - TOUJOURS au centre */}
         <Box
             sx={{
                 position: "absolute",
@@ -208,7 +205,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
             )}
         </Box>
 
-        {/* Icône non provisionné - positionnée à gauche */}
         {isNodeNotProvisioned && (
             <Box
                 sx={{
@@ -226,7 +222,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
             </Box>
         )}
 
-        {/* Icône frozen - positionnée à droite */}
         {nodeFrozen === "frozen" && (
             <Box
                 sx={{
@@ -433,7 +428,6 @@ const Objects = () => {
     const navigate = useNavigate();
     const isMounted = useRef(true);
 
-    // Parse query parameters
     const queryParams = new URLSearchParams(location.search);
     const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
     const rawGlobalState = queryParams.get("globalState") || "all";
@@ -441,7 +435,6 @@ const Objects = () => {
     const rawKind = queryParams.get("kind") || "all";
     const rawSearchQuery = queryParams.get("name") || "";
 
-    // State hooks
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
@@ -471,7 +464,6 @@ const Objects = () => {
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
-    // Utility functions
     const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
 
     const getObjectStatus = useCallback(
@@ -515,7 +507,6 @@ const Objects = () => {
         [objectInstanceStatus, instanceMonitor]
     );
 
-    // Memoized data
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
@@ -602,7 +593,6 @@ const Objects = () => {
         return debouncedUpdateQuery.cancel;
     }, [debouncedUpdateQuery]);
 
-    // Sync state with query parameters (URL to state)
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
@@ -615,31 +605,32 @@ const Objects = () => {
         setSearchQuery(newSearchQuery);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
 
-    // Event subscription
+    const eventStarted = useRef(false);
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
+        if (token && !eventStarted.current) {
             startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
+            eventStarted.current = true;
         }
 
         return () => {
             closeEventSource();
+            eventStarted.current = false; // Reset for potential remounts
         };
     }, []);
 
-    // Event handlers
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
@@ -773,6 +764,7 @@ const Objects = () => {
                 justifyContent: "center",
                 alignItems: "flex-start",
                 p: 2,
+                position: 'relative'
             }}
         >
             <Box
@@ -905,7 +897,7 @@ const Objects = () => {
                         <TableHead sx={{
                             position: "sticky",
                             top: 0,
-                            zIndex: 3, // Augmenté le z-index pour être au-dessus du contenu
+                            zIndex: 3,
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
@@ -1032,6 +1024,7 @@ const Objects = () => {
                     onClose={() => setPendingAction(null)}
                 />
             </Box>
+            <EventLogger selectedObjects={selectedObjects}/>
         </Box>
     );
 };

@@ -78,7 +78,7 @@ const NavBar = () => {
                 localStorage.setItem('appVersion', cleanVersion);
                 localStorage.setItem('appVersionTime', now.toString());
             } catch (error) {
-                console.error('Error fetching version:', error);
+                logger.error('Error fetching version:', error);
                 setAppVersion(cached || 'Unknown');
             }
         };

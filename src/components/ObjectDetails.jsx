@@ -902,7 +902,6 @@ const ObjectDetail = () => {
                         getColor={getColor}
                         objectMenuAnchorRef={objectMenuAnchorRef}
                     />
-                    {/* ActionDialogManager pour toutes les actions SAUF console */}
                     {pendingAction && pendingAction.action !== "console" && (
                         <ActionDialogManager
                             pendingAction={pendingAction}

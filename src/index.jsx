@@ -4,6 +4,8 @@ import {BrowserRouter as Router} from 'react-router-dom';
 import App from './components/App';
 import './i18n';
 import './styles/main.css';
+import logger from './utils/logger.js';
+
 
 const rootElement = document.getElementById('root');
 
@@ -20,5 +22,5 @@ if (rootElement) {
         </React.StrictMode>
     );
 } else {
-    console.error("DOM element with id 'root' not found!");
+    logger.error("DOM element with id 'root' not found!");
 }

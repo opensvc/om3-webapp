@@ -103,11 +103,9 @@ const NodesTable = () => {
         setSelectedNodeForLogs(null);
     };
 
-    // VERSION CORRIGÉE : Support des événements tactiles ET souris
     const startResizing = (e) => {
         e.preventDefault();
 
-        // Déterminer si c'est un événement tactile ou souris
         const isTouchEvent = e.type.startsWith('touch');
         const startX = isTouchEvent ? e.touches[0].clientX : e.clientX;
         const startWidth = drawerWidth;
@@ -124,7 +122,6 @@ const NodesTable = () => {
         };
 
         const stopResize = () => {
-            // Retirer les écouteurs d'événements appropriés
             if (isTouchEvent) {
                 document.removeEventListener("touchmove", doResize);
                 document.removeEventListener("touchend", stopResize);
@@ -138,7 +135,6 @@ const NodesTable = () => {
             document.body.style.webkitUserSelect = "";
         };
 
-        // Ajouter les écouteurs d'événements appropriés
         if (isTouchEvent) {
             document.addEventListener("touchmove", doResize, {passive: false});
             document.addEventListener("touchend", stopResize);
@@ -574,13 +570,12 @@ const NodesTable = () => {
                     },
                 }}
             >
-                {/* BARRE DE REDIMENSIONNEMENT AMÉLIORÉE pour mobile */}
                 <Box
                     sx={{
                         position: "absolute",
                         top: 0,
                         left: 0,
-                        width: isMobile ? "12px" : "6px", // Plus large sur mobile
+                        width: isMobile ? "12px" : "6px",
                         height: "100%",
                         cursor: "ew-resize",
                         bgcolor: theme.palette.grey[300],
@@ -591,7 +586,7 @@ const NodesTable = () => {
                             bgcolor: theme.palette.primary.main,
                         },
                         transition: "background-color 0.2s",
-                        touchAction: "none", // Important pour le touch
+                        touchAction: "none",
                         zIndex: 1,
                     }}
                     onMouseDown={startResizing}

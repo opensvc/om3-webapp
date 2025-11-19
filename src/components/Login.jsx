@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
 import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
+import logger from '../utils/logger.js';
 
 // --- Custom decodeToken using safe Base64url decoding for compatibility with tests ---
 export const decodeToken = (token) => {
@@ -39,7 +40,7 @@ export const decodeToken = (token) => {
         }
         return JSON.parse(decodedPayload);
     } catch (error) {
-        console.error('Error decoding token:', error);
+        logger.error('Error decoding token:', error);
         return null;
     }
 };
@@ -59,7 +60,7 @@ export const refreshToken = async (dispatch) => {
 
     const refreshExpiration = localStorage.getItem('refreshTokenExpiration');
     if (refreshExpiration && Date.now() > parseInt(refreshExpiration, 10)) {
-        console.error('Refresh token expired');
+        logger.error('Refresh token expired');
         dispatch({type: SetAccessToken, data: null});
         return null;
     }
@@ -76,7 +77,7 @@ export const refreshToken = async (dispatch) => {
             });
 
             if (!response.ok) {
-                console.error('Error refreshing token: Token refresh failed');
+                logger.error('Error refreshing token: Token refresh failed');
                 dispatch({type: SetAccessToken, data: null});
                 return null;
             }
@@ -104,7 +105,7 @@ export const refreshToken = async (dispatch) => {
             dispatch({type: SetAccessToken, data: data.access_token});
             return data.access_token;
         } catch (error) {
-            console.error('Error refreshing token:', error);
+            logger.error('Error refreshing token:', error);
             dispatch({type: SetAccessToken, data: null});
             return null;
         } finally {
@@ -137,7 +138,7 @@ const Login = forwardRef((props, ref) => {
 
             if (!response.ok) {
                 const errorMsg = t('Incorrect username or password');
-                console.error('Authentication error:', errorMsg);
+                logger.error('Authentication error:', errorMsg);
                 setErrorMessage(errorMsg);
                 setLoading(false);
                 return;
@@ -161,7 +162,7 @@ const Login = forwardRef((props, ref) => {
             setLoading(false);
             navigate('/');
         } catch (error) {
-            console.error('Authentication error:', error);
+            logger.error('Authentication error:', error);
             setErrorMessage(error.message || t('An error occurred during authentication'));
             setLoading(false);
         }

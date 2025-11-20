@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from "react";
+import React, {useEffect, useState, useRef, useMemo} from "react";
 import {
     Box,
     Table,
@@ -34,6 +34,7 @@ import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
+import EventLogger from "../components/EventLogger";
 
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -60,9 +61,20 @@ const NodesTable = () => {
     // Logs drawer state
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
-    const [drawerWidth, setDrawerWidth] = useState(600); // Initial width in pixels
+    const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.9;
+
+    const nodeEventTypes = useMemo(() => [
+        "NodeStatusUpdated",
+        "NodeMonitorUpdated",
+        "NodeStatsUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ], []);
 
     // Compute the zoom level
     const getZoomLevel = () => {
@@ -114,7 +126,7 @@ const NodesTable = () => {
             const currentX = moveEvent.type.startsWith('touch')
                 ? moveEvent.touches[0].clientX
                 : moveEvent.clientX;
-            const newWidth = startWidth + (startX - currentX); // Right-to-left resizing
+            const newWidth = startWidth + (startX - currentX);
 
             if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
                 setDrawerWidth(newWidth);
@@ -151,27 +163,15 @@ const NodesTable = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        let eventSourceActive = false;
-
         if (token) {
             fetchNodes(token);
-            if (!eventSourceActive) {
-                startEventReception(token, [
-                    "NodeStatusUpdated",
-                    "NodeMonitorUpdated",
-                    "NodeStatsUpdated",
-                ]);
-                eventSourceActive = true;
-            }
+            startEventReception(token, nodeEventTypes);
         }
 
         return () => {
-            if (eventSourceActive) {
-                closeEventSource();
-                eventSourceActive = false;
-            }
+            closeEventSource();
         };
-    }, [fetchNodes]);
+    }, [fetchNodes, nodeEventTypes]);
 
     const handleMenuOpen = (event, nodename) => {
         setAnchorEls((prev) => ({...prev, [nodename]: event.currentTarget}));
@@ -607,6 +607,11 @@ const NodesTable = () => {
                     />
                 )}
             </Drawer>
+            <EventLogger
+                eventTypes={nodeEventTypes}
+                title="Node Events Logger"
+                buttonLabel="Node Events"
+            />
         </Box>
     );
 };

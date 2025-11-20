@@ -185,7 +185,12 @@ describe('Objects Component', () => {
 
         expect(startEventReception).toHaveBeenCalledWith(
             "mock-token",
-            ["ObjectStatusUpdated", "InstanceStatusUpdated", "ObjectDeleted", "InstanceMonitorUpdated"]
+            [
+                "ObjectStatusUpdated",
+                "InstanceStatusUpdated",
+                "ObjectDeleted",
+                "InstanceMonitorUpdated"
+            ]
         );
 
         unmount();

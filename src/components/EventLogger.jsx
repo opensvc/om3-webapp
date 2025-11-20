@@ -28,7 +28,12 @@ import {
 } from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
 
-const EventLogger = () => {
+const EventLogger = ({
+                         eventTypes = [],
+                         objectName = null,
+                         title = "Event Logger",
+                         buttonLabel = "Events"
+                     }) => {
     const theme = useTheme();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -45,25 +50,72 @@ const EventLogger = () => {
         eventLogs,
         isPaused,
         setPaused,
-        clearLogs,
-        getEventStats
+        clearLogs
     } = useEventLogStore();
 
-    const eventTypes = useMemo(() => {
+    const baseFilteredLogs = useMemo(() => {
+        let filtered = eventLogs;
+
+        if (eventTypes.length > 0) {
+            filtered = filtered.filter(log => eventTypes.includes(log.eventType));
+        }
+
+        if (objectName) {
+            filtered = filtered.filter(log => {
+                if (log.eventType.includes('CONNECTION')) {
+                    return true;
+                }
+
+                const eventData = log.data || {};
+
+                if (eventData.path === objectName) {
+                    return true;
+                }
+
+                if (eventData.labels?.path === objectName) {
+                    return true;
+                }
+                if (eventData.data?.path === objectName) {
+                    return true;
+                }
+
+                if (eventData.data?.labels?.path === objectName) {
+                    return true;
+                }
+
+                if (log.eventType === 'ObjectDeleted') {
+                    try {
+                        const rawData = eventData._rawEvent ? JSON.parse(eventData._rawEvent) : {};
+                        if (rawData.path === objectName || rawData.labels?.path === objectName) {
+                            return true;
+                        }
+                    } catch (e) {}
+                }
+
+                return false;
+            });
+        }
+
+        return filtered;
+    }, [eventLogs, eventTypes, objectName, forceUpdate]);
+
+    const availableEventTypes = useMemo(() => {
         const types = new Set();
-        eventLogs.forEach(log => types.add(log.eventType));
+        baseFilteredLogs.forEach(log => types.add(log.eventType));
         return Array.from(types).sort();
-    }, [eventLogs]);
+    }, [baseFilteredLogs]);
+
+    const eventStats = useMemo(() => {
+        const stats = {};
+        baseFilteredLogs.forEach(log => {
+            stats[log.eventType] = (stats[log.eventType] || 0) + 1;
+        });
+        return stats;
+    }, [baseFilteredLogs]);
+
 
     const filteredLogs = useMemo(() => {
-        console.log("Filtering logs:", {
-            total: eventLogs.length,
-            eventTypeFilter,
-            searchTerm,
-            forceUpdate
-        });
-
-        let result = [...eventLogs];
+        let result = [...baseFilteredLogs];
 
         if (eventTypeFilter.length > 0) {
             result = result.filter(log => eventTypeFilter.includes(log.eventType));
@@ -86,15 +138,13 @@ const EventLogger = () => {
             });
         }
 
-        console.log("Filtered result:", result.length);
         return result;
-    }, [eventLogs, eventTypeFilter, searchTerm, forceUpdate]);
+    }, [baseFilteredLogs, eventTypeFilter, searchTerm]);
+
 
     useEffect(() => {
-        if (drawerOpen) {
-            setForceUpdate(prev => prev + 1);
-        }
-    }, [drawerOpen]);
+        setForceUpdate(prev => prev + 1);
+    }, [eventLogs.length, drawerOpen]);
 
     useEffect(() => {
         if (autoScroll && logsEndRef.current && filteredLogs.length > 0 && drawerOpen) {
@@ -197,7 +247,6 @@ const EventLogger = () => {
         setForceUpdate(prev => prev + 1);
     }, [isPaused, setPaused]);
 
-    // Nettoyer le timeout à la destruction
     useEffect(() => {
         return () => {
             if (resizeTimeoutRef.current) {
@@ -212,33 +261,35 @@ const EventLogger = () => {
 
     return (
         <>
-            <Tooltip title="Event Logger">
-                <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<BugReport/>}
-                    onClick={() => setDrawerOpen(true)}
-                    sx={{
-                        position: 'fixed',
-                        bottom: 16,
-                        right: 16,
-                        zIndex: 9999,
-                        borderRadius: '20px',
-                        minWidth: 'auto',
-                        px: 2
-                    }}
-                >
-                    Events
-                    {eventLogs.length > 0 && (
-                        <Chip
-                            label={eventLogs.length}
-                            size="small"
-                            color="primary"
-                            sx={{ml: 1, height: 20, minWidth: 20}}
-                        />
-                    )}
-                </Button>
-            </Tooltip>
+            {!drawerOpen && (
+                <Tooltip title={title}>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        startIcon={<BugReport/>}
+                        onClick={() => setDrawerOpen(true)}
+                        sx={{
+                            position: 'fixed',
+                            bottom: 16,
+                            right: 16,
+                            zIndex: 9999,
+                            borderRadius: '20px',
+                            minWidth: 'auto',
+                            px: 2
+                        }}
+                    >
+                        {buttonLabel}
+                        {baseFilteredLogs.length > 0 && (
+                            <Chip
+                                label={baseFilteredLogs.length}
+                                size="small"
+                                color="primary"
+                                sx={{ml: 1, height: 20, minWidth: 20}}
+                            />
+                        )}
+                    </Button>
+                </Tooltip>
+            )}
 
             <Drawer
                 anchor="bottom"
@@ -278,10 +329,10 @@ const EventLogger = () => {
                 <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Typography variant="h6" sx={{fontSize: '1rem'}}>
-                            Event Logger
+                            {title}
                         </Typography>
                         <Chip
-                            label={`${filteredLogs.length}/${eventLogs.length} events`}
+                            label={`${filteredLogs.length}/${baseFilteredLogs.length} events`}
                             size="small"
                             variant="outlined"
                         />
@@ -294,6 +345,14 @@ const EventLogger = () => {
                                 color="info"
                                 size="small"
                                 onDelete={handleClearFilters}
+                            />
+                        )}
+                        {objectName && (
+                            <Chip
+                                label={`Object: ${objectName}`}
+                                color="secondary"
+                                size="small"
+                                variant="outlined"
                             />
                         )}
                     </Box>
@@ -338,7 +397,7 @@ const EventLogger = () => {
                         sx={{minWidth: 200, flexGrow: 1}}
                     />
 
-                    {eventTypes.length > 0 && (
+                    {availableEventTypes.length > 0 && (
                         <FormControl size="small" sx={{minWidth: 200}}>
                             <InputLabel>Event Types</InputLabel>
                             <Select
@@ -350,7 +409,7 @@ const EventLogger = () => {
                                     selected.length === 0 ? "All events" : `${selected.length} selected`
                                 }
                             >
-                                {eventTypes.map((eventType) => (
+                                {availableEventTypes.map((eventType) => (
                                     <MenuItem key={eventType} value={eventType}>
                                         <Checkbox
                                             checked={eventTypeFilter.includes(eventType)}
@@ -360,7 +419,7 @@ const EventLogger = () => {
                                             primary={
                                                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
                                                     <Chip
-                                                        label={getEventStats()[eventType] || 0}
+                                                        label={eventStats[eventType] || 0}
                                                         size="small"
                                                         variant="outlined"
                                                         sx={{height: 20, minWidth: 20}}
@@ -392,7 +451,7 @@ const EventLogger = () => {
                     {filteredLogs.length === 0 ? (
                         <Box sx={{p: 4, textAlign: "center"}}>
                             <Typography color="textSecondary">
-                                {eventLogs.length === 0
+                                {baseFilteredLogs.length === 0
                                     ? "No events logged"
                                     : eventTypeFilter.length > 0
                                         ? `No events match the selected types: ${eventTypeFilter.join(', ')}`

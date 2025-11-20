@@ -329,7 +329,14 @@ describe("Heartbeats Component", () => {
         renderWithRouter(<Heartbeats/>);
 
         expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-        expect(startEventReception).toHaveBeenCalledWith("valid-token", ["DaemonHeartbeatUpdated"]);
+        expect(startEventReception).toHaveBeenCalledWith("valid-token", [
+            "DaemonHeartbeatUpdated",
+            "CONNECTION_OPENED",
+            "CONNECTION_ERROR",
+            "RECONNECTION_ATTEMPT",
+            "MAX_RECONNECTIONS_REACHED",
+            "CONNECTION_CLOSED"
+        ]);
     });
 
     test("cleans up on unmount", async () => {

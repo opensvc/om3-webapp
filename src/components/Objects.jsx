@@ -62,7 +62,6 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
-
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
         sx={{
@@ -104,7 +103,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 </Tooltip>
             )}
         </Box>
-
         {isNotProvisioned && (
             <Box
                 sx={{
@@ -121,7 +119,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 </Tooltip>
             </Box>
         )}
-
         {frozen === "frozen" && (
             <Box
                 sx={{
@@ -139,7 +136,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
         )}
     </Box>
 ));
-
 const GlobalExpectDisplay = React.memo(({globalExpect}) => (
     <Box
         sx={{
@@ -167,7 +163,6 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
         )}
     </Box>
 ));
-
 const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
     <Box
         sx={{
@@ -204,7 +199,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 </Tooltip>
             )}
         </Box>
-
         {isNodeNotProvisioned && (
             <Box
                 sx={{
@@ -221,7 +215,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 </Tooltip>
             </Box>
         )}
-
         {nodeFrozen === "frozen" && (
             <Box
                 sx={{
@@ -239,7 +232,6 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         )}
     </Box>
 ));
-
 const NodeStateDisplay = React.memo(({nodeState, node}) => (
     <Box
         sx={{
@@ -268,14 +260,12 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => (
         )}
     </Box>
 ));
-
 const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
     const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState, provisioned: nodeProvisioned} = getNodeState(
         objectName,
         node
     );
     const isNodeNotProvisioned = nodeProvisioned === "false" || nodeProvisioned === false;
-
     return nodeAvail ? (
         <Box sx={{
             width: "130px",
@@ -305,7 +295,6 @@ const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
         </Box>
     );
 });
-
 const TableRowComponent = React.memo(
     ({
          objectName,
@@ -341,7 +330,6 @@ const TableRowComponent = React.memo(
                 ),
             [objectName, isFrozen, hasAnyNodeFrozen]
         );
-
         return (
             <TableRow onClick={() => handleObjectClick(objectName)} sx={{cursor: "pointer"}}>
                 <TableCell>
@@ -422,25 +410,21 @@ const TableRowComponent = React.memo(
         );
     }
 );
-
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const isMounted = useRef(true);
-
     const queryParams = new URLSearchParams(location.search);
     const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
     const rawSearchQuery = queryParams.get("name") || "";
-
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
-
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
@@ -463,9 +447,18 @@ const Objects = () => {
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
-
+    const objectEventTypes = useMemo(() => [
+        "ObjectStatusUpdated",
+        "InstanceStatusUpdated",
+        "ObjectDeleted",
+        "InstanceMonitorUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ], []);
     const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
-
     const getObjectStatus = useCallback(
         (objectName, objs) => {
             const obj = objs[objectName] || {};
@@ -488,7 +481,6 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
-
     const getNodeState = useCallback(
         (objectName, node) => {
             const instanceStatus = objectInstanceStatus[objectName] || {};
@@ -506,20 +498,16 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
-
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
-
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
-
     const namespaces = useMemo(() => Array.from(new Set(allObjectNames.map(extractNamespace))).sort(), [allObjectNames]);
     const kinds = useMemo(() => Array.from(new Set(allObjectNames.map(extractKind))).sort(), [allObjectNames]);
-
     const allNodes = useMemo(
         () =>
             Array.from(
@@ -531,7 +519,6 @@ const Objects = () => {
             ).sort(),
         [objectInstanceStatus]
     );
-
     const filteredObjectNames = useMemo(
         () =>
             allObjectNames.filter((name) => {
@@ -550,7 +537,6 @@ const Objects = () => {
             }),
         [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, getObjectStatus, objects]
     );
-
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         return [...filteredObjectNames].sort((a, b) => {
@@ -569,7 +555,6 @@ const Objects = () => {
             return sortDirection === "asc" ? diff : -diff;
         });
     }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
-
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
@@ -587,32 +572,26 @@ const Objects = () => {
             }, 300),
         [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]
     );
-
     useEffect(() => {
         debouncedUpdateQuery();
         return debouncedUpdateQuery.cancel;
     }, [debouncedUpdateQuery]);
-
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
         const newKind = rawKind;
         const newSearchQuery = rawSearchQuery;
-
         setSelectedGlobalState(newGlobalState);
         setSelectedNamespace(newNamespace);
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
-
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
-
     const eventStarted = useRef(false);
-
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token && !eventStarted.current) {
@@ -624,37 +603,30 @@ const Objects = () => {
             ]);
             eventStarted.current = true;
         }
-
         return () => {
             closeEventSource();
-            eventStarted.current = false; // Reset for potential remounts
+            eventStarted.current = false;
         };
     }, []);
-
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
         );
     }, []);
-
     const handleActionsMenuOpen = useCallback((event) => {
         setActionsMenuAnchor(event.currentTarget);
     }, []);
-
     const handleActionsMenuClose = useCallback(() => {
         setActionsMenuAnchor(null);
     }, []);
-
     const handleRowMenuOpen = useCallback((event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
     }, []);
-
     const handleRowMenuClose = useCallback(() => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
     }, []);
-
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
@@ -663,7 +635,6 @@ const Objects = () => {
         },
         [handleRowMenuClose, handleActionsMenuClose]
     );
-
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -671,7 +642,6 @@ const Objects = () => {
                 setSnackbar({open: true, message: "Authentication token not found", severity: "error"});
                 return;
             }
-
             setSnackbar({open: true, message: `Executing '${action}'...`, severity: "info"});
             let successCount = 0;
             let errorCount = 0;
@@ -682,14 +652,11 @@ const Objects = () => {
                     errorCount++;
                     return;
                 }
-
                 const {namespace, kind, name} = parseObjectName(objectName);
-
                 if ((action === "freeze" && rawObj.frozen === "frozen") || (action === "unfreeze" && rawObj.frozen === "unfrozen")) {
                     errorCount++;
                     return;
                 }
-
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
                 try {
                     const response = await fetch(url, {
@@ -709,7 +676,6 @@ const Objects = () => {
                     errorCount++;
                 }
             });
-
             await Promise.all(promises);
             setSnackbar({
                 open: true,
@@ -721,20 +687,17 @@ const Objects = () => {
                             : `'${action}' failed on all ${objectsToProcess.length} object(s).`,
                 severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
             });
-
             setSelectedObjects([]);
             setPendingAction(null);
         },
         [pendingAction, selectedObjects, objectStatus, removeObject]
     );
-
     const handleObjectClick = useCallback(
         (objectName) => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
     );
-
     const popperProps = useCallback(
         () => ({
             placement: "bottom-end",
@@ -754,7 +717,6 @@ const Objects = () => {
         }),
         [getZoomLevel]
     );
-
     return (
         <Box
             sx={{
@@ -782,7 +744,6 @@ const Objects = () => {
                 <Typography variant="h4" gutterBottom align="center">
                     Objects
                 </Typography>
-
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
@@ -811,7 +772,6 @@ const Objects = () => {
                             Actions on selected objects
                         </Button>
                     </Box>
-
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
                             <Autocomplete
@@ -863,7 +823,6 @@ const Objects = () => {
                             />
                         </Box>
                     </Collapse>
-
                     <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">
@@ -890,7 +849,6 @@ const Objects = () => {
                         </ClickAwayListener>
                     </Popper>
                 </Box>
-
                 {/* Objects table */}
                 <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                     <Table>
@@ -1003,7 +961,6 @@ const Objects = () => {
                         No objects found matching the current filters.
                     </Typography>
                 )}
-
                 {/* Feedback and dialogs */}
                 <Snackbar
                     open={snackbar.open}
@@ -1015,7 +972,6 @@ const Objects = () => {
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
-
                 <ActionDialogManager
                     pendingAction={pendingAction}
                     handleConfirm={handleExecuteActionOnSelected}
@@ -1024,7 +980,11 @@ const Objects = () => {
                     onClose={() => setPendingAction(null)}
                 />
             </Box>
-            <EventLogger selectedObjects={selectedObjects}/>
+            <EventLogger
+                eventTypes={objectEventTypes}
+                title="Object Events Logger"
+                buttonLabel="Object Events"
+            />
         </Box>
     );
 };

@@ -15,6 +15,7 @@ import {
 } from "./ClusterStatGrids.jsx";
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception} from "../eventSourceManager";
+import EventLogger from "../components/EventLogger";
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
@@ -25,6 +26,22 @@ const ClusterOverview = () => {
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
     const isMounted = useRef(true);
+
+    const clusterEventTypes = [
+        "NodeStatusUpdated",
+        "NodeMonitorUpdated",
+        "NodeStatsUpdated",
+        "DaemonHeartbeatUpdated",
+        "ObjectStatusUpdated",
+        "InstanceStatusUpdated",
+        "ObjectDeleted",
+        "InstanceMonitorUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ];
 
     useEffect(() => {
         isMounted.current = true;
@@ -219,6 +236,12 @@ const ClusterOverview = () => {
                     />
                 </Box>
             </Box>
+
+            <EventLogger
+                eventTypes={clusterEventTypes}
+                title="Cluster Events Logger"
+                buttonLabel="Cluster Events"
+            />
         </Box>
     );
 };

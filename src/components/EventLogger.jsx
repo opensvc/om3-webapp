@@ -27,6 +27,7 @@ import {
     KeyboardArrowUp
 } from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
+import logger from '../utils/logger.js';
 
 const EventLogger = ({
                          eventTypes = [],
@@ -131,7 +132,7 @@ const EventLogger = ({
                     const dataString = JSON.stringify(log.data || {}).toLowerCase();
                     dataMatch = dataString.includes(term);
                 } catch (error) {
-                    console.warn("Error stringifying log data:", error);
+                    logger.warn("Error stringifying log data:", error);
                 }
 
                 return eventTypeMatch || dataMatch;

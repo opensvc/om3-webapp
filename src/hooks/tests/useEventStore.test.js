@@ -431,7 +431,6 @@ describe('useEventStore', () => {
             {name: 'cluster', fullName: 'root/ccfg/cluster', node: 'node2'},
         ]);
 
-        // Test deduplication
         act(() => {
             setConfigUpdated([{name: 'service1', node: 'node1'}]); // Duplicate
         });

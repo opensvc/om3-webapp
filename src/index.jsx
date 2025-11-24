@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {BrowserRouter as Router} from 'react-router-dom';
 import App from './components/App';
+import {ThemeProvider, createTheme} from '@mui/material/styles';
+import {grey} from '@mui/material/colors';
 import './i18n';
 import './styles/main.css';
 import logger from './utils/logger.js';
@@ -14,11 +16,21 @@ if (rootElement) {
     const uiMatch = pathname.startsWith('/ui') ? '/ui' : '/';
 
     const root = ReactDOM.createRoot(rootElement);
+    const theme = createTheme({
+        palette: {
+            primary: {
+                main: grey[900],
+                contrastText: '#fff',
+            },
+        },
+    });
     root.render(
         <React.StrictMode>
-            <Router basename={uiMatch}>
-                <App/>
-            </Router>
+            <ThemeProvider theme={theme}>
+                <Router basename={uiMatch}>
+                    <App/>
+                </Router>
+            </ThemeProvider>
         </React.StrictMode>
     );
 } else {

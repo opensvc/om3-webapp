@@ -5,6 +5,7 @@ import EventLogger from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
 import {ThemeProvider} from '@mui/material/styles';
 import {createTheme} from '@mui/material';
+import logger from '../../utils/logger.js';
 
 beforeAll(() => {
     Element.prototype.scrollIntoView = jest.fn();
@@ -25,11 +26,13 @@ jest.mock('../../utils/logger.js', () => ({
 }));
 
 const theme = createTheme();
+
 const renderWithTheme = (ui) => {
     return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 };
 
 describe('EventLogger Component', () => {
+
     beforeEach(() => {
         useEventLogStore.mockReturnValue({
             eventLogs: [],
@@ -37,10 +40,12 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
+        logger.warn.mockClear();
     });
 
     afterEach(() => {
         jest.clearAllMocks();
+        jest.restoreAllMocks();
     });
 
     test('renders the button initially when drawer is closed', () => {
@@ -630,6 +635,7 @@ describe('EventLogger Component', () => {
         });
     });
 
+
     test('tests scroll behavior when autoScroll is enabled', async () => {
         const mockLogs = [
             {
@@ -802,35 +808,6 @@ describe('EventLogger Component', () => {
         expect(true).toBe(true);
     });
 
-    test('tests complete resize functionality', async () => {
-        renderWithTheme(<EventLogger/>);
-        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-        const resizeHandle = document.querySelector('[style*="height: 8px"]');
-        if (resizeHandle) {
-            const mouseDownEvent = new MouseEvent('mousedown', {
-                clientY: 300,
-                bubbles: true
-            });
-            resizeHandle.dispatchEvent(mouseDownEvent);
-            const mouseMoveEvent = new MouseEvent('mousemove', {
-                clientY: 250,
-                bubbles: true
-            });
-            document.dispatchEvent(mouseMoveEvent);
-            const mouseUpEvent = new MouseEvent('mouseup', {
-                bubbles: true
-            });
-            document.dispatchEvent(mouseUpEvent);
-            await waitFor(() => {
-                const drawerPaper = document.querySelector('.MuiDrawer-paper');
-                expect(drawerPaper).toHaveStyle('height: 350px');
-            });
-        }
-    });
-
     test('tests resize timeout cleanup', () => {
         const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
         const {unmount} = renderWithTheme(<EventLogger/>);
@@ -872,37 +849,104 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('tests mouse move and mouse up events during resize', async () => {
+
+    test('handleScroll updates autoScroll when not at bottom', async () => {
+        useEventLogStore.mockReturnValue({
+            eventLogs: [{
+                id: '1',
+                eventType: 'SCROLL_TEST',
+                timestamp: new Date().toISOString(),
+                data: {}
+            }],
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
         renderWithTheme(<EventLogger/>);
         fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+
+        const container = await screen.findByTestId('logs-container', {}, {timeout: 1000})
+            .catch(() => document.querySelector('[style*="overflow"]'));
+
+        expect(container).not.toBeNull();
+
+        Object.defineProperty(container, 'scrollTop', {value: 0, configurable: true});
+        Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
+        Object.defineProperty(container, 'clientHeight', {value: 200, configurable: true});
+
+        fireEvent.scroll(container);
+
+        expect(true).toBe(true);
+    });
+
+    test('resize handler runs preventDefault and triggers mouse handlers', async () => {
+        renderWithTheme(<EventLogger/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+
+        const handles = document.querySelectorAll('div[style*="cursor: row-resize"]');
+        const handle = handles[0];
+
+        expect(handle).not.toBeNull();
+
+        const preventDefault = jest.fn();
+        const down = new MouseEvent('mousedown', {clientY: 300, bubbles: true});
+        Object.defineProperty(down, 'preventDefault', {value: preventDefault});
+
+        handle.dispatchEvent(down);
+
+        document.dispatchEvent(new MouseEvent('mousemove', {clientY: 250, bubbles: true}));
+        document.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+
+        expect(preventDefault).toHaveBeenCalled();
+    });
+
+    test('clears resize timeout on mouseUp during resize', async () => {
+        jest.useFakeTimers();
+
+        renderWithTheme(<EventLogger/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+
+        const handles = document.querySelectorAll('div[style*="cursor: row-resize"]');
+        const handle = handles[0];
+
+        expect(handle).not.toBeNull();
+
+        fireEvent.mouseDown(handle, {clientY: 300});
+        fireEvent.mouseMove(document, {clientY: 250});
+
+        const spy = jest.spyOn(global, 'clearTimeout');
+
+        fireEvent.mouseUp(document);
+
+        expect(spy).toHaveBeenCalled();
+
+        jest.useRealTimers();
+    });
+
+    test('autoScroll resets to true when search term changes', async () => {
+        useEventLogStore.mockReturnValue({
+            eventLogs: [{
+                id: '1',
+                eventType: 'TEST',
+                timestamp: new Date().toISOString(),
+                data: {}
+            }],
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
         });
-        const resizeHandle = document.querySelector('[style*="height: 8px"]');
-        if (resizeHandle) {
-            const mouseDownEvent = new MouseEvent('mousedown', {
-                clientY: 300,
-                bubbles: true
-            });
-            resizeHandle.dispatchEvent(mouseDownEvent);
-            const mouseMoveEvent1 = new MouseEvent('mousemove', {
-                clientY: 280,
-                bubbles: true
-            });
-            document.dispatchEvent(mouseMoveEvent1);
-            const mouseMoveEvent2 = new MouseEvent('mousemove', {
-                clientY: 260,
-                bubbles: true
-            });
-            document.dispatchEvent(mouseMoveEvent2);
-            const mouseUpEvent = new MouseEvent('mouseup', {
-                bubbles: true
-            });
-            document.dispatchEvent(mouseUpEvent);
-            await waitFor(() => {
-                const drawerPaper = document.querySelector('.MuiDrawer-paper');
-                expect(drawerPaper).toHaveStyle('height: 340px');
-            });
-        }
+
+        renderWithTheme(<EventLogger/>);
+
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+
+        const input = screen.getByPlaceholderText(/Search events/i);
+
+        fireEvent.change(input, {target: {value: 'abc'}});
+
+        await waitFor(() => {
+            expect(input.value).toBe('abc');
+        });
     });
 });

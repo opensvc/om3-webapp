@@ -21,7 +21,6 @@ import {
     PlayArrow,
     Pause,
     DeleteOutline,
-    Search,
     BugReport,
     Close,
     KeyboardArrowUp
@@ -114,7 +113,6 @@ const EventLogger = ({
         return stats;
     }, [baseFilteredLogs]);
 
-
     const filteredLogs = useMemo(() => {
         let result = [...baseFilteredLogs];
 
@@ -141,7 +139,6 @@ const EventLogger = ({
 
         return result;
     }, [baseFilteredLogs, eventTypeFilter, searchTerm]);
-
 
     useEffect(() => {
         setForceUpdate(prev => prev + 1);
@@ -176,8 +173,10 @@ const EventLogger = ({
     }, [autoScroll]);
 
     const startResizing = useCallback((mouseDownEvent) => {
-        mouseDownEvent.preventDefault();
-        const startY = mouseDownEvent.clientY;
+        if (mouseDownEvent && typeof mouseDownEvent.preventDefault === 'function') {
+            mouseDownEvent.preventDefault();
+        }
+        const startY = mouseDownEvent?.clientY ?? 0;
         const startHeight = drawerHeight;
 
         const handleMouseMove = (mouseMoveEvent) => {
@@ -186,7 +185,7 @@ const EventLogger = ({
             }
 
             resizeTimeoutRef.current = setTimeout(() => {
-                const deltaY = startY - mouseMoveEvent.clientY;
+                const deltaY = startY - (mouseMoveEvent?.clientY ?? startY);
                 const newHeight = Math.max(200, Math.min(600, startHeight + deltaY));
                 setDrawerHeight(newHeight);
             }, 16);
@@ -205,12 +204,16 @@ const EventLogger = ({
     }, [drawerHeight]);
 
     const formatTimestamp = (timestamp) => {
-        return new Date(timestamp).toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            fractionalSecondDigits: 3,
-        });
+        try {
+            return new Date(timestamp).toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                fractionalSecondDigits: 3,
+            });
+        } catch (e) {
+            return String(timestamp);
+        }
     };
 
     const getEventColor = (eventType) => {
@@ -260,6 +263,15 @@ const EventLogger = ({
         setAutoScroll(true);
     }, [eventTypeFilter, searchTerm]);
 
+    const paperStyle = {
+        height: drawerHeight,
+        maxHeight: '70vh',
+        overflow: 'hidden',
+        borderTopLeftRadius: 8,
+        borderTopRightRadius: 8,
+        backgroundColor: theme.palette.background.paper
+    };
+
     return (
         <>
             {!drawerOpen && (
@@ -297,34 +309,27 @@ const EventLogger = ({
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
                 variant="persistent"
-                sx={{
-                    '& .MuiDrawer-paper': {
-                        height: drawerHeight,
-                        maxHeight: '70vh',
-                        overflow: 'hidden',
-                        borderTopLeftRadius: 8,
-                        borderTopRightRadius: 8,
-                        bgcolor: theme.palette.background.paper
-                    }
-                }}
+                PaperProps={{style: paperStyle}}
             >
-                <Box
-                    sx={{
+                <div
+                    onMouseDown={startResizing}
+                    style={{
                         width: '100%',
-                        height: 8,
-                        bgcolor: 'grey.300',
+                        height: '8px',
+                        backgroundColor: theme.palette.grey?.[300] ?? '#e0e0e0',
                         cursor: 'row-resize',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        '&:hover': {
-                            bgcolor: 'primary.main',
-                        }
+                        justifyContent: 'center'
                     }}
-                    onMouseDown={startResizing}
                 >
-                    <Box sx={{width: 40, height: 4, bgcolor: 'grey.500', borderRadius: 1}}/>
-                </Box>
+                    <div style={{
+                        width: '40px',
+                        height: '4px',
+                        backgroundColor: theme.palette.grey?.[500] ?? '#9e9e9e',
+                        borderRadius: 1
+                    }}/>
+                </div>
 
                 {/* Header */}
                 <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
@@ -438,14 +443,14 @@ const EventLogger = ({
 
                 <Divider/>
 
-                <Box
+                <div
                     ref={logsContainerRef}
                     onScroll={handleScroll}
-                    sx={{
+                    style={{
                         flex: 1,
-                        overflow: "auto",
-                        bgcolor: theme.palette.grey[50],
-                        p: 0,
+                        overflow: 'auto',
+                        backgroundColor: theme.palette.grey?.[50] ?? '#fafafa',
+                        padding: 0,
                         position: 'relative'
                     }}
                 >
@@ -475,7 +480,6 @@ const EventLogger = ({
                                     }}
                                 >
                                     <Box sx={{display: "flex", alignItems: "flex-start", gap: 2}}>
-                                        {/* Colonne info compacte */}
                                         <Box sx={{minWidth: 200, flexShrink: 0}}>
                                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 0.5}}>
                                                 <Chip
@@ -519,7 +523,7 @@ const EventLogger = ({
                             <div ref={logsEndRef} style={{height: '1px'}}/>
                         </>
                     )}
-                </Box>
+                </div>
 
                 {!autoScroll && filteredLogs.length > 0 && (
                     <Box sx={{p: 1, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'center'}}>

@@ -46,9 +46,13 @@ const isEqual = (a, b) => {
 
 // Create query string for EventSource URL
 const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
+    const validFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
+    if (validFilters.length < filters.length) {
+        logger.warn(`Invalid filters detected: ${filters.filter(f => !validFilters.includes(f)).join(', ')}. Using only valid ones.`);
+    }
     const queryFilters = objectName
         ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
-        : filters;
+        : validFilters;
     return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 };
 
@@ -137,7 +141,6 @@ const createBufferManager = () => {
         }
         flushTimeout = null;
     };
-
     return {buffers, scheduleFlush};
 };
 
@@ -385,10 +388,9 @@ export const updateEventSourceToken = (newToken) => {
     currentToken = newToken;
     if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
         logger.info('🔄 Token updated, restarting EventSource');
+        const currentUrl = currentEventSource.url;
         closeEventSource();
-        const queryString = createQueryString(DEFAULT_FILTERS, null);
-        const url = `${URL_NODE_EVENT}?${queryString}`;
-        setTimeout(() => createEventSource(url, newToken), 100);
+        setTimeout(() => createEventSource(currentUrl, newToken), 100);
     }
 };
 

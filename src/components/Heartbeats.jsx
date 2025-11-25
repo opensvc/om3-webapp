@@ -389,7 +389,6 @@ const Heartbeats = () => {
                 </TableContainer>
             </Paper>
 
-            {/* Ajout du EventLogger pour les événements Heartbeats */}
             <EventLogger
                 eventTypes={heartbeatEventTypes}
                 title="Heartbeat Events Logger"

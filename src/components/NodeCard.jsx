@@ -18,7 +18,7 @@ import {
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
@@ -421,7 +421,7 @@ const NodeCard = ({
                             </Tooltip>
                             {isResourceNotProvisioned && (
                                 <Tooltip title="Not Provisioned">
-                                    <WarningAmberIcon
+                                    <PriorityHighIcon
                                         sx={{color: red[500], fontSize: "1rem"}}
                                         aria-label={`Resource ${rid} is not provisioned`}
                                     />
@@ -542,7 +542,7 @@ const NodeCard = ({
                         </Tooltip>
                         {isResourceNotProvisioned && (
                             <Tooltip title="Not Provisioned">
-                                <WarningAmberIcon
+                                <PriorityHighIcon
                                     sx={{color: red[500], fontSize: "1rem"}}
                                     aria-label={`Resource ${rid} is not provisioned`}
                                 />
@@ -649,7 +649,7 @@ const NodeCard = ({
                         </Tooltip>
                         {avail === "warn" && (
                             <Tooltip title="warn">
-                                <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
+                                <PriorityHighIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
                             </Tooltip>
                         )}
                         {frozen === "frozen" && (
@@ -659,7 +659,7 @@ const NodeCard = ({
                         )}
                         {isInstanceNotProvisioned && (
                             <Tooltip title="Not Provisioned">
-                                <WarningAmberIcon
+                                <PriorityHighIcon
                                     sx={{color: red[500], fontSize: "1.2rem"}}
                                     aria-label={`Instance on node ${node} is not provisioned`}
                                 />

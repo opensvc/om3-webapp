@@ -136,7 +136,7 @@ jest.mock('@mui/material', () => {
 jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon"/>);
 jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="UploadFileIcon"/>);
 jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon"/>);
-jest.mock('@mui/icons-material/WarningAmber', () => () => <span data-testid="WarningAmberIcon"/>);
+jest.mock('@mui/icons-material/PriorityHigh', () => () => <span data-testid="PriorityHighIcon"/>);
 jest.mock('@mui/icons-material/AcUnit', () => () => <span data-testid="AcUnitIcon"/>);
 jest.mock('@mui/icons-material/MoreVert', () => () => <span data-testid="MoreVertIcon"/>);
 
@@ -719,7 +719,7 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
-            const warningIcon = screen.getByTestId('WarningAmberIcon');
+            const warningIcon = screen.getByTestId('PriorityHighIcon');
             expect(warningIcon).toBeInTheDocument();
         });
     });

@@ -20,8 +20,7 @@ import useEventStore from "../hooks/useEventStore.js";
 import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import {red, orange} from "@mui/material/colors";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";import {red, orange} from "@mui/material/colors";
 import Tooltip from "@mui/material/Tooltip";
 
 const NavBar = () => {
@@ -382,7 +381,7 @@ const NavBar = () => {
                                             textDecoration: "none",
                                         }}
                                     >
-                                        <WarningAmberIcon sx={{color: orange[500]}}/>
+                                        <PriorityHighIcon sx={{color: orange[500]}}/>
                                         {warnCount}
                                     </Typography>
                                 </Tooltip>

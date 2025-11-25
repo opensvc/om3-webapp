@@ -31,7 +31,7 @@ import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import debounce from "lodash/debounce";
@@ -84,22 +84,22 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
         >
             {avail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
                 </Tooltip>
             )}
             {avail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is down"/>
                 </Tooltip>
             )}
             {avail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
+                    <PriorityHighIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
                 </Tooltip>
             )}
             {avail === "n/a" && (
                 <Tooltip title="n/a">
-                    <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
+                    <FiberManualRecordIcon sx={{color: grey[500], fontSize: 24}} aria-label="Object status is n/a"/>
                 </Tooltip>
             )}
         </Box>
@@ -114,7 +114,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label="Object is not provisioned"/>
                 </Tooltip>
             </Box>
@@ -130,7 +130,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label="Object is frozen"/>
                 </Tooltip>
             </Box>
         )}
@@ -185,17 +185,17 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         >
             {nodeAvail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label={`Node ${node} is up`}/>
                 </Tooltip>
             )}
             {nodeAvail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label={`Node ${node} is down`}/>
                 </Tooltip>
             )}
             {nodeAvail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+                    <PriorityHighIcon sx={{color: orange[500], fontSize: 24}} aria-label={`Node ${node} has warning`}/>
                 </Tooltip>
             )}
         </Box>
@@ -210,7 +210,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label={`Node ${node} is not provisioned`}/>
                 </Tooltip>
             </Box>
@@ -226,7 +226,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label={`Node ${node} is frozen`}/>
                 </Tooltip>
             </Box>
         )}
@@ -789,11 +789,11 @@ const Objects = () => {
                                             {option === "down" &&
                                                 <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
                                             {option === "warn" &&
-                                                <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>}
+                                                <PriorityHighIcon sx={{color: orange[500], fontSize: 18}}/>}
                                             {option === "n/a" &&
                                                 <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
                                             {option === "unprovisioned" &&
-                                                <WarningAmberIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
                                             {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
                                         </Box>
                                     </li>

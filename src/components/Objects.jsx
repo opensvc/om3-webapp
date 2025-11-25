@@ -43,6 +43,7 @@ import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
+import EventLogger from "../components/EventLogger";
 
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -61,60 +62,86 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
-
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
-        display="flex"
-        alignItems="center"
-        gap={0.5}
         sx={{
             width: "80px",
+            height: "24px",
+            position: "relative",
+            display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            left: "0px"
+            alignItems: "center"
         }}
     >
-        {avail === "up" && (
-            <Tooltip title="up">
-                <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
-            </Tooltip>
-        )}
-        {avail === "down" && (
-            <Tooltip title="down">
-                <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
-            </Tooltip>
-        )}
-        {avail === "warn" && (
-            <Tooltip title="warn">
-                <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
-            </Tooltip>
-        )}
-        {avail === "n/a" && (
-            <Tooltip title="n/a">
-                <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
-            </Tooltip>
-        )}
+        <Box
+            sx={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1
+            }}
+        >
+            {avail === "up" && (
+                <Tooltip title="up">
+                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
+                </Tooltip>
+            )}
+            {avail === "down" && (
+                <Tooltip title="down">
+                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
+                </Tooltip>
+            )}
+            {avail === "warn" && (
+                <Tooltip title="warn">
+                    <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
+                </Tooltip>
+            )}
+            {avail === "n/a" && (
+                <Tooltip title="n/a">
+                    <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
+                </Tooltip>
+            )}
+        </Box>
         {isNotProvisioned && (
-            <Tooltip title="Not Provisioned">
-                <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}} aria-label="Object is not provisioned"/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    left: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="Not Provisioned">
+                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                                      aria-label="Object is not provisioned"/>
+                </Tooltip>
+            </Box>
         )}
         {frozen === "frozen" && (
-            <Tooltip title="frozen">
-                <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    right: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="frozen">
+                    <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
+                </Tooltip>
+            </Box>
         )}
     </Box>
 ));
-
 const GlobalExpectDisplay = React.memo(({globalExpect}) => (
     <Box
         sx={{
             width: "70px",
             display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            right: "0px"
         }}
     >
         {globalExpect && (
@@ -136,56 +163,81 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
         )}
     </Box>
 ));
-
 const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
     <Box
-        display="flex"
-        alignItems="center"
-        gap={0.5}
         sx={{
             width: "80px",
+            height: "24px",
+            position: "relative",
+            display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            left: "0px"
+            alignItems: "center"
         }}
     >
-        {nodeAvail === "up" && (
-            <Tooltip title="up">
-                <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
-            </Tooltip>
-        )}
-        {nodeAvail === "down" && (
-            <Tooltip title="down">
-                <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
-            </Tooltip>
-        )}
-        {nodeAvail === "warn" && (
-            <Tooltip title="warn">
-                <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
-            </Tooltip>
-        )}
+        <Box
+            sx={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1
+            }}
+        >
+            {nodeAvail === "up" && (
+                <Tooltip title="up">
+                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+                </Tooltip>
+            )}
+            {nodeAvail === "down" && (
+                <Tooltip title="down">
+                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+                </Tooltip>
+            )}
+            {nodeAvail === "warn" && (
+                <Tooltip title="warn">
+                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+                </Tooltip>
+            )}
+        </Box>
         {isNodeNotProvisioned && (
-            <Tooltip title="Not Provisioned">
-                <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
-                                  aria-label={`Node ${node} is not provisioned`}/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    left: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="Not Provisioned">
+                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                                      aria-label={`Node ${node} is not provisioned`}/>
+                </Tooltip>
+            </Box>
         )}
         {nodeFrozen === "frozen" && (
-            <Tooltip title="frozen">
-                <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
-            </Tooltip>
+            <Box
+                sx={{
+                    position: "absolute",
+                    right: "0px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    zIndex: 2
+                }}
+            >
+                <Tooltip title="frozen">
+                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+                </Tooltip>
+            </Box>
         )}
     </Box>
 ));
-
 const NodeStateDisplay = React.memo(({nodeState, node}) => (
     <Box
         sx={{
             width: "50px",
             display: "flex",
             justifyContent: "center",
-            position: "absolute",
-            right: "0px"
         }}
     >
         {nodeState && (
@@ -208,21 +260,19 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => (
         )}
     </Box>
 ));
-
 const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
     const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState, provisioned: nodeProvisioned} = getNodeState(
         objectName,
         node
     );
     const isNodeNotProvisioned = nodeProvisioned === "false" || nodeProvisioned === false;
-
     return nodeAvail ? (
         <Box sx={{
-            position: "relative",
             width: "130px",
             height: "100%",
             display: "flex",
-            alignItems: "center"
+            alignItems: "center",
+            justifyContent: "space-between"
         }}>
             <NodeStatusIcons
                 nodeAvail={nodeAvail}
@@ -245,7 +295,6 @@ const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
         </Box>
     );
 });
-
 const TableRowComponent = React.memo(
     ({
          objectName,
@@ -281,7 +330,6 @@ const TableRowComponent = React.memo(
                 ),
             [objectName, isFrozen, hasAnyNodeFrozen]
         );
-
         return (
             <TableRow onClick={() => handleObjectClick(objectName)} sx={{cursor: "pointer"}}>
                 <TableCell>
@@ -299,11 +347,11 @@ const TableRowComponent = React.memo(
                     height: "100%"
                 }}>
                     <Box sx={{
-                        position: "relative",
                         width: "100%",
                         height: "100%",
                         display: "flex",
-                        alignItems: "center"
+                        alignItems: "center",
+                        justifyContent: "space-between"
                     }}>
                         <StatusIcon
                             avail={avail}
@@ -362,27 +410,21 @@ const TableRowComponent = React.memo(
         );
     }
 );
-
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const isMounted = useRef(true);
-
-    // Parse query parameters
     const queryParams = new URLSearchParams(location.search);
     const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
     const rawGlobalState = queryParams.get("globalState") || "all";
     const rawNamespace = queryParams.get("namespace") || "all";
     const rawKind = queryParams.get("kind") || "all";
     const rawSearchQuery = queryParams.get("name") || "";
-
-    // State hooks
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore((state) => state.objectStatus);
     const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
-
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
@@ -405,10 +447,18 @@ const Objects = () => {
 
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
-
-    // Utility functions
+    const objectEventTypes = useMemo(() => [
+        "ObjectStatusUpdated",
+        "InstanceStatusUpdated",
+        "ObjectDeleted",
+        "InstanceMonitorUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ], []);
     const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
-
     const getObjectStatus = useCallback(
         (objectName, objs) => {
             const obj = objs[objectName] || {};
@@ -431,7 +481,6 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
-
     const getNodeState = useCallback(
         (objectName, node) => {
             const instanceStatus = objectInstanceStatus[objectName] || {};
@@ -449,21 +498,16 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
-
-    // Memoized data
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
-
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
-
     const namespaces = useMemo(() => Array.from(new Set(allObjectNames.map(extractNamespace))).sort(), [allObjectNames]);
     const kinds = useMemo(() => Array.from(new Set(allObjectNames.map(extractKind))).sort(), [allObjectNames]);
-
     const allNodes = useMemo(
         () =>
             Array.from(
@@ -475,7 +519,6 @@ const Objects = () => {
             ).sort(),
         [objectInstanceStatus]
     );
-
     const filteredObjectNames = useMemo(
         () =>
             allObjectNames.filter((name) => {
@@ -494,7 +537,6 @@ const Objects = () => {
             }),
         [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, getObjectStatus, objects]
     );
-
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         return [...filteredObjectNames].sort((a, b) => {
@@ -513,7 +555,6 @@ const Objects = () => {
             return sortDirection === "asc" ? diff : -diff;
         });
     }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
-
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
@@ -531,74 +572,61 @@ const Objects = () => {
             }, 300),
         [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]
     );
-
     useEffect(() => {
         debouncedUpdateQuery();
         return debouncedUpdateQuery.cancel;
     }, [debouncedUpdateQuery]);
-
-    // Sync state with query parameters (URL to state)
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
         const newKind = rawKind;
         const newSearchQuery = rawSearchQuery;
-
         setSelectedGlobalState(newGlobalState);
         setSelectedNamespace(newNamespace);
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
-
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
-
-    // Event subscription
+    const eventStarted = useRef(false);
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
+        if (token && !eventStarted.current) {
             startEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
                 "InstanceMonitorUpdated",
             ]);
+            eventStarted.current = true;
         }
-
         return () => {
             closeEventSource();
+            eventStarted.current = false;
         };
     }, []);
-
-    // Event handlers
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
         );
     }, []);
-
     const handleActionsMenuOpen = useCallback((event) => {
         setActionsMenuAnchor(event.currentTarget);
     }, []);
-
     const handleActionsMenuClose = useCallback(() => {
         setActionsMenuAnchor(null);
     }, []);
-
     const handleRowMenuOpen = useCallback((event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
     }, []);
-
     const handleRowMenuClose = useCallback(() => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
     }, []);
-
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
@@ -607,7 +635,6 @@ const Objects = () => {
         },
         [handleRowMenuClose, handleActionsMenuClose]
     );
-
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -615,7 +642,6 @@ const Objects = () => {
                 setSnackbar({open: true, message: "Authentication token not found", severity: "error"});
                 return;
             }
-
             setSnackbar({open: true, message: `Executing '${action}'...`, severity: "info"});
             let successCount = 0;
             let errorCount = 0;
@@ -626,14 +652,11 @@ const Objects = () => {
                     errorCount++;
                     return;
                 }
-
                 const {namespace, kind, name} = parseObjectName(objectName);
-
                 if ((action === "freeze" && rawObj.frozen === "frozen") || (action === "unfreeze" && rawObj.frozen === "unfrozen")) {
                     errorCount++;
                     return;
                 }
-
                 const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
                 try {
                     const response = await fetch(url, {
@@ -653,7 +676,6 @@ const Objects = () => {
                     errorCount++;
                 }
             });
-
             await Promise.all(promises);
             setSnackbar({
                 open: true,
@@ -665,20 +687,17 @@ const Objects = () => {
                             : `'${action}' failed on all ${objectsToProcess.length} object(s).`,
                 severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
             });
-
             setSelectedObjects([]);
             setPendingAction(null);
         },
         [pendingAction, selectedObjects, objectStatus, removeObject]
     );
-
     const handleObjectClick = useCallback(
         (objectName) => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
     );
-
     const popperProps = useCallback(
         () => ({
             placement: "bottom-end",
@@ -698,7 +717,6 @@ const Objects = () => {
         }),
         [getZoomLevel]
     );
-
     return (
         <Box
             sx={{
@@ -708,6 +726,7 @@ const Objects = () => {
                 justifyContent: "center",
                 alignItems: "flex-start",
                 p: 2,
+                position: 'relative'
             }}
         >
             <Box
@@ -725,7 +744,6 @@ const Objects = () => {
                 <Typography variant="h4" gutterBottom align="center">
                     Objects
                 </Typography>
-
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
@@ -754,7 +772,6 @@ const Objects = () => {
                             Actions on selected objects
                         </Button>
                     </Box>
-
                     <Collapse in={showFilters} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
                             <Autocomplete
@@ -806,7 +823,6 @@ const Objects = () => {
                             />
                         </Box>
                     </Collapse>
-
                     <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">
@@ -833,11 +849,15 @@ const Objects = () => {
                         </ClickAwayListener>
                     </Popper>
                 </Box>
-
                 {/* Objects table */}
                 <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                     <Table>
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
+                        <TableHead sx={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 3,
+                            backgroundColor: "background.paper"
+                        }}>
                             <TableRow>
                                 <TableCell>
                                     <Checkbox
@@ -854,23 +874,22 @@ const Objects = () => {
                                     }}
                                 >
                                     <Box sx={{
-                                        position: "relative",
                                         width: "100%",
                                         height: "100%",
                                         display: "flex",
-                                        alignItems: "center"
+                                        alignItems: "center",
+                                        justifyContent: "space-between"
                                     }}>
                                         <Box
                                             sx={{
                                                 width: "80px",
                                                 display: "flex",
                                                 justifyContent: "center",
-                                                position: "absolute",
-                                                left: "0px"
                                             }}
                                         >
                                             <strong>Status</strong>
                                         </Box>
+                                        <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
                                 <TableCell>
@@ -889,23 +908,22 @@ const Objects = () => {
                                             }}
                                         >
                                             <Box sx={{
-                                                position: "relative",
                                                 width: "100%",
                                                 height: "100%",
                                                 display: "flex",
-                                                alignItems: "center"
+                                                alignItems: "center",
+                                                justifyContent: "space-between"
                                             }}>
                                                 <Box
                                                     sx={{
                                                         width: "80px",
                                                         display: "flex",
                                                         justifyContent: "center",
-                                                        position: "absolute",
-                                                        left: "0px"
                                                     }}
                                                 >
                                                     <strong>{node}</strong>
                                                 </Box>
+                                                <Box sx={{width: "50px"}}></Box>
                                             </Box>
                                         </TableCell>
                                     ))}
@@ -943,7 +961,6 @@ const Objects = () => {
                         No objects found matching the current filters.
                     </Typography>
                 )}
-
                 {/* Feedback and dialogs */}
                 <Snackbar
                     open={snackbar.open}
@@ -955,7 +972,6 @@ const Objects = () => {
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
-
                 <ActionDialogManager
                     pendingAction={pendingAction}
                     handleConfirm={handleExecuteActionOnSelected}
@@ -964,6 +980,11 @@ const Objects = () => {
                     onClose={() => setPendingAction(null)}
                 />
             </Box>
+            <EventLogger
+                eventTypes={objectEventTypes}
+                title="Object Events Logger"
+                buttonLabel="Object Events"
+            />
         </Box>
     );
 };

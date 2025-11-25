@@ -18,6 +18,7 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import useEventStore from "../hooks/useEventStore.js";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import EventLogger from "../components/EventLogger";
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -49,15 +50,17 @@ const Namespaces = () => {
     const urlNamespace = queryParams.get("namespace");
     const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
 
+    const namespaceEventTypes = [
+        'ObjectStatusUpdated',
+        'InstanceStatusUpdated',
+        'ObjectDeleted',
+        'InstanceConfigUpdated'
+    ];
+
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token, [
-                'ObjectStatusUpdated',
-                'InstanceStatusUpdated',
-                'ObjectDeleted',
-                'InstanceConfigUpdated'
-            ]);
+            startEventReception(token, namespaceEventTypes);
         }
         return () => {
             closeEventSource();
@@ -142,6 +145,8 @@ const Namespaces = () => {
                 display: "flex",
                 justifyContent: "center",
                 p: 3,
+                position: 'relative',
+                minHeight: '100vh'
             }}
         >
             <Box
@@ -294,6 +299,12 @@ const Namespaces = () => {
                         </TableBody>
                     </Table>
                 </TableContainer>
+
+                <EventLogger
+                    eventTypes={namespaceEventTypes}
+                    title="Namespaces Events Logger"
+                    buttonLabel="Namespace Events"
+                />
             </Box>
         </Box>
     );

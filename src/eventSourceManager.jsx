@@ -1,4 +1,5 @@
 import useEventStore from './hooks/useEventStore.js';
+import useEventLogStore from './hooks/useEventLogStore.js';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
 import logger from './utils/logger.js';
@@ -45,9 +46,13 @@ const isEqual = (a, b) => {
 
 // Create query string for EventSource URL
 const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
+    const validFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
+    if (validFilters.length < filters.length) {
+        logger.warn(`Invalid filters detected: ${filters.filter(f => !validFilters.includes(f)).join(', ')}. Using only valid ones.`);
+    }
     const queryFilters = objectName
         ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
-        : filters;
+        : validFilters;
     return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 };
 
@@ -136,14 +141,12 @@ const createBufferManager = () => {
         }
         flushTimeout = null;
     };
-
     return {buffers, scheduleFlush};
 };
 
 // Navigation service for SPA-friendly redirects
 const navigationService = {
     redirectToAuth: () => {
-        // Use the custom event that your OidcInitializer is listening to
         window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
             detail: '/auth-choice'
         }));
@@ -178,10 +181,25 @@ export const createEventSource = (url, token) => {
     currentEventSource.onopen = () => {
         logger.info('✅ EventSource connection established');
         reconnectAttempts = 0;
+
+        // Log connection event
+        useEventLogStore.getState().addEventLog('CONNECTION_OPENED', {
+            url,
+            timestamp: new Date().toISOString()
+        });
     };
 
     currentEventSource.onerror = (error) => {
         logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
+
+        // Log error event
+        useEventLogStore.getState().addEventLog('CONNECTION_ERROR', {
+            error: error.message,
+            status: error.status,
+            readyState: currentEventSource?.readyState,
+            url,
+            timestamp: new Date().toISOString()
+        });
 
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected');
@@ -202,7 +220,6 @@ export const createEventSource = (url, token) => {
                     })
                     .catch(silentError => {
                         logger.error('❌ Silent renew failed:', silentError);
-                        // Use SPA-friendly navigation instead of window.location.href
                         navigationService.redirectToAuth();
                     });
                 return;
@@ -213,6 +230,15 @@ export const createEventSource = (url, token) => {
             reconnectAttempts++;
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+            // Log reconnection attempt
+            useEventLogStore.getState().addEventLog('RECONNECTION_ATTEMPT', {
+                attempt: reconnectAttempts,
+                maxAttempts: MAX_RECONNECT_ATTEMPTS,
+                delay,
+                timestamp: new Date().toISOString()
+            });
+
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -221,19 +247,35 @@ export const createEventSource = (url, token) => {
             }, delay);
         } else {
             logger.error('❌ Max reconnection attempts reached');
-            // Redirect to auth choice when max reconnection attempts are reached
+            useEventLogStore.getState().addEventLog('MAX_RECONNECTIONS_REACHED', {
+                maxAttempts: MAX_RECONNECT_ATTEMPTS,
+                timestamp: new Date().toISOString()
+            });
             navigationService.redirectToAuth();
         }
     };
 
-    // Event handlers with type checking
+    // Event handlers with type checking and logging
     const addEventListener = (eventType, handler) => {
         currentEventSource.addEventListener(eventType, (event) => {
             let parsed;
             try {
                 parsed = JSON.parse(event.data);
+
+                // Log the event
+                useEventLogStore.getState().addEventLog(eventType, {
+                    ...parsed,
+                    _rawEvent: event.data
+                });
+
             } catch (e) {
                 logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
+
+                // Log parsing errors
+                useEventLogStore.getState().addEventLog(`${eventType}_PARSE_ERROR`, {
+                    error: e.message,
+                    rawData: event.data
+                });
                 return;
             }
             handler(parsed);
@@ -346,10 +388,9 @@ export const updateEventSourceToken = (newToken) => {
     currentToken = newToken;
     if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
         logger.info('🔄 Token updated, restarting EventSource');
+        const currentUrl = currentEventSource.url;
         closeEventSource();
-        const queryString = createQueryString(DEFAULT_FILTERS, null);
-        const url = `${URL_NODE_EVENT}?${queryString}`;
-        setTimeout(() => createEventSource(url, newToken), 100);
+        setTimeout(() => createEventSource(currentUrl, newToken), 100);
     }
 };
 
@@ -357,7 +398,12 @@ export const updateEventSourceToken = (newToken) => {
 export const closeEventSource = () => {
     if (currentEventSource) {
         logger.info('Closing current EventSource');
-        // call cleanup if available to clear timers
+
+        // Log closure
+        useEventLogStore.getState().addEventLog('CONNECTION_CLOSED', {
+            timestamp: new Date().toISOString()
+        });
+
         if (typeof currentEventSource._cleanup === 'function') {
             try {
                 currentEventSource._cleanup();

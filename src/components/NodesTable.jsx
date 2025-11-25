@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from "react";
+import React, {useEffect, useState, useRef, useMemo} from "react";
 import {
     Box,
     Table,
@@ -34,6 +34,7 @@ import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
+import EventLogger from "../components/EventLogger";
 
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -60,9 +61,20 @@ const NodesTable = () => {
     // Logs drawer state
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
-    const [drawerWidth, setDrawerWidth] = useState(600); // Initial width in pixels
+    const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.9;
+
+    const nodeEventTypes = useMemo(() => [
+        "NodeStatusUpdated",
+        "NodeMonitorUpdated",
+        "NodeStatsUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ], []);
 
     // Compute the zoom level
     const getZoomLevel = () => {
@@ -103,11 +115,9 @@ const NodesTable = () => {
         setSelectedNodeForLogs(null);
     };
 
-    // VERSION CORRIGÉE : Support des événements tactiles ET souris
     const startResizing = (e) => {
         e.preventDefault();
 
-        // Déterminer si c'est un événement tactile ou souris
         const isTouchEvent = e.type.startsWith('touch');
         const startX = isTouchEvent ? e.touches[0].clientX : e.clientX;
         const startWidth = drawerWidth;
@@ -116,7 +126,7 @@ const NodesTable = () => {
             const currentX = moveEvent.type.startsWith('touch')
                 ? moveEvent.touches[0].clientX
                 : moveEvent.clientX;
-            const newWidth = startWidth + (startX - currentX); // Right-to-left resizing
+            const newWidth = startWidth + (startX - currentX);
 
             if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
                 setDrawerWidth(newWidth);
@@ -124,7 +134,6 @@ const NodesTable = () => {
         };
 
         const stopResize = () => {
-            // Retirer les écouteurs d'événements appropriés
             if (isTouchEvent) {
                 document.removeEventListener("touchmove", doResize);
                 document.removeEventListener("touchend", stopResize);
@@ -138,7 +147,6 @@ const NodesTable = () => {
             document.body.style.webkitUserSelect = "";
         };
 
-        // Ajouter les écouteurs d'événements appropriés
         if (isTouchEvent) {
             document.addEventListener("touchmove", doResize, {passive: false});
             document.addEventListener("touchend", stopResize);
@@ -155,27 +163,15 @@ const NodesTable = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        let eventSourceActive = false;
-
         if (token) {
             fetchNodes(token);
-            if (!eventSourceActive) {
-                startEventReception(token, [
-                    "NodeStatusUpdated",
-                    "NodeMonitorUpdated",
-                    "NodeStatsUpdated",
-                ]);
-                eventSourceActive = true;
-            }
+            startEventReception(token, nodeEventTypes);
         }
 
         return () => {
-            if (eventSourceActive) {
-                closeEventSource();
-                eventSourceActive = false;
-            }
+            closeEventSource();
         };
-    }, [fetchNodes]);
+    }, [fetchNodes, nodeEventTypes]);
 
     const handleMenuOpen = (event, nodename) => {
         setAnchorEls((prev) => ({...prev, [nodename]: event.currentTarget}));
@@ -574,13 +570,12 @@ const NodesTable = () => {
                     },
                 }}
             >
-                {/* BARRE DE REDIMENSIONNEMENT AMÉLIORÉE pour mobile */}
                 <Box
                     sx={{
                         position: "absolute",
                         top: 0,
                         left: 0,
-                        width: isMobile ? "12px" : "6px", // Plus large sur mobile
+                        width: isMobile ? "12px" : "6px",
                         height: "100%",
                         cursor: "ew-resize",
                         bgcolor: theme.palette.grey[300],
@@ -591,7 +586,7 @@ const NodesTable = () => {
                             bgcolor: theme.palette.primary.main,
                         },
                         transition: "background-color 0.2s",
-                        touchAction: "none", // Important pour le touch
+                        touchAction: "none",
                         zIndex: 1,
                     }}
                     onMouseDown={startResizing}
@@ -612,6 +607,11 @@ const NodesTable = () => {
                     />
                 )}
             </Drawer>
+            <EventLogger
+                eventTypes={nodeEventTypes}
+                title="Node Events Logger"
+                buttonLabel="Node Events"
+            />
         </Box>
     );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen, waitFor, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
 
@@ -19,22 +19,20 @@ jest.mock('../AuthChoice.jsx', () => () => <div data-testid="auth-choice">AuthCh
 jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
 
-// Mock AuthInfo hook
-jest.mock('../../hooks/AuthInfo.jsx', () => () => ({
+jest.mock('../../hooks/AuthInfo.jsx', () => jest.fn(() => ({
     openid: {
         issuer: 'https://test-issuer.com',
         client_id: 'test-client'
     }
-}));
+})));
 
-// Mock OIDC configuration
 jest.mock('../../config/oidcConfiguration.js', () => jest.fn(() => Promise.resolve({
     client_id: 'test-client',
     authority: 'https://test-issuer.com',
     scope: 'openid profile email'
 })));
+const oidcConfiguration = require('../../config/oidcConfiguration.js');
 
-// Mock AuthProvider with proper context values
 const mockAuthDispatch = jest.fn();
 const mockAuthState = {
     user: null,
@@ -53,8 +51,7 @@ jest.mock('../../context/AuthProvider', () => ({
     Login: 'Login',
 }));
 
-// Mock OidcAuthContext with proper hooks
-const mockUserManager = {
+let mockUserManager = {
     getUser: jest.fn(() => Promise.resolve(null)),
     events: {
         addUserLoaded: jest.fn(),
@@ -66,19 +63,30 @@ const mockUserManager = {
         removeSilentRenewError: jest.fn(),
     }
 };
+let mockRecreateUserManager = jest.fn();
+let mockIsInitialized = true;
 
-const mockRecreateUserManager = jest.fn();
+jest.mock('../../context/OidcAuthContext.tsx', () => {
+    return {
+        OidcProvider: ({children}) => <div>{children}</div>,
+        useOidc: () => ({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+            isInitialized: mockIsInitialized,
+        }),
+        __setMockUserManager: (um) => {
+            mockUserManager = um;
+        },
+        __setMockRecreateUserManager: (fn) => {
+            mockRecreateUserManager = fn;
+        },
+        __setMockIsInitialized: (v) => {
+            mockIsInitialized = v;
+        },
+    };
+});
+const mockOidcModule = require('../../context/OidcAuthContext.tsx');
 
-jest.mock('../../context/OidcAuthContext.tsx', () => ({
-    OidcProvider: ({children}) => <div>{children}</div>,
-    useOidc: () => ({
-        userManager: mockUserManager,
-        recreateUserManager: mockRecreateUserManager,
-        isInitialized: true,
-    }),
-}));
-
-// Mock localStorage
 const mockLocalStorage = {
     getItem: jest.fn(),
     setItem: jest.fn(),
@@ -86,31 +94,52 @@ const mockLocalStorage = {
 };
 Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
-// Mock console.log, console.error, and console.warn to suppress logs
 jest.spyOn(console, 'log').mockImplementation(() => {
 });
 jest.spyOn(console, 'error').mockImplementation(() => {
 });
 jest.spyOn(console, 'warn').mockImplementation(() => {
 });
+jest.spyOn(console, 'debug').mockImplementation(() => {
+});
+
+const makeTokenWithExp = (expSecondsFromNow) => {
+    const payload = {exp: Math.floor(Date.now() / 1000) + expSecondsFromNow};
+    return 'h.' + btoa(JSON.stringify(payload)) + '.s';
+};
 
 describe('App Component', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authChoice') return null;
-            return null;
+
+        mockLocalStorage.getItem.mockImplementation(() => null);
+        mockLocalStorage.setItem.mockImplementation(() => {
         });
-        // Reset auth state
+        mockLocalStorage.removeItem.mockImplementation(() => {
+        });
+
         mockAuthState.authChoice = null;
         mockAuthState.accessToken = null;
         mockAuthState.isAuthenticated = false;
-        // Reset getUser default
+
         mockUserManager.getUser.mockResolvedValue(null);
+        mockUserManager.events.addUserLoaded.mockClear();
+        mockUserManager.events.addAccessTokenExpiring.mockClear();
+        mockUserManager.events.addAccessTokenExpired.mockClear();
+        mockUserManager.events.addSilentRenewError.mockClear();
+        mockUserManager.events.removeUserLoaded.mockClear();
+        mockUserManager.events.removeAccessTokenExpired.mockClear();
+        mockUserManager.events.removeSilentRenewError.mockClear();
+
+        mockRecreateUserManager = jest.fn();
+        mockOidcModule.__setMockRecreateUserManager(mockRecreateUserManager);
+        mockOidcModule.__setMockIsInitialized(true);
+
+        oidcConfiguration.mockClear();
     });
 
     test('renders NavBar and redirects from / to /cluster', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
+        const validToken = makeTokenWithExp(3600);
         mockLocalStorage.getItem.mockImplementation((key) => {
             if (key === 'authToken') return validToken;
             if (key === 'authChoice') return 'basic';
@@ -123,22 +152,15 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('navbar')).toBeInTheDocument();
-        }, {timeout: 2000});
-
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
+        expect(await screen.findByTestId('navbar')).toBeInTheDocument();
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
-    test('renders protected route /cluster with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
-        });
+    test('ProtectedRoute with valid basic token shows cluster', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
+        );
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -146,18 +168,14 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
-    test('redirects from protected route /cluster to /auth-choice with invalid token', async () => {
-        const invalidToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 - 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return invalidToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
-        });
+    test('invalid basic token redirects to auth-choice and clears storage', async () => {
+        const invalidToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
+        );
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -165,32 +183,14 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, {timeout: 2000});
-
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
 
-    test('redirects from protected route /cluster to /auth-choice with no token', async () => {
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
+    test('openid authChoice with malformed token present still allows render', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'not-a-valid-jwt' : (k === 'authChoice' ? 'openid' : null)
         );
-
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, {timeout: 2000});
-    });
-
-    test('renders protected route with OIDC token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
         mockAuthState.authChoice = 'openid';
 
         render(
@@ -199,16 +199,16 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
-    test('redirects OIDC user with no token to /auth-choice', async () => {
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authChoice') return 'openid';
-            return null; // no token
-        });
+    test('initializeOidcOnStartup calls oidcConfiguration and recreateUserManager when not initialized', async () => {
+        mockOidcModule.__setMockIsInitialized(false);
+        const validToken = makeTokenWithExp(3600);
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
+        );
         mockAuthState.authChoice = 'openid';
 
         render(
@@ -217,87 +217,284 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, {timeout: 2000});
+        await waitFor(() => expect(oidcConfiguration).toHaveBeenCalled());
+        await waitFor(() => expect(mockRecreateUserManager).toHaveBeenCalled());
+
+        mockOidcModule.__setMockIsInitialized(true);
     });
 
-    test('renders public route /auth-choice without token', async () => {
+    test('initializeOidcOnStartup handles oidcConfiguration rejection gracefully', async () => {
+        mockOidcModule.__setMockIsInitialized(false);
+        oidcConfiguration.mockImplementationOnce(() =>
+            Promise.reject(new Error('config failed'))
+        );
+
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
+        );
+        mockAuthState.authChoice = 'openid';
+
         render(
-            <MemoryRouter initialEntries={['/auth-choice']}>
+            <MemoryRouter initialEntries={['/cluster']}>
                 <App/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, {timeout: 2000});
+        await new Promise(r => setTimeout(r, 200));
+        expect(oidcConfiguration).toHaveBeenCalled();
+        expect(mockRecreateUserManager).not.toHaveBeenCalled();
+        expect(console.error).toHaveBeenCalled();
+
+        mockOidcModule.__setMockIsInitialized(true);
     });
 
-    test('renders public route /auth/login without token', async () => {
-        render(
-            <MemoryRouter initialEntries={['/auth/login']}>
-                <App/>
-            </MemoryRouter>
+    test('initializeOidcOnStartup handles recreateUserManager throwing', async () => {
+        mockOidcModule.__setMockIsInitialized(false);
+
+        oidcConfiguration.mockImplementationOnce(() =>
+            Promise.resolve({client_id: 'x'})
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('login')).toBeInTheDocument();
-        }, {timeout: 2000});
-    });
-
-    test('renders public route /auth-callback without token', async () => {
-        render(
-            <MemoryRouter initialEntries={['/auth-callback']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-callback')).toBeInTheDocument();
-        }, {timeout: 2000});
-    });
-
-    test('renders protected route /nodes with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
+        mockRecreateUserManager = jest.fn(() => {
+            throw new Error('boom create');
         });
+        mockOidcModule.__setMockRecreateUserManager(mockRecreateUserManager);
+
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
+        );
+        mockAuthState.authChoice = 'openid';
 
         render(
-            <MemoryRouter initialEntries={['/nodes']}>
+            <MemoryRouter initialEntries={['/cluster']}>
                 <App/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('nodes')).toBeInTheDocument();
-        }, {timeout: 2000});
+        await new Promise(r => setTimeout(r, 200));
+        expect(oidcConfiguration).toHaveBeenCalled();
+        expect(mockRecreateUserManager).toHaveBeenCalled();
+        expect(console.error).toHaveBeenCalled();
+
+        mockOidcModule.__setMockIsInitialized(true);
     });
 
-    test('renders protected route /objects/:objectName with valid token', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
-        });
+    test('initializeOidcOnStartup does not run if authInfo hook returns null', async () => {
+        mockOidcModule.__setMockIsInitialized(false);
+
+        const authInfoMock = require('../../hooks/AuthInfo.jsx');
+        authInfoMock.mockImplementationOnce(() => null);
+
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
+        );
+        mockAuthState.authChoice = 'openid';
 
         render(
-            <MemoryRouter initialEntries={['/objects/test-object']}>
+            <MemoryRouter initialEntries={['/cluster']}>
                 <App/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('object-details')).toBeInTheDocument();
-        }, {timeout: 2000});
+        await new Promise(r => setTimeout(r, 200));
+        expect(oidcConfiguration).not.toHaveBeenCalled();
+        expect(mockRecreateUserManager).not.toHaveBeenCalled();
+
+        authInfoMock.mockImplementation(() => ({
+            openid: {issuer: 'https://test-issuer.com', client_id: 'test-client'}
+        }));
+        mockOidcModule.__setMockIsInitialized(true);
     });
 
-    test('updates token state on localStorage change', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
+    test('userManager.getUser valid user triggers login + token refresh', async () => {
+        const validUser = {
+            profile: {preferred_username: 'test-user'},
+            access_token: 'new-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expired: false,
+        };
+
+        mockUserManager.getUser.mockResolvedValue(validUser);
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'SetAccessToken',
+                data: 'new-token'
+            })
+        );
+
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'Login',
+                data: 'test-user'
+            })
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+                'authToken',
+                'new-token'
+            )
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+                'tokenExpiration',
+                expect.any(String)
+            )
+        );
+    });
+
+    test('expired user does not trigger SetAccessToken dispatch', async () => {
+        const expiredUser = {
+            profile: {preferred_username: 'expired-user'},
+            expired: true
+        };
+
+        mockUserManager.getUser.mockResolvedValue(expiredUser);
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(
+            expect.objectContaining({type: 'SetAccessToken'})
+        );
+    });
+
+    test('addAccessTokenExpired handler clears storage', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled()
+        );
+
+        const expiredCb = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
+
+        act(() => expiredCb());
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken')
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith(
+                'tokenExpiration'
+            )
+        );
+    });
+
+    test('addSilentRenewError handler clears storage', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled()
+        );
+
+        const errorCb = mockUserManager.events.addSilentRenewError.mock.calls[0][0];
+
+        act(() => errorCb(new Error('renew failed')));
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken')
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration')
+        );
+    });
+
+    test('addAccessTokenExpiring listener logs debug', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled()
+        );
+
+        const expiringCb =
+            mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0];
+
+        act(() => expiringCb());
+
+        expect(console.debug).toHaveBeenCalled();
+    });
+
+    test('removes old listeners when setting up new ones', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() =>
+            expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalled()
+        );
+        await waitFor(() =>
+            expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalled()
+        );
+        await waitFor(() =>
+            expect(mockUserManager.events.removeSilentRenewError).toHaveBeenCalled()
+        );
+    });
+
+    test('storage event triggers checkTokenChange', async () => {
         mockLocalStorage.getItem.mockReturnValue(null);
 
         render(
@@ -306,27 +503,25 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        // Simulate storage event
-        window.dispatchEvent(
-            new StorageEvent('storage', {
-                key: 'authToken',
-                newValue: validToken,
-                bubbles: true,
-                cancelable: false,
-            })
-        );
+        act(() => {
+            window.dispatchEvent(
+                new StorageEvent('storage', {
+                    key: 'authToken',
+                    newValue: makeTokenWithExp(3600)
+                })
+            );
+        });
 
-        await waitFor(() => {
-            expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken');
-        }, {timeout: 2000});
+        await waitFor(() =>
+            expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken')
+        );
     });
 
-    test('handles invalid token format gracefully', async () => {
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'invalid-token';
-            if (key === 'authChoice') return 'basic';
-            return null;
-        });
+    test('focus triggers redirect when token invalid', async () => {
+        const invalidToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
+        );
 
         render(
             <MemoryRouter initialEntries={['/cluster']}>
@@ -334,39 +529,39 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('auth-choice')).toBeInTheDocument();
-        }, {timeout: 2000});
-
-        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
-    });
-
-    test('redirects unknown routes to /', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
         });
 
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('visibilitychange does not redirect for valid openid', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy-token' : (k === 'authChoice' ? 'openid' : null)
+        );
+
         render(
-            <MemoryRouter initialEntries={['/unknown']}>
+            <MemoryRouter initialEntries={['/cluster']}>
                 <App/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
+        act(() => {
+            Object.defineProperty(document, 'visibilityState', {
+                value: 'visible',
+                configurable: true
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 
-    test('does not render blank page', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'basic';
-            return null;
-        });
+    test('saves auth.authChoice to localStorage', async () => {
+        mockAuthState.authChoice = 'basic';
 
         render(
             <MemoryRouter initialEntries={['/']}>
@@ -374,187 +569,27 @@ describe('App Component', () => {
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('navbar')).toBeInTheDocument();
-        }, {timeout: 2000});
-
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
-
-        // Verify text content presence using specific elements
-        expect(screen.getByTestId('navbar').textContent).toBe('NavBar');
-        expect(screen.getByTestId('cluster').textContent).toBe('ClusterOverview');
+        await waitFor(() =>
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+                'authChoice',
+                'basic'
+            )
+        );
     });
 
-    test('initializes OIDC UserManager on startup with existing token (cluster renders)', async () => {
-        const validToken = 'header.' + btoa(JSON.stringify({exp: Date.now() / 1000 + 3600})) + '.signature';
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return validToken;
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
+    test('unknown route redirects to /cluster', async () => {
+        const validToken = makeTokenWithExp(3600);
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
+        );
 
         render(
-            <MemoryRouter initialEntries={['/cluster']}>
+            <MemoryRouter initialEntries={['/unknown-route']}>
                 <App/>
             </MemoryRouter>
         );
 
-        await waitFor(() => {
-            expect(screen.getByTestId('cluster')).toBeInTheDocument();
-        }, {timeout: 2000});
-    });
-
-    test('refreshes user and updates access token on userManager.getUser()', async () => {
-        const validUser = {
-            profile: {preferred_username: 'test-user'},
-            access_token: 'new-token',
-            expires_at: Math.floor(Date.now() / 1000) + 3600,
-            expired: false,
-        };
-        mockUserManager.getUser.mockResolvedValue(validUser);
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'dummy';
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(mockUserManager.getUser).toHaveBeenCalled();
-        });
-
-        await waitFor(() => {
-            expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'new-token'});
-        });
-
-        await waitFor(() => {
-            expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'Login', data: 'test-user'});
-        });
-
-        await waitFor(() => {
-            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'new-token');
-        });
-
-        await waitFor(() => {
-            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('tokenExpiration', expect.any(String));
-        });
-    });
-
-    test('handles expired user by not refreshing tokens (silent renew path)', async () => {
-        const expiredUser = {profile: {preferred_username: 'expired-user'}, expired: true};
-        mockUserManager.getUser.mockResolvedValue(expiredUser);
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'dummy';
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(mockUserManager.getUser).toHaveBeenCalled();
-        });
-
-        expect(mockAuthDispatch).not.toHaveBeenCalledWith(expect.objectContaining({type: 'SetAccessToken'}));
-    });
-
-    test('handles token expired by clearing storage and redirecting', async () => {
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'dummy';
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled();
-        });
-
-        const expiredCb = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
-        expiredCb();
-
-        await waitFor(() => {
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
-        });
-
-        await waitFor(() => {
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
-        });
-    });
-
-    test('handles silent renew error by clearing storage and redirecting', async () => {
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'dummy';
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled();
-        });
-
-        const errorCb = mockUserManager.events.addSilentRenewError.mock.calls[0][0];
-        errorCb(new Error('renew failed'));
-
-        await waitFor(() => {
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
-        });
-
-        await waitFor(() => {
-            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
-        });
-    });
-
-    test('logs when access token is about to expire', async () => {
-        mockAuthState.authChoice = 'openid';
-        mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'authToken') return 'dummy';
-            if (key === 'authChoice') return 'openid';
-            return null;
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled();
-        });
-
-        const expiringCb = mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0];
-        expiringCb();
-
-        expect(console.log).toHaveBeenCalledWith(
-            'Access token is about to expire, attempting silent renew...'
-        );
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 });

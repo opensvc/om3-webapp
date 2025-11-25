@@ -32,6 +32,7 @@ import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import EventLogger from "../components/EventLogger";
 
 const getStateIcon = (state) => {
     switch (state) {
@@ -96,6 +97,15 @@ const Heartbeats = () => {
     );
     const [showFilters, setShowFilters] = useState(true);
 
+    const heartbeatEventTypes = useMemo(() => [
+        "DaemonHeartbeatUpdated",
+        "CONNECTION_OPENED",
+        "CONNECTION_ERROR",
+        "RECONNECTION_ATTEMPT",
+        "MAX_RECONNECTIONS_REACHED",
+        "CONNECTION_CLOSED"
+    ], []);
+
     // Update URL when filters change
     useEffect(() => {
         const newQueryParams = new URLSearchParams();
@@ -136,14 +146,14 @@ const Heartbeats = () => {
         });
     }, [heartbeatStatus]);
 
-    // Start event reception with only DaemonHeartbeatUpdated filter
+    // Start event reception with heartbeat-specific filters
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token, ['DaemonHeartbeatUpdated']);
+            startEventReception(token, heartbeatEventTypes);
         }
         return () => closeEventSource();
-    }, []);
+    }, [heartbeatEventTypes]);
 
     const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
     const isSingleNode = nodes.length === 1;
@@ -264,7 +274,7 @@ const Heartbeats = () => {
     };
 
     return (
-        <Box sx={{p: 4}}>
+        <Box sx={{p: 4, position: 'relative'}}>
             <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
                 <Typography variant="h4" gutterBottom align="center">
                     Heartbeats
@@ -378,6 +388,13 @@ const Heartbeats = () => {
                     </Table>
                 </TableContainer>
             </Paper>
+
+            {/* Ajout du EventLogger pour les événements Heartbeats */}
+            <EventLogger
+                eventTypes={heartbeatEventTypes}
+                title="Heartbeat Events Logger"
+                buttonLabel="Heartbeat Events"
+            />
         </Box>
     );
 };

@@ -796,7 +796,7 @@ describe('EventLogger Component', () => {
         renderWithTheme(<EventLogger objectName="/target/path"/>);
         fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
         await waitFor(() => {
-            expect(screen.getByText(/No events logged/i)).toBeInTheDocument();
+            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
         });
     });
 

@@ -1,31 +1,23 @@
-import React, {useEffect, useState, useRef, useCallback, useMemo} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
     Box,
-    Typography,
-    IconButton,
-    TextField,
-    Chip,
     Button,
-    Tooltip,
-    useTheme,
     Checkbox,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    ListItemText,
+    Chip,
+    Divider,
     Drawer,
-    Divider
+    FormControl,
+    IconButton,
+    InputLabel,
+    ListItemText,
+    MenuItem,
+    Select,
+    TextField,
+    Tooltip,
+    Typography,
+    useTheme
 } from "@mui/material";
-import {
-    PlayArrow,
-    Pause,
-    DeleteOutline,
-    BugReport,
-    Close,
-    KeyboardArrowUp,
-    ExpandMore
-} from "@mui/icons-material";
+import {BugReport, Close, DeleteOutline, ExpandMore, KeyboardArrowUp, Pause, PlayArrow} from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
 
@@ -60,19 +52,88 @@ const EventLogger = ({
         );
     }, []);
 
-    // JSON preview dense (compact)
-    const denseJSON = (data) => {
-        try {
-            return JSON.stringify(data);
-        } catch {
-            return String(data);
+    const syntaxHighlightJSON = (json, dense = false) => {
+        if (typeof json !== 'string') {
+            try {
+                json = JSON.stringify(json, null, dense ? 0 : 2);
+            } catch {
+                json = String(json);
+            }
+        }
+
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+            let cls = 'json-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return `<span class="${cls}">${match}</span>`;
+        });
+    };
+
+    const JSONView = ({data, dense = false}) => {
+        const jsonString = useMemo(() => {
+            try {
+                return dense ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+            } catch {
+                return String(data);
+            }
+        }, [data, dense]);
+
+        const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString, dense), [jsonString, dense]);
+
+        return (
+            <pre
+                style={{
+                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                    fontSize: dense ? "0.80rem" : "0.78rem",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    margin: 0,
+                    lineHeight: dense ? 1.2 : 1.4,
+                    opacity: dense ? 0.9 : 1,
+                    maxHeight: dense ? 160 : 'none',
+                    overflow: dense ? 'hidden' : 'visible'
+                }}
+                dangerouslySetInnerHTML={{__html: coloredJSON}}
+            />
+        );
+    };
+
+    const jsonStyles = {
+        '& .json-key': {
+            color: theme.palette.primary.main,
+            fontWeight: '600'
+        },
+        '& .json-string': {
+            color: theme.palette.success.dark
+        },
+        '& .json-number': {
+            color: theme.palette.info.main,
+            fontWeight: '500'
+        },
+        '& .json-boolean': {
+            color: theme.palette.warning.dark,
+            fontWeight: '600'
+        },
+        '& .json-null': {
+            color: theme.palette.grey[500],
+            fontWeight: '600'
         }
     };
 
     // Compute filtered logs
     const baseFilteredLogs = useMemo(() => {
-        const safeLogs = Array.isArray(eventLogs) ? eventLogs : [];
-        let filtered = safeLogs;
+        let filtered = Array.isArray(eventLogs) ? eventLogs : [];
 
         if (eventTypes.length > 0) filtered = filtered.filter(log => eventTypes.includes(log.eventType));
 
@@ -96,7 +157,7 @@ const EventLogger = ({
         }
 
         return filtered;
-    }, [eventLogs, eventTypes, objectName, forceUpdate]);
+    }, [eventLogs, eventTypes, objectName]);
 
     const availableEventTypes = useMemo(() => {
         const types = new Set();
@@ -336,10 +397,16 @@ const EventLogger = ({
                 <Divider/>
 
                 {/* Logs container */}
-                <div
+                <Box
                     ref={logsContainerRef}
                     onScroll={handleScroll}
-                    style={{flex: 1, overflow: "auto", backgroundColor: theme.palette.grey[50], padding: 8}}
+                    sx={{
+                        flex: 1,
+                        overflow: "auto",
+                        backgroundColor: theme.palette.grey[50],
+                        padding: 1,
+                        ...jsonStyles
+                    }}
                 >
                     {filteredLogs.length === 0 ? (
                         <Box sx={{p: 4, textAlign: "center"}}>
@@ -365,54 +432,55 @@ const EventLogger = ({
                                             mb: 1,
                                             borderRadius: 1,
                                             "&:hover": {bgcolor: theme.palette.action.hover},
-                                            bgcolor: isOpen ? theme.palette.action.selected : "transparent"
+                                            bgcolor: isOpen ? theme.palette.action.selected : "transparent",
+                                            transition: "background-color 0.2s ease"
                                         }}
                                     >
                                         {/* Header */}
                                         <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
-                                            <Chip label={log.eventType} size="small"
-                                                  color={getEventColor(log.eventType)}/>
+                                            <Chip
+                                                label={log.eventType}
+                                                size="small"
+                                                color={getEventColor(log.eventType)}
+                                                sx={{fontWeight: '600'}}
+                                            />
                                             <Typography variant="caption"
                                                         color="textSecondary">{formatTimestamp(log.timestamp)}</Typography>
                                             <ExpandMore sx={{
                                                 marginLeft: "auto",
                                                 transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                                transition: "0.2s"
+                                                transition: "0.2s",
+                                                color: theme.palette.text.secondary
                                             }}/>
                                         </Box>
 
-                                        {/* Preview when collapsed: dense JSON */}
+                                        {/* Preview when collapsed: dense JSON WITH COLORS */}
                                         {!isOpen && (
-                                            <Typography
-                                                component="pre"
-                                                sx={{
-                                                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                                                    fontSize: "0.80rem",
-                                                    whiteSpace: "pre-wrap",
-                                                    wordBreak: "break-word",
-                                                    p: 1,
-                                                    maxHeight: 160,
-                                                    overflow: "hidden"
-                                                }}
-                                            >
-                                                {denseJSON(log.data)}
-                                            </Typography>
+                                            <Box sx={{
+                                                p: 1,
+                                                maxHeight: 160,
+                                                overflow: "hidden",
+                                                backgroundColor: theme.palette.background.default,
+                                                borderRadius: 1,
+                                                mx: 0.5,
+                                                mb: 0.5
+                                            }}>
+                                                <JSONView data={log.data} dense={true}/>
+                                            </Box>
                                         )}
 
-                                        {/* Full details when expanded: pretty JSON */}
+                                        {/* Full details when expanded: pretty JSON with colors */}
                                         {isOpen && (
-                                            <Typography
-                                                component="pre"
-                                                sx={{
-                                                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                                                    fontSize: "0.78rem",
-                                                    whiteSpace: "pre-wrap",
-                                                    wordBreak: "break-word",
-                                                    p: 1
-                                                }}
-                                            >
-                                                {JSON.stringify(log.data, null, 2)}
-                                            </Typography>
+                                            <Box sx={{
+                                                p: 1,
+                                                borderTop: `1px solid ${theme.palette.divider}`,
+                                                backgroundColor: theme.palette.background.default,
+                                                borderRadius: 1,
+                                                mx: 0.5,
+                                                mb: 0.5
+                                            }}>
+                                                <JSONView data={log.data} dense={false}/>
+                                            </Box>
                                         )}
                                     </Box>
                                 );
@@ -421,8 +489,7 @@ const EventLogger = ({
                             <div ref={logsEndRef} style={{height: 2}}/>
                         </>
                     )}
-                </div>
-
+                </Box>
 
                 {!autoScroll && filteredLogs.length > 0 && (
                     <Box sx={{p: 1, borderTop: `1px solid ${theme.palette.divider}`, textAlign: "center"}}>
@@ -435,6 +502,14 @@ const EventLogger = ({
                     </Box>
                 )}
             </Drawer>
+
+            <style>{`
+                .json-key { color: ${theme.palette.primary.main}; font-weight: 600; }
+                .json-string { color: ${theme.palette.success.dark}; }
+                .json-number { color: ${theme.palette.info.main}; font-weight: 500; }
+                .json-boolean { color: ${theme.palette.warning.dark}; font-weight: 600; }
+                .json-null { color: ${theme.palette.grey[500]}; font-weight: 600; }
+            `}</style>
         </>
     );
 };

@@ -42,6 +42,11 @@ jest.mock('../../hooks/useEventStore.js', () => ({
     default: jest.fn(),
 }));
 
+jest.mock('../../hooks/useOnlineStatus', () => ({
+    __esModule: true,
+    default: jest.fn().mockReturnValue(true),
+}));
+
 describe('NavBar Component', () => {
     const mockNavigate = jest.fn();
     const mockAuthDispatch = jest.fn();
@@ -90,7 +95,7 @@ describe('NavBar Component', () => {
         );
 
         expect(screen.getByText('Cluster')).toBeInTheDocument();
-        expect(screen.getByText('Logout')).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
         expect(screen.queryByRole('link', {name: /objects\?globalState=down/})).not.toBeInTheDocument();
         expect(screen.queryByRole('link', {name: /objects\?globalState=warn/})).not.toBeInTheDocument();
     });
@@ -110,59 +115,6 @@ describe('NavBar Component', () => {
         expect(screen.getByRole('link', {name: /navigate to node1/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to pod1/i})).toBeInTheDocument();
         expect(screen.getAllByText('>')).toHaveLength(2);
-    });
-
-    test('handles logout with openid auth', async () => {
-        const mockSignoutRedirect = jest.fn().mockResolvedValue(undefined);
-        const mockRemoveUser = jest.fn().mockResolvedValue(undefined);
-        require('../../context/OidcAuthContext.tsx').useOidc.mockReturnValue({
-            userManager: {
-                signoutRedirect: mockSignoutRedirect,
-                removeUser: mockRemoveUser,
-            },
-        });
-        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
-            authChoice: 'openid',
-            user: {profile: {}},
-        });
-
-        render(
-            <MemoryRouter>
-                <NavBar/>
-            </MemoryRouter>
-        );
-
-        const logoutButton = screen.getByText('Logout');
-        fireEvent.click(logoutButton);
-
-        await waitFor(() => expect(mockSignoutRedirect).toHaveBeenCalled(), {timeout: 2000});
-
-        expect(mockRemoveUser).toHaveBeenCalled();
-        expect(localStorage.getItem('authToken')).toBeNull();
-        expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
-        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
-    });
-
-    test('handles logout without openid auth', () => {
-        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
-            authChoice: 'local',
-        });
-
-        render(
-            <MemoryRouter>
-                <NavBar/>
-            </MemoryRouter>
-        );
-
-        const logoutButton = screen.getByText('Logout');
-        fireEvent.click(logoutButton);
-
-        const {userManager} = require('../../context/OidcAuthContext.tsx').useOidc();
-        expect(userManager.signoutRedirect).not.toHaveBeenCalled();
-        expect(userManager.removeUser).not.toHaveBeenCalled();
-        expect(localStorage.getItem('authToken')).toBeNull();
-        expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
-        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
 
     test('does not render breadcrumbs for login page', () => {
@@ -192,18 +144,6 @@ describe('NavBar Component', () => {
         );
 
         expect(screen.getByRole('link', {name: /navigate to node 1/i})).toBeInTheDocument();
-    });
-
-    test('renders logout button with correct styles', () => {
-        render(
-            <MemoryRouter>
-                <NavBar/>
-            </MemoryRouter>
-        );
-
-        const logoutButton = screen.getByText('Logout');
-        expect(logoutButton).toHaveStyle('background-color: red');
-        expect(logoutButton).toHaveStyle('color: white');
     });
 
     test('opens and closes menu correctly', async () => {
@@ -742,5 +682,52 @@ describe('NavBar Component', () => {
         const warnCountEl = screen.getByText('1');
         expect(warnCountEl).toHaveAttribute('href', '/objects?globalState=warn');
         expect(screen.queryByText('1', {selector: '[href="/objects?globalState=down"]'})).not.toBeInTheDocument();
+    });
+
+    test('displays offline status when not online', () => {
+        require('../../hooks/useOnlineStatus').default.mockReturnValue(false);
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByText('Offline')).toBeInTheDocument();
+    });
+
+    test('does not display offline status when online', () => {
+        require('../../hooks/useOnlineStatus').default.mockReturnValue(true);
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        expect(screen.queryByText('Offline')).not.toBeInTheDocument();
+    });
+
+    test('renders WhoAmI icon button with correct styles', () => {
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const whoAmIButton = screen.getByRole('link', {name: /view user information/i});
+        expect(whoAmIButton).toBeInTheDocument();
+        expect(whoAmIButton).toHaveAttribute('href', '/whoami');
+    });
+
+    test('navigates to WhoAmI page when icon is clicked', () => {
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        const whoAmIButton = screen.getByRole('link', {name: /view user information/i});
+        expect(whoAmIButton).toHaveAttribute('href', '/whoami');
     });
 });

@@ -1,7 +1,6 @@
 import {Link, useNavigate, useLocation} from "react-router-dom";
 import {AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, ListItemIcon, ListItemText} from "@mui/material";
 import {
-    FaSignOutAlt,
     FaUser,
     FaBars,
     FaHome,
@@ -20,7 +19,8 @@ import useEventStore from "../hooks/useEventStore.js";
 import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";import {red, orange} from "@mui/material/colors";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import {red, orange} from "@mui/material/colors";
 import Tooltip from "@mui/material/Tooltip";
 
 const NavBar = () => {
@@ -37,10 +37,9 @@ const NavBar = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const [downCount, setDownCount] = useState(0);
     const [warnCount, setWarnCount] = useState(0);
-    const [appVersion, setAppVersion] = useState(null);
 
     const [storedClusterName, setStoredClusterName] = useState(null);
-        const online = useOnlineStatus();
+    const online = useOnlineStatus();
 
     const navRoutes = [
         {path: "/cluster", name: "Cluster Overview", icon: <FaHome/>},
@@ -52,38 +51,6 @@ const NavBar = () => {
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
-
-    // Fetch app version from GitHub API
-    useEffect(() => {
-        const fetchVersion = async () => {
-            const cached = localStorage.getItem('appVersion');
-            const cacheTime = localStorage.getItem('appVersionTime');
-            const now = Date.now();
-
-            if (cached && cacheTime && (now - parseInt(cacheTime)) < 3600000) {
-                setAppVersion(cached);
-                return;
-            }
-
-            try {
-                const response = await fetch('https://api.github.com/repos/opensvc/om3-webapp/releases', {
-                    headers: {'User-Agent': 'MonTestCurl'}
-                });
-                const data = await response.json();
-                const latestVersion = data[0]?.tag_name || 'Unknown';
-                const cleanVersion = latestVersion.startsWith('v') ? latestVersion.slice(1) : latestVersion;
-
-                setAppVersion(cleanVersion);
-                localStorage.setItem('appVersion', cleanVersion);
-                localStorage.setItem('appVersionTime', now.toString());
-            } catch (error) {
-                logger.error('Error fetching version:', error);
-                setAppVersion(cached || 'Unknown');
-            }
-        };
-
-        fetchVersion();
-    }, []);
 
     const getObjectStatus = useCallback((objectName, objs) => {
         const obj = objs[objectName] || {};
@@ -202,16 +169,6 @@ const NavBar = () => {
         setBreadcrumb(breadcrumbItems);
     }, [location.pathname, storedClusterName, loading]);
 
-    const handleLogout = () => {
-        if (auth?.authChoice === "openid") {
-            userManager.signoutRedirect();
-            userManager.removeUser();
-        }
-        localStorage.removeItem("authToken");
-        authDispatch({type: Logout});
-        navigate("/auth-choice");
-    };
-
     const handleMenuOpen = (event) => {
         setMenuAnchor(event.currentTarget);
     };
@@ -329,25 +286,6 @@ const NavBar = () => {
                             </Box>
                         ))}
 
-                    {/* Version display */}
-                    <Tooltip title="Application version">
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                ml: 2,
-                                px: 1,
-                                py: 0.5,
-                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                borderRadius: 1,
-                                fontFamily: 'monospace',
-                                fontSize: '0.8rem',
-                                color: 'white'
-                            }}
-                        >
-                            v{appVersion || '...'}
-                        </Typography>
-                    </Tooltip>
-
                     {(downCount > 0 || warnCount > 0) && (
                         <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
                             {downCount > 0 && (
@@ -409,7 +347,7 @@ const NavBar = () => {
                                         fontWeight: 600,
                                     }}
                                 >
-                                    <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}} />
+                                    <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}}/>
                                     Offline
                                 </Typography>
                             </span>
@@ -418,31 +356,20 @@ const NavBar = () => {
                     <Button
                         component={Link}
                         to="/whoami"
-                        startIcon={<FaUser/>}
                         sx={{
-                            backgroundColor: "primary.main",
                             color: "white",
-                            boxShadow: 3,
+                            minWidth: "auto",
+                            padding: "8px",
+                            borderRadius: 2,
+                            backgroundColor: "rgba(255, 255, 255, 0.1)",
                             "&:hover": {
-                                backgroundColor: "primary.dark",
+                                backgroundColor: "rgba(255, 255, 255, 0.2)",
                             },
+                            transition: "background-color 0.3s ease",
                         }}
+                        aria-label="View user information"
                     >
-                        Who Am I
-                    </Button>
-                    <Button
-                        startIcon={<FaSignOutAlt/>}
-                        onClick={handleLogout}
-                        sx={{
-                            backgroundColor: "red",
-                            color: "white",
-                            boxShadow: 3,
-                            "&:hover": {
-                                backgroundColor: "darkred",
-                            },
-                        }}
-                    >
-                        Logout
+                        <FaUser/>
                     </Button>
                 </Box>
             </Toolbar>

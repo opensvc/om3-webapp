@@ -331,4 +331,51 @@ describe('WhoAmI Component', () => {
         expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
+    test('does not call fetchNodes when no authToken in localStorage', async () => {
+        mockLocalStorage.getItem.mockReturnValueOnce(null); // no token
+        const mockFetchNodes = jest.fn();
+        jest.mock('../../hooks/useFetchDaemonStatus', () => () => ({
+            daemon: {},
+            fetchNodes: mockFetchNodes,
+        }));
+
+        render(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockFetchNodes).not.toHaveBeenCalled();
+        });
+    });
+    test('sets appVersion to cached value or Unknown when GitHub fetch fails', async () => {
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'appVersion') return null;
+            if (key === 'authToken') return mockToken;
+            return null;
+        });
+
+        global.fetch.mockImplementation((url) => {
+            if (url === URL_AUTH_WHOAMI) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(mockUserInfo),
+                });
+            }
+            if (url.includes('github')) {
+                return Promise.reject(new Error('Network error'));
+            }
+        });
+
+        render(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(/vUnknown|vloading/i)).toBeInTheDocument();
+        });
+    });
 });

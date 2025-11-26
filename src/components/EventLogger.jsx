@@ -45,6 +45,14 @@ const EventLogger = ({
     // Event logs store
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
+    const filterData = useCallback((data) => {
+        if (!data || typeof data !== 'object') return data;
+
+        const filtered = {...data};
+        delete filtered._rawEvent;
+        return filtered;
+    }, []);
+
     // Toggle expand/collapse
     const toggleExpand = useCallback((id) => {
         setExpandedLogIds(prev =>
@@ -81,13 +89,15 @@ const EventLogger = ({
     };
 
     const JSONView = ({data, dense = false}) => {
+        const filteredData = useMemo(() => filterData(data), [data, filterData]);
+
         const jsonString = useMemo(() => {
             try {
-                return dense ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+                return dense ? JSON.stringify(filteredData) : JSON.stringify(filteredData, null, 2);
             } catch {
-                return String(data);
+                return String(filteredData);
             }
-        }, [data, dense]);
+        }, [filteredData, dense]);
 
         const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString, dense), [jsonString, dense]);
 
@@ -184,7 +194,8 @@ const EventLogger = ({
                 const typeMatch = String(log.eventType || "").toLowerCase().includes(term);
                 let dataMatch = false;
                 try {
-                    const dataString = JSON.stringify(log.data || {}).toLowerCase();
+                    const filteredData = filterData(log.data || {});
+                    const dataString = JSON.stringify(filteredData).toLowerCase();
                     dataMatch = dataString.includes(term);
                 } catch (err) {
                     logger.warn("Error serializing log data for search:", err);
@@ -194,7 +205,7 @@ const EventLogger = ({
         }
 
         return result;
-    }, [baseFilteredLogs, eventTypeFilter, searchTerm]);
+    }, [baseFilteredLogs, eventTypeFilter, searchTerm, filterData]);
 
     useEffect(() => {
         setForceUpdate(prev => prev + 1);

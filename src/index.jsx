@@ -22,6 +22,10 @@ if (rootElement) {
                 main: grey[900],
                 contrastText: '#fff',
             },
+            secondary : {
+                main: grey[600],
+                contrastText: '#fff',
+            }
         },
     });
     root.render(

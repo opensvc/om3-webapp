@@ -725,20 +725,22 @@ const Objects = () => {
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "flex-start",
-                p: 2,
-                position: 'relative'
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
             }}
         >
             <Box
                 sx={{
                     width: "100%",
-                    maxWidth: isWideScreen ? "1600px" : "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                 }}
             >
                 <Typography variant="h4" gutterBottom align="center">

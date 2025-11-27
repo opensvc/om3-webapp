@@ -274,8 +274,31 @@ const Heartbeats = () => {
     };
 
     return (
-        <Box sx={{p: 4, position: 'relative'}}>
-            <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
+        <Box
+            sx={{
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
+                minHeight: '100vh',
+                bgcolor: 'background.default',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start'
+            }}
+        >
+            <Box
+                sx={{
+                    width: "100%",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
+                    p: 3,
+                    m: 0,
+                }}
+            >
                 <Typography variant="h4" gutterBottom align="center">
                     Heartbeats
                 </Typography>
@@ -387,7 +410,7 @@ const Heartbeats = () => {
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </Paper>
+            </Box>
 
             <EventLogger
                 eventTypes={heartbeatEventTypes}

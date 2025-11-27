@@ -117,102 +117,127 @@ const Pools = () => {
     };
 
     return (
-        <Box sx={{p: 3, maxWidth: "1400px", mx: "auto"}}>
-            <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
-                Pools
-            </Typography>
-            {loading ? (
-                <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}>
-                    <CircularProgress/>
-                </Box>
-            ) : error ? (
-                <Box sx={{maxWidth: '600px', mx: 'auto', mb: 3}}>
-                    <Alert
-                        severity="error"
-                        action={
-                            <Button color="inherit" size="small" onClick={handleRetry}>
-                                Retry
-                            </Button>
-                        }
-                    >
-                        {error}
-                    </Alert>
-                </Box>
-            ) : (
-                <TableContainer component={Paper} sx={{width: "100%"}}>
-                    <Table sx={{minWidth: 700}} aria-label="pools table">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Name</strong>
-                                        {sortColumn === "name" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Type</strong>
-                                        {sortColumn === "type" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("volume_count")}
-                                           sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Volume Count</strong>
-                                        {sortColumn === "volume_count" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("usage")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Usage</strong>
-                                        {sortColumn === "usage" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell onClick={() => handleSort("head")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Head</strong>
-                                        {sortColumn === "head" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {sortedPools.length > 0 ? (
-                                sortedPools.map((pool) => {
-                                    const usedPercentage = pool.size && pool.used >= 0
-                                        ? ((pool.used / pool.size) * 100).toFixed(1)
-                                        : "N/A";
-                                    return (
-                                        <TableRow key={pool.name || Math.random()}>
-                                            <TableCell>{pool.name || "N/A"}</TableCell>
-                                            <TableCell>{pool.type || "N/A"}</TableCell>
-                                            <TableCell align="center">{pool.volume_count ?? "N/A"}</TableCell>
-                                            <TableCell align="center">{usedPercentage}%</TableCell>
-                                            <TableCell>{pool.head || "N/A"}</TableCell>
-                                        </TableRow>
-                                    );
-                                })
-                            ) : (
+        <Box
+            sx={{
+                p: 0,
+                width: '100vw',
+                margin: 0,
+                minHeight: '100vh',
+                bgcolor: 'background.default',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start'
+            }}
+        >
+            <Box
+                sx={{
+                    width: "100%",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
+                    p: 3,
+                    m: 0,
+                }}
+            >
+                <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
+                    Pools
+                </Typography>
+                {loading ? (
+                    <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}>
+                        <CircularProgress/>
+                    </Box>
+                ) : error ? (
+                    <Box sx={{maxWidth: '600px', mx: 'auto', mb: 3}}>
+                        <Alert
+                            severity="error"
+                            action={
+                                <Button color="inherit" size="small" onClick={handleRetry}>
+                                    Retry
+                                </Button>
+                            }
+                        >
+                            {error}
+                        </Alert>
+                    </Box>
+                ) : (
+                    <TableContainer component={Paper} sx={{width: "100%"}}>
+                        <Table sx={{minWidth: 700}} aria-label="pools table">
+                            <TableHead>
                                 <TableRow>
-                                    <TableCell colSpan={5} align="center" sx={{color: 'text.secondary'}}>
-                                        No pools available.
+                                    <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Name</strong>
+                                            {sortColumn === "name" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Type</strong>
+                                            {sortColumn === "type" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center" onClick={() => handleSort("volume_count")}
+                                               sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Volume Count</strong>
+                                            {sortColumn === "volume_count" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center" onClick={() => handleSort("usage")}
+                                               sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Usage</strong>
+                                            {sortColumn === "usage" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell onClick={() => handleSort("head")} sx={{cursor: "pointer"}}>
+                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                            <strong>Head</strong>
+                                            {sortColumn === "head" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
                                     </TableCell>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            )}
+                            </TableHead>
+                            <TableBody>
+                                {sortedPools.length > 0 ? (
+                                    sortedPools.map((pool) => {
+                                        const usedPercentage = pool.size && pool.used >= 0
+                                            ? ((pool.used / pool.size) * 100).toFixed(1)
+                                            : "N/A";
+                                        return (
+                                            <TableRow key={pool.name || Math.random()}>
+                                                <TableCell>{pool.name || "N/A"}</TableCell>
+                                                <TableCell>{pool.type || "N/A"}</TableCell>
+                                                <TableCell align="center">{pool.volume_count ?? "N/A"}</TableCell>
+                                                <TableCell align="center">{usedPercentage}%</TableCell>
+                                                <TableCell>{pool.head || "N/A"}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={5} align="center" sx={{color: 'text.secondary'}}>
+                                            No pools available.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </Box>
         </Box>
     );
 };

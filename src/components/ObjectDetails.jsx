@@ -938,11 +938,13 @@ const ObjectDetail = () => {
         <Box sx={{
             display: "flex",
             flexDirection: "row",
-            width: "100%",
+            width: "100vw",
             minHeight: "100vh",
             overflow: "hidden",
             boxSizing: "border-box",
-            position: 'relative'
+            position: 'relative',
+            margin: 0,
+            p: 0,
         }}>
             <Box sx={{
                 flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
@@ -956,11 +958,15 @@ const ObjectDetail = () => {
             }}>
                 <Box sx={{
                     width: "100%",
-                    maxWidth: "1400px",
                     margin: "0 auto",
                     px: 2,
                     py: 4,
-                    boxSizing: "border-box"
+                    boxSizing: "border-box",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
                 }}>
                     <HeaderSection
                         decodedObjectName={decodedObjectName}

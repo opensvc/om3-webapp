@@ -127,134 +127,158 @@ const NetworkDetails = () => {
     }, [ipDetails, nodeFilter, pathFilter, ridFilter]);
 
     return (
-        <Box sx={{p: 3, maxWidth: "1400px", mx: "auto"}}>
-            <Typography
-                variant="h4"
-                gutterBottom
-                sx={{mb: 3}}
-                align="center"
-            >
-                Network Details: {networkName || "N/A"} ({networkType})
-            </Typography>
-            {error && (
-                <Alert severity="error" sx={{mb: 2}}>
-                    {error}
-                </Alert>
-            )}
+        <Box
+            sx={{
+                p: 0,
+                width: '100vw',
+                margin: 0,
+                minHeight: '100vh',
+                bgcolor: 'background.default',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start'
+            }}
+        >
             <Box
                 sx={{
-                    position: "sticky",
-                    top: 64,
-                    zIndex: 10,
-                    backgroundColor: "background.paper",
-                    pt: 2,
-                    pb: 1,
-                    mb: 2,
+                    width: "100%",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
+                    p: 3,
+                    m: 0,
                 }}
             >
+                <Typography
+                    variant="h4"
+                    gutterBottom
+                    sx={{mb: 3}}
+                    align="center"
+                >
+                    Network Details: {networkName || "N/A"} ({networkType})
+                </Typography>
+                {error && (
+                    <Alert severity="error" sx={{mb: 2}}>
+                        {error}
+                    </Alert>
+                )}
                 <Box
                     sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        mb: 1,
+                        position: "sticky",
+                        top: 64,
+                        zIndex: 10,
+                        backgroundColor: "background.paper",
+                        pt: 2,
+                        pb: 1,
+                        mb: 2,
                     }}
                 >
-                    <Button
-                        onClick={() => setShowFilters(!showFilters)}
-                        startIcon={
-                            showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>
-                        }
-                        aria-label={showFilters ? "Hide filters" : "Show filters"}
-                    >
-                        {showFilters ? "Hide filters" : "Show filters"}
-                    </Button>
-                </Box>
-                <Collapse in={showFilters} timeout="auto" unmountOnExit>
                     <Box
                         sx={{
                             display: "flex",
-                            flexWrap: "wrap",
-                            gap: 2,
+                            justifyContent: "space-between",
                             alignItems: "center",
-                            pb: 2,
+                            mb: 1,
                         }}
                     >
-                        <TextField
-                            label="Node"
-                            value={nodeFilter}
-                            onChange={(e) => debouncedSetNodeFilter(e.target.value)}
-                            sx={{minWidth: 200}}
-                        />
-                        <TextField
-                            label="Path"
-                            value={pathFilter}
-                            onChange={(e) => debouncedSetPathFilter(e.target.value)}
-                            sx={{minWidth: 200}}
-                        />
-                        <TextField
-                            label="RID"
-                            value={ridFilter}
-                            onChange={(e) => debouncedSetRidFilter(e.target.value)}
-                            sx={{minWidth: 200}}
-                        />
+                        <Button
+                            onClick={() => setShowFilters(!showFilters)}
+                            startIcon={
+                                showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>
+                            }
+                            aria-label={showFilters ? "Hide filters" : "Show filters"}
+                        >
+                            {showFilters ? "Hide filters" : "Show filters"}
+                        </Button>
                     </Box>
-                </Collapse>
-            </Box>
-            {isLoading ? (
-                <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
-                    <CircularProgress aria-label="Loading network details"/>
+                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 2,
+                                alignItems: "center",
+                                pb: 2,
+                            }}
+                        >
+                            <TextField
+                                label="Node"
+                                value={nodeFilter}
+                                onChange={(e) => debouncedSetNodeFilter(e.target.value)}
+                                sx={{minWidth: 200}}
+                            />
+                            <TextField
+                                label="Path"
+                                value={pathFilter}
+                                onChange={(e) => debouncedSetPathFilter(e.target.value)}
+                                sx={{minWidth: 200}}
+                            />
+                            <TextField
+                                label="RID"
+                                value={ridFilter}
+                                onChange={(e) => debouncedSetRidFilter(e.target.value)}
+                                sx={{minWidth: 200}}
+                            />
+                        </Box>
+                    </Collapse>
                 </Box>
-            ) : (
-                <TableContainer component={Paper} sx={{width: "100%"}}>
-                    <Table sx={{minWidth: 700}} aria-label="Network details table">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell scope="col">
-                                    <strong>IP</strong>
-                                </TableCell>
-                                <TableCell align="center" scope="col">
-                                    <strong>Node</strong>
-                                </TableCell>
-                                <TableCell align="center" scope="col">
-                                    <strong>Path</strong>
-                                </TableCell>
-                                <TableCell align="center" scope="col">
-                                    <strong>RID</strong>
-                                </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {filteredIpDetails.length > 0 ? (
-                                filteredIpDetails.map((detail, index) => (
-                                    <TableRow key={`${detail.rid}-${index}`}>
-                                        <TableCell>{detail.ip || "N/A"}</TableCell>
-                                        <TableCell align="center">
-                                            {detail.node || "N/A"}
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            {detail.path || "N/A"}
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            {detail.rid || "N/A"}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
+                {isLoading ? (
+                    <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
+                        <CircularProgress aria-label="Loading network details"/>
+                    </Box>
+                ) : (
+                    <TableContainer component={Paper} sx={{width: "100%"}}>
+                        <Table sx={{minWidth: 700}} aria-label="Network details table">
+                            <TableHead>
                                 <TableRow>
-                                    <TableCell
-                                        colSpan={4}
-                                        align="center"
-                                        sx={{color: "text.secondary"}}
-                                    >
-                                        No IP details available for this network.
+                                    <TableCell scope="col">
+                                        <strong>IP</strong>
+                                    </TableCell>
+                                    <TableCell align="center" scope="col">
+                                        <strong>Node</strong>
+                                    </TableCell>
+                                    <TableCell align="center" scope="col">
+                                        <strong>Path</strong>
+                                    </TableCell>
+                                    <TableCell align="center" scope="col">
+                                        <strong>RID</strong>
                                     </TableCell>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            )}
+                            </TableHead>
+                            <TableBody>
+                                {filteredIpDetails.length > 0 ? (
+                                    filteredIpDetails.map((detail, index) => (
+                                        <TableRow key={`${detail.rid}-${index}`}>
+                                            <TableCell>{detail.ip || "N/A"}</TableCell>
+                                            <TableCell align="center">
+                                                {detail.node || "N/A"}
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                {detail.path || "N/A"}
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                {detail.rid || "N/A"}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={4}
+                                            align="center"
+                                            sx={{color: "text.secondary"}}
+                                        >
+                                            No IP details available for this network.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </Box>
         </Box>
     );
 };

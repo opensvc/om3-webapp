@@ -359,22 +359,23 @@ const NodesTable = () => {
                 bgcolor: "background.default",
                 display: "flex",
                 flexDirection: "row",
-                width: "100%",
+                width: "100vw",
                 overflow: "hidden",
-                p: 2,
-                gap: 2,
+                p: 0,
+                margin: 0,
             }}
         >
             <Box
                 sx={{
-                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
-                    maxWidth: isWideScreen ? "1600px" : "1000px",
+                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
+                    width: "100%",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                     overflow: "auto",
                     transition: theme.transitions.create("flex", {
                         easing: theme.transitions.easing.sharp,

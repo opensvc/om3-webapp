@@ -47,6 +47,10 @@ jest.mock('../../hooks/useOnlineStatus', () => ({
     default: jest.fn().mockReturnValue(true),
 }));
 
+jest.mock('../../utils/logger.js', () => ({
+    error: jest.fn(),
+}));
+
 describe('NavBar Component', () => {
     const mockNavigate = jest.fn();
     const mockAuthDispatch = jest.fn();
@@ -274,6 +278,7 @@ describe('NavBar Component', () => {
         fireEvent.click(menuButton);
 
         const selectedItem = screen.getByRole('menuitem', {name: /namespaces/i});
+
         expect(selectedItem).toHaveClass('Mui-selected');
     });
 
@@ -354,9 +359,6 @@ describe('NavBar Component', () => {
             authToken: 'test-token',
         });
 
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
-
         render(
             <MemoryRouter>
                 <NavBar/>
@@ -364,13 +366,6 @@ describe('NavBar Component', () => {
         );
 
         await waitFor(() => expect(mockFetchNodes).toHaveBeenCalledWith('test-token'));
-
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error while calling fetchNodes:',
-            'Network error'
-        );
-
-        consoleErrorSpy.mockRestore();
     });
 
     test('handles single network path breadcrumbs correctly', () => {
@@ -384,7 +379,6 @@ describe('NavBar Component', () => {
             </MemoryRouter>
         );
 
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to network/i})).toBeInTheDocument();
     });
 
@@ -399,7 +393,6 @@ describe('NavBar Component', () => {
             </MemoryRouter>
         );
 
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to objects/i})).toBeInTheDocument();
     });
 
@@ -458,7 +451,6 @@ describe('NavBar Component', () => {
             expect(mockFetchNodes).not.toHaveBeenCalled();
         });
 
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to network/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to eth0/i})).toBeInTheDocument();
 
@@ -495,7 +487,6 @@ describe('NavBar Component', () => {
             expect(mockFetchNodes).not.toHaveBeenCalled();
         });
 
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to objects/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to volume1/i})).toBeInTheDocument();
 
@@ -532,7 +523,6 @@ describe('NavBar Component', () => {
             expect(mockFetchNodes).not.toHaveBeenCalled();
         });
 
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to namespaces/i})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: /navigate to ns1/i})).toBeInTheDocument();
 

@@ -12,7 +12,7 @@ import {
     FaNetworkWired
 } from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
-import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
+import {useAuth, useAuthDispatch} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useMemo, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import useEventStore from "../hooks/useEventStore.js";
@@ -37,7 +37,6 @@ const NavBar = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const [downCount, setDownCount] = useState(0);
     const [warnCount, setWarnCount] = useState(0);
-
     const [storedClusterName, setStoredClusterName] = useState(null);
     const online = useOnlineStatus();
 
@@ -111,6 +110,7 @@ const NavBar = () => {
         return breadcrumbItems;
     }, [location.pathname]);
 
+    // Fetch nodes when token is available
     useEffect(() => {
         const fetchClusterData = async () => {
             const token = auth?.authToken || localStorage.getItem("authToken");
@@ -121,13 +121,16 @@ const NavBar = () => {
                 ]);
                 return;
             }
-            try {
-                await fetchNodes(token);
-                if (!storedClusterName && clusterName) {
-                    setStoredClusterName(clusterName);
+
+            if (fetchNodes && typeof fetchNodes === 'function') {
+                try {
+                    await fetchNodes(token);
+                    if (!storedClusterName && clusterName) {
+                        setStoredClusterName(clusterName);
+                    }
+                } catch (error) {
+                    logger.error("Error while calling fetchNodes:", error);
                 }
-            } catch (error) {
-                logger.error("Error while calling fetchNodes:", error.message);
             }
         };
 
@@ -136,6 +139,7 @@ const NavBar = () => {
         }
     }, [auth, fetchNodes, getPathBreadcrumbs, storedClusterName, clusterName]);
 
+    // Breadcrumb generation
     useEffect(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
         const breadcrumbItems = [];
@@ -183,7 +187,15 @@ const NavBar = () => {
     };
 
     return (
-        <AppBar position="sticky">
+        <AppBar
+            position="sticky"
+            sx={{
+                width: "100vw",
+                left: 0,
+                right: 0,
+                boxSizing: "border-box"
+            }}
+        >
             <Toolbar sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                 <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1}}>
                     <Button
@@ -195,96 +207,56 @@ const NavBar = () => {
                             padding: "8px",
                             borderRadius: 2,
                             backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            "&:hover": {
-                                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                            },
-                            transition: "background-color 0.3s ease",
+                            "&:hover": {backgroundColor: "rgba(255, 255, 255, 0.2)"},
                         }}
                     >
                         <FaBars/>
                     </Button>
-                    <Typography id="navigation-menu-label" sx={{display: 'none'}}>Navigation menu</Typography>
+
                     <Menu
                         anchorEl={menuAnchor}
                         open={Boolean(menuAnchor)}
                         onClose={handleMenuClose}
-                        aria-labelledby="navigation-menu-label"
-                        slotProps={{
-                            paper: {
-                                sx: {
-                                    minWidth: 200,
-                                    boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
-                                    borderRadius: 2,
-                                    backgroundColor: "background.paper",
-                                },
-                            },
-                        }}
-                        transformOrigin={{vertical: "top", horizontal: "left"}}
-                        anchorOrigin={{vertical: "bottom", horizontal: "left"}}
-                        transitionDuration={300}
                     >
-                        {navRoutes.map(({path, name, icon}, index) => (
+                        {navRoutes.map(({path, name, icon}) => (
                             <MenuItem
                                 key={path}
                                 onClick={() => handleMenuItemClick(path)}
                                 selected={location.pathname === path}
-                                sx={{
-                                    py: 1.5,
-                                    transition: "background-color 0.2s ease",
-                                    "&:hover": {
-                                        backgroundColor: "primary.light",
-                                        color: "primary.contrastText",
-                                    },
-                                    "&.Mui-selected": {
-                                        backgroundColor: "primary.main",
-                                        color: "primary.contrastText",
-                                        "&:hover": {
-                                            backgroundColor: "primary.dark",
-                                        },
-                                    },
-                                    animation: `slideIn 0.3s ease forwards ${index * 0.05}s`,
-                                    "@keyframes slideIn": {
-                                        from: {
-                                            opacity: 0,
-                                            transform: "translateY(-10px)",
-                                        },
-                                        to: {
-                                            opacity: 1,
-                                            transform: "translateY(0)",
-                                        },
-                                    },
-                                }}
+                                aria-selected={location.pathname === path}
                             >
-                                <ListItemIcon sx={{color: "inherit"}}>{icon}</ListItemIcon>
+                                <ListItemIcon>{icon}</ListItemIcon>
                                 <ListItemText primary={name}/>
                             </MenuItem>
                         ))}
                     </Menu>
-                    {breadcrumb.length > 0 &&
-                        breadcrumb.map((item, index) => (
-                            <Box key={index} sx={{display: "flex", alignItems: "center"}}>
-                                <Typography
-                                    component={Link}
-                                    to={item.path}
-                                    aria-label={`Navigate to ${decodeURIComponent(item.name)}`}
-                                    sx={{
-                                        color: "inherit",
-                                        textDecoration: "none",
-                                        fontWeight: 500,
-                                        fontSize: "1.1rem",
-                                        textTransform: "none",
-                                        "&:hover": {
-                                            textDecoration: "underline",
-                                        },
-                                    }}
-                                >
-                                    {decodeURIComponent(item.name)}
-                                </Typography>
-                                {index < breadcrumb.length - 1 && (
-                                    <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
-                                )}
-                            </Box>
-                        ))}
+
+                    {breadcrumb.length > 0 && location.pathname !== '/login' && (
+                        <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap"}}>
+                            {breadcrumb.map((item, index) => (
+                                <Box key={index} sx={{display: "flex", alignItems: "center"}}>
+                                    <Typography
+                                        component={Link}
+                                        to={item.path}
+                                        sx={{
+                                            color: "inherit",
+                                            textDecoration: "none",
+                                            fontWeight: 500,
+                                            fontSize: "1.1rem",
+                                            "&:hover": {textDecoration: "underline"},
+                                        }}
+                                        aria-label={`Navigate to ${decodeURIComponent(item.name)}`}
+                                    >
+                                        {decodeURIComponent(item.name)}
+                                    </Typography>
+
+                                    {index < breadcrumb.length - 1 && (
+                                        <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
+                                    )}
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
 
                     {(downCount > 0 || warnCount > 0) && (
                         <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
@@ -298,7 +270,7 @@ const NavBar = () => {
                                             alignItems: "center",
                                             gap: 0.5,
                                             color: "inherit",
-                                            textDecoration: "none",
+                                            textDecoration: "none"
                                         }}
                                     >
                                         <FiberManualRecordIcon sx={{color: red[500]}}/>
@@ -316,7 +288,7 @@ const NavBar = () => {
                                             alignItems: "center",
                                             gap: 0.5,
                                             color: "inherit",
-                                            textDecoration: "none",
+                                            textDecoration: "none"
                                         }}
                                     >
                                         <PriorityHighIcon sx={{color: orange[500]}}/>
@@ -331,28 +303,26 @@ const NavBar = () => {
                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                     {!online && (
                         <Tooltip title="You are offline — some features may be limited">
-                            <span>
-                                <Typography
-                                    variant="body2"
-                                    sx={{
-                                        mr: 1,
-                                        px: 1,
-                                        py: 0.5,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 0.5,
-                                        borderRadius: 1,
-                                        backgroundColor: 'rgba(255, 0, 0, 0.12)',
-                                        color: 'white',
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}}/>
-                                    Offline
-                                </Typography>
-                            </span>
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    px: 1,
+                                    py: 0.5,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 0.5,
+                                    borderRadius: 1,
+                                    backgroundColor: 'rgba(255, 0, 0, 0.12)',
+                                    color: 'white',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}}/>
+                                Offline
+                            </Typography>
                         </Tooltip>
                     )}
+
                     <Button
                         component={Link}
                         to="/whoami"
@@ -362,10 +332,7 @@ const NavBar = () => {
                             padding: "8px",
                             borderRadius: 2,
                             backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            "&:hover": {
-                                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                            },
-                            transition: "background-color 0.3s ease",
+                            "&:hover": {backgroundColor: "rgba(255, 255, 255, 0.2)"},
                         }}
                         aria-label="View user information"
                     >

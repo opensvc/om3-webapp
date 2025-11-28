@@ -17,7 +17,16 @@ import {
     Typography,
     useTheme
 } from "@mui/material";
-import {BugReport, Close, DeleteOutline, ExpandMore, KeyboardArrowUp, Pause, PlayArrow} from "@mui/icons-material";
+import {
+    BugReport,
+    Close,
+    DeleteOutline,
+    ExpandMore,
+    KeyboardArrowUp,
+    Pause,
+    PlayArrow,
+    Settings
+} from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
 
@@ -37,6 +46,8 @@ const EventLogger = ({
     const [drawerHeight, setDrawerHeight] = useState(320);
     const [forceUpdate, setForceUpdate] = useState(0);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
+    const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
+    const [subscribedEventTypes, setSubscribedEventTypes] = useState(eventTypes);
 
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
@@ -141,11 +152,21 @@ const EventLogger = ({
         }
     };
 
-    // Compute filtered logs
+    // Get all unique event types from received logs for the filter dropdown
+    const allReceivedEventTypes = useMemo(() => {
+        const types = new Set();
+        eventLogs.forEach(log => types.add(log.eventType));
+        return Array.from(types).sort();
+    }, [eventLogs]);
+
+    // Compute filtered logs based on eventTypes prop AND received events
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
 
-        if (eventTypes.length > 0) filtered = filtered.filter(log => eventTypes.includes(log.eventType));
+        // Filter by eventTypes prop if provided (this is the display filter)
+        if (eventTypes.length > 0) {
+            filtered = filtered.filter(log => eventTypes.includes(log.eventType));
+        }
 
         if (objectName) {
             filtered = filtered.filter(log => {
@@ -169,6 +190,7 @@ const EventLogger = ({
         return filtered;
     }, [eventLogs, eventTypes, objectName]);
 
+    // Available event types for the filter dropdown (from baseFilteredLogs)
     const availableEventTypes = useMemo(() => {
         const types = new Set();
         baseFilteredLogs.forEach(log => types.add(log.eventType));
@@ -207,32 +229,137 @@ const EventLogger = ({
         return result;
     }, [baseFilteredLogs, eventTypeFilter, searchTerm, filterData]);
 
-    // Subscription info component - compact version
+
+    const SubscriptionDialog = () => (
+        <Drawer
+            anchor="right"
+            open={subscriptionDialogOpen}
+            onClose={() => setSubscriptionDialogOpen(false)}
+            sx={{
+                '& .MuiDrawer-paper': {
+                    width: 400,
+                    maxWidth: '90vw',
+                    p: 2
+                }
+            }}
+        >
+            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                <Typography variant="h6">Event Subscriptions</Typography>
+                <IconButton onClick={() => setSubscriptionDialogOpen(false)}>
+                    <Close/>
+                </IconButton>
+            </Box>
+
+            <Divider sx={{mb: 2}}/>
+
+            <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                Select which event types you want to SUBSCRIBE to (this affects future events only):
+            </Typography>
+
+            <Box sx={{mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
+                <Button
+                    size="small"
+                    onClick={() => setSubscribedEventTypes([...eventTypes])}
+                    disabled={eventTypes.length === 0}
+                >
+                    Subscribe to All
+                </Button>
+                <Button
+                    size="small"
+                    onClick={() => setSubscribedEventTypes([])}
+                >
+                    Unsubscribe from All
+                </Button>
+                <Button
+                    size="small"
+                    onClick={() => setSubscribedEventTypes([...eventTypes])}
+                >
+                    Reset to Default
+                </Button>
+            </Box>
+
+            <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
+                {eventTypes.length === 0 ? (
+                    <Typography color="text.secondary" sx={{textAlign: 'center', py: 4}}>
+                        No event types available for this page
+                    </Typography>
+                ) : (
+                    eventTypes.map(eventType => (
+                        <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5}}>
+                            <Checkbox
+                                checked={subscribedEventTypes.includes(eventType)}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setSubscribedEventTypes(prev => [...prev, eventType]);
+                                    } else {
+                                        setSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
+                                    }
+                                }}
+                                size="small"
+                            />
+                            <Box sx={{flex: 1, minWidth: 0}}>
+                                <Typography variant="body2" noWrap>
+                                    {eventType}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {eventStats[eventType] || 0} events received
+                                </Typography>
+                            </Box>
+                        </Box>
+                    ))
+                )}
+            </Box>
+
+            <Box sx={{mt: 'auto', pt: 2}}>
+                <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={() => setSubscriptionDialogOpen(false)}
+                >
+                    Apply Subscriptions
+                </Button>
+            </Box>
+        </Drawer>
+    );
+
+    // Subscription info component
     const SubscriptionInfo = () => {
-        if (eventTypes.length === 0 && !objectName) {
+        if (subscribedEventTypes.length === 0 && !objectName) {
             return null;
         }
 
         const subscriptionText = [
-            eventTypes.length > 0 && `${eventTypes.length} event type(s)`,
+            subscribedEventTypes.length > 0 && `${subscribedEventTypes.length} event type(s)`,
             objectName && `object: ${objectName}`
         ].filter(Boolean).join(' • ');
 
         return (
             <Box sx={{px: 1, py: 0.5}}>
-                <Tooltip
-                    title={eventTypes.length > 0 ? `Subscribed to: ${eventTypes.join(', ')}` : 'Event subscriptions'}>
+                <Tooltip title="Click to manage event subscriptions">
                     <Chip
                         label={`Subscribed to: ${subscriptionText}`}
                         size="small"
                         color="info"
                         variant="outlined"
                         sx={{height: 24, fontSize: '0.75rem'}}
+                        onClick={() => setSubscriptionDialogOpen(true)}
+                        onDelete={() => setSubscribedEventTypes([...eventTypes])}
+                        deleteIcon={<Settings/>}
                     />
                 </Tooltip>
             </Box>
         );
     };
+
+    // Function to get current subscriptions for external use
+    const getCurrentSubscriptions = useCallback(() => {
+        return [...subscribedEventTypes];
+    }, [subscribedEventTypes]);
+
+    // Expose subscriptions via ref or other method if needed
+    useEffect(() => {
+        console.log("Subscriptions updated:", subscribedEventTypes);
+    }, [subscribedEventTypes]);
 
     useEffect(() => {
         setForceUpdate(prev => prev + 1);
@@ -404,7 +531,7 @@ const EventLogger = ({
                         onChange={(e) => setSearchTerm(e.target.value)}
                         sx={{minWidth: 240, flexGrow: 1}}
                     />
-                    {availableEventTypes.length > 0 && (
+                    {allReceivedEventTypes.length > 0 && (
                         <FormControl size="small" sx={{minWidth: 240}}>
                             <InputLabel>Event Types</InputLabel>
                             <Select
@@ -414,7 +541,7 @@ const EventLogger = ({
                                 label="Event Types"
                                 renderValue={(selected) => (selected.length === 0 ? "All events" : `${selected.length} selected`)}
                             >
-                                {availableEventTypes.map((et) => (
+                                {allReceivedEventTypes.map((et) => (
                                     <MenuItem key={et} value={et}>
                                         <Checkbox checked={eventTypeFilter.includes(et)} size="small"/>
                                         <ListItemText
@@ -541,6 +668,9 @@ const EventLogger = ({
                     </Box>
                 )}
             </Drawer>
+
+            {/* Subscription Management Dialog */}
+            <SubscriptionDialog/>
 
             <style>{`
                 .json-key { color: ${theme.palette.primary.main}; font-weight: 600; }

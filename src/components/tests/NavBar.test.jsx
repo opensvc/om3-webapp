@@ -720,4 +720,172 @@ describe('NavBar Component', () => {
         const whoAmIButton = screen.getByRole('link', {name: /view user information/i});
         expect(whoAmIButton).toHaveAttribute('href', '/whoami');
     });
+
+    test('handles undefined object in objects when getting status', () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': undefined,
+            },
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        expect(screen.queryByText('1')).not.toBeInTheDocument();
+    });
+
+    test('handles missing instance monitor for node', () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': {avail: 'down'},
+            },
+            objectInstanceStatus: {
+                'obj1': {
+                    'node1': {avail: 'down'},
+                },
+            },
+            instanceMonitor: {
+            },
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        expect(screen.getByText('1')).toBeInTheDocument();
+    });
+
+    test('excludes "cluster" from breadcrumb parts in getPathBreadcrumbs', () => {
+        useLocation.mockReturnValue({
+            pathname: '/cluster/node1/cluster',
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        const clusterLinks = screen.getAllByRole('link', {name: /navigate to cluster/i});
+        expect(clusterLinks).toHaveLength(1);
+        expect(screen.getByRole('link', {name: /navigate to node1/i})).toBeInTheDocument();
+    });
+
+    test('does not call fetchNodes when it is not a function', async () => {
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: null,
+            loading: false,
+            daemon: null,
+        });
+
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: 'test-token',
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        await waitFor(() => {
+            expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
+        });
+    });
+
+    test('handles fetchNodes being undefined', async () => {
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: undefined,
+            loading: false,
+            daemon: null,
+        });
+
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: 'test-token',
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
+        });
+    });
+
+    test('handles empty objects in getObjectStatus', () => {
+        const mockStore = {
+            objectStatus: {},
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        require('../../hooks/useFetchDaemonStatus').default.mockReturnValue({
+            clusterName: null,
+            fetchNodes: jest.fn(),
+            loading: false,
+            daemon: null,
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
+    });
+
+    test('handles object with no nodes in objectInstanceStatus', () => {
+        const mockStore = {
+            objectStatus: {
+                'obj1': {avail: 'down'},
+            },
+            objectInstanceStatus: {
+                'obj1': {},
+            },
+            instanceMonitor: {},
+        };
+        mockUseEventStore.mockImplementation((selector) => selector(mockStore));
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+        expect(screen.getByText('1')).toBeInTheDocument();
+    });
+
+    test('directly tests getPathBreadcrumbs exclusion of "cluster" segments', () => {
+        useLocation.mockReturnValue({
+            pathname: '/namespaces/cluster/objects',
+        });
+        require('../../context/AuthProvider.jsx').useAuth.mockReturnValue({
+            authChoice: 'local',
+            authToken: null,
+        });
+
+        render(
+            <MemoryRouter>
+                <NavBar/>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to namespaces/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to objects/i})).toBeInTheDocument();
+
+        expect(screen.getAllByText('>')).toHaveLength(2);
+    });
 });

@@ -207,6 +207,33 @@ const EventLogger = ({
         return result;
     }, [baseFilteredLogs, eventTypeFilter, searchTerm, filterData]);
 
+    // Subscription info component - compact version
+    const SubscriptionInfo = () => {
+        if (eventTypes.length === 0 && !objectName) {
+            return null;
+        }
+
+        const subscriptionText = [
+            eventTypes.length > 0 && `${eventTypes.length} event type(s)`,
+            objectName && `object: ${objectName}`
+        ].filter(Boolean).join(' • ');
+
+        return (
+            <Box sx={{px: 1, py: 0.5}}>
+                <Tooltip
+                    title={eventTypes.length > 0 ? `Subscribed to: ${eventTypes.join(', ')}` : 'Event subscriptions'}>
+                    <Chip
+                        label={`Subscribed to: ${subscriptionText}`}
+                        size="small"
+                        color="info"
+                        variant="outlined"
+                        sx={{height: 24, fontSize: '0.75rem'}}
+                    />
+                </Tooltip>
+            </Box>
+        );
+    };
+
     useEffect(() => {
         setForceUpdate(prev => prev + 1);
     }, [eventLogs.length, drawerOpen]);
@@ -343,8 +370,6 @@ const EventLogger = ({
                         {isPaused && <Chip label="PAUSED" color="warning" size="small"/>}
                         {(eventTypeFilter.length > 0 || searchTerm) &&
                             <Chip label="Filtered" color="info" size="small" onDelete={handleClearFilters}/>}
-                        {objectName &&
-                            <Chip label={`Object: ${objectName}`} color="secondary" size="small" variant="outlined"/>}
                     </Box>
 
                     <Box sx={{display: "flex", gap: 0.5, alignItems: "center"}}>
@@ -366,6 +391,9 @@ const EventLogger = ({
                 </Box>
 
                 <Divider/>
+
+                {/* Compact subscription info */}
+                <SubscriptionInfo/>
 
                 {/* Filters */}
                 <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>

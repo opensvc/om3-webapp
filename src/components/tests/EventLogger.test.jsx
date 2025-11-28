@@ -1454,10 +1454,18 @@ describe('EventLogger Component', () => {
 
         // Wait for and verify the JSON content
         await waitFor(() => {
-            // Check that various JSON elements are present
+            // Look for the number 42 specifically in JSON context by checking its styling
+            const numberElements = screen.getAllByText(/42/);
+
+            // Find the one that's in the JSON context (has the json-number class)
+            const jsonNumberElement = numberElements.find(element =>
+                element.classList.contains('json-number')
+            );
+            expect(jsonNumberElement).toBeInTheDocument();
+
+            // Check other JSON elements
             expect(screen.getByText(/"str":/)).toBeInTheDocument();
             expect(screen.getByText(/"string & < >"/)).toBeInTheDocument();
-            expect(screen.getByText(/42/)).toBeInTheDocument();
             expect(screen.getByText(/true/)).toBeInTheDocument();
             expect(screen.getByText(/false/)).toBeInTheDocument();
             expect(screen.getByText(/null/)).toBeInTheDocument();

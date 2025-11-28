@@ -358,7 +358,7 @@ const EventLogger = ({
 
     // Expose subscriptions via ref or other method if needed
     useEffect(() => {
-        console.log("Subscriptions updated:", subscribedEventTypes);
+        logger.log("Subscriptions updated:", subscribedEventTypes); // Changé de info à log
     }, [subscribedEventTypes]);
 
     useEffect(() => {

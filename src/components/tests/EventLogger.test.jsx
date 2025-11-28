@@ -22,7 +22,15 @@ jest.mock('../../hooks/useEventLogStore', () => ({
 }));
 
 jest.mock('../../utils/logger.js', () => ({
-    warn: jest.fn(),
+    __esModule: true,
+    default: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        log: jest.fn(),
+        serialize: jest.fn(arg => JSON.stringify(arg)),
+    }
 }));
 
 const theme = createTheme();
@@ -40,7 +48,11 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
+        logger.info.mockClear();
         logger.warn.mockClear();
+        logger.error.mockClear();
+        logger.debug.mockClear();
+        logger.log.mockClear();
     });
 
     afterEach(() => {
@@ -504,7 +516,7 @@ describe('EventLogger Component', () => {
         renderWithTheme(<EventLogger objectName="/test/path"/>);
         fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
         await waitFor(() => {
-            expect(screen.getByText(/Object: \/test\/path/i)).toBeInTheDocument();
+            expect(screen.getByText(/object: \/test\/path/i)).toBeInTheDocument();
         });
     });
 
@@ -1499,5 +1511,116 @@ describe('EventLogger Component', () => {
         const eventElement = screen.getByText(/INVALID_TS/i).closest('div');
 
         expect(eventElement).toBeInTheDocument();
+    });
+
+    test('renders subscription info when eventTypes provided', async () => {
+        renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        await waitFor(() => {
+            expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
+        });
+    });
+
+    test('renders subscription info when objectName and eventTypes provided', async () => {
+        renderWithTheme(<EventLogger eventTypes={['EVENT1']} objectName="/test/path"/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        await waitFor(() => {
+            expect(screen.getByText(/Subscribed to: 1 event type\(s\) • object: \/test\/path/i)).toBeInTheDocument();
+        });
+    });
+
+    test('opens subscription dialog and interacts with it', async () => {
+        const eventTypes = ['EVENT1', 'EVENT2', 'EVENT3'];
+        const mockLogs = [
+            {id: '1', eventType: 'EVENT1', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'EVENT2', timestamp: new Date().toISOString(), data: {}},
+            {id: '3', eventType: 'EVENT3', timestamp: new Date().toISOString(), data: {}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        const subChip = screen.getByText(/Subscribed to: 3 event type\(s\)/i);
+        fireEvent.click(subChip);
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+        // Check initial state
+        let checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBe(3);
+        checkboxes.forEach(cb => expect(cb).toBeChecked());
+        // Subscribe to All (already all, but disabled? Wait, test clicks)
+        const subscribeAll = screen.getByText('Subscribe to All');
+        fireEvent.click(subscribeAll);
+        checkboxes = screen.getAllByRole('checkbox');
+        checkboxes.forEach(cb => expect(cb).toBeChecked());
+        // Unsubscribe from All
+        const unsubscribeAll = screen.getByText('Unsubscribe from All');
+        fireEvent.click(unsubscribeAll);
+        checkboxes = screen.getAllByRole('checkbox');
+        checkboxes.forEach(cb => expect(cb).not.toBeChecked());
+        // Reset to Default
+        const reset = screen.getByText('Reset to Default');
+        fireEvent.click(reset);
+        checkboxes = screen.getAllByRole('checkbox');
+        checkboxes.forEach(cb => expect(cb).toBeChecked());
+        // Manually toggle one
+        fireEvent.click(checkboxes[0]);
+        expect(checkboxes[0]).not.toBeChecked();
+        // Check event stats
+        const statsElements = screen.getAllByText(/1 events received/i);
+        expect(statsElements.length).toBe(3);
+        // Apply
+        fireEvent.click(screen.getByText('Apply Subscriptions'));
+        await waitFor(() => {
+            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
+        });
+        // Subscription chip updated
+        await waitFor(() => {
+            expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
+        });
+        // Check logger called on update
+        expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
+    });
+
+    test('handles subscription dialog with no eventTypes', async () => {
+        renderWithTheme(<EventLogger eventTypes={[]}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        expect(screen.queryByText(/Subscribed to:/i)).not.toBeInTheDocument();
+    });
+
+    test('closes subscription dialog with close button', async () => {
+        const eventTypes = ['EVENT1'];
+        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        const subChip = screen.getByText(/Subscribed to: 1 event type\(s\)/i);
+        fireEvent.click(subChip);
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+        const allButtons = screen.getAllByRole('button');
+        const closeButton = allButtons[0]; // The first button is the IconButton with Close
+        fireEvent.click(closeButton);
+        await waitFor(() => {
+            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
+        });
+    });
+
+    test('resets subscriptions with delete icon on chip', async () => {
+        const eventTypes = ['EVENT1', 'EVENT2'];
+        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+        const subChip = screen.getByText(/Subscribed to: 2 event type\(s\)/i);
+        const deleteIcon = subChip.parentElement.querySelector('.MuiChip-deleteIcon');
+        fireEvent.click(deleteIcon);
+        // Assuming reset sets to all, chip remains the same
+        await waitFor(() => {
+            expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
+        });
+        expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
     });
 });

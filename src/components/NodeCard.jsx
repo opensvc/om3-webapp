@@ -230,6 +230,8 @@ const NodeCard = ({
             tooltipDescriptions[5] = "Not Provisioned";
         } else if (provisionedState === "true" || provisionedState === true) {
             tooltipDescriptions[5] = "Provisioned";
+        } else {
+            tooltipDescriptions[5] = "Provisioned";
         }
         const isStandby = instanceConfig?.resources?.[rid]?.is_standby;
         if (isStandby === true || isStandby === "true") {
@@ -412,12 +414,21 @@ const NodeCard = ({
                             }}
                         >
                             <Tooltip title={res.status || "unknown"}>
-                                <FiberManualRecordIcon
-                                    sx={{
-                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500],
-                                        fontSize: "1rem",
-                                    }}
-                                />
+                                {res.status === "warn" ? (
+                                    <PriorityHighIcon
+                                        sx={{
+                                            fontSize: "1rem",
+                                            color: typeof getColor === "function" ? getColor(res.status) : grey[500]
+                                        }}
+                                    />
+                                ) : (
+                                    <FiberManualRecordIcon
+                                        sx={{
+                                            fontSize: "1rem",
+                                            color: typeof getColor === "function" ? getColor(res.status) : grey[500]
+                                        }}
+                                    />
+                                )}
                             </Tooltip>
                             {isResourceNotProvisioned && (
                                 <Tooltip title="Not Provisioned">
@@ -533,12 +544,21 @@ const NodeCard = ({
                         }}
                     >
                         <Tooltip title={res.status || "unknown"}>
-                            <FiberManualRecordIcon
-                                sx={{
-                                    color: typeof getColor === "function" ? getColor(res.status) : grey[500],
-                                    fontSize: "1rem",
-                                }}
-                            />
+                            {res.status === "warn" ? (
+                                <PriorityHighIcon
+                                    sx={{
+                                        fontSize: "1rem",
+                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500]
+                                    }}
+                                />
+                            ) : (
+                                <FiberManualRecordIcon
+                                    sx={{
+                                        fontSize: "1rem",
+                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500]
+                                    }}
+                                />
+                            )}
                         </Tooltip>
                         {isResourceNotProvisioned && (
                             <Tooltip title="Not Provisioned">
@@ -640,18 +660,22 @@ const NodeCard = ({
                             </IconButton>
                         </Tooltip>
                         <Tooltip title={avail || "unknown"}>
-                            <FiberManualRecordIcon
-                                sx={{
-                                    color: typeof getColor === "function" ? getColor(avail) : grey[500],
-                                    fontSize: "1.2rem",
-                                }}
-                            />
+                            {avail === "warn" ? (
+                                <PriorityHighIcon
+                                    sx={{
+                                        fontSize: "1.2rem",
+                                        color: typeof getColor === "function" ? getColor(avail) : grey[500]
+                                    }}
+                                />
+                            ) : (
+                                <FiberManualRecordIcon
+                                    sx={{
+                                        fontSize: "1.2rem",
+                                        color: typeof getColor === "function" ? getColor(avail) : grey[500]
+                                    }}
+                                />
+                            )}
                         </Tooltip>
-                        {avail === "warn" && (
-                            <Tooltip title="warn">
-                                <PriorityHighIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
-                            </Tooltip>
-                        )}
                         {frozen === "frozen" && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>

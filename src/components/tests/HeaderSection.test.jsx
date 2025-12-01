@@ -140,7 +140,6 @@ describe('HeaderSection Component', () => {
         render(<HeaderSection {...defaultProps} />);
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
         expect(screen.getByTestId('PriorityHighIcon')).toBeInTheDocument();
         expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
         expect(screen.queryByText('placed@node1')).not.toBeInTheDocument();

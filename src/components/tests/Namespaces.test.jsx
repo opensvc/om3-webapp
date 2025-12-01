@@ -80,6 +80,13 @@ jest.mock('@mui/icons-material/FiberManualRecord', () => ({
         return <span data-testid="status-icon" style={{color}} {...props} />;
     },
 }));
+jest.mock('@mui/icons-material/PriorityHigh', () => ({
+    __esModule: true,
+    default: ({sx = {}, ...props}) => {
+        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
+        return <span data-testid="status-icon" style={{color}} {...props} />;
+    },
+}));
 // Mock useLocation
 const mockUseLocation = useLocation;
 // Helper function to get header cell for a column
@@ -324,7 +331,7 @@ describe('Namespaces Component', () => {
                 <Namespaces/>
             </MemoryRouter>
         );
-        // Should render without crashing and handle null/undefined values
+        // Should handle null/undefined values
         await waitFor(() => {
             expect(screen.getByText('valid')).toBeInTheDocument();
         });

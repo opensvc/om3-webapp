@@ -28,7 +28,6 @@ import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
 import ActionDialogManager from "../components/ActionDialogManager";
-import {ManageConfigParamsDialog} from "./ActionDialogs";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
@@ -107,9 +106,6 @@ const ObjectDetail = () => {
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
-    const [paramsToSet, setParamsToSet] = useState("");
-    const [paramsToUnset, setParamsToUnset] = useState("");
-    const [paramsToDelete, setParamsToDelete] = useState("");
     const [configNode, setConfigNode] = useState(null);
 
     // States for batch & actions
@@ -146,11 +142,7 @@ const ObjectDetail = () => {
     const [stopCheckbox, setStopCheckbox] = useState(DEFAULT_STOP_CHECKBOX);
     const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
     const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: "",
-        severity: "success",
-    });
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success",});
 
     // States for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
@@ -408,9 +400,7 @@ const ObjectDetail = () => {
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on resource ${rid}…`, "info");
-        const url =
-            postActionUrl({node, objectName: decodedObjectName, action}) +
-            `?rid=${encodeURIComponent(rid)}`;
+        const url = postActionUrl({node, objectName: decodedObjectName, action}) + `?rid=${encodeURIComponent(rid)}`;
         try {
             const res = await fetch(url, {
                 method: "POST",
@@ -496,11 +486,7 @@ const ObjectDetail = () => {
         const monitor = instanceMonitor[monitorKey] || {};
         return {
             avail: instanceStatus[node]?.avail,
-            frozen:
-                instanceStatus[node]?.frozen_at &&
-                instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z"
-                    ? "frozen"
-                    : "unfrozen",
+            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
             state: monitor.state !== "idle" ? monitor.state : null,
         };
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
@@ -685,9 +671,7 @@ const ObjectDetail = () => {
     const toggleResource = useCallback((node, rid) => {
         setSelectedResourcesByNode((prev) => {
             const current = prev[node] || [];
-            const next = current.includes(rid)
-                ? current.filter((r) => r !== rid)
-                : [...current, rid];
+            const next = current.includes(rid) ? current.filter((r) => r !== rid) : [...current, rid];
             return {...prev, [node]: next};
         });
     }, []);
@@ -771,9 +755,7 @@ const ObjectDetail = () => {
                     try {
                         const {name} = parseObjectPath(decodedObjectName);
                         const matchingUpdate = updates.find(
-                            (u) =>
-                                (u.name === name || u.fullName === decodedObjectName) &&
-                                u.node
+                            (u) => (u.name === name || u.fullName === decodedObjectName) && u.node
                         );
                         if (matchingUpdate && matchingUpdate.node) {
                             try {
@@ -855,10 +837,9 @@ const ObjectDetail = () => {
             if (objectData) {
                 const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
                 const initialNode = nodes.find((node) => {
-                    return objectData[node]?.encap &&
-                        Object.values(objectData[node].encap).some(
-                            (container) => container.resources && Object.keys(container.resources).length > 0
-                        );
+                    return objectData[node]?.encap && Object.values(objectData[node].encap).some(
+                        (container) => container.resources && Object.keys(container.resources).length > 0
+                    );
                 }) || nodes[0];
                 if (initialNode) {
                     try {
@@ -884,7 +865,9 @@ const ObjectDetail = () => {
             Object.keys(objectData).forEach((node) => {
                 enhancedObjectData[node] = {
                     ...objectData[node],
-                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName] ? instanceConfig[decodedObjectName][node] || {resources: {}} : {resources: {}},
+                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName]
+                        ? instanceConfig[decodedObjectName][node] || {resources: {}}
+                        : {resources: {}},
                     instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
                 };
             });
@@ -935,39 +918,45 @@ const ObjectDetail = () => {
     }
 
     return (
-        <Box sx={{
-            display: "flex",
-            flexDirection: "row",
-            width: "100vw",
-            minHeight: "100vh",
-            overflow: "hidden",
-            boxSizing: "border-box",
-            position: 'relative',
-            margin: 0,
-            p: 0,
-        }}>
-            <Box sx={{
-                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
-                overflow: "auto",
+        <Box
+            sx={{
+                display: "flex",
+                flexDirection: "row",
+                width: "100vw",
+                minHeight: "100vh",
+                overflow: "hidden",
                 boxSizing: "border-box",
-                maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
-                transition: theme.transitions.create(["flex", "maxWidth"], {
-                    easing: theme.transitions.easing.sharp,
-                    duration: theme.transitions.duration.enteringScreen,
-                }),
-            }}>
-                <Box sx={{
-                    width: "100%",
-                    margin: "0 auto",
-                    px: 2,
-                    py: 4,
+                position: 'relative',
+                margin: 0,
+                p: 0,
+            }}
+        >
+            <Box
+                sx={{
+                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
+                    overflow: "auto",
                     boxSizing: "border-box",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                }}>
+                    maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
+                    transition: theme.transitions.create(["flex", "maxWidth"], {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.enteringScreen,
+                    }),
+                }}
+            >
+                <Box
+                    sx={{
+                        width: "100%",
+                        margin: "0 auto",
+                        px: 2,
+                        py: 4,
+                        boxSizing: "border-box",
+                        bgcolor: "background.paper",
+                        border: "2px solid",
+                        borderColor: "divider",
+                        borderRadius: 0,
+                        boxShadow: 3,
+                    }}
+                >
                     <HeaderSection
                         decodedObjectName={decodedObjectName}
                         globalStatus={objectStatus[decodedObjectName]}
@@ -1014,8 +1003,12 @@ const ObjectDetail = () => {
                             setPurgeCheckboxes={setPurgeCheckboxes}
                         />
                     )}
-                    <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
-                            fullWidth>
+                    <Dialog
+                        open={consoleDialogOpen}
+                        onClose={() => setConsoleDialogOpen(false)}
+                        maxWidth="sm"
+                        fullWidth
+                    >
                         <DialogTitle>Open Console</DialogTitle>
                         <DialogContent>
                             <Typography variant="body1" sx={{mb: 2}}>
@@ -1078,26 +1071,25 @@ const ObjectDetail = () => {
                             }
                         }}
                     >
-                        <DialogTitle sx={{
-                            pb: 1,
-                            typography: {xs: 'h6', sm: 'h5'}
-                        }}>
+                        <DialogTitle sx={{pb: 1, typography: {xs: 'h6', sm: 'h5'}}}>
                             Console URL
                         </DialogTitle>
                         <DialogContent>
-                            <Box sx={{
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                padding: {xs: '8px 10px', sm: '12px 14px'},
-                                backgroundColor: '#f5f5f5',
-                                marginBottom: 2,
-                                overflow: 'auto',
-                                maxHeight: '100px',
-                                fontFamily: 'monospace',
-                                fontSize: {xs: '0.75rem', sm: '0.875rem'},
-                                wordBreak: 'break-all',
-                                whiteSpace: 'pre-wrap'
-                            }}>
+                            <Box
+                                sx={{
+                                    border: '1px solid #ccc',
+                                    borderRadius: '4px',
+                                    padding: {xs: '8px 10px', sm: '12px 14px'},
+                                    backgroundColor: '#f5f5f5',
+                                    marginBottom: 2,
+                                    overflow: 'auto',
+                                    maxHeight: '100px',
+                                    fontFamily: 'monospace',
+                                    fontSize: {xs: '0.75rem', sm: '0.875rem'},
+                                    wordBreak: 'break-all',
+                                    whiteSpace: 'pre-wrap'
+                                }}
+                            >
                                 {currentConsoleUrl || 'No URL available'}
                             </Box>
                             <Box sx={{
@@ -1133,14 +1125,9 @@ const ObjectDetail = () => {
                                 </Button>
                             </Box>
                         </DialogContent>
-                        <DialogActions sx={{
-                            px: {xs: 2, sm: 3},
-                            pb: {xs: 2, sm: 1}
-                        }}>
-                            <Button
-                                onClick={() => setConsoleUrlDialogOpen(false)}
-                                size={window.innerWidth < 600 ? "small" : "medium"}
-                            >
+                        <DialogActions sx={{px: {xs: 2, sm: 3}, pb: {xs: 2, sm: 1}}}>
+                            <Button onClick={() => setConsoleUrlDialogOpen(false)}
+                                    size={window.innerWidth < 600 ? "small" : "medium"}>
                                 Close
                             </Button>
                         </DialogActions>
@@ -1159,18 +1146,6 @@ const ObjectDetail = () => {
                         configError={configError}
                         configAccordionExpanded={configAccordionExpanded}
                         setConfigAccordionExpanded={setConfigAccordionExpanded}
-                    />
-                    <ManageConfigParamsDialog
-                        open={manageParamsDialogOpen}
-                        onClose={() => setManageParamsDialogOpen(false)}
-                        onConfirm={() => setManageParamsDialogOpen(false)}
-                        paramsToSet={paramsToSet}
-                        setParamsToSet={setParamsToSet}
-                        paramsToUnset={paramsToUnset}
-                        setParamsToUnset={setParamsToUnset}
-                        paramsToDelete={paramsToDelete}
-                        setParamsToDelete={setParamsToDelete}
-                        disabled={actionInProgress}
                     />
                     {!(["sec", "cfg", "usr"].includes(kind)) && (
                         <>
@@ -1389,9 +1364,7 @@ const ObjectDetail = () => {
                 />
                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                     <Typography variant="h6">
-                        {selectedInstanceForLogs
-                            ? `Instance Logs - ${selectedInstanceForLogs}`
-                            : `Node Logs - ${selectedNodeForLogs}`}
+                        {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
                     </Typography>
                     <IconButton onClick={handleCloseLogsDrawer}>
                         <CloseIcon/>

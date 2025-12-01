@@ -15,6 +15,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import useEventStore from "../hooks/useEventStore.js";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
@@ -272,9 +273,15 @@ const Namespaces = () => {
                                                 >
                                                     <Box display="flex" justifyContent="center" alignItems="center"
                                                          gap={1}>
-                                                        <FiberManualRecordIcon
-                                                            sx={{fontSize: 18, color: getColorByStatus(status)}}
-                                                        />
+                                                        {status === "warn" ? (
+                                                            <PriorityHighIcon
+                                                                sx={{fontSize: 18, color: getColorByStatus(status)}}
+                                                            />
+                                                        ) : (
+                                                            <FiberManualRecordIcon
+                                                                sx={{fontSize: 18, color: getColorByStatus(status)}}
+                                                            />
+                                                        )}
                                                         <Typography variant="body1">{counts[status]}</Typography>
                                                     </Box>
                                                 </TableCell>

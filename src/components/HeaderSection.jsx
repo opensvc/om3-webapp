@@ -92,15 +92,16 @@ const HeaderSection = ({
 
                     <Box sx={{ml: globalExpect ? "70px" : 0, display: 'flex', alignItems: 'center', gap: 1}}>
                         <Tooltip title={getObjectStatus().avail || 'unknown'}>
-                            <FiberManualRecordIcon
-                                sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
-                            />
+                            {getObjectStatus().avail === 'warn' ? (
+                                <PriorityHighIcon
+                                    sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
+                                />
+                            ) : (
+                                <FiberManualRecordIcon
+                                    sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
+                                />
+                            )}
                         </Tooltip>
-                        {getObjectStatus().avail === 'warn' && (
-                            <Tooltip title="warn">
-                                <PriorityHighIcon sx={{color: orange[500], fontSize: '1.2rem'}}/>
-                            </Tooltip>
-                        )}
                         {getObjectStatus().frozen === 'frozen' && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>

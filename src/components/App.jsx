@@ -1,6 +1,7 @@
 import React, {useEffect, useCallback} from "react";
 import {Routes, Route, Navigate, useNavigate} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
+import SilentRenew from "./SilentRenew.jsx";
 import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
@@ -253,6 +254,7 @@ const App = () => {
                         <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                         <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                        <Route path="/silent-renew" element={<SilentRenew/>}/>
                         <Route path="/auth-callback" element={<OidcCallback/>}/>
                         <Route path="/auth-choice" element={<AuthChoice/>}/>
                         <Route path="/auth/login" element={<Login/>}/>

@@ -53,6 +53,7 @@ jest.mock('../../context/AuthProvider', () => ({
 
 let mockUserManager = {
     getUser: jest.fn(() => Promise.resolve(null)),
+    signinSilent: jest.fn(() => Promise.resolve(null)),
     events: {
         addUserLoaded: jest.fn(),
         addAccessTokenExpiring: jest.fn(),
@@ -108,6 +109,13 @@ const makeTokenWithExp = (expSecondsFromNow) => {
     return 'h.' + btoa(JSON.stringify(payload)) + '.s';
 };
 
+// Mock useNavigate
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+    ...jest.requireActual('react-router-dom'),
+    useNavigate: () => mockNavigate,
+}));
+
 describe('App Component', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -123,6 +131,7 @@ describe('App Component', () => {
         mockAuthState.isAuthenticated = false;
 
         mockUserManager.getUser.mockResolvedValue(null);
+        mockUserManager.signinSilent.mockResolvedValue(null);
         mockUserManager.events.addUserLoaded.mockClear();
         mockUserManager.events.addAccessTokenExpiring.mockClear();
         mockUserManager.events.addAccessTokenExpired.mockClear();
@@ -136,6 +145,7 @@ describe('App Component', () => {
         mockOidcModule.__setMockIsInitialized(true);
 
         oidcConfiguration.mockClear();
+        mockNavigate.mockClear();
     });
 
     test('renders NavBar and redirects from / to /cluster', async () => {
@@ -591,5 +601,390 @@ describe('App Component', () => {
         );
 
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+    });
+
+    test('initializeOidcOnStartup does not run if savedAuthChoice is not openid', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic'; // Not 'openid'
+            return null;
+        });
+        mockAuthState.authChoice = 'basic';
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(oidcConfiguration).not.toHaveBeenCalled();
+            expect(mockRecreateUserManager).not.toHaveBeenCalled();
+        });
+    });
+
+    test('initializeOidcOnStartup does not run without token', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return null; // No token
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+        mockAuthState.authChoice = 'openid';
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(oidcConfiguration).not.toHaveBeenCalled();
+            expect(mockRecreateUserManager).not.toHaveBeenCalled();
+        });
+    });
+
+    test('initializeOidcOnStartup does not run without authInfo', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+        mockAuthState.authChoice = 'openid';
+
+        const authInfoMock = require('../../hooks/AuthInfo.jsx');
+        authInfoMock.mockImplementation(() => null); // authInfo null
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(oidcConfiguration).not.toHaveBeenCalled();
+            expect(mockRecreateUserManager).not.toHaveBeenCalled();
+        });
+
+        // Restore implementation
+        authInfoMock.mockImplementation(() => ({
+            openid: {issuer: 'https://test-issuer.com', client_id: 'test-client'}
+        }));
+    });
+
+    test('initializeOidcOnStartup does not run if already initialized', async () => {
+        mockOidcModule.__setMockIsInitialized(true);
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+        mockAuthState.authChoice = 'openid';
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(oidcConfiguration).not.toHaveBeenCalled();
+            expect(mockRecreateUserManager).not.toHaveBeenCalled();
+        });
+    });
+
+    test('userManager.getUser returns null does not trigger login', async () => {
+        mockUserManager.getUser.mockResolvedValue(null);
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+
+        // Should not trigger SetAccessToken
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(
+            expect.objectContaining({type: 'SetAccessToken'})
+        );
+
+        // Should not trigger Login
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(
+            expect.objectContaining({type: 'Login'})
+        );
+    });
+
+    test('silent renew fails on expired user', async () => {
+        const expiredUser = {
+            profile: {preferred_username: 'expired-user'},
+            expired: true,
+        };
+
+        mockUserManager.getUser.mockResolvedValue(expiredUser);
+        mockUserManager.signinSilent.mockRejectedValue(new Error('Renew failed'));
+
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
+
+        expect(console.error).toHaveBeenCalledWith('Silent renew failed:', expect.any(Error));
+    });
+
+    test('ProtectedRoute redirects if authChoice openid without token', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return null; // No token
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('ProtectedRoute with null authChoice and invalid token', async () => {
+        const invalidToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return invalidToken;
+            if (k === 'authChoice') return null; // authChoice null
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
+        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authChoice');
+    });
+
+    test('handleCheckAuthOnResume does not redirect for OIDC with token', async () => {
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return 'oidc-token';
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Simulate focus
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Should not redirect
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(screen.queryByTestId('auth-choice')).not.toBeInTheDocument();
+    });
+
+    test('handleCheckAuthOnResume does not redirect for basic auth with valid token', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Simulate focus
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Should not redirect
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(screen.queryByTestId('auth-choice')).not.toBeInTheDocument();
+    });
+
+    test('does not save authChoice to localStorage if auth.authChoice is null', async () => {
+        mockAuthState.authChoice = null;
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockLocalStorage.setItem).not.toHaveBeenCalledWith('authChoice', expect.anything());
+        });
+    });
+
+    test('handles om3:auth-redirect event', async () => {
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        act(() => {
+            window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
+                detail: '/auth-choice'
+            }));
+        });
+
+        // Check that navigate was called
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('handles storage event with new token', async () => {
+        const newToken = makeTokenWithExp(3600);
+
+        // First, set up the initial state with no token
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return null;
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Now change the mock to return the new token when getItem is called after the storage event
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return newToken;
+            return null;
+        });
+
+        act(() => {
+            window.dispatchEvent(
+                new StorageEvent('storage', {
+                    key: 'authToken',
+                    newValue: newToken,
+                    oldValue: 'old-token',
+                    url: window.location.href
+                })
+            );
+        });
+
+        // Wait for the component to process the event
+        await waitFor(() => {
+            // Check that getItem was called with 'authToken'
+            expect(mockLocalStorage.getItem).toHaveBeenCalledWith('authToken');
+        });
+
+        // The component logs multiple debug messages, we need to find the storage event one
+        const debugCalls = console.debug.mock.calls;
+        const storageEventCalls = debugCalls.filter(call =>
+            call[0] === 'Storage event: newToken='
+        );
+
+        // Should have at least one storage event log
+        expect(storageEventCalls.length).toBeGreaterThan(0);
+
+        // The last storage event should have the newToken
+        const lastStorageCall = storageEventCalls[storageEventCalls.length - 1];
+        expect(lastStorageCall[0]).toBe('Storage event: newToken=');
+        expect(lastStorageCall[1]).toBe(newToken);
+    });
+
+    test('handles errors in handleCheckAuthOnResume', async () => {
+        mockLocalStorage.getItem.mockImplementation(() => {
+            throw new Error('Storage error');
+        });
+
+        // We need a valid token to reach the handleCheckAuthOnResume
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        // Now mock getItem to throw error for the focus event
+        mockLocalStorage.getItem.mockImplementation(() => {
+            throw new Error('Storage error');
+        });
+
+        // Simulate focus (which will trigger the error)
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        await waitFor(() => {
+            expect(console.error).toHaveBeenCalledWith(
+                'Error while checking auth on resume:',
+                expect.any(Error)
+            );
+        });
+    });
+
+    test('isTokenValid returns false for malformed token', async () => {
+        // Note: This function is not directly exported, we test it indirectly
+        // via ProtectedRoute
+        const invalidToken = 'not.a.valid.jwt';
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return invalidToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('isTokenValid returns false for expired token', async () => {
+        const expiredToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return expiredToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/cluster']}>
+                <App/>
+            </MemoryRouter>
+        );
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
 });

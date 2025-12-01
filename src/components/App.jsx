@@ -124,12 +124,23 @@ const OidcInitializer = ({children}) => {
 
             // Check for existing user
             userManager.getUser().then(user => {
-                    if (user && !user.expired) {
+                if (user && !user.expired) {
                     logger.info("Found existing valid user:", user.profile?.preferred_username);
                     onUserRefreshed(user);
                     authDispatch({type: LoginAction, data: user.profile.preferred_username});
                 } else if (user && user.expired) {
                     logger.debug("Found expired user, will attempt silent renew");
+                    userManager.signinSilent().then(refreshedUser => {
+                        if (refreshedUser && !refreshedUser.expired) {
+                            logger.info("Silent renew succeeded for:", refreshedUser.profile?.preferred_username);
+                            onUserRefreshed(refreshedUser);
+                            authDispatch({type: LoginAction, data: refreshedUser.profile.preferred_username});
+                        } else {
+                            logger.warn("Silent renew failed or user still expired, will trigger logout via error handler");
+                        }
+                    }).catch(error => {
+                        logger.error("Silent renew failed:", error);
+                    });
                 }
             }).catch(err => {
                 logger.error("Error getting user:", err);

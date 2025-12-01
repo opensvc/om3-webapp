@@ -152,13 +152,6 @@ const EventLogger = ({
         }
     };
 
-    // Get all unique event types from received logs for the filter dropdown
-    const allReceivedEventTypes = useMemo(() => {
-        const types = new Set();
-        eventLogs.forEach(log => types.add(log.eventType));
-        return Array.from(types).sort();
-    }, [eventLogs]);
-
     // Compute filtered logs based on eventTypes prop AND received events
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
@@ -356,9 +349,8 @@ const EventLogger = ({
         return [...subscribedEventTypes];
     }, [subscribedEventTypes]);
 
-    // Expose subscriptions via ref or other method if needed
     useEffect(() => {
-        logger.log("Subscriptions updated:", subscribedEventTypes); // Changé de info à log
+        logger.log("Subscriptions updated:", subscribedEventTypes);
     }, [subscribedEventTypes]);
 
     useEffect(() => {
@@ -531,7 +523,7 @@ const EventLogger = ({
                         onChange={(e) => setSearchTerm(e.target.value)}
                         sx={{minWidth: 240, flexGrow: 1}}
                     />
-                    {allReceivedEventTypes.length > 0 && (
+                    {availableEventTypes.length > 0 && (
                         <FormControl size="small" sx={{minWidth: 240}}>
                             <InputLabel>Event Types</InputLabel>
                             <Select
@@ -541,7 +533,7 @@ const EventLogger = ({
                                 label="Event Types"
                                 renderValue={(selected) => (selected.length === 0 ? "All events" : `${selected.length} selected`)}
                             >
-                                {allReceivedEventTypes.map((et) => (
+                                {availableEventTypes.map((et) => (
                                     <MenuItem key={et} value={et}>
                                         <Checkbox checked={eventTypeFilter.includes(et)} size="small"/>
                                         <ListItemText

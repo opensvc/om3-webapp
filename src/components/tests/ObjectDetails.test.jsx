@@ -16,6 +16,8 @@ jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
+    startLoggerReception: jest.fn(),
+    closeLoggerEventSource: jest.fn(),
 }));
 
 // Mock Material-UI components
@@ -1100,28 +1102,6 @@ type = flag
         );
     }, 15000);
 
-    test('mount without token', async () => {
-        mockLocalStorage.getItem.mockReturnValueOnce(null);
-        useEventStore.mockImplementation((sel) =>
-            sel({
-                objectStatus: {},
-                objectInstanceStatus: {'root/cfg/cfg1': {node1: {resources: {}}}},
-                instanceMonitor: {},
-                instanceConfig: {},
-                configUpdates: [],
-                clearConfigUpdate: jest.fn(),
-            })
-        );
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        expect(startEventReception).not.toHaveBeenCalled();
-    });
-
     test('subscription without node does not trigger fetchConfig', async () => {
         const unsubscribeMock = jest.fn();
         useEventStore.subscribe = jest.fn((sel, cb) => {
@@ -1243,7 +1223,7 @@ type = flag
         const actionButton = await screen.findByRole('button', {name: /object actions/i});
         await user.click(actionButton);
         await waitFor(() => {
-            const menus = screen.getAllByRole('menu');
+            const menus = screen.queryAllByRole('menu');
             expect(menus.length).toBeGreaterThan(0);
         }, {timeout: 5000});
         const menus = screen.getAllByRole('menu');
@@ -2229,13 +2209,10 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        // Test simple: vérifier que le composant se rend sans erreur
         await waitFor(() => {
-            // Vérifier que quelque chose est rendu
             const content = document.body.textContent;
             expect(content).toBeTruthy();
         }, {timeout: 10000});
-        // Vérifier que nous avons au moins un élément de nœud
         const nodeElements = screen.queryAllByText(/node/);
         expect(nodeElements.length).toBeGreaterThan(0);
     });

@@ -30,6 +30,8 @@ jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
     configureEventSource: jest.fn(),
+    startLoggerReception: jest.fn(),
+    closeLoggerEventSource: jest.fn(),
 }));
 
 jest.mock('@mui/material', () => {

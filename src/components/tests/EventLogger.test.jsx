@@ -1536,61 +1536,69 @@ describe('EventLogger Component', () => {
             {id: '2', eventType: 'EVENT2', timestamp: new Date().toISOString(), data: {}},
             {id: '3', eventType: 'EVENT3', timestamp: new Date().toISOString(), data: {}},
         ];
+
         useEventLogStore.mockReturnValue({
             eventLogs: mockLogs,
             isPaused: false,
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+
+        renderWithTheme(<EventLogger eventTypes={eventTypes} />);
         fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
+
         const subChip = screen.getByText(/Subscribed to: 3 event type\(s\)/i);
         fireEvent.click(subChip);
+
         await waitFor(() => {
             expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
         });
-        // Check initial state
+
         let checkboxes = screen.getAllByRole('checkbox');
         expect(checkboxes.length).toBe(3);
         checkboxes.forEach(cb => expect(cb).toBeChecked());
-        // Subscribe to All (already all, but disabled? Wait, test clicks)
-        const subscribeAll = screen.getByText('Subscribe to All');
-        fireEvent.click(subscribeAll);
+
+        const subscribeAllButton = screen.getByText('Subscribe to All');
+        fireEvent.click(subscribeAllButton);
         checkboxes = screen.getAllByRole('checkbox');
         checkboxes.forEach(cb => expect(cb).toBeChecked());
-        // Unsubscribe from All
-        const unsubscribeAll = screen.getByText('Unsubscribe from All');
-        fireEvent.click(unsubscribeAll);
+
+        const unsubscribeAllButton = screen.getByText('Unsubscribe from All');
+        fireEvent.click(unsubscribeAllButton);
         checkboxes = screen.getAllByRole('checkbox');
         checkboxes.forEach(cb => expect(cb).not.toBeChecked());
-        // Reset to Default
-        const reset = screen.getByText('Reset to Default');
-        fireEvent.click(reset);
+
+        fireEvent.click(subscribeAllButton);
         checkboxes = screen.getAllByRole('checkbox');
         checkboxes.forEach(cb => expect(cb).toBeChecked());
-        // Manually toggle one
+
         fireEvent.click(checkboxes[0]);
         expect(checkboxes[0]).not.toBeChecked();
-        // Check event stats
+
         const statsElements = screen.getAllByText(/1 events received/i);
         expect(statsElements.length).toBe(3);
-        // Apply
+
         fireEvent.click(screen.getByText('Apply Subscriptions'));
         await waitFor(() => {
             expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
         });
-        // Subscription chip updated
+
         await waitFor(() => {
             expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
         });
-        // Check logger called on update
+
         expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
     });
 
     test('handles subscription dialog with no eventTypes', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
         fireEvent.click(screen.getByRole('button', {name: /Event Logger/i}));
-        expect(screen.queryByText(/Subscribed to:/i)).not.toBeInTheDocument();
+        const chip = screen.getByText(/Subscribed to: 0 event type\(s\)/i);
+        expect(chip).toBeInTheDocument();
+        fireEvent.click(chip);
+        await waitFor(() => {
+            expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+        });
     });
 
     test('closes subscription dialog with close button', async () => {

@@ -1,3 +1,4 @@
+// Heartbeats.test.jsx
 import React from "react";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
@@ -8,6 +9,8 @@ import useEventStore from "../../hooks/useEventStore.js";
 import {
     closeEventSource,
     startEventReception,
+    startLoggerReception,
+    closeLoggerEventSource,
 } from "../../eventSourceManager.jsx";
 
 jest.mock("../../hooks/useEventStore.js", () => ({
@@ -18,6 +21,8 @@ jest.mock("../../hooks/useEventStore.js", () => ({
 jest.mock("../../eventSourceManager.jsx", () => ({
     startEventReception: jest.fn(),
     closeEventSource: jest.fn(),
+    startLoggerReception: jest.fn(),
+    closeLoggerEventSource: jest.fn(),
 }));
 
 const mockLocalStorage = {
@@ -39,12 +44,16 @@ const renderWithRouter = (ui, {route = "/"} = {}) => {
 describe("Heartbeats Component", () => {
     const mockStartEventReception = jest.fn();
     const mockCloseEventSource = jest.fn();
+    const mockStartLoggerReception = jest.fn();
+    const mockCloseLoggerEventSource = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
         mockLocalStorage.getItem.mockReturnValue("valid-token");
         startEventReception.mockImplementation(mockStartEventReception);
         closeEventSource.mockImplementation(mockCloseEventSource);
+        startLoggerReception.mockImplementation(mockStartLoggerReception);
+        closeLoggerEventSource.mockImplementation(mockCloseLoggerEventSource);
     });
 
     afterEach(() => {

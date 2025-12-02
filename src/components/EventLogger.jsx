@@ -29,6 +29,7 @@ import {
 } from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
+import {startLoggerReception, closeLoggerEventSource} from "../eventSourceManager";
 
 const EventLogger = ({
                          eventTypes = [],
@@ -223,106 +224,103 @@ const EventLogger = ({
     }, [baseFilteredLogs, eventTypeFilter, searchTerm, filterData]);
 
 
-    const SubscriptionDialog = () => (
-        <Drawer
-            anchor="right"
-            open={subscriptionDialogOpen}
-            onClose={() => setSubscriptionDialogOpen(false)}
-            sx={{
-                '& .MuiDrawer-paper': {
-                    width: 400,
-                    maxWidth: '90vw',
-                    p: 2
-                }
-            }}
-        >
-            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Typography variant="h6">Event Subscriptions</Typography>
-                <IconButton onClick={() => setSubscriptionDialogOpen(false)}>
-                    <Close/>
-                </IconButton>
-            </Box>
+    const SubscriptionDialog = () => {
+        const [tempSubscribedEventTypes, setTempSubscribedEventTypes] = useState(subscribedEventTypes);
 
-            <Divider sx={{mb: 2}}/>
+        return (
+            <Drawer
+                anchor="right"
+                open={subscriptionDialogOpen}
+                onClose={() => setSubscriptionDialogOpen(false)}
+                sx={{
+                    '& .MuiDrawer-paper': {
+                        width: 400,
+                        maxWidth: '90vw',
+                        p: 2
+                    }
+                }}
+            >
+                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                    <Typography variant="h6">Event Subscriptions</Typography>
+                    <IconButton onClick={() => setSubscriptionDialogOpen(false)}>
+                        <Close/>
+                    </IconButton>
+                </Box>
 
-            <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
-                Select which event types you want to SUBSCRIBE to (this affects future events only):
-            </Typography>
+                <Divider sx={{mb: 2}}/>
 
-            <Box sx={{mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
-                <Button
-                    size="small"
-                    onClick={() => setSubscribedEventTypes([...eventTypes])}
-                    disabled={eventTypes.length === 0}
-                >
-                    Subscribe to All
-                </Button>
-                <Button
-                    size="small"
-                    onClick={() => setSubscribedEventTypes([])}
-                >
-                    Unsubscribe from All
-                </Button>
-                <Button
-                    size="small"
-                    onClick={() => setSubscribedEventTypes([...eventTypes])}
-                >
-                    Reset to Default
-                </Button>
-            </Box>
+                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                    Select which event types you want to SUBSCRIBE to (this affects future events only):
+                </Typography>
 
-            <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
-                {eventTypes.length === 0 ? (
-                    <Typography color="text.secondary" sx={{textAlign: 'center', py: 4}}>
-                        No event types available for this page
-                    </Typography>
-                ) : (
-                    eventTypes.map(eventType => (
-                        <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5}}>
-                            <Checkbox
-                                checked={subscribedEventTypes.includes(eventType)}
-                                onChange={(e) => {
-                                    if (e.target.checked) {
-                                        setSubscribedEventTypes(prev => [...prev, eventType]);
-                                    } else {
-                                        setSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
-                                    }
-                                }}
-                                size="small"
-                            />
-                            <Box sx={{flex: 1, minWidth: 0}}>
-                                <Typography variant="body2" noWrap>
-                                    {eventType}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {eventStats[eventType] || 0} events received
-                                </Typography>
+                <Box sx={{mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
+                    <Button
+                        size="small"
+                        onClick={() => setTempSubscribedEventTypes([...eventTypes])}
+                        disabled={eventTypes.length === 0}
+                    >
+                        Subscribe to All
+                    </Button>
+                    <Button
+                        size="small"
+                        onClick={() => setTempSubscribedEventTypes([])}
+                    >
+                        Unsubscribe from All
+                    </Button>
+                </Box>
+
+                <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
+                    {eventTypes.length === 0 ? (
+                        <Typography color="text.secondary" sx={{textAlign: 'center', py: 4}}>
+                            No event types available for this page
+                        </Typography>
+                    ) : (
+                        eventTypes.map(eventType => (
+                            <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5}}>
+                                <Checkbox
+                                    checked={tempSubscribedEventTypes.includes(eventType)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setTempSubscribedEventTypes(prev => [...prev, eventType]);
+                                        } else {
+                                            setTempSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
+                                        }
+                                    }}
+                                    size="small"
+                                />
+                                <Box sx={{flex: 1, minWidth: 0}}>
+                                    <Typography variant="body2" noWrap>
+                                        {eventType}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {eventStats[eventType] || 0} events received
+                                    </Typography>
+                                </Box>
                             </Box>
-                        </Box>
-                    ))
-                )}
-            </Box>
+                        ))
+                    )}
+                </Box>
 
-            <Box sx={{mt: 'auto', pt: 2}}>
-                <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={() => setSubscriptionDialogOpen(false)}
-                >
-                    Apply Subscriptions
-                </Button>
-            </Box>
-        </Drawer>
-    );
+                <Box sx={{mt: 'auto', pt: 2}}>
+                    <Button
+                        fullWidth
+                        variant="contained"
+                        onClick={() => {
+                            setSubscribedEventTypes(tempSubscribedEventTypes);
+                            setSubscriptionDialogOpen(false);
+                        }}
+                    >
+                        Apply Subscriptions
+                    </Button>
+                </Box>
+            </Drawer>
+        );
+    };
 
     // Subscription info component
     const SubscriptionInfo = () => {
-        if (subscribedEventTypes.length === 0 && !objectName) {
-            return null;
-        }
-
         const subscriptionText = [
-            subscribedEventTypes.length > 0 && `${subscribedEventTypes.length} event type(s)`,
+            `${subscribedEventTypes.length} event type(s)`,
             objectName && `object: ${objectName}`
         ].filter(Boolean).join(' • ');
 
@@ -436,6 +434,17 @@ const EventLogger = ({
         borderTopRightRadius: 8,
         backgroundColor: theme.palette.background.paper
     };
+
+    // Manage logger EventSource
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            startLoggerReception(token, subscribedEventTypes, objectName);
+        }
+        return () => {
+            closeLoggerEventSource();
+        };
+    }, [subscribedEventTypes, objectName]);
 
     return (
         <>

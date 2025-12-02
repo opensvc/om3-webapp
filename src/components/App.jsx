@@ -86,7 +86,7 @@ const OidcInitializer = ({children}) => {
             const savedToken = localStorage.getItem('authToken');
             const savedAuthChoice = auth.authChoice || localStorage.getItem('authChoice');
 
-                if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
+            if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
                 logger.info("Initializing OIDC UserManager on app startup");
                 try {
                     const config = await oidcConfiguration(authInfo);
@@ -106,7 +106,7 @@ const OidcInitializer = ({children}) => {
 
     // Set up OIDC event listeners once the UserManager is created
     useEffect(() => {
-            if (userManager && auth.authChoice === 'openid') {
+        if (userManager && auth.authChoice === 'openid') {
             logger.info("Setting up OIDC event listeners");
 
             // Remove old listeners
@@ -209,15 +209,14 @@ const App = () => {
                         logger.warn('No OIDC token found on resume, redirecting to /auth-choice');
                         navigate('/auth-choice', {replace: true});
                     }
+                    if (!isTokenValid(token)) {
+                        logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
+                        localStorage.removeItem('authToken');
+                        localStorage.removeItem('tokenExpiration');
+                        localStorage.removeItem('authChoice');
+                        navigate('/auth-choice', {replace: true});
+                    }
                     return;
-                }
-
-                if (!isTokenValid(token)) {
-                    logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('tokenExpiration');
-                    localStorage.removeItem('authChoice');
-                    navigate('/auth-choice', {replace: true});
                 }
             } catch (err) {
                 logger.error('Error while checking auth on resume:', err);

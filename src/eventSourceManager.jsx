@@ -365,26 +365,10 @@ export const createLoggerEventSource = (url, token, filters) => {
     currentLoggerEventSource.onopen = () => {
         logger.info('✅ Logger EventSource connection established');
         reconnectAttempts = 0;
-        if (filters.includes('CONNECTION_OPENED')) {
-            useEventLogStore.getState().addEventLog('CONNECTION_OPENED', {
-                url,
-                timestamp: new Date().toISOString()
-            });
-        }
     };
 
     currentLoggerEventSource.onerror = (error) => {
         logger.error('🚨 Logger EventSource error:', error, 'URL:', url, 'readyState:', currentLoggerEventSource?.readyState);
-
-        if (filters.includes('CONNECTION_ERROR')) {
-            useEventLogStore.getState().addEventLog('CONNECTION_ERROR', {
-                error: error.message,
-                status: error.status,
-                readyState: currentLoggerEventSource?.readyState,
-                url,
-                timestamp: new Date().toISOString()
-            });
-        }
 
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected in logger');
@@ -415,15 +399,6 @@ export const createLoggerEventSource = (url, token, filters) => {
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-            if (filters.includes('RECONNECTION_ATTEMPT')) {
-                useEventLogStore.getState().addEventLog('RECONNECTION_ATTEMPT', {
-                    attempt: reconnectAttempts,
-                    maxAttempts: MAX_RECONNECT_ATTEMPTS,
-                    delay,
-                    timestamp: new Date().toISOString()
-                });
-            }
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -432,12 +407,6 @@ export const createLoggerEventSource = (url, token, filters) => {
             }, delay);
         } else {
             logger.error('❌ Max reconnection attempts reached for logger');
-            if (filters.includes('MAX_RECONNECTIONS_REACHED')) {
-                useEventLogStore.getState().addEventLog('MAX_RECONNECTIONS_REACHED', {
-                    maxAttempts: MAX_RECONNECT_ATTEMPTS,
-                    timestamp: new Date().toISOString()
-                });
-            }
             navigationService.redirectToAuth();
         }
     };

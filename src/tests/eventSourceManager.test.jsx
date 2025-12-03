@@ -1060,11 +1060,11 @@ describe('eventSourceManager', () => {
             expect(console.error).toHaveBeenCalledWith('❌ Missing token for Logger EventSource!');
         });
 
-        test('should handle open event and log if subscribed', () => {
-            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['CONNECTION_OPENED']);
+        test('should handle open event but not log it', () => {
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             mockLoggerEventSource.onopen();
             expect(console.info).toHaveBeenCalledWith('✅ Logger EventSource connection established');
-            expect(mockLogStore.addEventLog).toHaveBeenCalledWith('CONNECTION_OPENED', expect.any(Object));
+            expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('CONNECTION_OPENED', expect.any(Object));
         });
 
         test('should not log open if not subscribed', () => {
@@ -1073,12 +1073,12 @@ describe('eventSourceManager', () => {
             expect(mockLogStore.addEventLog).not.toHaveBeenCalled();
         });
 
-        test('should handle error and log if subscribed', () => {
-            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['CONNECTION_ERROR']);
+        test('should handle error but not log connection error', () => {
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             const error = {message: 'test error', status: 500};
             mockLoggerEventSource.onerror(error);
             expect(console.error).toHaveBeenCalled();
-            expect(mockLogStore.addEventLog).toHaveBeenCalledWith('CONNECTION_ERROR', expect.any(Object));
+            expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('CONNECTION_ERROR', expect.any(Object));
         });
 
         test('should handle 401 error in logger with silent renew', async () => {
@@ -1102,8 +1102,8 @@ describe('eventSourceManager', () => {
             expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'new-logger-token');
         });
 
-        test('should handle max reconnections in logger', () => {
-            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['MAX_RECONNECTIONS_REACHED']);
+        test('should handle max reconnections in logger without logging', () => {
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
 
             for (let i = 0; i < 15; i++) {
                 mockLoggerEventSource.onerror({status: 500});
@@ -1111,7 +1111,7 @@ describe('eventSourceManager', () => {
             }
 
             expect(console.error).toHaveBeenCalledWith('❌ Max reconnection attempts reached for logger');
-            expect(mockLogStore.addEventLog).toHaveBeenCalledWith('MAX_RECONNECTIONS_REACHED', expect.any(Object));
+            expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('MAX_RECONNECTIONS_REACHED', expect.any(Object));
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
 

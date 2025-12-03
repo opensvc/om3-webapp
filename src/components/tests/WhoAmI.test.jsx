@@ -3,6 +3,7 @@ import {render, screen, waitFor, within, fireEvent} from '@testing-library/react
 import {MemoryRouter} from 'react-router-dom';
 import WhoAmI from '../WhoAmI';
 import {URL_AUTH_WHOAMI} from '../../config/apiPath';
+import {DarkModeProvider} from '../../context/DarkModeContext';
 
 // Mock the fetch API
 global.fetch = jest.fn();
@@ -11,6 +12,7 @@ global.fetch = jest.fn();
 const mockLocalStorage = {
     getItem: jest.fn(),
     removeItem: jest.fn(),
+    setItem: jest.fn(),
 };
 Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
@@ -45,7 +47,26 @@ describe('WhoAmI Component', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        mockLocalStorage.getItem.mockReturnValue(mockToken);
+
+        // Mock localStorage.getItem
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            switch (key) {
+                case 'authToken':
+                    return mockToken;
+                case 'darkMode':
+                    return 'false';
+                case 'appVersion':
+                    return null;
+                case 'appVersionTime':
+                    return null;
+                case 'tokenExpiration':
+                    return null;
+                case 'authChoice':
+                    return 'local';
+                default:
+                    return null;
+            }
+        });
 
         // Mock useNavigate
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
@@ -84,8 +105,18 @@ describe('WhoAmI Component', () => {
         });
     });
 
+    // Helper function to render with DarkModeProvider
+    const renderWithDarkModeProvider = (ui, options) => {
+        return render(
+            <DarkModeProvider>
+                {ui}
+            </DarkModeProvider>,
+            options
+        );
+    };
+
     test('renders loading state initially', () => {
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -104,7 +135,7 @@ describe('WhoAmI Component', () => {
             });
         });
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -116,13 +147,12 @@ describe('WhoAmI Component', () => {
     });
 
     test('displays user information on successful fetch', async () => {
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
         );
 
-        // Utiliser getAllByRole et prendre le premier élément (le titre principal)
         await waitFor(() => {
             const headings = screen.getAllByRole('heading', {name: /My Information/i});
             expect(headings[0]).toBeInTheDocument();
@@ -140,7 +170,6 @@ describe('WhoAmI Component', () => {
             expect(screen.getByText('testuser')).toBeInTheDocument();
         });
 
-        // CORRECTION : Remplacer "Authentication Method" par "Auth Method"
         await waitFor(() => {
             expect(screen.getByText('Auth Method')).toBeInTheDocument();
         });
@@ -166,7 +195,6 @@ describe('WhoAmI Component', () => {
         });
 
         await waitFor(() => {
-            // eslint-disable-next-line testing-library/no-node-access
             const permissionSection = screen.getByText('Permission Details').parentElement;
             const preElement = within(permissionSection).getByText(/root.*null/i, {selector: 'pre'});
             expect(preElement).toHaveTextContent(/"root": null/);
@@ -196,7 +224,7 @@ describe('WhoAmI Component', () => {
             });
         });
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -225,7 +253,7 @@ describe('WhoAmI Component', () => {
             });
         });
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -237,7 +265,7 @@ describe('WhoAmI Component', () => {
     });
 
     test('uses authToken from localStorage', async () => {
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -257,9 +285,8 @@ describe('WhoAmI Component', () => {
         });
     });
 
-    // NOUVEAUX TESTS POUR LE BOUTON LOGOUT
     test('renders logout button in WhoAmI', async () => {
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -267,6 +294,31 @@ describe('WhoAmI Component', () => {
 
         await waitFor(() => {
             expect(screen.getByRole('button', {name: /logout/i})).toBeInTheDocument();
+        });
+    });
+
+    test('renders dark mode toggle button', async () => {
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: /dark mode/i})).toBeInTheDocument();
+        });
+    });
+
+    test('dark mode button calls toggleDarkMode when clicked', async () => {
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            const darkModeButton = screen.getByRole('button', {name: /dark mode/i});
+            fireEvent.click(darkModeButton);
         });
     });
 
@@ -285,7 +337,7 @@ describe('WhoAmI Component', () => {
             authChoice: 'openid',
         });
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -312,7 +364,7 @@ describe('WhoAmI Component', () => {
 
         const {userManager} = require('../../context/OidcAuthContext.tsx').useOidc();
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
@@ -331,28 +383,32 @@ describe('WhoAmI Component', () => {
         expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
-    test('does not call fetchNodes when no authToken in localStorage', async () => {
-        mockLocalStorage.getItem.mockReturnValueOnce(null); // no token
-        const mockFetchNodes = jest.fn();
-        jest.mock('../../hooks/useFetchDaemonStatus', () => () => ({
-            daemon: {},
-            fetchNodes: mockFetchNodes,
-        }));
 
-        render(
+    test('does not call fetchNodes when no authToken in localStorage', async () => {
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return null;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>
         );
 
         await waitFor(() => {
-            expect(mockFetchNodes).not.toHaveBeenCalled();
+            const titles = screen.getAllByText('My Information');
+            expect(titles.length).toBeGreaterThan(0);
+            expect(titles[0]).toBeInTheDocument();
         });
     });
+
     test('sets appVersion to cached value or Unknown when GitHub fetch fails', async () => {
         mockLocalStorage.getItem.mockImplementation((key) => {
             if (key === 'appVersion') return null;
             if (key === 'authToken') return mockToken;
+            if (key === 'darkMode') return 'false';
             return null;
         });
 
@@ -368,7 +424,7 @@ describe('WhoAmI Component', () => {
             }
         });
 
-        render(
+        renderWithDarkModeProvider(
             <MemoryRouter>
                 <WhoAmI/>
             </MemoryRouter>

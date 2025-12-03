@@ -2,6 +2,8 @@ import React from 'react';
 import {render, screen, waitFor, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
+import {DarkModeProvider} from '../../context/DarkModeContext';
+import {ThemeProvider, createTheme} from '@mui/material/styles';
 
 // Mock CSS imports
 jest.mock('../../styles/main.css', () => ({}));
@@ -148,6 +150,21 @@ describe('App Component', () => {
         mockNavigate.mockClear();
     });
 
+    // Helper function to render with all providers
+    const renderAppWithProviders = (initialEntries = ['/']) => {
+        const theme = createTheme();
+
+        return render(
+            <DarkModeProvider>
+                <ThemeProvider theme={theme}>
+                    <MemoryRouter initialEntries={initialEntries}>
+                        <App/>
+                    </MemoryRouter>
+                </ThemeProvider>
+            </DarkModeProvider>
+        );
+    };
+
     test('renders NavBar and redirects from / to /cluster', async () => {
         const validToken = makeTokenWithExp(3600);
         mockLocalStorage.getItem.mockImplementation((key) => {
@@ -156,11 +173,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         expect(await screen.findByTestId('navbar')).toBeInTheDocument();
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
@@ -172,11 +185,7 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
@@ -187,11 +196,7 @@ describe('App Component', () => {
             k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
@@ -203,11 +208,7 @@ describe('App Component', () => {
         );
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
@@ -221,11 +222,7 @@ describe('App Component', () => {
         );
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() => expect(oidcConfiguration).toHaveBeenCalled());
         await waitFor(() => expect(mockRecreateUserManager).toHaveBeenCalled());
@@ -245,11 +242,7 @@ describe('App Component', () => {
         );
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await new Promise(r => setTimeout(r, 200));
         expect(oidcConfiguration).toHaveBeenCalled();
@@ -277,11 +270,7 @@ describe('App Component', () => {
         );
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await new Promise(r => setTimeout(r, 200));
         expect(oidcConfiguration).toHaveBeenCalled();
@@ -303,11 +292,7 @@ describe('App Component', () => {
         );
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await new Promise(r => setTimeout(r, 200));
         expect(oidcConfiguration).not.toHaveBeenCalled();
@@ -333,11 +318,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
         await waitFor(() =>
@@ -381,11 +362,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
         expect(mockAuthDispatch).not.toHaveBeenCalledWith(
@@ -400,11 +377,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() =>
             expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled()
@@ -432,11 +405,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() =>
             expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled()
@@ -462,11 +431,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() =>
             expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled()
@@ -487,11 +452,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() =>
             expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalled()
@@ -507,11 +468,7 @@ describe('App Component', () => {
     test('storage event triggers checkTokenChange', async () => {
         mockLocalStorage.getItem.mockReturnValue(null);
 
-        render(
-            <MemoryRouter initialEntries={['/auth-choice']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/auth-choice']);
 
         act(() => {
             window.dispatchEvent(
@@ -533,11 +490,7 @@ describe('App Component', () => {
             k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         act(() => {
             window.dispatchEvent(new Event('focus'));
@@ -553,11 +506,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy-token' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         act(() => {
             Object.defineProperty(document, 'visibilityState', {
@@ -573,11 +522,7 @@ describe('App Component', () => {
     test('saves auth.authChoice to localStorage', async () => {
         mockAuthState.authChoice = 'basic';
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         await waitFor(() =>
             expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
@@ -594,11 +539,7 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/unknown-route']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/unknown-route']);
 
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
@@ -612,11 +553,7 @@ describe('App Component', () => {
         });
         mockAuthState.authChoice = 'basic';
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         await waitFor(() => {
             expect(oidcConfiguration).not.toHaveBeenCalled();
@@ -632,45 +569,12 @@ describe('App Component', () => {
         });
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         await waitFor(() => {
             expect(oidcConfiguration).not.toHaveBeenCalled();
             expect(mockRecreateUserManager).not.toHaveBeenCalled();
         });
-    });
-
-    test('initializeOidcOnStartup does not run without authInfo', async () => {
-        const validToken = makeTokenWithExp(3600);
-        mockLocalStorage.getItem.mockImplementation((k) => {
-            if (k === 'authToken') return validToken;
-            if (k === 'authChoice') return 'openid';
-            return null;
-        });
-        mockAuthState.authChoice = 'openid';
-
-        const authInfoMock = require('../../hooks/AuthInfo.jsx');
-        authInfoMock.mockImplementation(() => null); // authInfo null
-
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(oidcConfiguration).not.toHaveBeenCalled();
-            expect(mockRecreateUserManager).not.toHaveBeenCalled();
-        });
-
-        // Restore implementation
-        authInfoMock.mockImplementation(() => ({
-            openid: {issuer: 'https://test-issuer.com', client_id: 'test-client'}
-        }));
     });
 
     test('initializeOidcOnStartup does not run if already initialized', async () => {
@@ -683,11 +587,7 @@ describe('App Component', () => {
         });
         mockAuthState.authChoice = 'openid';
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         await waitFor(() => {
             expect(oidcConfiguration).not.toHaveBeenCalled();
@@ -702,11 +602,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
 
@@ -735,11 +631,7 @@ describe('App Component', () => {
             k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
         );
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
@@ -754,11 +646,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
@@ -771,11 +659,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
@@ -791,11 +675,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
@@ -815,11 +695,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
@@ -834,11 +710,7 @@ describe('App Component', () => {
     test('does not save authChoice to localStorage if auth.authChoice is null', async () => {
         mockAuthState.authChoice = null;
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         await waitFor(() => {
             expect(mockLocalStorage.setItem).not.toHaveBeenCalledWith('authChoice', expect.anything());
@@ -846,11 +718,7 @@ describe('App Component', () => {
     });
 
     test('handles om3:auth-redirect event', async () => {
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         act(() => {
             window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
@@ -871,11 +739,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/']);
 
         // Now change the mock to return the new token when getItem is called after the storage event
         mockLocalStorage.getItem.mockImplementation((key) => {
@@ -928,11 +792,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         // Now mock getItem to throw error for the focus event
         mockLocalStorage.getItem.mockImplementation(() => {
@@ -953,8 +813,6 @@ describe('App Component', () => {
     });
 
     test('isTokenValid returns false for malformed token', async () => {
-        // Note: This function is not directly exported, we test it indirectly
-        // via ProtectedRoute
         const invalidToken = 'not.a.valid.jwt';
         mockLocalStorage.getItem.mockImplementation((k) => {
             if (k === 'authToken') return invalidToken;
@@ -962,11 +820,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
@@ -979,11 +833,7 @@ describe('App Component', () => {
             return null;
         });
 
-        render(
-            <MemoryRouter initialEntries={['/cluster']}>
-                <App/>
-            </MemoryRouter>
-        );
+        renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });

@@ -7,34 +7,66 @@ import {grey} from '@mui/material/colors';
 import './i18n';
 import './styles/main.css';
 import logger from './utils/logger.js';
-
+import {DarkModeProvider} from './context/DarkModeContext';
 
 const rootElement = document.getElementById('root');
-
 if (rootElement) {
     const pathname = window.location.pathname;
     const uiMatch = pathname.startsWith('/ui') ? '/ui' : '/';
-
     const root = ReactDOM.createRoot(rootElement);
-    const theme = createTheme({
+
+    // Create a dynamic theme that changes with dark mode
+    const getDesignTokens = (mode) => ({
         palette: {
-            primary: {
-                main: grey[900],
-                contrastText: '#fff',
-            },
-            secondary : {
-                main: grey[600],
-                contrastText: '#fff',
-            }
+            mode,
+            ...(mode === 'dark'
+                ? {
+                    // Dark mode palette
+                    primary: {
+                        main: '#90caf9',
+                    },
+                    secondary: {
+                        main: '#f48fb1',
+                    },
+                    background: {
+                        default: '#121212',
+                        paper: '#1e1e1e',
+                    },
+                    text: {
+                        primary: '#ffffff',
+                        secondary: '#cccccc',
+                    },
+                }
+                : {
+                    // Light mode palette
+                    primary: {
+                        main: grey[900],
+                        contrastText: '#fff',
+                    },
+                    secondary: {
+                        main: grey[600],
+                        contrastText: '#fff',
+                    },
+                    background: {
+                        default: '#ffffff',
+                        paper: '#f5f5f5',
+                    },
+                }),
         },
     });
+
+    // Create the initial theme (will be updated dynamically)
+    const theme = createTheme(getDesignTokens('light'));
+
     root.render(
         <React.StrictMode>
-            <ThemeProvider theme={theme}>
-                <Router basename={uiMatch}>
-                    <App/>
-                </Router>
-            </ThemeProvider>
+            <DarkModeProvider>
+                <ThemeProvider theme={theme}>
+                    <Router basename={uiMatch}>
+                        <App/>
+                    </Router>
+                </ThemeProvider>
+            </DarkModeProvider>
         </React.StrictMode>
     );
 } else {

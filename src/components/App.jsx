@@ -27,15 +27,60 @@ import {
 } from "../context/AuthProvider";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
-
 import logger from "../utils/logger.js";
+import {useDarkMode} from "../context/DarkModeContext";
+import {ThemeProvider, createTheme} from '@mui/material/styles';
+
+const DynamicThemeProvider = ({children}) => {
+    const {isDarkMode} = useDarkMode();
+
+    const theme = React.useMemo(
+        () =>
+            createTheme({
+                palette: {
+                    mode: isDarkMode ? 'dark' : 'light',
+                    ...(isDarkMode
+                        ? {
+                            primary: {
+                                main: '#90caf9',
+                            },
+                            secondary: {
+                                main: '#f48fb1',
+                            },
+                            background: {
+                                default: '#121212',
+                                paper: '#1e1e1e',
+                            },
+                            text: {
+                                primary: '#ffffff',
+                                secondary: '#cccccc',
+                            },
+                        }
+                        : {
+                            primary: {
+                                main: '#1976d2',
+                            },
+                            secondary: {
+                                main: '#dc004e',
+                            },
+                            background: {
+                                default: '#ffffff',
+                                paper: '#f5f5f5',
+                            },
+                        }),
+                },
+            }),
+        [isDarkMode],
+    );
+
+    return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+};
 
 const isTokenValid = (token) => {
     if (!token) {
         logger.debug("No token found in localStorage");
         return false;
     }
-
     try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         const now = Date.now() / 1000;
@@ -85,13 +130,11 @@ const OidcInitializer = ({children}) => {
         const initializeOidcOnStartup = async () => {
             const savedToken = localStorage.getItem('authToken');
             const savedAuthChoice = auth.authChoice || localStorage.getItem('authChoice');
-
             if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
                 logger.info("Initializing OIDC UserManager on app startup");
                 try {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
-
                     // Update authentication state
                     authDispatch({type: SetAuthChoice, data: 'openid'});
                     authDispatch({type: SetAccessToken, data: savedToken});
@@ -100,7 +143,6 @@ const OidcInitializer = ({children}) => {
                 }
             }
         };
-
         initializeOidcOnStartup();
     }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
 
@@ -108,12 +150,10 @@ const OidcInitializer = ({children}) => {
     useEffect(() => {
         if (userManager && auth.authChoice === 'openid') {
             logger.info("Setting up OIDC event listeners");
-
             // Remove old listeners
             userManager.events.removeUserLoaded(onUserRefreshed);
             userManager.events.removeAccessTokenExpired(handleTokenExpired);
             userManager.events.removeSilentRenewError(handleSilentRenewError);
-
             // Add new listeners
             userManager.events.addUserLoaded(onUserRefreshed);
             userManager.events.addAccessTokenExpiring(() => {
@@ -121,7 +161,6 @@ const OidcInitializer = ({children}) => {
             });
             userManager.events.addAccessTokenExpired(handleTokenExpired);
             userManager.events.addSilentRenewError(handleSilentRenewError);
-
             // Check for existing user
             userManager.getUser().then(user => {
                 if (user && !user.expired) {
@@ -195,7 +234,6 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     logger.info("App init");
-
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -203,20 +241,19 @@ const App = () => {
             try {
                 const authChoice = localStorage.getItem('authChoice');
                 const token = localStorage.getItem('authToken');
-
                 if (authChoice === 'openid') {
                     if (!token) {
                         logger.warn('No OIDC token found on resume, redirecting to /auth-choice');
                         navigate('/auth-choice', {replace: true});
                     }
-                    if (!isTokenValid(token)) {
-                        logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
-                        localStorage.removeItem('authToken');
-                        localStorage.removeItem('tokenExpiration');
-                        localStorage.removeItem('authChoice');
-                        navigate('/auth-choice', {replace: true});
-                    }
                     return;
+                }
+                if (!isTokenValid(token)) {
+                    logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('tokenExpiration');
+                    localStorage.removeItem('authChoice');
+                    navigate('/auth-choice', {replace: true});
                 }
             } catch (err) {
                 logger.error('Error while checking auth on resume:', err);
@@ -250,26 +287,31 @@ const App = () => {
         <AuthProvider>
             <OidcProvider>
                 <OidcInitializer>
-                    <NavBar/>
-                    <Routes>
-                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                        <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
-                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                        <Route path="/heartbeats" element={<Heartbeats/>}/>
-                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                        <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                        <Route path="/network/:networkName"
-                               element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
-                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                        <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                        <Route path="/silent-renew" element={<SilentRenew/>}/>
-                        <Route path="/auth-callback" element={<OidcCallback/>}/>
-                        <Route path="/auth-choice" element={<AuthChoice/>}/>
-                        <Route path="/auth/login" element={<Login/>}/>
-                        <Route path="*" element={<Navigate to="/"/>}/>
-                    </Routes>
+                    <DynamicThemeProvider>
+                        <NavBar/>
+                        <div className="min-h-screen bg-inherit">
+                            <Routes>
+                                <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                                <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                                <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                <Route path="/network/:networkName"
+                                       element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
+                                <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                                <Route path="/objects/:objectName"
+                                       element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                                <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                <Route path="/auth-choice" element={<AuthChoice/>}/>
+                                <Route path="/auth/login" element={<Login/>}/>
+                                <Route path="*" element={<Navigate to="/"/>}/>
+                            </Routes>
+                        </div>
+                    </DynamicThemeProvider>
                 </OidcInitializer>
             </OidcProvider>
         </AuthProvider>

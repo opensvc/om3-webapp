@@ -7,14 +7,16 @@ import {
     Alert,
     Typography,
     Button,
-    Box
+    Box,
+    useTheme
 } from '@mui/material';
-import {FaSignOutAlt, FaServer, FaUser, FaKey, FaLock, FaCode, FaWifi} from "react-icons/fa";
+import {FaSignOutAlt, FaServer, FaUser, FaKey, FaLock, FaCode, FaWifi, FaMoon, FaSun} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useNavigate} from "react-router-dom";
 import logger from '../utils/logger.js';
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import {useDarkMode} from "../context/DarkModeContext";
 
 const WhoAmI = () => {
     const [userInfo, setUserInfo] = useState(null);
@@ -26,6 +28,8 @@ const WhoAmI = () => {
     const authDispatch = useAuthDispatch();
     const navigate = useNavigate();
     const {daemon, fetchNodes} = useFetchDaemonStatus();
+    const {isDarkMode, toggleDarkMode} = useDarkMode();
+    const theme = useTheme();
 
     // Fetch app version from GitHub API
     useEffect(() => {
@@ -237,7 +241,7 @@ const WhoAmI = () => {
                             </Typography>
 
                             <Box sx={{
-                                bgcolor: 'grey.50',
+                                bgcolor: isDarkMode ? 'background.default' : 'grey.50',
                                 p: 2,
                                 borderRadius: 1,
                                 maxHeight: '300px',
@@ -247,7 +251,8 @@ const WhoAmI = () => {
                                     margin: 0,
                                     fontSize: '0.875rem',
                                     fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                                    color: 'text.primary'
+                                    color: isDarkMode ? '#ffffff' : theme.palette.text.primary,
+                                    backgroundColor: 'transparent'
                                 }}>
                                     {JSON.stringify(userInfo.grant, null, 2)}
                                 </pre>
@@ -256,7 +261,7 @@ const WhoAmI = () => {
                     </CardContent>
                 </Card>
 
-                {/* Right Side - Server Information and Logout */}
+                {/* Right Side - Server Information, Dark Mode and Logout */}
                 <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
                     {/* Server Information Panel */}
                     <Card
@@ -279,7 +284,13 @@ const WhoAmI = () => {
 
                             <Box sx={{display: 'flex', flexDirection: 'column', gap: 3}}>
                                 {/* Connected Node Information */}
-                                <Box sx={{textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1}}>
+                                <Box sx={{
+                                    textAlign: 'center',
+                                    p: 2,
+                                    bgcolor: isDarkMode ? 'background.default' : 'grey.50',
+                                    borderRadius: 1,
+                                    border: isDarkMode ? `1px solid ${theme.palette.divider}` : 'none'
+                                }}>
                                     <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1}}>
                                         <FaWifi style={{color: '#4caf50', marginRight: '8px'}}/>
                                         <Typography variant="h6" color="primary.main">
@@ -330,6 +341,31 @@ const WhoAmI = () => {
                             </Box>
                         </CardContent>
                     </Card>
+
+                    {/* Dark Mode Toggle Button */}
+                    <Button
+                        startIcon={isDarkMode ? <FaSun/> : <FaMoon/>}
+                        onClick={toggleDarkMode}
+                        size="large"
+                        fullWidth
+                        sx={{
+                            backgroundColor: isDarkMode ? "#ff9800" : "#333333",
+                            color: "white",
+                            boxShadow: 2,
+                            padding: '16px 24px',
+                            fontSize: '1.1rem',
+                            fontWeight: 'bold',
+                            borderRadius: 2,
+                            "&:hover": {
+                                backgroundColor: isDarkMode ? "#f57c00" : "#555555",
+                                boxShadow: 4
+                            },
+                            transition: 'all 0.3s ease',
+                        }}
+                        aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                    >
+                        {isDarkMode ? "Light Mode" : "Dark Mode"}
+                    </Button>
 
                     {/* Simple Logout Button */}
                     <Button

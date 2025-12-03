@@ -299,10 +299,6 @@ const Heartbeats = () => {
                     m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Heartbeats
-                </Typography>
-
                 <Box sx={{position: "sticky", top: 64, zIndex: 20, backgroundColor: "background.paper", pb: 2, mb: 2}}>
                     <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
                         <Button onClick={() => setShowFilters(!showFilters)}

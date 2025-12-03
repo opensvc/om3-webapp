@@ -95,9 +95,7 @@ const Network = () => {
                     m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
-                    Networks
-                </Typography>
+                
                 <TableContainer component={Paper} sx={{width: "100%"}}>
                     <Table sx={{minWidth: 700}}>
                         <TableHead>

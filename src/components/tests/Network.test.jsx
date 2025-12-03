@@ -38,11 +38,6 @@ describe('Network Component', () => {
         mockLocalStorage.getItem.mockReturnValue('mock-token');
     });
 
-    test('renders the Networks title', () => {
-        render(<Network/>, {wrapper: MemoryRouter});
-        expect(screen.getByText('Networks')).toBeInTheDocument();
-    });
-
     test('renders table headers correctly', () => {
         render(<Network/>, {wrapper: MemoryRouter});
         const headers = ['Name', 'Type', 'Network', 'Usage'];

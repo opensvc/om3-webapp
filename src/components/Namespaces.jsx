@@ -164,9 +164,7 @@ const Namespaces = () => {
                     m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Namespaces Status Overview
-                </Typography>
+
 
                 {/* Namespace Filter */}
                 <Box sx={{mb: 3}}>

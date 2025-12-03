@@ -743,9 +743,7 @@ const Objects = () => {
                     m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Objects
-                </Typography>
+
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",

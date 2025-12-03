@@ -124,7 +124,7 @@ describe('Objects Component', () => {
 
     const waitForComponentToLoad = async () => {
         await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
     };
 
@@ -580,7 +580,7 @@ describe('Objects Component', () => {
         setupComponent();
 
         await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
 
         // Only header row should be present

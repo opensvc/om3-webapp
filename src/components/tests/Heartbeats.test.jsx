@@ -1,4 +1,3 @@
-// Heartbeats.test.jsx
 import React from "react";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {ThemeProvider, createTheme} from "@mui/material/styles";
@@ -64,7 +63,8 @@ describe("Heartbeats Component", () => {
         useEventStore.mockReturnValue({heartbeatStatus: {}});
         renderWithRouter(<Heartbeats/>);
 
-        expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
+        expect(screen.getByRole("table")).toBeInTheDocument();
+
         const table = screen.getByRole("table");
         expect(table).toBeInTheDocument();
 
@@ -611,13 +611,9 @@ describe("Heartbeats Component", () => {
         );
 
         renderWithRouter(<Heartbeats/>);
-
-        // The component should render without error
-        expect(screen.getByRole("heading", {name: /Heartbeats/i})).toBeInTheDocument();
-
-        // The table should only have the header row
+        expect(screen.getByRole("table")).toBeInTheDocument();
         const rows = screen.getAllByRole("row");
-        expect(rows).toHaveLength(1); // Only the header
+        expect(rows).toHaveLength(1);
     });
 
     test("handles URL parameter initialization with invalid status", async () => {
@@ -645,10 +641,8 @@ describe("Heartbeats Component", () => {
             selector({heartbeatStatus: mockHeartbeatStatus})
         );
 
-        // Test with an invalid status in the URL
         renderWithRouter(<Heartbeats/>, {route: "/?status=invalid"});
 
-        // The component should use "all" as the default value
         await waitFor(() => {
             expect(screen.getByText("1.rx")).toBeInTheDocument();
         });
@@ -681,7 +675,6 @@ describe("Heartbeats Component", () => {
 
         renderWithRouter(<Heartbeats/>);
 
-        // Rendering with is_beating false in single node covers the branch
         const rows = await screen.findAllByRole("row");
         expect(rows.slice(1)).toHaveLength(1);
     });

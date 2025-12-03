@@ -383,9 +383,6 @@ const NodesTable = () => {
                     }),
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Node Status
-                </Typography>
 
                 <Box sx={{mb: 2, display: "flex", gap: 2}}>
                     <Button

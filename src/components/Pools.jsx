@@ -141,9 +141,7 @@ const Pools = () => {
                     m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom sx={{mb: 3}} align="center">
-                    Pools
-                </Typography>
+                
                 {loading ? (
                     <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}>
                         <CircularProgress/>

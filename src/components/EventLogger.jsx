@@ -38,6 +38,7 @@ const EventLogger = ({
                          buttonLabel = "Events"
                      }) => {
     const theme = useTheme();
+    const isDarkMode = theme.palette.mode === 'dark';
 
     // UI state
     const [drawerOpen, setDrawerOpen] = useState(false);
@@ -185,7 +186,9 @@ const EventLogger = ({
                     lineHeight: dense ? 1.2 : 1.4,
                     opacity: dense ? 0.9 : 1,
                     maxHeight: dense ? 160 : 'none',
-                    overflow: dense ? 'hidden' : 'visible'
+                    overflow: dense ? 'hidden' : 'visible',
+                    backgroundColor: 'transparent',
+                    color: isDarkMode ? '#ffffff' : theme.palette.text.primary
                 }}
                 dangerouslySetInnerHTML={{__html: coloredJSON}}
             />
@@ -194,22 +197,22 @@ const EventLogger = ({
 
     const jsonStyles = {
         '& .json-key': {
-            color: theme.palette.primary.main,
+            color: isDarkMode ? '#90caf9' : theme.palette.primary.main,
             fontWeight: '600'
         },
         '& .json-string': {
-            color: theme.palette.success.dark
+            color: isDarkMode ? '#a5d6a7' : theme.palette.success.dark
         },
         '& .json-number': {
-            color: theme.palette.info.main,
+            color: isDarkMode ? '#80cbc4' : theme.palette.info.main,
             fontWeight: '500'
         },
         '& .json-boolean': {
-            color: theme.palette.warning.dark,
+            color: isDarkMode ? '#ffcc80' : theme.palette.warning.dark,
             fontWeight: '600'
         },
         '& .json-null': {
-            color: theme.palette.grey[500],
+            color: isDarkMode ? theme.palette.grey[400] : theme.palette.grey[500],
             fontWeight: '600'
         }
     };
@@ -297,20 +300,23 @@ const EventLogger = ({
                     '& .MuiDrawer-paper': {
                         width: 400,
                         maxWidth: '90vw',
-                        p: 2
+                        p: 2,
+                        backgroundColor: isDarkMode ? theme.palette.background.paper : '#ffffff'
                     }
                 }}
             >
                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                    <Typography variant="h6">Event Subscriptions</Typography>
+                    <Typography variant="h6" color={isDarkMode ? '#ffffff' : 'inherit'}>
+                        Event Subscriptions
+                    </Typography>
                     <IconButton onClick={() => setSubscriptionDialogOpen(false)}>
-                        <Close/>
+                        <Close sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}/>
                     </IconButton>
                 </Box>
 
-                <Divider sx={{mb: 2}}/>
+                <Divider sx={{mb: 2, backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
-                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mb: 2}}>
                     Select which event types you want to SUBSCRIBE to (this affects future events only):
                 </Typography>
 
@@ -319,12 +325,20 @@ const EventLogger = ({
                         size="small"
                         onClick={() => setTempSubscribedEventTypes([...eventTypes])}
                         disabled={eventTypes.length === 0}
+                        sx={{
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined
+                        }}
                     >
                         Subscribe to All
                     </Button>
                     <Button
                         size="small"
                         onClick={() => setTempSubscribedEventTypes([])}
+                        sx={{
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined
+                        }}
                     >
                         Unsubscribe from All
                     </Button>
@@ -332,7 +346,7 @@ const EventLogger = ({
 
                 <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
                     {eventTypes.length === 0 ? (
-                        <Typography color="text.secondary" sx={{textAlign: 'center', py: 4}}>
+                        <Typography color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{textAlign: 'center', py: 4}}>
                             No event types available for this page
                         </Typography>
                     ) : (
@@ -348,12 +362,18 @@ const EventLogger = ({
                                         }
                                     }}
                                     size="small"
+                                    sx={{
+                                        color: isDarkMode ? '#ffffff' : undefined,
+                                        '&.Mui-checked': {
+                                            color: isDarkMode ? '#90caf9' : undefined,
+                                        }
+                                    }}
                                 />
                                 <Box sx={{flex: 1, minWidth: 0}}>
-                                    <Typography variant="body2" noWrap>
+                                    <Typography variant="body2" noWrap color={isDarkMode ? '#ffffff' : 'inherit'}>
                                         {eventType}
                                     </Typography>
-                                    <Typography variant="caption" color="text.secondary">
+                                    <Typography variant="caption" color={isDarkMode ? '#999999' : 'text.secondary'}>
                                         {eventStats[eventType] || 0} events received
                                     </Typography>
                                 </Box>
@@ -369,6 +389,10 @@ const EventLogger = ({
                         onClick={() => {
                             setSubscribedEventTypes(tempSubscribedEventTypes);
                             setSubscriptionDialogOpen(false);
+                        }}
+                        sx={{
+                            backgroundColor: isDarkMode ? '#1976d2' : undefined,
+                            color: '#ffffff'
                         }}
                     >
                         Apply Subscriptions
@@ -393,10 +417,16 @@ const EventLogger = ({
                         size="small"
                         color="info"
                         variant="outlined"
-                        sx={{height: 24, fontSize: '0.75rem'}}
+                        sx={{
+                            height: 24,
+                            fontSize: '0.75rem',
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined,
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                        }}
                         onClick={() => setSubscriptionDialogOpen(true)}
                         onDelete={() => setSubscribedEventTypes([...eventTypes])}
-                        deleteIcon={<Settings/>}
+                        deleteIcon={<Settings sx={{color: isDarkMode ? '#ffffff' : undefined}}/>}
                     />
                 </Tooltip>
             </Box>
@@ -493,7 +523,7 @@ const EventLogger = ({
         overflow: "hidden",
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        backgroundColor: theme.palette.background.paper
+        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper
     };
 
     // Manage logger EventSource
@@ -517,6 +547,8 @@ const EventLogger = ({
                 color={color === "default" ? "default" : color}
                 sx={{
                     fontWeight: '600',
+                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                    color: isDarkMode ? '#ffffff' : undefined,
                     ...(searchTerm && eventType.toLowerCase().includes(searchTerm.toLowerCase()) && {
                         borderWidth: 2,
                         borderStyle: 'solid',
@@ -536,12 +568,34 @@ const EventLogger = ({
                         color="primary.light"
                         startIcon={<BugReport/>}
                         onClick={() => setDrawerOpen(true)}
-                        sx={{position: "fixed", bottom: 16, right: 16, zIndex: 9999, borderRadius: "20px", px: 2}}
+                        sx={{
+                            position: "fixed",
+                            bottom: 16,
+                            right: 16,
+                            zIndex: 9999,
+                            borderRadius: "20px",
+                            px: 2,
+                            backgroundColor: isDarkMode ? '#333333' : undefined,
+                            color: '#ffffff',
+                            '&:hover': {
+                                backgroundColor: isDarkMode ? '#555555' : undefined,
+                            }
+                        }}
                     >
                         {buttonLabel}
                         {baseFilteredLogs.length > 0 && (
-                            <Chip label={baseFilteredLogs.length} size="small" color="primary"
-                                  sx={{ml: 1, height: 20, minWidth: 20}}/>
+                            <Chip
+                                label={baseFilteredLogs.length}
+                                size="small"
+                                color="primary"
+                                sx={{
+                                    ml: 1,
+                                    height: 20,
+                                    minWidth: 20,
+                                    backgroundColor: isDarkMode ? '#1976d2' : undefined,
+                                    color: '#ffffff'
+                                }}
+                            />
                         )}
                     </Button>
                 </Tooltip>
@@ -560,46 +614,96 @@ const EventLogger = ({
                     style={{
                         width: "100%",
                         height: 10,
-                        backgroundColor: theme.palette.grey[300],
+                        backgroundColor: isDarkMode ? theme.palette.grey[700] : theme.palette.grey[300],
                         cursor: "row-resize",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center"
                     }}
                 >
-                    <div style={{width: 48, height: 6, backgroundColor: theme.palette.grey[500], borderRadius: 2}}/>
+                    <div style={{
+                        width: 48,
+                        height: 6,
+                        backgroundColor: isDarkMode ? theme.palette.grey[500] : theme.palette.grey[500],
+                        borderRadius: 2
+                    }}/>
                 </div>
 
                 {/* Header */}
                 <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                        <Typography variant="h6" sx={{fontSize: "1rem"}}>{title}</Typography>
-                        <Chip label={`${filteredLogs.length}/${baseFilteredLogs.length} events`} size="small"
-                              variant="outlined"/>
-                        {isPaused && <Chip label="PAUSED" color="warning" size="small"/>}
+                        <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
+                            {title}
+                        </Typography>
+                        <Chip
+                            label={`${filteredLogs.length}/${baseFilteredLogs.length} events`}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                color: isDarkMode ? '#ffffff' : undefined,
+                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                            }}
+                        />
+                        {isPaused && (
+                            <Chip
+                                label="PAUSED"
+                                color="warning"
+                                size="small"
+                                sx={{
+                                    backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : undefined,
+                                    color: isDarkMode ? '#ff9800' : undefined
+                                }}
+                            />
+                        )}
                         {(eventTypeFilter.length > 0 || searchTerm) &&
-                            <Chip label="Filtered" color="info" size="small" onDelete={handleClearFilters}/>}
+                            <Chip
+                                label="Filtered"
+                                color="info"
+                                size="small"
+                                onDelete={handleClearFilters}
+                                sx={{
+                                    backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : undefined,
+                                    color: isDarkMode ? '#2196f3' : undefined
+                                }}
+                            />
+                        }
                     </Box>
 
                     <Box sx={{display: "flex", gap: 0.5, alignItems: "center"}}>
                         <Tooltip title={isPaused ? "Resume" : "Pause"}>
-                            <IconButton onClick={() => setPaused(!isPaused)} color={isPaused ? "warning" : "primary"}
-                                        size="small">
+                            <IconButton
+                                onClick={() => setPaused(!isPaused)}
+                                color={isPaused ? "warning" : "primary"}
+                                size="small"
+                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                            >
                                 {isPaused ? <PlayArrow/> : <Pause/>}
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="Clear logs">
-                            <IconButton onClick={handleClear} size="small" disabled={eventLogs.length === 0}>
+                            <IconButton
+                                onClick={handleClear}
+                                size="small"
+                                disabled={eventLogs.length === 0}
+                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                            >
                                 <DeleteOutline/>
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="Close">
-                            <IconButton onClick={() => setDrawerOpen(false)} size="small"><Close/></IconButton>
+                            <IconButton
+                                onClick={() => setDrawerOpen(false)}
+                                size="small"
+                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                            >
+                                <Close/>
+                            </IconButton>
                         </Tooltip>
                     </Box>
                 </Box>
 
-                <Divider/>
+                <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
                 {/* Compact subscription info */}
                 <SubscriptionInfo/>
@@ -611,27 +715,76 @@ const EventLogger = ({
                         placeholder="Search events..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        sx={{minWidth: 240, flexGrow: 1}}
+                        sx={{
+                            minWidth: 240,
+                            flexGrow: 1,
+                            '& .MuiInputBase-root': {
+                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                color: isDarkMode ? '#ffffff' : undefined
+                            },
+                            '& .MuiInputLabel-root': {
+                                color: isDarkMode ? '#cccccc' : undefined
+                            },
+                            '& .MuiOutlinedInput-notchedOutline': {
+                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                            }
+                        }}
                     />
                     {availableEventTypes.length > 0 && (
                         <FormControl size="small" sx={{minWidth: 240}}>
-                            <InputLabel>Event Types</InputLabel>
+                            <InputLabel sx={{color: isDarkMode ? '#cccccc' : undefined}}>
+                                Event Types
+                            </InputLabel>
                             <Select
                                 multiple
                                 value={eventTypeFilter}
                                 onChange={(e) => setEventTypeFilter(e.target.value)}
                                 label="Event Types"
-                                renderValue={(selected) => (selected.length === 0 ? "All events" : `${selected.length} selected`)}
+                                renderValue={(selected) => (
+                                    <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>
+                                        {selected.length === 0 ? "All events" : `${selected.length} selected`}
+                                    </span>
+                                )}
+                                sx={{
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                    color: isDarkMode ? '#ffffff' : undefined,
+                                    '& .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                    },
+                                    '& .MuiSvgIcon-root': {
+                                        color: isDarkMode ? '#ffffff' : undefined
+                                    }
+                                }}
                             >
                                 {availableEventTypes.map((et) => (
                                     <MenuItem key={et} value={et}>
-                                        <Checkbox checked={eventTypeFilter.includes(et)} size="small"/>
+                                        <Checkbox
+                                            checked={eventTypeFilter.includes(et)}
+                                            size="small"
+                                            sx={{
+                                                color: isDarkMode ? '#ffffff' : undefined,
+                                                '&.Mui-checked': {
+                                                    color: isDarkMode ? '#90caf9' : undefined,
+                                                }
+                                            }}
+                                        />
                                         <ListItemText
                                             primary={
                                                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                                    <Chip label={eventStats[et] || 0} size="small" variant="outlined"
-                                                          sx={{height: 20, minWidth: 20}}/>
-                                                    <span>{et}</span>
+                                                    <Chip
+                                                        label={eventStats[et] || 0}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{
+                                                            height: 20,
+                                                            minWidth: 20,
+                                                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                                            color: isDarkMode ? '#ffffff' : undefined,
+                                                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                                        }}
+                                                    />
+                                                    <span
+                                                        style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
                                                 </Box>
                                             }
                                         />
@@ -642,7 +795,7 @@ const EventLogger = ({
                     )}
                 </Box>
 
-                <Divider/>
+                <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
                 {/* Logs container */}
                 <Box
@@ -651,14 +804,14 @@ const EventLogger = ({
                     sx={{
                         flex: 1,
                         overflow: "auto",
-                        backgroundColor: theme.palette.grey[50],
+                        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.grey[50],
                         padding: 1,
                         ...jsonStyles
                     }}
                 >
                     {filteredLogs.length === 0 ? (
                         <Box sx={{p: 4, textAlign: "center"}}>
-                            <Typography color="textSecondary">
+                            <Typography color={isDarkMode ? '#cccccc' : 'textSecondary'}>
                                 {eventLogs.length === 0
                                     ? "No events logged"
                                     : "No events match current filters"}
@@ -676,11 +829,15 @@ const EventLogger = ({
                                         onClick={() => toggleExpand(safeId)}
                                         sx={{
                                             cursor: "pointer",
-                                            borderBottom: `1px solid ${theme.palette.divider}`,
+                                            borderBottom: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
                                             mb: 1,
                                             borderRadius: 1,
-                                            "&:hover": {bgcolor: theme.palette.action.hover},
-                                            bgcolor: isOpen ? theme.palette.action.selected : "transparent",
+                                            "&:hover": {
+                                                bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.palette.action.hover
+                                            },
+                                            bgcolor: isOpen
+                                                ? isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.palette.action.selected
+                                                : "transparent",
                                             transition: "background-color 0.2s ease"
                                         }}
                                     >
@@ -690,13 +847,17 @@ const EventLogger = ({
                                                 eventType={log.eventType}
                                                 searchTerm={searchTerm}
                                             />
-                                            <Typography variant="caption"
-                                                        color="textSecondary">{formatTimestamp(log.timestamp)}</Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color={isDarkMode ? '#cccccc' : 'textSecondary'}
+                                            >
+                                                {formatTimestamp(log.timestamp)}
+                                            </Typography>
                                             <ExpandMore sx={{
                                                 marginLeft: "auto",
                                                 transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
                                                 transition: "0.2s",
-                                                color: theme.palette.text.secondary
+                                                color: isDarkMode ? '#ffffff' : theme.palette.text.secondary
                                             }}/>
                                         </Box>
 
@@ -706,7 +867,7 @@ const EventLogger = ({
                                                 p: 1,
                                                 maxHeight: 160,
                                                 overflow: "hidden",
-                                                backgroundColor: theme.palette.background.default,
+                                                backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
                                                 borderRadius: 1,
                                                 mx: 0.5,
                                                 mb: 0.5
@@ -719,8 +880,8 @@ const EventLogger = ({
                                         {isOpen && (
                                             <Box sx={{
                                                 p: 1,
-                                                borderTop: `1px solid ${theme.palette.divider}`,
-                                                backgroundColor: theme.palette.background.default,
+                                                borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
+                                                backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
                                                 borderRadius: 1,
                                                 mx: 0.5,
                                                 mb: 0.5
@@ -738,11 +899,26 @@ const EventLogger = ({
                 </Box>
 
                 {!autoScroll && filteredLogs.length > 0 && (
-                    <Box sx={{p: 1, borderTop: `1px solid ${theme.palette.divider}`, textAlign: "center"}}>
-                        <Button size="small" startIcon={<KeyboardArrowUp/>} onClick={() => {
-                            setAutoScroll(true);
-                            setTimeout(() => logsEndRef.current?.scrollIntoView({behavior: "smooth"}), 100);
-                        }}>
+                    <Box sx={{
+                        p: 1,
+                        borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
+                        textAlign: "center"
+                    }}>
+                        <Button
+                            size="small"
+                            startIcon={<KeyboardArrowUp sx={{color: isDarkMode ? '#ffffff' : undefined}}/>}
+                            onClick={() => {
+                                setAutoScroll(true);
+                                setTimeout(() => logsEndRef.current?.scrollIntoView({behavior: "smooth"}), 100);
+                            }}
+                            sx={{
+                                color: isDarkMode ? '#ffffff' : undefined,
+                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                '&:hover': {
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                }
+                            }}
+                        >
                             Scroll to bottom
                         </Button>
                     </Box>
@@ -753,14 +929,14 @@ const EventLogger = ({
             <SubscriptionDialog/>
 
             <style>{`
-                .json-key { color: ${theme.palette.primary.main}; font-weight: 600; }
-                .json-string { color: ${theme.palette.success.dark}; }
-                .json-number { color: ${theme.palette.info.main}; font-weight: 500; }
-                .json-boolean { color: ${theme.palette.warning.dark}; font-weight: 600; }
-                .json-null { color: ${theme.palette.grey[500]}; font-weight: 600; }
+                .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
+                .json-string { color: ${isDarkMode ? '#a5d6a7' : theme.palette.success.dark}; }
+                .json-number { color: ${isDarkMode ? '#80cbc4' : theme.palette.info.main}; font-weight: 500; }
+                .json-boolean { color: ${isDarkMode ? '#ffcc80' : theme.palette.warning.dark}; font-weight: 600; }
+                .json-null { color: ${isDarkMode ? theme.palette.grey[400] : theme.palette.grey[500]}; font-weight: 600; }
                 .search-highlight { 
-                    background-color: #ffeb3b; 
-                    color: #000;
+                    background-color: ${isDarkMode ? '#ffeb3b' : '#ffeb3b'}; 
+                    color: ${isDarkMode ? '#000000' : '#000000'};
                     padding: 0 2px;
                     border-radius: 2px;
                     font-weight: bold;

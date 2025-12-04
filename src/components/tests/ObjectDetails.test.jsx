@@ -19,6 +19,13 @@ jest.mock('../../eventSourceManager.jsx', () => ({
     startLoggerReception: jest.fn(),
     closeLoggerEventSource: jest.fn(),
 }));
+// Mock useDarkMode hook
+jest.mock('../../context/DarkModeContext', () => ({
+    useDarkMode: () => ({
+        isDarkMode: false,
+        toggleDarkMode: jest.fn(),
+    }),
+}));
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => {

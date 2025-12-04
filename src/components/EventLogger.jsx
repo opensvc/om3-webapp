@@ -65,6 +65,45 @@ const EventLogger = ({
         return filtered;
     }, []);
 
+    const escapeHtml = useCallback((text) => {
+        if (typeof text !== 'string') return text;
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }, []);
+
+    const createHighlightedHtml = useCallback((text, searchTerm) => {
+        if (!searchTerm || !text) return escapeHtml(text);
+
+        const term = searchTerm.toLowerCase();
+        const lowerText = text.toLowerCase();
+        let lastIndex = 0;
+        const parts = [];
+
+        while (lastIndex < text.length) {
+            const index = lowerText.indexOf(term, lastIndex);
+            if (index === -1) {
+                parts.push(escapeHtml(text.substring(lastIndex)));
+                break;
+            }
+
+            if (index > lastIndex) {
+                parts.push(escapeHtml(text.substring(lastIndex, index)));
+            }
+
+            parts.push(
+                `<span class="search-highlight">${escapeHtml(text.substring(index, index + term.length))}</span>`
+            );
+
+            lastIndex = index + term.length;
+        }
+
+        return parts.join('');
+    }, [escapeHtml]);
+
     // Toggle expand/collapse
     const toggleExpand = useCallback((id) => {
         setExpandedLogIds(prev =>
@@ -72,7 +111,7 @@ const EventLogger = ({
         );
     }, []);
 
-    const syntaxHighlightJSON = (json, dense = false) => {
+    const syntaxHighlightJSON = (json, dense = false, searchTerm = '') => {
         if (typeof json !== 'string') {
             try {
                 json = JSON.stringify(json, null, dense ? 0 : 2);
@@ -81,26 +120,48 @@ const EventLogger = ({
             }
         }
 
-        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        json = escapeHtml(json);
 
-        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
-            let cls = 'json-number';
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    cls = 'json-key';
-                } else {
-                    cls = 'json-string';
+        const applyHighlightToMatch = (match, searchTerm) => {
+            if (!searchTerm) return match;
+
+            const term = searchTerm.toLowerCase();
+            const lowerMatch = match.toLowerCase();
+            const index = lowerMatch.indexOf(term);
+
+            if (index === -1) return match;
+
+            const before = match.substring(0, index);
+            const highlight = match.substring(index, index + term.length);
+            const after = match.substring(index + term.length);
+
+            return `${before}<span class="search-highlight">${highlight}</span>${after}`;
+        };
+
+        return json.replace(
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+            (match) => {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
                 }
-            } else if (/true|false/.test(match)) {
-                cls = 'json-boolean';
-            } else if (/null/.test(match)) {
-                cls = 'json-null';
+
+                const highlightedMatch = searchTerm ? applyHighlightToMatch(match, searchTerm) : match;
+
+                return `<span class="${cls}">${highlightedMatch}</span>`;
             }
-            return `<span class="${cls}">${match}</span>`;
-        });
+        );
     };
 
-    const JSONView = ({data, dense = false}) => {
+    const JSONView = ({data, dense = false, searchTerm = ''}) => {
         const filteredData = useMemo(() => filterData(data), [data, filterData]);
 
         const jsonString = useMemo(() => {
@@ -111,7 +172,7 @@ const EventLogger = ({
             }
         }, [filteredData, dense]);
 
-        const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString, dense), [jsonString, dense]);
+        const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString, dense, searchTerm), [jsonString, dense, searchTerm]);
 
         return (
             <pre
@@ -446,6 +507,26 @@ const EventLogger = ({
         };
     }, [subscribedEventTypes, objectName]);
 
+    const EventTypeChip = ({eventType, searchTerm}) => {
+        const color = getEventColor(eventType);
+
+        return (
+            <Chip
+                label={eventType}
+                size="small"
+                color={color === "default" ? "default" : color}
+                sx={{
+                    fontWeight: '600',
+                    ...(searchTerm && eventType.toLowerCase().includes(searchTerm.toLowerCase()) && {
+                        borderWidth: 2,
+                        borderStyle: 'solid',
+                        borderColor: '#ffeb3b'
+                    })
+                }}
+            />
+        );
+    };
+
     return (
         <>
             {!drawerOpen && (
@@ -550,7 +631,7 @@ const EventLogger = ({
                                                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                                                     <Chip label={eventStats[et] || 0} size="small" variant="outlined"
                                                           sx={{height: 20, minWidth: 20}}/>
-                                                    {et}
+                                                    <span>{et}</span>
                                                 </Box>
                                             }
                                         />
@@ -605,11 +686,9 @@ const EventLogger = ({
                                     >
                                         {/* Header */}
                                         <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
-                                            <Chip
-                                                label={log.eventType}
-                                                size="small"
-                                                color={getEventColor(log.eventType)}
-                                                sx={{fontWeight: '600'}}
+                                            <EventTypeChip
+                                                eventType={log.eventType}
+                                                searchTerm={searchTerm}
                                             />
                                             <Typography variant="caption"
                                                         color="textSecondary">{formatTimestamp(log.timestamp)}</Typography>
@@ -632,7 +711,7 @@ const EventLogger = ({
                                                 mx: 0.5,
                                                 mb: 0.5
                                             }}>
-                                                <JSONView data={log.data} dense={true}/>
+                                                <JSONView data={log.data} dense={true} searchTerm={searchTerm}/>
                                             </Box>
                                         )}
 
@@ -646,7 +725,7 @@ const EventLogger = ({
                                                 mx: 0.5,
                                                 mb: 0.5
                                             }}>
-                                                <JSONView data={log.data} dense={false}/>
+                                                <JSONView data={log.data} dense={false} searchTerm={searchTerm}/>
                                             </Box>
                                         )}
                                     </Box>
@@ -679,6 +758,13 @@ const EventLogger = ({
                 .json-number { color: ${theme.palette.info.main}; font-weight: 500; }
                 .json-boolean { color: ${theme.palette.warning.dark}; font-weight: 600; }
                 .json-null { color: ${theme.palette.grey[500]}; font-weight: 600; }
+                .search-highlight { 
+                    background-color: #ffeb3b; 
+                    color: #000;
+                    padding: 0 2px;
+                    border-radius: 2px;
+                    font-weight: bold;
+                }
             `}</style>
         </>
     );

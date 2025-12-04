@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useState, useRef, useEffect} from "react";
-import {UserManager, UserManagerSettings} from "oidc-client-ts";
+import {UserManager, UserManagerSettings, Log} from "oidc-client-ts";
 import logger from "../utils/logger.js";
 
 export interface OidcContextType {
@@ -18,7 +18,21 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     const recreateUserManager = (settings: UserManagerSettings) => {
         logger.info("Recreating UserManager with settings:", settings);
         cleanupUserManager(userManagerRef.current);
+        // Ensure oidc-client-ts has verbose logging during development
+        try {
+            (Log as any).logger = console;
+            (Log as any).level = (Log as any).DEBUG;
+        } catch (e) {
+            logger.debug('Failed to configure oidc-client-ts Log:', e);
+        }
+
         const newUserManager = new UserManager(settings);
+        // Expose globally for legacy modules that rely on window.oidcUserManager
+        try {
+            (window as any).oidcUserManager = newUserManager;
+        } catch (e) {
+            logger.debug('Unable to set window.oidcUserManager:', e);
+        }
         setUserManager(newUserManager);
         userManagerRef.current = newUserManager;
         setIsInitialized(true);
@@ -28,6 +42,11 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
     useEffect(() => {
         return () => {
             cleanupUserManager(userManagerRef.current);
+            try {
+                delete (window as any).oidcUserManager;
+            } catch (e) {
+                logger.debug('Unable to delete window.oidcUserManager during cleanup:', e);
+            }
         };
     }, []);
 

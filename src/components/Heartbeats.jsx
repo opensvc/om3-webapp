@@ -274,12 +274,31 @@ const Heartbeats = () => {
     };
 
     return (
-        <Box sx={{p: 4, position: 'relative'}}>
-            <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                <Typography variant="h4" gutterBottom align="center">
-                    Heartbeats
-                </Typography>
-
+        <Box
+            sx={{
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
+                minHeight: '100vh',
+                bgcolor: 'background.default',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start'
+            }}
+        >
+            <Box
+                sx={{
+                    width: "100%",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
+                    p: 3,
+                    m: 0,
+                }}
+            >
                 <Box sx={{position: "sticky", top: 64, zIndex: 20, backgroundColor: "background.paper", pb: 2, mb: 2}}>
                     <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
                         <Button onClick={() => setShowFilters(!showFilters)}
@@ -387,9 +406,8 @@ const Heartbeats = () => {
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </Paper>
+            </Box>
 
-            {/* Ajout du EventLogger pour les événements Heartbeats */}
             <EventLogger
                 eventTypes={heartbeatEventTypes}
                 title="Heartbeat Events Logger"

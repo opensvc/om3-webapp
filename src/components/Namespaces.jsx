@@ -15,6 +15,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import useEventStore from "../hooks/useEventStore.js";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
@@ -144,26 +145,26 @@ const Namespaces = () => {
                 bgcolor: "background.default",
                 display: "flex",
                 justifyContent: "center",
-                p: 3,
+                p: 0,
                 position: 'relative',
-                minHeight: '100vh'
+                minHeight: '100vh',
+                width: '100vw',
+                margin: 0,
             }}
         >
             <Box
                 sx={{
                     width: "100%",
-                    maxWidth: "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Namespaces Status Overview
-                </Typography>
+
 
                 {/* Namespace Filter */}
                 <Box sx={{mb: 3}}>
@@ -270,9 +271,15 @@ const Namespaces = () => {
                                                 >
                                                     <Box display="flex" justifyContent="center" alignItems="center"
                                                          gap={1}>
-                                                        <FiberManualRecordIcon
-                                                            sx={{fontSize: 18, color: getColorByStatus(status)}}
-                                                        />
+                                                        {status === "warn" ? (
+                                                            <PriorityHighIcon
+                                                                sx={{fontSize: 18, color: getColorByStatus(status)}}
+                                                            />
+                                                        ) : (
+                                                            <FiberManualRecordIcon
+                                                                sx={{fontSize: 18, color: getColorByStatus(status)}}
+                                                            />
+                                                        )}
                                                         <Typography variant="body1">{counts[status]}</Typography>
                                                     </Box>
                                                 </TableCell>

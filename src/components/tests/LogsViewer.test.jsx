@@ -8,7 +8,7 @@ jest.mock('@mui/material', () => ({
     ...jest.requireActual('@mui/material'),
     useTheme: () => ({
         palette: {
-            background: {paper: '#fff'},
+            background: {paper: '#fff', default: '#f5f5f5'},
             grey: {100: '#f5f5f5'},
             divider: '#e0e0e0',
             text: {primary: '#000', secondary: '#666'},
@@ -17,6 +17,14 @@ jest.mock('@mui/material', () => ({
             info: {main: '#2196f3'},
             action: {hover: '#f0f0f0', selected: '#e0e0e0'},
         },
+    }),
+}));
+
+// Mock DarkModeContext
+jest.mock('../../context/DarkModeContext', () => ({
+    useDarkMode: () => ({
+        isDarkMode: false,
+        toggleDarkMode: jest.fn(),
     }),
 }));
 
@@ -757,15 +765,15 @@ describe('LogsViewer Component', () => {
         const stream = new MockReadableStream(chunks);
         const reader = stream.getReader();
 
-        const { value: value1, done: done1 } = await reader.read();
+        const {value: value1, done: done1} = await reader.read();
         expect(done1).toBe(false);
         expect(new TextDecoder().decode(value1)).toBe(chunks[0]);
 
-        const { value: value2, done: done2 } = await reader.read();
+        const {value: value2, done: done2} = await reader.read();
         expect(done2).toBe(false);
         expect(new TextDecoder().decode(value2)).toBe(chunks[1]);
 
-        const { done: done3 } = await reader.read();
+        const {done: done3} = await reader.read();
         expect(done3).toBe(true);
     });
 
@@ -774,13 +782,13 @@ describe('LogsViewer Component', () => {
         const stream = new MockReadableStream(chunks);
         const reader = stream.getReader();
 
-        const { value: value1, done: done1 } = await reader.read();
+        const {value: value1, done: done1} = await reader.read();
         expect(done1).toBe(false);
         expect(new TextDecoder().decode(value1)).toBe(chunks[0]);
 
         await reader.cancel();
 
-        const { done: done2 } = await reader.read();
+        const {done: done2} = await reader.read();
         expect(done2).toBe(true);
     });
 
@@ -789,13 +797,13 @@ describe('LogsViewer Component', () => {
         const stream = new MockReadableStream(chunks);
         const reader = stream.getReader();
 
-        const { value: value1, done: done1 } = await reader.read();
+        const {value: value1, done: done1} = await reader.read();
         expect(done1).toBe(false);
         expect(new TextDecoder().decode(value1)).toBe(chunks[0]);
 
         await stream.cancel();
 
-        const { done: done2 } = await reader.read();
+        const {done: done2} = await reader.read();
         expect(done2).toBe(true);
     });
 });

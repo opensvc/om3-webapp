@@ -60,7 +60,7 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                        logger.error('Failed to fetch pools:', error.message);
+                    logger.error('Failed to fetch pools:', error.message);
                     setPoolCount(0);
                 });
 
@@ -75,7 +75,7 @@ const ClusterOverview = () => {
                 })
                 .catch((error) => {
                     if (!isMounted.current) return;
-                        logger.error('Failed to fetch networks:', error.message);
+                    logger.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
                 });
         }
@@ -164,84 +164,104 @@ const ClusterOverview = () => {
     const heartbeatCount = heartbeatIds.size;
 
     return (
-        <Box sx={{p: 3}}>
-            <Typography variant="h4" gutterBottom sx={{mb: 4}}>
-                Cluster Overview
-            </Typography>
-
+        <Box sx={{
+            p: 0,
+            width: '100vw',
+            margin: 0,
+            minHeight: '100vh',
+            bgcolor: 'background.default',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start'
+        }}>
             <Box sx={{
-                display: 'flex',
-                flexDirection: {xs: 'column', md: 'row'},
-                gap: 3,
-                alignItems: 'stretch'
+                width: "100%",
+                bgcolor: "background.paper",
+                border: "2px solid",
+                borderColor: "divider",
+                borderRadius: 0,
+                boxShadow: 3,
+                p: 3,
+                m: 0,
             }}>
-                {/* Left side - 2x3 grid */}
+                <Typography variant="h4" gutterBottom sx={{mb: 4}}>
+                    Cluster Overview
+                </Typography>
+
                 <Box sx={{
-                    flex: 2,
-                    display: 'grid',
-                    gridTemplateColumns: {md: '1fr 1fr'},
+                    display: 'flex',
+                    flexDirection: {xs: 'column', md: 'row'},
                     gap: 3,
-                    minHeight: '100%'
+                    alignItems: 'stretch'
                 }}>
-                    <Box>
-                        <GridNodes
-                            nodeCount={nodeCount}
-                            frozenCount={frozenCount}
-                            unfrozenCount={unfrozenCount}
-                            onClick={() => navigate("/nodes")}
-                        />
+                    {/* Left side - 2x3 grid */}
+                    <Box sx={{
+                        flex: 2,
+                        display: 'grid',
+                        gridTemplateColumns: {md: '1fr 1fr'},
+                        gap: 3,
+                        minHeight: '100%'
+                    }}>
+                        <Box>
+                            <GridNodes
+                                nodeCount={nodeCount}
+                                frozenCount={frozenCount}
+                                unfrozenCount={unfrozenCount}
+                                onClick={() => navigate("/nodes")}
+                            />
+                        </Box>
+                        <Box>
+                            <GridObjects
+                                objectCount={Object.keys(objectStatus).length}
+                                statusCount={statusCount}
+                                onClick={(globalState) => navigate(globalState ? `/objects?globalState=${globalState}` : '/objects')}
+                            />
+                        </Box>
+                        <Box>
+                            <GridHeartbeats
+                                heartbeatCount={heartbeatCount}
+                                beatingCount={beatingCount}
+                                nonBeatingCount={staleCount}
+                                stateCount={stateCount}
+                                nodeCount={nodeCount}
+                                onClick={(status, state) => {
+                                    const params = new URLSearchParams();
+                                    if (status) params.append('status', status);
+                                    if (state) params.append('state', state);
+                                    navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+                                }}
+                            />
+                        </Box>
+                        <Box>
+                            <GridPools
+                                poolCount={poolCount}
+                                onClick={() => navigate("/storage-pools")}
+                            />
+                        </Box>
+                        <Box>
+                            <GridNetworks
+                                networks={networks}
+                                onClick={() => navigate("/network")}
+                            />
+                        </Box>
                     </Box>
-                    <Box>
-                        <GridObjects
-                            objectCount={Object.keys(objectStatus).length}
-                            statusCount={statusCount}
-                            onClick={(globalState) => navigate(globalState ? `/objects?globalState=${globalState}` : '/objects')}
-                        />
-                    </Box>
-                    <Box>
-                        <GridHeartbeats
-                            heartbeatCount={heartbeatCount}
-                            beatingCount={beatingCount}
-                            nonBeatingCount={staleCount}
-                            stateCount={stateCount}
-                            nodeCount={nodeCount}
-                            onClick={(status, state) => {
-                                const params = new URLSearchParams();
-                                if (status) params.append('status', status);
-                                if (state) params.append('state', state);
-                                navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
-                            }}
-                        />
-                    </Box>
-                    <Box>
-                        <GridPools
-                            poolCount={poolCount}
-                            onClick={() => navigate("/storage-pools")}
-                        />
-                    </Box>
-                    <Box>
-                        <GridNetworks
-                            networks={networks}
-                            onClick={() => navigate("/network")}
+
+                    {/* Right side - Namespaces */}
+                    <Box sx={{flex: 1}}>
+                        <GridNamespaces
+                            namespaceCount={namespaceCount}
+                            namespaceSubtitle={namespaceSubtitle}
+                            onClick={(url) => navigate(url || "/namespaces")}
                         />
                     </Box>
                 </Box>
 
-                {/* Right side - Namespaces */}
-                <Box sx={{flex: 1}}>
-                    <GridNamespaces
-                        namespaceCount={namespaceCount}
-                        namespaceSubtitle={namespaceSubtitle}
-                        onClick={(url) => navigate(url || "/namespaces")}
-                    />
-                </Box>
+                <EventLogger
+                    eventTypes={clusterEventTypes}
+                    title="Cluster Events Logger"
+                    buttonLabel="Cluster Events"
+                />
             </Box>
-
-            <EventLogger
-                eventTypes={clusterEventTypes}
-                title="Cluster Events Logger"
-                buttonLabel="Cluster Events"
-            />
         </Box>
     );
 };

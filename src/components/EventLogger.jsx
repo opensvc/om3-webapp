@@ -576,9 +576,14 @@ const EventLogger = ({
                             borderRadius: "20px",
                             px: 2,
                             backgroundColor: isDarkMode ? '#333333' : undefined,
-                            color: '#ffffff',
+                            // Correction: Garder la couleur de fond mais changer la couleur du texte pour light mode
+                            color: isDarkMode ? '#ffffff' : '#000000', // Texte noir en light mode, blanc en dark mode
                             '&:hover': {
                                 backgroundColor: isDarkMode ? '#555555' : undefined,
+                            },
+                            // S'assurer que l'icône a aussi la bonne couleur de texte
+                            '& .MuiButton-startIcon': {
+                                color: isDarkMode ? '#ffffff' : '#000000'
                             }
                         }}
                     >
@@ -587,13 +592,17 @@ const EventLogger = ({
                             <Chip
                                 label={baseFilteredLogs.length}
                                 size="small"
-                                color="primary"
                                 sx={{
                                     ml: 1,
                                     height: 20,
                                     minWidth: 20,
-                                    backgroundColor: isDarkMode ? '#1976d2' : undefined,
-                                    color: '#ffffff'
+                                    // Chip noir en light mode, bleu foncé en dark mode
+                                    backgroundColor: isDarkMode ? '#1976d2' : '#000000',
+                                    // Texte toujours blanc
+                                    color: '#ffffff',
+                                    '& .MuiChip-label': {
+                                        color: '#ffffff'
+                                    }
                                 }}
                             />
                         )}

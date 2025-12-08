@@ -18,7 +18,6 @@ import {
     TextField,
     Snackbar,
     Alert,
-    Collapse,
     ListItemIcon,
     ListItemText,
     useMediaQuery,
@@ -754,75 +753,96 @@ const Objects = () => {
                     pb: 1,
                     mb: 2
                 }}>
-                    <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1}}>
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            aria-label={showFilters ? "Hide filters" : "Show filters"}
-                        >
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
+                    <Box sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                    }}>
+                        {/* Left section with Show Filters button and filters */}
+                        <Box sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 2,
+                            flexGrow: 1,
+                            overflowX: "auto",
+                            py: 1
+                        }}>
+                            <Button
+                                onClick={() => setShowFilters(!showFilters)}
+                                startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                                aria-label={showFilters ? "Hide filters" : "Show filters"}
+                                sx={{minWidth: 'auto', flexShrink: 0}}
+                            >
+                                {showFilters ? "Hide filters" : "Show filters"}
+                            </Button>
+
+                            {showFilters && (
+                                <>
+                                    <Autocomplete
+                                        key={`global-state-${selectedGlobalState}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={globalStates}
+                                        value={selectedGlobalState}
+                                        onChange={(e, val) => val && setSelectedGlobalState(val)}
+                                        renderInput={(params) => <TextField {...params} label="Global State"/>}
+                                        renderOption={(props, option) => (
+                                            <li {...props}>
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    {option === "up" &&
+                                                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
+                                                    {option === "down" &&
+                                                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "warn" &&
+                                                        <PriorityHighIcon sx={{color: orange[500], fontSize: 18}}/>}
+                                                    {option === "n/a" &&
+                                                        <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
+                                                    {option === "unprovisioned" &&
+                                                        <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
+                                                </Box>
+                                            </li>
+                                        )}
+                                    />
+                                    <Autocomplete
+                                        key={`namespace-${selectedNamespace}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...namespaces]}
+                                        value={selectedNamespace}
+                                        onChange={(e, val) => val && setSelectedNamespace(val)}
+                                        renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                                    />
+                                    <Autocomplete
+                                        key={`kind-${selectedKind}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...kinds]}
+                                        value={selectedKind}
+                                        onChange={(e, val) => val && setSelectedKind(val)}
+                                        renderInput={(params) => <TextField {...params} label="Kind"/>}
+                                    />
+                                    <TextField
+                                        label="Name"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                    />
+                                </>
+                            )}
+                        </Box>
+
+                        {/* Right section with Actions button */}
                         <Button
                             variant="contained"
                             color="primary"
                             onClick={handleActionsMenuOpen}
                             disabled={!selectedObjects.length}
                             aria-label="Actions on selected objects"
+                            sx={{flexShrink: 0}}
                         >
                             Actions on selected objects
                         </Button>
                     </Box>
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                        <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
-                            <Autocomplete
-                                key={`global-state-${selectedGlobalState}`}
-                                sx={{minWidth: 200}}
-                                options={globalStates}
-                                value={selectedGlobalState}
-                                onChange={(e, val) => val && setSelectedGlobalState(val)}
-                                renderInput={(params) => <TextField {...params} label="Global State"/>}
-                                renderOption={(props, option) => (
-                                    <li {...props}>
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                            {option === "up" &&
-                                                <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
-                                            {option === "down" &&
-                                                <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "warn" &&
-                                                <PriorityHighIcon sx={{color: orange[500], fontSize: 18}}/>}
-                                            {option === "n/a" &&
-                                                <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
-                                            {option === "unprovisioned" &&
-                                                <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
-                                        </Box>
-                                    </li>
-                                )}
-                            />
-                            <Autocomplete
-                                key={`namespace-${selectedNamespace}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...namespaces]}
-                                value={selectedNamespace}
-                                onChange={(e, val) => val && setSelectedNamespace(val)}
-                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                            />
-                            <Autocomplete
-                                key={`kind-${selectedKind}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...kinds]}
-                                value={selectedKind}
-                                onChange={(e, val) => val && setSelectedKind(val)}
-                                renderInput={(params) => <TextField {...params} label="Kind"/>}
-                            />
-                            <TextField
-                                label="Name"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                sx={{minWidth: 200}}
-                            />
-                        </Box>
-                    </Collapse>
+
                     <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">

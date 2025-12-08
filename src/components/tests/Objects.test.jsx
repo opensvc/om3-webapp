@@ -512,7 +512,6 @@ describe('Objects Component', () => {
 
         // Check filters are visible initially
         const toggleButton = await screen.findByRole('button', {name: /filters/i});
-        expect(toggleButton).toHaveTextContent('Hide filters');
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
 
         // Click to hide filters
@@ -520,17 +519,13 @@ describe('Objects Component', () => {
 
         // Check filters are hidden
         await waitFor(() => {
-            expect(toggleButton).toHaveTextContent('Show filters');
+            expect(toggleButton).toHaveTextContent('Filters');
         });
 
         expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
 
         // Click to show filters again
         fireEvent.click(toggleButton);
-
-        await waitFor(() => {
-            expect(toggleButton).toHaveTextContent('Hide filters');
-        });
 
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
     });

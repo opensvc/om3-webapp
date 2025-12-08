@@ -316,10 +316,9 @@ const Heartbeats = () => {
                         }}>
                             <Button
                                 onClick={() => setShowFilters(!showFilters)}
-                                startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                                 sx={{minWidth: 'auto', flexShrink: 0}}
                             >
-                                {showFilters ? "Hide filters" : "Show filters"}
+                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
                             </Button>
 
                             {showFilters && (

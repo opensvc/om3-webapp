@@ -770,11 +770,10 @@ const Objects = () => {
                         }}>
                             <Button
                                 onClick={() => setShowFilters(!showFilters)}
-                                startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                                 aria-label={showFilters ? "Hide filters" : "Show filters"}
                                 sx={{minWidth: 'auto', flexShrink: 0}}
                             >
-                                {showFilters ? "Hide filters" : "Show filters"}
+                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
                             </Button>
 
                             {showFilters && (

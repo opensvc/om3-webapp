@@ -93,7 +93,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
             )}
             {avail === "warn" && (
                 <Tooltip title="warn">
-                    <PriorityHighIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
                 </Tooltip>
             )}
             {avail === "n/a" && (
@@ -194,7 +194,8 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
             )}
             {nodeAvail === "warn" && (
                 <Tooltip title="warn">
-                    <PriorityHighIcon sx={{color: orange[500], fontSize: 24}} aria-label={`Node ${node} has warning`}/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}}
+                                           aria-label={`Node ${node} has warning`}/>
                 </Tooltip>
             )}
         </Box>
@@ -793,7 +794,8 @@ const Objects = () => {
                                                     {option === "down" &&
                                                         <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
                                                     {option === "warn" &&
-                                                        <PriorityHighIcon sx={{color: orange[500], fontSize: 18}}/>}
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: orange[500], fontSize: 18}}/>}
                                                     {option === "n/a" &&
                                                         <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
                                                     {option === "unprovisioned" &&

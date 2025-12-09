@@ -19,7 +19,6 @@ import useEventStore from "../hooks/useEventStore.js";
 import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import {red, orange} from "@mui/material/colors";
 import Tooltip from "@mui/material/Tooltip";
 
@@ -291,7 +290,7 @@ const NavBar = () => {
                                             textDecoration: "none"
                                         }}
                                     >
-                                        <PriorityHighIcon sx={{color: orange[500]}}/>
+                                        <FiberManualRecordIcon sx={{color: orange[500]}}/>
                                         {warnCount}
                                     </Typography>
                                 </Tooltip>

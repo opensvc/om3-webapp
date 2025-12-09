@@ -12,10 +12,10 @@ import {
     ClickAwayListener,
 } from '@mui/material';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import AcUnitIcon from '@mui/icons-material/AcUnit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {orange, blue, red} from '@mui/material/colors';
+import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
+import {blue, red} from '@mui/material/colors';
 import {OBJECT_ACTIONS} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 import logger from '../utils/logger.js';
@@ -92,15 +92,9 @@ const HeaderSection = ({
 
                     <Box sx={{ml: globalExpect ? "70px" : 0, display: 'flex', alignItems: 'center', gap: 1}}>
                         <Tooltip title={getObjectStatus().avail || 'unknown'}>
-                            {getObjectStatus().avail === 'warn' ? (
-                                <PriorityHighIcon
-                                    sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
-                                />
-                            ) : (
-                                <FiberManualRecordIcon
-                                    sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
-                                />
-                            )}
+                            <FiberManualRecordIcon
+                                sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
+                            />
                         </Tooltip>
                         {getObjectStatus().frozen === 'frozen' && (
                             <Tooltip title="frozen">

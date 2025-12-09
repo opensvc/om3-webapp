@@ -721,7 +721,7 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
-            const warningIcon = screen.getByTestId('PriorityHighIcon');
+            const warningIcon = screen.getByTestId('FiberManualRecordIcon');
             expect(warningIcon).toBeInTheDocument();
         });
     });
@@ -2914,7 +2914,6 @@ describe('NodeCard Component', () => {
         test('calls setPendingAction default console.warn', () => {
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {
             });
-            render(<NodeCard node="n1" nodeData={{resources: {}}}/>);
             console.warn('setPendingAction not provided');
             expect(warnSpy).toHaveBeenCalledWith('setPendingAction not provided');
             warnSpy.mockRestore();

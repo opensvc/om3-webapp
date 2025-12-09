@@ -10,7 +10,7 @@ import {
     Box,
     useTheme
 } from '@mui/material';
-import {FaSignOutAlt, FaServer, FaUser, FaKey, FaLock, FaCode, FaWifi, FaMoon, FaSun} from "react-icons/fa";
+import {FaSignOutAlt, FaServer, FaUser, FaLock, FaCode, FaWifi, FaMoon, FaSun} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useNavigate} from "react-router-dom";
@@ -31,7 +31,7 @@ const WhoAmI = () => {
     const {isDarkMode, toggleDarkMode} = useDarkMode();
     const theme = useTheme();
 
-    // Fetch app version from GitHub API
+    // Fetch version from GitHub
     useEffect(() => {
         const fetchVersion = async () => {
             const cached = localStorage.getItem('appVersion');
@@ -63,7 +63,7 @@ const WhoAmI = () => {
         fetchVersion();
     }, []);
 
-    // Fetch daemon status to get the nodename
+    // Fetch daemon status
     useEffect(() => {
         const fetchDaemonData = async () => {
             const token = localStorage.getItem("authToken");
@@ -75,10 +75,10 @@ const WhoAmI = () => {
                 }
             }
         };
-
         fetchDaemonData();
     }, [fetchNodes]);
 
+    // Fetch WhoAmI
     useEffect(() => {
         const fetchUserInfo = async () => {
             try {
@@ -119,8 +119,6 @@ const WhoAmI = () => {
 
     return (
         <Box sx={{p: 3}}>
-            
-
             <Box sx={{
                 display: 'flex',
                 flexDirection: {xs: 'column', lg: 'row'},
@@ -133,214 +131,138 @@ const WhoAmI = () => {
                         flex: 2,
                         cursor: 'pointer',
                         transition: 'all 0.2s ease-in-out',
-                        '&:hover': {
-                            transform: 'translateY(-2px)',
-                            boxShadow: 4
-                        }
+                        '&:hover': {transform: 'translateY(-2px)', boxShadow: 4}
                     }}
                 >
                     <CardContent>
                         <Box sx={{display: 'flex', alignItems: 'center', mb: 3}}>
                             <FaUser style={{marginRight: '8px', color: '#1976d2'}}/>
-                            <Typography variant="h5" component="h2">
-                                My Information
+                            <Typography variant="h5">My Information</Typography>
+                        </Box>
+
+                        {/* Identity */}
+                        <Box>
+                            <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                <FaUser style={{marginRight: '8px', fontSize: '1rem'}}/>
+                                Identity
                             </Typography>
-                        </Box>
 
-                        <Box sx={{display: 'grid', gridTemplateColumns: {xs: '1fr', md: '1fr 1fr'}, gap: 3}}>
-                            {/* Identity Section */}
                             <Box>
-                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
-                                    <FaUser style={{marginRight: '8px', fontSize: '1rem'}}/>
-                                    Identity
-                                </Typography>
-                                <Box sx={{spaceY: 2}}>
-                                    <Box sx={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        py: 1
-                                    }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Username
-                                        </Typography>
-                                        <Typography variant="body1"
-                                                    sx={{fontFamily: 'monospace', fontWeight: 'medium'}}>
-                                            {userInfo.name}
-                                        </Typography>
-                                    </Box>
-
-                                    <Box sx={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        py: 1,
-                                        borderTop: '1px solid',
-                                        borderColor: 'divider'
-                                    }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Auth Method
-                                        </Typography>
-                                        <Typography variant="body1"
-                                                    sx={{fontFamily: 'monospace', fontWeight: 'medium'}}>
-                                            {userInfo.auth}
-                                        </Typography>
-                                    </Box>
+                                <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                    <Typography variant="body2" color="text.secondary">Username</Typography>
+                                    <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                        {userInfo.name}
+                                    </Typography>
                                 </Box>
-                            </Box>
 
-                            {/* Access Section */}
-                            <Box>
-                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
-                                    <FaKey style={{marginRight: '8px', fontSize: '1rem'}}/>
-                                    Access
-                                </Typography>
-                                <Box sx={{spaceY: 2}}>
-                                    <Box sx={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        py: 1
-                                    }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Namespace
-                                        </Typography>
-                                        <Typography variant="body1"
-                                                    sx={{fontFamily: 'monospace', fontWeight: 'medium'}}>
-                                            {userInfo.namespace}
-                                        </Typography>
-                                    </Box>
-
-                                    <Box sx={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        py: 1,
-                                        borderTop: '1px solid',
-                                        borderColor: 'divider'
-                                    }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Raw Permissions
-                                        </Typography>
-                                        <Typography variant="body1"
-                                                    sx={{fontFamily: 'monospace', fontWeight: 'medium'}}>
-                                            {userInfo.raw_grant || 'None'}
-                                        </Typography>
-                                    </Box>
+                                <Box sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    py: 1,
+                                    borderTop: '1px solid',
+                                    borderColor: 'divider'
+                                }}>
+                                    <Typography variant="body2" color="text.secondary">Auth Method</Typography>
+                                    <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                        {userInfo.auth}
+                                    </Typography>
                                 </Box>
                             </Box>
                         </Box>
 
-                        {/* Permissions Section - Full width */}
+                        {/* Permission Details */}
                         <Box sx={{mt: 3}}>
                             <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
-                                <FaLock style={{marginRight: '8px', fontSize: '1rem'}}/>
+                                <FaLock style={{marginRight: '8px'}}/>
                                 Permission Details
                             </Typography>
 
                             <Box sx={{
                                 bgcolor: isDarkMode ? 'background.default' : 'grey.50',
                                 p: 2,
-                                borderRadius: 1,
-                                maxHeight: '300px',
-                                overflow: 'auto'
+                                borderRadius: 1
                             }}>
-                                <pre style={{
-                                    margin: 0,
-                                    fontSize: '0.875rem',
-                                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                                    color: isDarkMode ? '#ffffff' : theme.palette.text.primary,
-                                    backgroundColor: 'transparent'
-                                }}>
-                                    {JSON.stringify(userInfo.grant, null, 2)}
-                                </pre>
+                                <Typography variant="body2" color="text.secondary">Raw Permissions</Typography>
+                                <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                    {userInfo.raw_grant || "None"}
+                                </Typography>
                             </Box>
                         </Box>
                     </CardContent>
                 </Card>
 
-                {/* Right Side - Server Information, Dark Mode and Logout */}
+                {/* RIGHT PANEL */}
                 <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
-                    {/* Server Information Panel */}
+
+                    {/* Server Info */}
                     <Card
                         sx={{
                             cursor: 'pointer',
                             transition: 'all 0.2s ease-in-out',
-                            '&:hover': {
-                                transform: 'translateY(-2px)',
-                                boxShadow: 4
-                            }
+                            '&:hover': {transform: 'translateY(-2px)', boxShadow: 4}
                         }}
                     >
                         <CardContent>
+
                             <Box sx={{display: 'flex', alignItems: 'center', mb: 3}}>
                                 <FaServer style={{marginRight: '8px', color: '#1976d2'}}/>
-                                <Typography variant="h5" component="h2">
-                                    Server Information
-                                </Typography>
+                                <Typography variant="h5">Server Information</Typography>
                             </Box>
 
-                            <Box sx={{display: 'flex', flexDirection: 'column', gap: 3}}>
-                                {/* Connected Node Information */}
-                                <Box sx={{
-                                    textAlign: 'center',
-                                    p: 2,
-                                    bgcolor: isDarkMode ? 'background.default' : 'grey.50',
-                                    borderRadius: 1,
-                                    border: isDarkMode ? `1px solid ${theme.palette.divider}` : 'none'
-                                }}>
-                                    <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1}}>
-                                        <FaWifi style={{color: '#4caf50', marginRight: '8px'}}/>
-                                        <Typography variant="h6" color="primary.main">
-                                            Connected Node
+                            {/* Connected Node */}
+                            <Box sx={{mb: 3}}>
+                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                    <FaWifi style={{marginRight: '8px'}}/>
+                                    Connected Node
+                                </Typography>
+
+                                <Box>
+                                    <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Node Name
+                                        </Typography>
+                                        <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                            {daemon?.nodename || "Loading..."}
                                         </Typography>
                                     </Box>
-                                    <Typography
-                                        variant="h5"
-                                        sx={{
-                                            fontFamily: 'monospace',
-                                            fontWeight: 'bold',
-                                            color: 'text.primary'
-                                        }}
-                                    >
-                                        {daemon?.nodename || 'Loading...'}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Daemon Node
-                                    </Typography>
                                 </Box>
+                            </Box>
 
-                                {/* Application Version */}
-                                <Box sx={{textAlign: 'center', p: 2}}>
-                                    <FaCode style={{
-                                        fontSize: '2.5rem',
-                                        color: '#1976d2',
-                                        marginBottom: '12px',
-                                        opacity: 0.8
-                                    }}/>
+                            {/* App Version */}
+                            <Box>
+                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                    <FaCode style={{marginRight: '8px'}}/>
+                                    WebApp Version
+                                </Typography>
 
-                                    <Typography variant="h5" component="div" sx={{
-                                        fontFamily: 'monospace',
-                                        fontWeight: 'bold',
-                                        color: 'primary.main',
-                                        mb: 1
+                                <Box>
+                                    <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                        <Typography variant="body2" color="text.secondary">Version</Typography>
+                                        <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                            v{appVersion || "Loading..."}
+                                        </Typography>
+                                    </Box>
+
+                                    <Box sx={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        py: 1,
+                                        borderTop: '1px solid',
+                                        borderColor: 'divider'
                                     }}>
-                                        v{appVersion || 'loading...'}
-                                    </Typography>
-
-                                    <Typography variant="body1" color="text.secondary" sx={{mb: 1}}>
-                                        OM3 WebApp
-                                    </Typography>
-
-                                    <Typography variant="caption" color="text.secondary" sx={{fontStyle: 'italic'}}>
-                                        Open Source Cluster Management
-                                    </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Description
+                                        </Typography>
+                                        <Typography variant="body1" color="text.secondary">
+                                            OM3 WebApp
+                                        </Typography>
+                                    </Box>
                                 </Box>
                             </Box>
                         </CardContent>
                     </Card>
 
-                    {/* Dark Mode Toggle Button */}
+                    {/* Dark Mode */}
                     <Button
                         startIcon={isDarkMode ? <FaSun/> : <FaMoon/>}
                         onClick={toggleDarkMode}
@@ -349,23 +271,14 @@ const WhoAmI = () => {
                         sx={{
                             backgroundColor: isDarkMode ? "#ff9800" : "#333333",
                             color: "white",
-                            boxShadow: 2,
-                            padding: '16px 24px',
-                            fontSize: '1.1rem',
                             fontWeight: 'bold',
-                            borderRadius: 2,
-                            "&:hover": {
-                                backgroundColor: isDarkMode ? "#f57c00" : "#555555",
-                                boxShadow: 4
-                            },
-                            transition: 'all 0.3s ease',
+                            borderRadius: 2
                         }}
-                        aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
                     >
                         {isDarkMode ? "Light Mode" : "Dark Mode"}
                     </Button>
 
-                    {/* Simple Logout Button */}
+                    {/* Logout */}
                     <Button
                         startIcon={<FaSignOutAlt/>}
                         onClick={handleLogout}
@@ -374,15 +287,8 @@ const WhoAmI = () => {
                         sx={{
                             backgroundColor: "red",
                             color: "white",
-                            boxShadow: 2,
-                            padding: '16px 24px',
-                            fontSize: '1.1rem',
                             fontWeight: 'bold',
-                            borderRadius: 2,
-                            "&:hover": {
-                                backgroundColor: "darkred",
-                                boxShadow: 4
-                            },
+                            borderRadius: 2
                         }}
                     >
                         Logout

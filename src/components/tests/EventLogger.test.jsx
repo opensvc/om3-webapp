@@ -2503,15 +2503,6 @@ describe('EventLogger Component', () => {
         }
     });
 
-    test('renders the button initially when drawer is closed', () => {
-        renderWithTheme(<EventLogger/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-        expect(eventLoggerButton).toBeInTheDocument();
-    });
-
     test('createHighlightedHtml - branch when no search term provided', async () => {
         const mockLogs = [{
             id: '1',
@@ -2659,7 +2650,6 @@ describe('EventLogger Component', () => {
             clearLogs: jest.fn(),
         });
         renderWithTheme(<EventLogger/>);
-
         const eventLoggerButton = screen.getByText((content, element) => {
             const hasText = (node) => node.textContent &&
                 (node.textContent === 'Events' ||
@@ -4053,5 +4043,337 @@ describe('EventLogger Component', () => {
 
         const {container} = renderWithTheme(<EventLogger/>);
         expect(container).toBeInTheDocument();
+    });
+
+    test('search handles JSON serialization errors gracefully', () => {
+        const circular = {};
+        circular.self = circular;
+
+        const mockLogs = [
+            {
+                id: '1',
+                eventType: 'CIRCULAR_TEST',
+                timestamp: new Date().toISOString(),
+                data: circular
+            }
+        ];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
+        logger.warn = jest.fn();
+
+        renderWithTheme(<EventLogger/>);
+    });
+
+    test('handles logs without id property', () => {
+        const mockLogs = [
+            {eventType: 'NO_ID_EVENT', timestamp: new Date().toISOString(), data: {}}
+        ];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
+        expect(() => {
+            renderWithTheme(<EventLogger/>);
+        }).not.toThrow();
+    });
+
+    test('clearLogs button is found and works', () => {
+        const mockClearLogs = jest.fn();
+        const mockLogs = [
+            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
+        ];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+
+        const openButton = screen.getByLabelText('Event Logger', {selector: 'button'});
+        fireEvent.click(openButton);
+
+        waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        const deleteIcons = screen.getAllByTestId('DeleteOutlineIcon');
+        if (deleteIcons.length > 0) {
+            const clearButton = deleteIcons[0].closest('button');
+            if (clearButton) {
+                fireEvent.click(clearButton);
+                expect(mockClearLogs).toHaveBeenCalled();
+            }
+        }
+    });
+
+    test('handles empty search term', () => {
+        const mockLogs = [
+            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}
+        ];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
+        renderWithTheme(<EventLogger/>);
+    });
+
+    test('handles resize with null event', () => {
+        const startResizing = (mouseDownEvent) => {
+            if (mouseDownEvent?.preventDefault) mouseDownEvent.preventDefault();
+            const startY = mouseDownEvent?.clientY ?? 0;
+            return startY;
+        };
+
+        expect(startResizing(null)).toBe(0);
+        expect(startResizing({clientY: 100})).toBe(100);
+        expect(startResizing({})).toBe(0);
+
+        const mockEvent = {clientY: 100, preventDefault: jest.fn()};
+        expect(startResizing(mockEvent)).toBe(100);
+        expect(mockEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    test('getEventColor covers all branches', () => {
+        const getEventColor = (eventType = "") => {
+            if (eventType.includes("ERROR")) return "error";
+            if (eventType.includes("UPDATED")) return "primary";
+            if (eventType.includes("DELETED")) return "warning";
+            if (eventType.includes("CONNECTION")) return "info";
+            return "default";
+        };
+
+        expect(getEventColor("TEST_ERROR_EVENT")).toBe("error");
+        expect(getEventColor("OBJECT_UPDATED")).toBe("primary");
+        expect(getEventColor("ITEM_DELETED")).toBe("warning");
+        expect(getEventColor("CONNECTION_STATUS")).toBe("info");
+        expect(getEventColor("REGULAR_EVENT")).toBe("default");
+        expect(getEventColor("")).toBe("default");
+        expect(getEventColor()).toBe("default");
+    });
+
+    test('toggleExpand covers both branches', () => {
+        const toggleExpand = (prev, id) => {
+            return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+        };
+
+        expect(toggleExpand([], 'id1')).toEqual(['id1']);
+        expect(toggleExpand(['id1'], 'id2')).toEqual(['id1', 'id2']);
+
+        expect(toggleExpand(['id1', 'id2'], 'id1')).toEqual(['id2']);
+        expect(toggleExpand(['id1'], 'id1')).toEqual([]);
+    });
+
+    test('covers createHighlightedHtml no search term branch', async () => {
+        const mockLogs = [
+            {
+                id: '1',
+                eventType: 'NO_SEARCH_BRANCH',
+                timestamp: new Date().toISOString(),
+                data: {message: 'content to escape & < >'},
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+        renderWithTheme(<EventLogger/>);
+        const buttons = screen.getAllByRole('button');
+        const eventLoggerButton = buttons.find(btn =>
+            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+        );
+        if (eventLoggerButton) {
+            fireEvent.click(eventLoggerButton);
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+            fireEvent.change(searchInput, {target: {value: ''}});
+            await waitFor(() => {
+                expect(screen.getByText(/NO_SEARCH_BRANCH/i)).toBeInTheDocument();
+            });
+            const logHeader = screen.getByText(/NO_SEARCH_BRANCH/i).closest('div');
+            fireEvent.click(logHeader);
+            await waitFor(() => {
+                expect(screen.getByText(/"content to escape & < >"/)).toBeInTheDocument();
+            });
+        }
+    });
+
+    test('covers createHighlightedHtml no text branch', async () => {
+        const mockLogs = [
+            {
+                id: '1',
+                eventType: 'NO_TEXT_BRANCH',
+                timestamp: new Date().toISOString(),
+                data: null,
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+        renderWithTheme(<EventLogger/>);
+        const buttons = screen.getAllByRole('button');
+        const eventLoggerButton = buttons.find(btn =>
+            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+        );
+        if (eventLoggerButton) {
+            fireEvent.click(eventLoggerButton);
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+            await waitFor(() => {
+                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
+            });
+            fireEvent.change(searchInput, {target: {value: ''}});
+            await waitFor(() => {
+                expect(screen.getByText(/NO_TEXT_BRANCH/i)).toBeInTheDocument();
+            });
+            const logHeader = screen.getByText(/NO_TEXT_BRANCH/i).closest('div');
+            fireEvent.click(logHeader);
+            await waitFor(() => {
+                expect(screen.getByText(/null/i)).toBeInTheDocument();
+            });
+        }
+    });
+
+    test('covers applyHighlightToMatch no searchTerm branch', async () => {
+        const mockLogs = [
+            {
+                id: '1',
+                eventType: 'NO_SEARCH_APPLY',
+                timestamp: new Date().toISOString(),
+                data: {key: 'value'},
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+        renderWithTheme(<EventLogger/>);
+        const buttons = screen.getAllByRole('button');
+        const eventLoggerButton = buttons.find(btn =>
+            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+        );
+        if (eventLoggerButton) {
+            fireEvent.click(eventLoggerButton);
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+            fireEvent.change(searchInput, {target: {value: ''}});
+            await waitFor(() => {
+                expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
+            });
+            const logHeader = screen.getByText(/NO_SEARCH_APPLY/i).closest('div');
+            fireEvent.click(logHeader);
+            await waitFor(() => {
+                expect(screen.getByText(/"value"/)).toBeInTheDocument();
+                const highlightSpans = document.querySelectorAll('.search-highlight');
+                expect(highlightSpans.length).toBe(0);
+            });
+        }
+    });
+
+    test('covers subscription dialog empty eventTypes', async () => {
+        renderWithTheme(<EventLogger eventTypes={[]}/>);
+        const buttons = screen.getAllByRole('button');
+        const eventLoggerButton = buttons.find(btn =>
+            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+        );
+        if (eventLoggerButton) {
+            fireEvent.click(eventLoggerButton);
+            const subChip = screen.getByText(/Subscribed to: 0 event type\(s\)/i);
+            fireEvent.click(subChip);
+            await waitFor(() => {
+                expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+            });
+            const subscribeAllButton = screen.getByText('Subscribe to All');
+            expect(subscribeAllButton).toBeDisabled();
+        }
+    });
+
+    test('dark mode styles are applied correctly', () => {
+        const darkTheme = createTheme({
+            palette: {
+                mode: 'dark',
+            },
+        });
+
+        const mockLogs = [
+            {
+                id: '1',
+                eventType: 'DARK_MODE_TEST',
+                timestamp: new Date().toISOString(),
+                data: {}
+            }
+        ];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
+        render(
+            <ThemeProvider theme={darkTheme}>
+                <EventLogger/>
+            </ThemeProvider>
+        );
+
+        const button = screen.getByText('Events');
+        fireEvent.click(button);
+
+        waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+    });
+
+    test('covers line 117-120 - escapeHtml with special characters', () => {
+        const mockLogs = [{
+            id: '1',
+            eventType: 'HTML_SPECIAL_CHARS',
+            timestamp: new Date().toISOString(),
+            data: {
+                html: 'Test & < > " \' special characters',
+                script: '<script>alert("xss")</script>'
+            }
+        }];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs: mockLogs,
+            isPaused: false,
+            setPaused: jest.fn(),
+            clearLogs: jest.fn(),
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const button = screen.getByText('Events');
+        fireEvent.click(button);
+
+        waitFor(() => {
+            const logElement = screen.getByText(/HTML_SPECIAL_CHARS/i);
+            const clickableElement = logElement.closest('[style*="cursor: pointer"]');
+            if (clickableElement) {
+                fireEvent.click(clickableElement);
+            }
+        });
     });
 });

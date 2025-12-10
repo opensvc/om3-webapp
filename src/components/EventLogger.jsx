@@ -51,6 +51,7 @@ const EventLogger = ({
     // UI state
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
     const [eventTypeFilter, setEventTypeFilter] = useState([]);
     const [autoScroll, setAutoScroll] = useState(true);
     const [drawerHeight, setDrawerHeight] = useState(320);
@@ -67,9 +68,27 @@ const EventLogger = ({
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
     const resizeTimeoutRef = useRef(null);
+    const searchDebounceRef = useRef(null);
 
     // Event logs store
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
+
+    // Debounce search term updates
+    useEffect(() => {
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+        }
+
+        searchDebounceRef.current = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 300); // 300ms delay
+
+        return () => {
+            if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
+            }
+        };
+    }, [searchTerm]);
 
     const filterData = useCallback((data) => {
         if (!data || typeof data !== 'object') return data;
@@ -282,8 +301,8 @@ const EventLogger = ({
 
         if (eventTypeFilter.length > 0) result = result.filter(log => eventTypeFilter.includes(log.eventType));
 
-        if (searchTerm.trim()) {
-            const term = searchTerm.toLowerCase().trim();
+        if (debouncedSearchTerm.trim()) {
+            const term = debouncedSearchTerm.toLowerCase().trim();
             result = result.filter(log => {
                 const typeMatch = String(log.eventType || "").toLowerCase().includes(term);
                 let dataMatch = false;
@@ -299,7 +318,7 @@ const EventLogger = ({
         }
 
         return result;
-    }, [baseFilteredLogs, eventTypeFilter, searchTerm, filterData]);
+    }, [baseFilteredLogs, eventTypeFilter, debouncedSearchTerm, filterData]);
 
 
     const SubscriptionDialog = () => {
@@ -522,12 +541,14 @@ const EventLogger = ({
     const handleClear = useCallback(() => {
         clearLogs();
         setSearchTerm("");
+        setDebouncedSearchTerm("");
         setEventTypeFilter([]);
         setExpandedLogIds([]);
     }, [clearLogs]);
 
     const handleClearFilters = useCallback(() => {
         setSearchTerm("");
+        setDebouncedSearchTerm("");
         setEventTypeFilter([]);
     }, []);
 
@@ -675,7 +696,7 @@ const EventLogger = ({
                                 }}
                             />
                         )}
-                        {(eventTypeFilter.length > 0 || searchTerm) &&
+                        {(eventTypeFilter.length > 0 || debouncedSearchTerm) &&
                             <Chip
                                 label="Filtered"
                                 color="info"
@@ -747,6 +768,17 @@ const EventLogger = ({
                             '& .MuiOutlinedInput-notchedOutline': {
                                 borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
                             }
+                        }}
+                        InputProps={{
+                            endAdornment: searchTerm && (
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setSearchTerm("")}
+                                    sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                                >
+                                    <Close fontSize="small"/>
+                                </IconButton>
+                            )
                         }}
                     />
                     {availableEventTypes.length > 0 && (
@@ -864,7 +896,7 @@ const EventLogger = ({
                                         <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
                                             <EventTypeChip
                                                 eventType={log.eventType}
-                                                searchTerm={searchTerm}
+                                                searchTerm={debouncedSearchTerm}
                                             />
                                             <Typography
                                                 variant="caption"
@@ -891,7 +923,8 @@ const EventLogger = ({
                                                 mx: 0.5,
                                                 mb: 0.5
                                             }}>
-                                                <JSONView data={log.data} dense={true} searchTerm={searchTerm}/>
+                                                <JSONView data={log.data} dense={true}
+                                                          searchTerm={debouncedSearchTerm}/>
                                             </Box>
                                         )}
 
@@ -905,7 +938,8 @@ const EventLogger = ({
                                                 mx: 0.5,
                                                 mb: 0.5
                                             }}>
-                                                <JSONView data={log.data} dense={false} searchTerm={searchTerm}/>
+                                                <JSONView data={log.data} dense={false}
+                                                          searchTerm={debouncedSearchTerm}/>
                                             </Box>
                                         )}
                                     </Box>

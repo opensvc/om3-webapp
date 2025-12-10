@@ -31,6 +31,14 @@ import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
 import {startLoggerReception, closeLoggerEventSource} from "../eventSourceManager";
 
+const CONNECTION_EVENTS = [
+    'CONNECTION_OPENED',
+    'CONNECTION_ERROR',
+    'RECONNECTION_ATTEMPT',
+    'MAX_RECONNECTIONS_REACHED',
+    'CONNECTION_CLOSED'
+];
+
 const EventLogger = ({
                          eventTypes = [],
                          objectName = null,
@@ -49,7 +57,12 @@ const EventLogger = ({
     const [forceUpdate, setForceUpdate] = useState(0);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
     const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
-    const [subscribedEventTypes, setSubscribedEventTypes] = useState(eventTypes);
+
+    const filteredEventTypes = useMemo(() => {
+        return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
+    }, [eventTypes]);
+
+    const [subscribedEventTypes, setSubscribedEventTypes] = useState(filteredEventTypes);
 
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
@@ -217,13 +230,14 @@ const EventLogger = ({
         }
     };
 
-    // Compute filtered logs based on eventTypes prop AND received events
+    // Compute filtered logs based on filteredEventTypes prop AND received events
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
+        filtered = filtered.filter(log => !CONNECTION_EVENTS.includes(log.eventType));
 
-        // Filter by eventTypes prop if provided (this is the display filter)
-        if (eventTypes.length > 0) {
-            filtered = filtered.filter(log => eventTypes.includes(log.eventType));
+        // Filter by filteredEventTypes prop if provided (this is the display filter)
+        if (filteredEventTypes.length > 0) {
+            filtered = filtered.filter(log => filteredEventTypes.includes(log.eventType));
         }
 
         if (objectName) {
@@ -246,7 +260,7 @@ const EventLogger = ({
         }
 
         return filtered;
-    }, [eventLogs, eventTypes, objectName]);
+    }, [eventLogs, filteredEventTypes, objectName]);
 
     // Available event types for the filter dropdown (from baseFilteredLogs)
     const availableEventTypes = useMemo(() => {
@@ -323,8 +337,8 @@ const EventLogger = ({
                 <Box sx={{mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
                     <Button
                         size="small"
-                        onClick={() => setTempSubscribedEventTypes([...eventTypes])}
-                        disabled={eventTypes.length === 0}
+                        onClick={() => setTempSubscribedEventTypes([...filteredEventTypes])}
+                        disabled={filteredEventTypes.length === 0}
                         sx={{
                             backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
                             color: isDarkMode ? '#ffffff' : undefined
@@ -345,12 +359,12 @@ const EventLogger = ({
                 </Box>
 
                 <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
-                    {eventTypes.length === 0 ? (
+                    {filteredEventTypes.length === 0 ? (
                         <Typography color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{textAlign: 'center', py: 4}}>
                             No event types available for this page
                         </Typography>
                     ) : (
-                        eventTypes.map(eventType => (
+                        filteredEventTypes.map(eventType => (
                             <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5}}>
                                 <Checkbox
                                     checked={tempSubscribedEventTypes.includes(eventType)}
@@ -425,7 +439,7 @@ const EventLogger = ({
                             borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
                         }}
                         onClick={() => setSubscriptionDialogOpen(true)}
-                        onDelete={() => setSubscribedEventTypes([...eventTypes])}
+                        onDelete={() => setSubscribedEventTypes([...filteredEventTypes])}
                         deleteIcon={<Settings sx={{color: isDarkMode ? '#ffffff' : undefined}}/>}
                     />
                 </Tooltip>
@@ -576,12 +590,10 @@ const EventLogger = ({
                             borderRadius: "20px",
                             px: 2,
                             backgroundColor: isDarkMode ? '#333333' : undefined,
-                            // Correction: Garder la couleur de fond mais changer la couleur du texte pour light mode
-                            color: isDarkMode ? '#ffffff' : '#000000', // Texte noir en light mode, blanc en dark mode
+                            color: isDarkMode ? '#ffffff' : '#000000',
                             '&:hover': {
                                 backgroundColor: isDarkMode ? '#555555' : undefined,
                             },
-                            // S'assurer que l'icône a aussi la bonne couleur de texte
                             '& .MuiButton-startIcon': {
                                 color: isDarkMode ? '#ffffff' : '#000000'
                             }
@@ -596,9 +608,7 @@ const EventLogger = ({
                                     ml: 1,
                                     height: 20,
                                     minWidth: 20,
-                                    // Chip noir en light mode, bleu foncé en dark mode
                                     backgroundColor: isDarkMode ? '#1976d2' : '#000000',
-                                    // Texte toujours blanc
                                     color: '#ffffff',
                                     '& .MuiChip-label': {
                                         color: '#ffffff'
@@ -870,7 +880,7 @@ const EventLogger = ({
                                             }}/>
                                         </Box>
 
-                                        {/* Preview when collapsed: dense JSON WITH COLORS */}
+                                        {/* Preview when collapsed */}
                                         {!isOpen && (
                                             <Box sx={{
                                                 p: 1,
@@ -885,7 +895,7 @@ const EventLogger = ({
                                             </Box>
                                         )}
 
-                                        {/* Full details when expanded: pretty JSON with colors */}
+                                        {/* Full details when expanded */}
                                         {isOpen && (
                                             <Box sx={{
                                                 p: 1,

@@ -25,7 +25,8 @@ import {
     KeyboardArrowUp,
     Pause,
     PlayArrow,
-    Settings
+    Settings,
+    Add
 } from "@mui/icons-material";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
@@ -39,6 +40,18 @@ const CONNECTION_EVENTS = [
     'CONNECTION_CLOSED'
 ];
 
+const ALL_EVENT_TYPES = [
+    'NodeStatusUpdated',
+    'NodeMonitorUpdated',
+    'NodeStatsUpdated',
+    'DaemonHeartbeatUpdated',
+    'ObjectStatusUpdated',
+    'InstanceStatusUpdated',
+    'ObjectDeleted',
+    'InstanceMonitorUpdated',
+    'InstanceConfigUpdated'
+];
+
 const EventLogger = ({
                          eventTypes = [],
                          objectName = null,
@@ -48,7 +61,6 @@ const EventLogger = ({
     const theme = useTheme();
     const isDarkMode = theme.palette.mode === 'dark';
 
-    // UI state
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -63,17 +75,57 @@ const EventLogger = ({
         return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
     }, [eventTypes]);
 
-    const [subscribedEventTypes, setSubscribedEventTypes] = useState(filteredEventTypes);
+    const usePersistedState = (key, initialValue) => {
+        const [value, setValue] = useState(() => {
+            const readFromStorage = () => {
+                try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                        const item = window.localStorage.getItem(key);
+                        return item ? JSON.parse(item) : initialValue;
+                    }
+                } catch (error) {
+                    logger.warn(`Failed to read from localStorage for key ${key}:`, error);
+                }
+                return initialValue;
+            };
+            return readFromStorage();
+        });
+
+        useEffect(() => {
+            try {
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    window.localStorage.setItem(key, JSON.stringify(value));
+                }
+            } catch (error) {
+                logger.warn(`Failed to write to localStorage for key ${key}:`, error);
+            }
+        }, [key, value]);
+
+        return [value, setValue];
+    };
+
+    const [manualSubscriptions, setManualSubscriptions] = usePersistedState('eventLogger_manualSubscriptions', []);
+
+    const subscribedEventTypes = useMemo(() => {
+        return [...new Set([...filteredEventTypes, ...manualSubscriptions])];
+    }, [filteredEventTypes, manualSubscriptions]);
+
+    useEffect(() => {
+        const newManualSubscriptions = manualSubscriptions.filter(type =>
+            !filteredEventTypes.includes(type)
+        );
+        if (newManualSubscriptions.length !== manualSubscriptions.length) {
+            setManualSubscriptions(newManualSubscriptions);
+        }
+    }, [filteredEventTypes, manualSubscriptions, setManualSubscriptions]);
 
     const logsEndRef = useRef(null);
     const logsContainerRef = useRef(null);
     const resizeTimeoutRef = useRef(null);
     const searchDebounceRef = useRef(null);
 
-    // Event logs store
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
-    // Debounce search term updates
     useEffect(() => {
         if (searchDebounceRef.current) {
             clearTimeout(searchDebounceRef.current);
@@ -81,7 +133,7 @@ const EventLogger = ({
 
         searchDebounceRef.current = setTimeout(() => {
             setDebouncedSearchTerm(searchTerm);
-        }, 300); // 300ms delay
+        }, 300);
 
         return () => {
             if (searchDebounceRef.current) {
@@ -137,7 +189,6 @@ const EventLogger = ({
         return parts.join('');
     }, [escapeHtml]);
 
-    // Toggle expand/collapse
     const toggleExpand = useCallback((id) => {
         setExpandedLogIds(prev =>
             prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -249,14 +300,19 @@ const EventLogger = ({
         }
     };
 
-    // Compute filtered logs based on filteredEventTypes prop AND received events
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
-        filtered = filtered.filter(log => !CONNECTION_EVENTS.includes(log.eventType));
 
-        // Filter by filteredEventTypes prop if provided (this is the display filter)
-        if (filteredEventTypes.length > 0) {
-            filtered = filtered.filter(log => filteredEventTypes.includes(log.eventType));
+        if (subscribedEventTypes.length > 0) {
+            filtered = filtered.filter(log => subscribedEventTypes.includes(log.eventType));
+        }
+
+        const connectionEventsFromPage = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
+        if (connectionEventsFromPage.length > 0) {
+            filtered = filtered.filter(log =>
+                subscribedEventTypes.includes(log.eventType) ||
+                connectionEventsFromPage.includes(log.eventType)
+            );
         }
 
         if (objectName) {
@@ -279,9 +335,8 @@ const EventLogger = ({
         }
 
         return filtered;
-    }, [eventLogs, filteredEventTypes, objectName]);
+    }, [eventLogs, subscribedEventTypes, objectName, eventTypes]);
 
-    // Available event types for the filter dropdown (from baseFilteredLogs)
     const availableEventTypes = useMemo(() => {
         const types = new Set();
         baseFilteredLogs.forEach(log => types.add(log.eventType));
@@ -320,9 +375,27 @@ const EventLogger = ({
         return result;
     }, [baseFilteredLogs, eventTypeFilter, debouncedSearchTerm, filterData]);
 
-
     const SubscriptionDialog = () => {
         const [tempSubscribedEventTypes, setTempSubscribedEventTypes] = useState(subscribedEventTypes);
+        const [customEventType, setCustomEventType] = useState("");
+
+        const availableEventTypesForAdd = useMemo(() => {
+            return ALL_EVENT_TYPES.filter(type =>
+                !tempSubscribedEventTypes.includes(type)
+            ).sort();
+        }, [tempSubscribedEventTypes]);
+
+        const selectedPageEventTypes = useMemo(() => {
+            return tempSubscribedEventTypes.filter(type =>
+                filteredEventTypes.includes(type)
+            );
+        }, [tempSubscribedEventTypes, filteredEventTypes]);
+
+        const selectedManualEventTypes = useMemo(() => {
+            return tempSubscribedEventTypes.filter(type =>
+                !filteredEventTypes.includes(type)
+            );
+        }, [tempSubscribedEventTypes, filteredEventTypes]);
 
         return (
             <Drawer
@@ -331,7 +404,7 @@ const EventLogger = ({
                 onClose={() => setSubscriptionDialogOpen(false)}
                 sx={{
                     '& .MuiDrawer-paper': {
-                        width: 400,
+                        width: 500,
                         maxWidth: '90vw',
                         p: 2,
                         backgroundColor: isDarkMode ? theme.palette.background.paper : '#ffffff'
@@ -353,13 +426,14 @@ const EventLogger = ({
                     Select which event types you want to SUBSCRIBE to (this affects future events only):
                 </Typography>
 
-                <Box sx={{mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
+                <Box sx={{mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
                     <Button
                         size="small"
+                        variant="outlined"
                         onClick={() => setTempSubscribedEventTypes([...filteredEventTypes])}
                         disabled={filteredEventTypes.length === 0}
                         sx={{
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
                             color: isDarkMode ? '#ffffff' : undefined
                         }}
                     >
@@ -367,60 +441,225 @@ const EventLogger = ({
                     </Button>
                     <Button
                         size="small"
+                        variant="outlined"
+                        onClick={() => setTempSubscribedEventTypes([...ALL_EVENT_TYPES])}
+                        sx={{
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined
+                        }}
+                    >
+                        All Events
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
                         onClick={() => setTempSubscribedEventTypes([])}
                         sx={{
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
                             color: isDarkMode ? '#ffffff' : undefined
                         }}
                     >
                         Unsubscribe from All
                     </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setTempSubscribedEventTypes([])}
+                        sx={{
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined
+                        }}
+                    >
+                        Clear All
+                    </Button>
                 </Box>
 
-                <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
-                    {filteredEventTypes.length === 0 ? (
-                        <Typography color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{textAlign: 'center', py: 4}}>
-                            No event types available for this page
+                {filteredEventTypes.length > 0 && (
+                    <Box sx={{mb: 3}}>
+                        <Typography variant="subtitle2" color={isDarkMode ? '#ffffff' : 'inherit'} sx={{mb: 1}}>
+                            Add Additional Event Type:
                         </Typography>
-                    ) : (
-                        filteredEventTypes.map(eventType => (
-                            <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5}}>
-                                <Checkbox
-                                    checked={tempSubscribedEventTypes.includes(eventType)}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setTempSubscribedEventTypes(prev => [...prev, eventType]);
-                                        } else {
-                                            setTempSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
-                                        }
-                                    }}
-                                    size="small"
-                                    sx={{
-                                        color: isDarkMode ? '#ffffff' : undefined,
-                                        '&.Mui-checked': {
-                                            color: isDarkMode ? '#90caf9' : undefined,
-                                        }
-                                    }}
-                                />
-                                <Box sx={{flex: 1, minWidth: 0}}>
-                                    <Typography variant="body2" noWrap color={isDarkMode ? '#ffffff' : 'inherit'}>
-                                        {eventType}
-                                    </Typography>
-                                    <Typography variant="caption" color={isDarkMode ? '#999999' : 'text.secondary'}>
-                                        {eventStats[eventType] || 0} events received
-                                    </Typography>
+                        <Box sx={{display: 'flex', gap: 1}}>
+                            <Select
+                                size="small"
+                                value={customEventType}
+                                onChange={(e) => setCustomEventType(e.target.value)}
+                                displayEmpty
+                                sx={{
+                                    flex: 1,
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                    color: isDarkMode ? '#ffffff' : undefined,
+                                    '& .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                    }
+                                }}
+                            >
+                                <MenuItem value="">Select event type...</MenuItem>
+                                {availableEventTypesForAdd.map(type => (
+                                    <MenuItem key={type} value={type}>
+                                        {type}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => {
+                                    if (customEventType && !tempSubscribedEventTypes.includes(customEventType)) {
+                                        setTempSubscribedEventTypes(prev => [...prev, customEventType]);
+                                        setCustomEventType("");
+                                    }
+                                }}
+                                disabled={!customEventType}
+                                sx={{
+                                    backgroundColor: isDarkMode ? '#1976d2' : undefined,
+                                    color: '#ffffff'
+                                }}
+                            >
+                                <Add/>
+                            </Button>
+                        </Box>
+                    </Box>
+                )}
+
+                <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
+                    {selectedPageEventTypes.length > 0 && (
+                        <Box sx={{mb: 3}}>
+                            <Typography variant="subtitle2" color={isDarkMode ? '#90caf9' : 'primary.main'}
+                                        sx={{mb: 1}}>
+                                Page Events ({selectedPageEventTypes.length})
+                            </Typography>
+                            {selectedPageEventTypes.map(eventType => (
+                                <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
+                                    <Checkbox
+                                        checked={tempSubscribedEventTypes.includes(eventType)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setTempSubscribedEventTypes(prev => [...prev, eventType]);
+                                            } else {
+                                                setTempSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
+                                            }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            color: isDarkMode ? '#ffffff' : undefined,
+                                            '&.Mui-checked': {
+                                                color: isDarkMode ? '#90caf9' : undefined,
+                                            }
+                                        }}
+                                    />
+                                    <Box sx={{flex: 1, minWidth: 0}}>
+                                        <Typography variant="body2" noWrap color={isDarkMode ? '#ffffff' : 'inherit'}>
+                                            {eventType}
+                                            <Chip
+                                                label="Page"
+                                                size="small"
+                                                sx={{
+                                                    ml: 1,
+                                                    height: 16,
+                                                    fontSize: '0.65rem',
+                                                    backgroundColor: isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)',
+                                                    color: isDarkMode ? '#90caf9' : 'primary.main'
+                                                }}
+                                            />
+                                        </Typography>
+                                        <Typography variant="caption" color={isDarkMode ? '#999999' : 'text.secondary'}>
+                                            {eventStats[eventType] || 0} events received
+                                        </Typography>
+                                    </Box>
                                 </Box>
-                            </Box>
-                        ))
+                            ))}
+                        </Box>
+                    )}
+
+                    {selectedManualEventTypes.length > 0 && (
+                        <Box sx={{mb: 3}}>
+                            <Typography variant="subtitle2" color={isDarkMode ? '#a5d6a7' : 'success.dark'}
+                                        sx={{mb: 1}}>
+                                Additional Events ({selectedManualEventTypes.length})
+                            </Typography>
+                            {selectedManualEventTypes.map(eventType => (
+                                <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
+                                    <Checkbox
+                                        checked={tempSubscribedEventTypes.includes(eventType)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setTempSubscribedEventTypes(prev => [...prev, eventType]);
+                                            } else {
+                                                setTempSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
+                                            }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            color: isDarkMode ? '#ffffff' : undefined,
+                                            '&.Mui-checked': {
+                                                color: isDarkMode ? '#90caf9' : undefined,
+                                            }
+                                        }}
+                                    />
+                                    <Box sx={{flex: 1, minWidth: 0}}>
+                                        <Typography variant="body2" noWrap color={isDarkMode ? '#ffffff' : 'inherit'}>
+                                            {eventType}
+                                            <Chip
+                                                label="Added"
+                                                size="small"
+                                                sx={{
+                                                    ml: 1,
+                                                    height: 16,
+                                                    fontSize: '0.65rem',
+                                                    backgroundColor: isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)',
+                                                    color: isDarkMode ? '#a5d6a7' : 'success.dark'
+                                                }}
+                                            />
+                                        </Typography>
+                                        <Typography variant="caption" color={isDarkMode ? '#999999' : 'text.secondary'}>
+                                            {eventStats[eventType] || 0} events received
+                                        </Typography>
+                                    </Box>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => {
+                                            setTempSubscribedEventTypes(prev => prev.filter(et => et !== eventType));
+                                        }}
+                                        sx={{color: isDarkMode ? '#ff5252' : 'error.main'}}
+                                    >
+                                        <Close fontSize="small"/>
+                                    </IconButton>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+
+                    {tempSubscribedEventTypes.length === 0 && (
+                        <Typography color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{textAlign: 'center', py: 4}}>
+                            {filteredEventTypes.length === 0
+                                ? "No event types available for this page"
+                                : "No event types selected. You won't receive any events."}
+                        </Typography>
                     )}
                 </Box>
 
-                <Box sx={{mt: 'auto', pt: 2}}>
+                <Box sx={{
+                    mt: 'auto',
+                    pt: 2,
+                    borderTop: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+                }}>
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', mb: 2}}>
+                        <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'}>
+                            Total selected: {tempSubscribedEventTypes.length}
+                        </Typography>
+                        <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'}>
+                            Available: {ALL_EVENT_TYPES.length}
+                        </Typography>
+                    </Box>
                     <Button
                         fullWidth
                         variant="contained"
                         onClick={() => {
-                            setSubscribedEventTypes(tempSubscribedEventTypes);
+                            const newManualSubscriptions = tempSubscribedEventTypes.filter(type =>
+                                !filteredEventTypes.includes(type)
+                            );
+                            setManualSubscriptions(newManualSubscriptions);
                             setSubscriptionDialogOpen(false);
                         }}
                         sx={{
@@ -428,23 +667,27 @@ const EventLogger = ({
                             color: '#ffffff'
                         }}
                     >
-                        Apply Subscriptions
+                        Apply Subscriptions ({tempSubscribedEventTypes.length})
                     </Button>
                 </Box>
             </Drawer>
         );
     };
 
-    // Subscription info component
     const SubscriptionInfo = () => {
+        const pageEventCount = subscribedEventTypes.filter(type =>
+            filteredEventTypes.includes(type)
+        ).length;
+        const manualEventCount = subscribedEventTypes.length - pageEventCount;
+
         const subscriptionText = [
             `${subscribedEventTypes.length} event type(s)`,
             objectName && `object: ${objectName}`
         ].filter(Boolean).join(' • ');
 
         return (
-            <Box sx={{px: 1, py: 0.5}}>
-                <Tooltip title="Click to manage event subscriptions">
+            <Box sx={{px: 1, py: 0.5, display: 'flex', alignItems: 'center', gap: 1}}>
+                <Tooltip title={`${pageEventCount} page events, ${manualEventCount} additional events`}>
                     <Chip
                         label={`Subscribed to: ${subscriptionText}`}
                         size="small"
@@ -458,15 +701,30 @@ const EventLogger = ({
                             borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
                         }}
                         onClick={() => setSubscriptionDialogOpen(true)}
-                        onDelete={() => setSubscribedEventTypes([...filteredEventTypes])}
+                        onDelete={() => {
+                            setManualSubscriptions([]);
+                        }}
                         deleteIcon={<Settings sx={{color: isDarkMode ? '#ffffff' : undefined}}/>}
                     />
                 </Tooltip>
+                {manualEventCount > 0 && (
+                    <Chip
+                        label={`+${manualEventCount} additional`}
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{
+                            height: 20,
+                            fontSize: '0.65rem',
+                            backgroundColor: isDarkMode ? 'rgba(165, 214, 167, 0.1)' : undefined,
+                            color: isDarkMode ? '#a5d6a7' : 'success.main'
+                        }}
+                    />
+                )}
             </Box>
         );
     };
 
-    // Function to get current subscriptions for external use
     const getCurrentSubscriptions = useCallback(() => {
         return [...subscribedEventTypes];
     }, [subscribedEventTypes]);
@@ -561,16 +819,30 @@ const EventLogger = ({
         backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper
     };
 
-    // Manage logger EventSource
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startLoggerReception(token, subscribedEventTypes, objectName);
+        if (token && subscribedEventTypes.length > 0) {
+            const allSubscribedTypes = [
+                ...subscribedEventTypes,
+                ...eventTypes.filter(et => CONNECTION_EVENTS.includes(et))
+            ];
+
+            try {
+                logger.log("Starting logger reception with event types:", allSubscribedTypes);
+                startLoggerReception(token, allSubscribedTypes, objectName);
+            } catch (error) {
+                logger.warn("Failed to start logger reception:", error);
+            }
         }
         return () => {
-            closeLoggerEventSource();
+            try {
+                logger.log("Closing logger event source");
+                closeLoggerEventSource();
+            } catch (error) {
+                logger.warn("Failed to close logger event source:", error);
+            }
         };
-    }, [subscribedEventTypes, objectName]);
+    }, [subscribedEventTypes, objectName, eventTypes]);
 
     const EventTypeChip = ({eventType, searchTerm}) => {
         const color = getEventColor(eventType);
@@ -648,7 +920,6 @@ const EventLogger = ({
                 variant="persistent"
                 PaperProps={{style: paperStyle}}
             >
-                {/* Resizer */}
                 <div
                     onMouseDown={startResizing}
                     style={{
@@ -669,7 +940,6 @@ const EventLogger = ({
                     }}/>
                 </div>
 
-                {/* Header */}
                 <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
@@ -745,10 +1015,8 @@ const EventLogger = ({
 
                 <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
-                {/* Compact subscription info */}
                 <SubscriptionInfo/>
 
-                {/* Filters */}
                 <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>
                     <TextField
                         size="small"
@@ -848,7 +1116,6 @@ const EventLogger = ({
 
                 <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
-                {/* Logs container */}
                 <Box
                     ref={logsContainerRef}
                     onScroll={handleScroll}
@@ -892,7 +1159,6 @@ const EventLogger = ({
                                             transition: "background-color 0.2s ease"
                                         }}
                                     >
-                                        {/* Header */}
                                         <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
                                             <EventTypeChip
                                                 eventType={log.eventType}
@@ -912,7 +1178,6 @@ const EventLogger = ({
                                             }}/>
                                         </Box>
 
-                                        {/* Preview when collapsed */}
                                         {!isOpen && (
                                             <Box sx={{
                                                 p: 1,
@@ -928,7 +1193,6 @@ const EventLogger = ({
                                             </Box>
                                         )}
 
-                                        {/* Full details when expanded */}
                                         {isOpen && (
                                             <Box sx={{
                                                 p: 1,
@@ -978,7 +1242,6 @@ const EventLogger = ({
                 )}
             </Drawer>
 
-            {/* Subscription Management Dialog */}
             <SubscriptionDialog/>
 
             <style>{`

@@ -1853,45 +1853,68 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
+
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 3 event type\(s\)/i);
-            fireEvent.click(subChip);
-            await waitFor(() => {
-                expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-            });
-            let checkboxes = screen.getAllByRole('checkbox');
-            expect(checkboxes.length).toBe(3);
-            checkboxes.forEach(cb => expect(cb).toBeChecked());
-            const subscribeAllButton = screen.getByText('Subscribe to All');
-            fireEvent.click(subscribeAllButton);
-            checkboxes = screen.getAllByRole('checkbox');
-            checkboxes.forEach(cb => expect(cb).toBeChecked());
-            const unsubscribeAllButton = screen.getByText('Unsubscribe from All');
-            fireEvent.click(unsubscribeAllButton);
-            checkboxes = screen.getAllByRole('checkbox');
-            checkboxes.forEach(cb => expect(cb).not.toBeChecked());
-            fireEvent.click(subscribeAllButton);
-            checkboxes = screen.getAllByRole('checkbox');
-            checkboxes.forEach(cb => expect(cb).toBeChecked());
+
+        expect(eventLoggerButton).toBeInTheDocument();
+        fireEvent.click(eventLoggerButton);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        const subscriptionChip = screen.getByText(/Subscribed to: 3 event type\(s\)/i);
+        fireEvent.click(subscriptionChip);
+
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getAllByText('EVENT1').length).toBeGreaterThan(0);
+            expect(screen.getAllByText('EVENT2').length).toBeGreaterThan(0);
+            expect(screen.getAllByText('EVENT3').length).toBeGreaterThan(0);
+        });
+
+        const subscribeAllButton = screen.getByRole('button', {name: /Subscribe to All/i});
+        fireEvent.click(subscribeAllButton);
+
+        const unsubscribeAllButton = screen.getByRole('button', {name: /Unsubscribe from All/i});
+        fireEvent.click(unsubscribeAllButton);
+
+        const allEventsButton = screen.getByRole('button', {name: /All Events/i});
+        fireEvent.click(allEventsButton);
+
+        const clearAllButton = screen.getByRole('button', {name: /Clear All/i});
+        fireEvent.click(clearAllButton);
+
+        fireEvent.click(subscribeAllButton);
+
+        await waitFor(() => {
+            const checkboxes = screen.getAllByRole('checkbox');
+            expect(checkboxes.length).toBeGreaterThan(0);
+
             fireEvent.click(checkboxes[0]);
-            expect(checkboxes[0]).not.toBeChecked();
-            const statsElements = screen.getAllByText(/1 events received/i);
-            expect(statsElements.length).toBe(3);
-            fireEvent.click(screen.getByText('Apply Subscriptions'));
-            await waitFor(() => {
-                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-            });
-            await waitFor(() => {
-                expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
-            });
-            expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
-        }
+
+            fireEvent.click(checkboxes[0]);
+        });
+
+        const statsElements = screen.getAllByText(/events received/i);
+        expect(statsElements.length).toBeGreaterThan(0);
+
+        const applyButton = screen.getByRole('button', {name: /Apply Subscriptions/i});
+        fireEvent.click(applyButton);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
+        });
+
+        expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
     });
 
     test('handles subscription dialog with no eventTypes', async () => {

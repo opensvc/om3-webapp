@@ -6,7 +6,7 @@ import logger from './utils/logger.js';
 import {cleanup} from "@testing-library/react";
 
 // Constants for event names
-const EVENT_TYPES = {
+export const EVENT_TYPES = {
     NODE_STATUS_UPDATED: 'NodeStatusUpdated',
     NODE_MONITOR_UPDATED: 'NodeMonitorUpdated',
     NODE_STATS_UPDATED: 'NodeStatsUpdated',

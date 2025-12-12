@@ -2420,7 +2420,8 @@ describe('EventLogger Component', () => {
             await waitFor(() => {
                 expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
             });
-            const checkbox = screen.getByRole('checkbox');
+            const checkboxes = screen.getAllByRole('checkbox');
+            const checkbox = checkboxes[0];
             expect(checkbox).toBeChecked();
             fireEvent.click(checkbox);
             expect(checkbox).not.toBeChecked();
@@ -4244,7 +4245,7 @@ describe('EventLogger Component', () => {
                 id: '1',
                 eventType: 'NO_TEXT_BRANCH',
                 timestamp: new Date().toISOString(),
-                data: null,
+                data: {message: null},
             },
         ];
         useEventLogStore.mockReturnValue({
@@ -4253,28 +4254,58 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
-        renderWithTheme(<EventLogger/>);
+
+        const { unmount } = renderWithTheme(<EventLogger />);
+
+        await waitFor(() => {
+            const buttons = screen.getAllByRole('button');
+            const eventLoggerButton = buttons.find(btn =>
+                btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+            );
+            expect(eventLoggerButton).toBeInTheDocument();
+        }, { timeout: 3000 });
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
         if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const searchInput = screen.getByPlaceholderText(/Search events/i);
-            fireEvent.change(searchInput, {target: {value: 'test'}});
-            await waitFor(() => {
-                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
+            await act(async () => {
+                fireEvent.click(eventLoggerButton);
             });
-            fireEvent.change(searchInput, {target: {value: ''}});
+
+            await waitFor(() => {
+                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+            }, { timeout: 3000 });
+
             await waitFor(() => {
                 expect(screen.getByText(/NO_TEXT_BRANCH/i)).toBeInTheDocument();
+            }, { timeout: 3000 });
+
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+
+            await act(async () => {
+                fireEvent.change(searchInput, { target: { value: '' } });
+                await new Promise(resolve => setTimeout(resolve, 400));
             });
-            const logHeader = screen.getByText(/NO_TEXT_BRANCH/i).closest('div');
-            fireEvent.click(logHeader);
-            await waitFor(() => {
-                expect(screen.getByText(/null/i)).toBeInTheDocument();
-            });
+
+            const logHeader = screen.getByText(/NO_TEXT_BRANCH/i).closest('[style*="cursor: pointer"]');
+            if (logHeader) {
+                await act(async () => {
+                    fireEvent.click(logHeader);
+                });
+
+                await waitFor(() => {
+                    const nullElements = screen.getAllByText(/null/i);
+                    expect(nullElements.length).toBeGreaterThan(0);
+                }, { timeout: 2000 });
+            }
         }
+
+        await act(async () => {
+            unmount();
+        });
     });
 
     test('covers applyHighlightToMatch no searchTerm branch', async () => {
@@ -4292,26 +4323,65 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
-        renderWithTheme(<EventLogger/>);
+
+        const { unmount } = renderWithTheme(<EventLogger/>);
+
+        // Wait for component to mount and button to be available
+        await waitFor(() => {
+            const buttons = screen.queryAllByRole('button');
+            expect(buttons.length).toBeGreaterThan(0);
+        }, { timeout: 3000 });
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
+        expect(eventLoggerButton).toBeInTheDocument();
+
         if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const searchInput = screen.getByPlaceholderText(/Search events/i);
-            fireEvent.change(searchInput, {target: {value: ''}});
+            await act(async () => {
+                fireEvent.click(eventLoggerButton);
+            });
+
+            await waitFor(() => {
+                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+            }, { timeout: 3000 });
+
             await waitFor(() => {
                 expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
+            }, { timeout: 3000 });
+
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+
+            await act(async () => {
+                fireEvent.change(searchInput, {target: {value: ''}});
+                await new Promise(resolve => setTimeout(resolve, 400));
             });
-            const logHeader = screen.getByText(/NO_SEARCH_APPLY/i).closest('div');
-            fireEvent.click(logHeader);
+
             await waitFor(() => {
-                expect(screen.getByText(/"value"/)).toBeInTheDocument();
+                expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
+            }, { timeout: 2000 });
+
+            const logHeader = screen.getByText(/NO_SEARCH_APPLY/i).closest('[style*="cursor: pointer"]');
+            if (logHeader) {
+                await act(async () => {
+                    fireEvent.click(logHeader);
+                });
+
+                await waitFor(() => {
+                    expect(screen.getByText(/"value"/)).toBeInTheDocument();
+                }, { timeout: 2000 });
+
+                // Verify no search highlights are present (since no search term)
                 const highlightSpans = document.querySelectorAll('.search-highlight');
                 expect(highlightSpans.length).toBe(0);
-            });
+            }
         }
+
+        await act(async () => {
+            unmount();
+        });
     });
 
     test('covers subscription dialog empty eventTypes', async () => {

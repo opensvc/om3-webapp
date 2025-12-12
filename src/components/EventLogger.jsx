@@ -445,25 +445,22 @@ const EventLogger = ({
             }
         }
 
-        json = escapeHtml(json);
-
-        const applyHighlightToMatch = (match, searchTerm) => {
-            if (!searchTerm) return match;
-
+        let highlightedJson = json;
+        if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            const lowerMatch = match.toLowerCase();
-            const index = lowerMatch.indexOf(term);
+            const escapedTerm = escapeHtml(searchTerm).toLowerCase();
 
-            if (index === -1) return match;
+            const escapedJson = escapeHtml(json);
 
-            const before = match.substring(0, index);
-            const highlight = match.substring(index, index + term.length);
-            const after = match.substring(index + term.length);
+            highlightedJson = escapedJson.replace(
+                new RegExp(`(${escapedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                '<span class="search-highlight">$1</span>'
+            );
+        } else {
+            highlightedJson = escapeHtml(json);
+        }
 
-            return `${before}<span class="search-highlight">${highlight}</span>${after}`;
-        };
-
-        return json.replace(
+        return highlightedJson.replace(
             /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
             (match) => {
                 let cls = 'json-number';
@@ -479,9 +476,11 @@ const EventLogger = ({
                     cls = 'json-null';
                 }
 
-                const highlightedMatch = searchTerm ? applyHighlightToMatch(match, searchTerm) : match;
+                if (match.includes('search-highlight')) {
+                    return match;
+                }
 
-                return `<span class="${cls}">${highlightedMatch}</span>`;
+                return `<span class="${cls}">${match}</span>`;
             }
         );
     };
@@ -1209,7 +1208,7 @@ const EventLogger = ({
                     border-radius: 2px;
                     font-weight: bold;
                 }
-            `}</style>F
+            `}</style>
         </>
     );
 };

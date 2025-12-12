@@ -1150,26 +1150,42 @@ describe('EventLogger Component', () => {
         }
     });
 
+
     test('clears resize timeout on mouseUp during resize', async () => {
         jest.useFakeTimers();
+
         renderWithTheme(<EventLogger/>);
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
+        expect(eventLoggerButton).toBeInTheDocument();
+
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+            });
+
             const handles = document.querySelectorAll('div[style*="cursor: row-resize"]');
             const handle = handles[0];
             expect(handle).not.toBeNull();
             fireEvent.mouseDown(handle, {clientY: 300});
             fireEvent.mouseMove(document, {clientY: 250});
-            const spy = jest.spyOn(global, 'clearTimeout');
+
+            jest.advanceTimersByTime(20);
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
             fireEvent.mouseUp(document);
-            expect(spy).toHaveBeenCalled();
-            jest.useRealTimers();
+
+            expect(clearTimeoutSpy).toHaveBeenCalled();
+            clearTimeoutSpy.mockRestore();
         }
+
+        jest.useRealTimers();
     });
+
 
     test('autoScroll resets to true when search term changes', async () => {
         useEventLogStore.mockReturnValue({
@@ -3015,10 +3031,11 @@ describe('EventLogger Component', () => {
     test('applyHighlightToMatch - branch when index === -1', async () => {
         const mockLogs = [{
             id: '1',
-            eventType: 'NO_JSON_MATCH',
+            eventType: 'NO_MATCH_HIGHLIGHT',
             timestamp: new Date().toISOString(),
-            data: {field: 'content'},
+            data: {field: 'value'}
         }];
+
         useEventLogStore.mockReturnValue({
             eventLogs: mockLogs,
             isPaused: false,
@@ -3026,15 +3043,47 @@ describe('EventLogger Component', () => {
             clearLogs: jest.fn(),
         });
         renderWithTheme(<EventLogger/>);
+        await waitFor(() => {
+            const buttons = screen.getAllByRole('button');
+            const eventLoggerButton = buttons.find(btn =>
+                btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+            );
+            expect(eventLoggerButton).toBeInTheDocument();
+        });
         const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn => btn.textContent?.includes('Events'));
+        const eventLoggerButton = buttons.find(btn =>
+            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
+        );
+
+        expect(eventLoggerButton).toBeInTheDocument();
+
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const searchInput = screen.getByPlaceholderText(/Search events/i);
-            fireEvent.change(searchInput, {target: {value: 'nomatch'}});
+
             await waitFor(() => {
-                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
+                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
             });
+
+            await waitFor(() => {
+                expect(screen.getByText(/NO_MATCH_HIGHLIGHT/i)).toBeInTheDocument();
+            });
+
+            const searchInput = screen.getByPlaceholderText(/Search events/i);
+            expect(searchInput).toBeInTheDocument();
+
+            fireEvent.change(searchInput, {target: {value: 'nonexistent'}});
+
+            await waitFor(() => {
+                expect(searchInput.value).toBe('nonexistent');
+            });
+
+            const noMatchMessage = await screen.findByText(
+                /No events match current filters/i,
+                {},
+                {timeout: 3000}
+            );
+
+            expect(noMatchMessage).toBeInTheDocument();
         }
     });
 
@@ -4255,7 +4304,7 @@ describe('EventLogger Component', () => {
             clearLogs: jest.fn(),
         });
 
-        const { unmount } = renderWithTheme(<EventLogger />);
+        const {unmount} = renderWithTheme(<EventLogger/>);
 
         await waitFor(() => {
             const buttons = screen.getAllByRole('button');
@@ -4263,7 +4312,7 @@ describe('EventLogger Component', () => {
                 btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
             );
             expect(eventLoggerButton).toBeInTheDocument();
-        }, { timeout: 3000 });
+        }, {timeout: 3000});
 
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
@@ -4277,16 +4326,16 @@ describe('EventLogger Component', () => {
 
             await waitFor(() => {
                 expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-            }, { timeout: 3000 });
+            }, {timeout: 3000});
 
             await waitFor(() => {
                 expect(screen.getByText(/NO_TEXT_BRANCH/i)).toBeInTheDocument();
-            }, { timeout: 3000 });
+            }, {timeout: 3000});
 
             const searchInput = screen.getByPlaceholderText(/Search events/i);
 
             await act(async () => {
-                fireEvent.change(searchInput, { target: { value: '' } });
+                fireEvent.change(searchInput, {target: {value: ''}});
                 await new Promise(resolve => setTimeout(resolve, 400));
             });
 
@@ -4299,7 +4348,7 @@ describe('EventLogger Component', () => {
                 await waitFor(() => {
                     const nullElements = screen.getAllByText(/null/i);
                     expect(nullElements.length).toBeGreaterThan(0);
-                }, { timeout: 2000 });
+                }, {timeout: 2000});
             }
         }
 
@@ -4324,13 +4373,13 @@ describe('EventLogger Component', () => {
             clearLogs: jest.fn(),
         });
 
-        const { unmount } = renderWithTheme(<EventLogger/>);
+        const {unmount} = renderWithTheme(<EventLogger/>);
 
         // Wait for component to mount and button to be available
         await waitFor(() => {
             const buttons = screen.queryAllByRole('button');
             expect(buttons.length).toBeGreaterThan(0);
-        }, { timeout: 3000 });
+        }, {timeout: 3000});
 
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
@@ -4346,11 +4395,11 @@ describe('EventLogger Component', () => {
 
             await waitFor(() => {
                 expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-            }, { timeout: 3000 });
+            }, {timeout: 3000});
 
             await waitFor(() => {
                 expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
-            }, { timeout: 3000 });
+            }, {timeout: 3000});
 
             const searchInput = screen.getByPlaceholderText(/Search events/i);
 
@@ -4361,7 +4410,7 @@ describe('EventLogger Component', () => {
 
             await waitFor(() => {
                 expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
-            }, { timeout: 2000 });
+            }, {timeout: 2000});
 
             const logHeader = screen.getByText(/NO_SEARCH_APPLY/i).closest('[style*="cursor: pointer"]');
             if (logHeader) {
@@ -4371,7 +4420,7 @@ describe('EventLogger Component', () => {
 
                 await waitFor(() => {
                     expect(screen.getByText(/"value"/)).toBeInTheDocument();
-                }, { timeout: 2000 });
+                }, {timeout: 2000});
 
                 // Verify no search highlights are present (since no search term)
                 const highlightSpans = document.querySelectorAll('.search-highlight');

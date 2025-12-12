@@ -52,6 +52,7 @@ const ALL_EVENT_TYPES = [
     'InstanceConfigUpdated'
 ];
 
+const DEBOUNCE_DELAY = process.env.NODE_ENV === 'test' ? 0 : 300;
 const SubscriptionDialog = ({
                                 open,
                                 onClose,
@@ -311,6 +312,7 @@ const EventLogger = ({
     const [forceUpdate, setForceUpdate] = useState(0);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
     const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
 
     const filteredEventTypes = useMemo(() => {
         return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
@@ -364,6 +366,9 @@ const EventLogger = ({
     const logsContainerRef = useRef(null);
     const resizeTimeoutRef = useRef(null);
     const searchDebounceRef = useRef(null);
+    const startYRef = useRef(0);
+    const startHeightRef = useRef(0);
+    const isDraggingRef = useRef(false);
 
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
@@ -374,11 +379,12 @@ const EventLogger = ({
 
         searchDebounceRef.current = setTimeout(() => {
             setDebouncedSearchTerm(searchTerm);
-        }, 300);
+        }, DEBOUNCE_DELAY);
 
         return () => {
             if (searchDebounceRef.current) {
                 clearTimeout(searchDebounceRef.current);
+                searchDebounceRef.current = null;
             }
         };
     }, [searchTerm]);
@@ -692,29 +698,97 @@ const EventLogger = ({
         if (atBottom !== autoScroll) setAutoScroll(atBottom);
     }, [autoScroll]);
 
-    const startResizing = useCallback((mouseDownEvent) => {
-        if (mouseDownEvent?.preventDefault) mouseDownEvent.preventDefault();
-        const startY = mouseDownEvent?.clientY ?? 0;
-        const startHeight = drawerHeight;
+    const handleResizeStart = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-        const handleMouseMove = (mouseMoveEvent) => {
-            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-            resizeTimeoutRef.current = setTimeout(() => {
-                const deltaY = startY - (mouseMoveEvent?.clientY ?? startY);
-                const newHeight = Math.max(220, Math.min(800, startHeight + deltaY));
-                setDrawerHeight(newHeight);
-            }, 16);
-        };
+        setIsResizing(true);
+        isDraggingRef.current = true;
 
-        const handleMouseUp = () => {
-            document.removeEventListener("mousemove", handleMouseMove);
-            document.removeEventListener("mouseup", handleMouseUp);
-            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-        };
+        const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        startYRef.current = clientY;
+        startHeightRef.current = drawerHeight;
 
-        document.addEventListener("mousemove", handleMouseMove);
-        document.addEventListener("mouseup", handleMouseUp);
+        document.body.style.userSelect = 'none';
+        document.body.style.touchAction = 'none';
+        document.body.style.overflow = 'hidden';
+
+        if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+            resizeTimeoutRef.current = null;
+        }
     }, [drawerHeight]);
+
+    const handleResizeMove = useCallback((e) => {
+        if (!isDraggingRef.current) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        const deltaY = startYRef.current - clientY;
+        const newHeight = Math.max(220, Math.min(window.innerHeight * 0.8, startHeightRef.current + deltaY));
+
+        if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+        }
+
+        resizeTimeoutRef.current = setTimeout(() => {
+            setDrawerHeight(newHeight);
+        }, 16);
+    }, []);
+
+    const handleResizeEnd = useCallback((e) => {
+        if (!isDraggingRef.current) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        setIsResizing(false);
+        isDraggingRef.current = false;
+
+        document.body.style.userSelect = '';
+        document.body.style.touchAction = '';
+        document.body.style.overflow = '';
+
+        if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+            resizeTimeoutRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleMouseMove = (e) => handleResizeMove(e);
+        const handleTouchMove = (e) => handleResizeMove(e);
+        const handleMouseUp = (e) => handleResizeEnd(e);
+        const handleTouchEnd = (e) => handleResizeEnd(e);
+        const handleTouchCancel = (e) => handleResizeEnd(e);
+
+        if (isResizing) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('touchmove', handleTouchMove, {passive: false});
+            document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('touchend', handleTouchEnd);
+            document.addEventListener('touchcancel', handleTouchCancel);
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('touchmove', handleTouchMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('touchend', handleTouchEnd);
+            document.removeEventListener('touchcancel', handleTouchCancel);
+
+            if (resizeTimeoutRef.current) {
+                clearTimeout(resizeTimeoutRef.current);
+                resizeTimeoutRef.current = null;
+            }
+            if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
+                searchDebounceRef.current = null;
+            }
+        };
+    }, [isResizing, handleResizeMove, handleResizeEnd]);
 
     const formatTimestamp = (ts) => {
         try {
@@ -757,7 +831,8 @@ const EventLogger = ({
         overflow: "hidden",
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper
+        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper,
+        touchAction: 'none'
     };
 
     useEffect(() => {
@@ -862,22 +937,36 @@ const EventLogger = ({
                 PaperProps={{style: paperStyle}}
             >
                 <div
-                    onMouseDown={startResizing}
+                    onMouseDown={handleResizeStart}
+                    onTouchStart={handleResizeStart}
                     style={{
                         width: "100%",
-                        height: 10,
-                        backgroundColor: isDarkMode ? theme.palette.grey[700] : theme.palette.grey[300],
+                        height: 24,
+                        minHeight: 24,
+                        backgroundColor: isResizing
+                            ? (isDarkMode ? theme.palette.primary.dark : theme.palette.primary.light)
+                            : (isDarkMode ? theme.palette.grey[700] : theme.palette.grey[300]),
                         cursor: "row-resize",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center"
+                        justifyContent: "center",
+                        touchAction: "none",
+                        userSelect: "none",
+                        WebkitUserSelect: "none",
+                        MozUserSelect: "none",
+                        msUserSelect: "none",
+                        position: "relative",
+                        zIndex: 2,
+                        transition: "background-color 0.2s ease"
                     }}
+                    className="resize-handle"
                 >
                     <div style={{
-                        width: 48,
+                        width: 60,
                         height: 6,
                         backgroundColor: isDarkMode ? theme.palette.grey[500] : theme.palette.grey[500],
-                        borderRadius: 2
+                        borderRadius: 3,
+                        opacity: isResizing ? 0.8 : 1
                     }}/>
                 </div>
 
@@ -1065,7 +1154,8 @@ const EventLogger = ({
                         overflow: "auto",
                         backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.grey[50],
                         padding: 1,
-                        ...jsonStyles
+                        ...jsonStyles,
+                        WebkitOverflowScrolling: 'touch'
                     }}
                 >
                     {filteredLogs.length === 0 ? (
@@ -1097,7 +1187,8 @@ const EventLogger = ({
                                             bgcolor: isOpen
                                                 ? isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.palette.action.selected
                                                 : "transparent",
-                                            transition: "background-color 0.2s ease"
+                                            transition: "background-color 0.2s ease",
+                                            touchAction: 'manipulation'
                                         }}
                                     >
                                         <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
@@ -1207,6 +1298,42 @@ const EventLogger = ({
                     padding: 0 2px;
                     border-radius: 2px;
                     font-weight: bold;
+                }
+                /* Améliorations pour mobile */
+                @media (max-width: 768px) {
+                    .MuiDrawer-paper {
+                        max-height: 90vh !important;
+                        touch-action: none;
+                    }
+                    .resize-handle {
+                        height: 32px !important;
+                        min-height: 32px !important;
+                    }
+                    .MuiChip-root {
+                        font-size: 0.7rem !important;
+                    }
+                    .MuiTypography-body2 {
+                        font-size: 0.8rem !important;
+                    }
+                    .MuiButton-root {
+                        padding: 6px 12px !important;
+                        min-height: 36px !important;
+                    }
+                    .MuiIconButton-root {
+                        padding: 6px !important;
+                        min-width: 36px !important;
+                        min-height: 36px !important;
+                    }
+                    .MuiTextField-root, .MuiFormControl-root {
+                        min-width: 100% !important;
+                    }
+                }
+                
+                /* Empêcher le zoom sur le champ de saisie sur iOS */
+                @media screen and (max-width: 768px) {
+                    input, select, textarea {
+                        font-size: 16px !important;
+                    }
                 }
             `}</style>
         </>

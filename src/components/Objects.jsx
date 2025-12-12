@@ -18,7 +18,6 @@ import {
     TextField,
     Snackbar,
     Alert,
-    Collapse,
     ListItemIcon,
     ListItemText,
     useMediaQuery,
@@ -31,7 +30,7 @@ import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import debounce from "lodash/debounce";
@@ -84,22 +83,22 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
         >
             {avail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
                 </Tooltip>
             )}
             {avail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is down"/>
                 </Tooltip>
             )}
             {avail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
                 </Tooltip>
             )}
             {avail === "n/a" && (
                 <Tooltip title="n/a">
-                    <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
+                    <FiberManualRecordIcon sx={{color: grey[500], fontSize: 24}} aria-label="Object status is n/a"/>
                 </Tooltip>
             )}
         </Box>
@@ -114,7 +113,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label="Object is not provisioned"/>
                 </Tooltip>
             </Box>
@@ -130,7 +129,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label="Object is frozen"/>
                 </Tooltip>
             </Box>
         )}
@@ -185,17 +184,18 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         >
             {nodeAvail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label={`Node ${node} is up`}/>
                 </Tooltip>
             )}
             {nodeAvail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label={`Node ${node} is down`}/>
                 </Tooltip>
             )}
             {nodeAvail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}}
+                                           aria-label={`Node ${node} has warning`}/>
                 </Tooltip>
             )}
         </Box>
@@ -210,7 +210,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label={`Node ${node} is not provisioned`}/>
                 </Tooltip>
             </Box>
@@ -226,7 +226,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label={`Node ${node} is frozen`}/>
                 </Tooltip>
             </Box>
         )}
@@ -725,25 +725,25 @@ const Objects = () => {
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "flex-start",
-                p: 2,
-                position: 'relative'
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
             }}
         >
             <Box
                 sx={{
                     width: "100%",
-                    maxWidth: isWideScreen ? "1600px" : "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Objects
-                </Typography>
+
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
@@ -754,75 +754,96 @@ const Objects = () => {
                     pb: 1,
                     mb: 2
                 }}>
-                    <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1}}>
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            aria-label={showFilters ? "Hide filters" : "Show filters"}
-                        >
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
+                    <Box sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                    }}>
+                        {/* Left section with Show Filters button and filters */}
+                        <Box sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 2,
+                            flexGrow: 1,
+                            overflowX: "auto",
+                            py: 1
+                        }}>
+                            <Button
+                                onClick={() => setShowFilters(!showFilters)}
+                                aria-label={showFilters ? "Hide filters" : "Show filters"}
+                                sx={{minWidth: 'auto', flexShrink: 0}}
+                            >
+                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                            </Button>
+
+                            {showFilters && (
+                                <>
+                                    <Autocomplete
+                                        key={`global-state-${selectedGlobalState}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={globalStates}
+                                        value={selectedGlobalState}
+                                        onChange={(e, val) => val && setSelectedGlobalState(val)}
+                                        renderInput={(params) => <TextField {...params} label="Global State"/>}
+                                        renderOption={(props, option) => (
+                                            <li {...props}>
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    {option === "up" &&
+                                                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
+                                                    {option === "down" &&
+                                                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "warn" &&
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: orange[500], fontSize: 18}}/>}
+                                                    {option === "n/a" &&
+                                                        <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
+                                                    {option === "unprovisioned" &&
+                                                        <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
+                                                </Box>
+                                            </li>
+                                        )}
+                                    />
+                                    <Autocomplete
+                                        key={`namespace-${selectedNamespace}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...namespaces]}
+                                        value={selectedNamespace}
+                                        onChange={(e, val) => val && setSelectedNamespace(val)}
+                                        renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                                    />
+                                    <Autocomplete
+                                        key={`kind-${selectedKind}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...kinds]}
+                                        value={selectedKind}
+                                        onChange={(e, val) => val && setSelectedKind(val)}
+                                        renderInput={(params) => <TextField {...params} label="Kind"/>}
+                                    />
+                                    <TextField
+                                        label="Name"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                    />
+                                </>
+                            )}
+                        </Box>
+
+                        {/* Right section with Actions button */}
                         <Button
                             variant="contained"
                             color="primary"
                             onClick={handleActionsMenuOpen}
                             disabled={!selectedObjects.length}
                             aria-label="Actions on selected objects"
+                            sx={{flexShrink: 0}}
                         >
                             Actions on selected objects
                         </Button>
                     </Box>
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                        <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
-                            <Autocomplete
-                                key={`global-state-${selectedGlobalState}`}
-                                sx={{minWidth: 200}}
-                                options={globalStates}
-                                value={selectedGlobalState}
-                                onChange={(e, val) => val && setSelectedGlobalState(val)}
-                                renderInput={(params) => <TextField {...params} label="Global State"/>}
-                                renderOption={(props, option) => (
-                                    <li {...props}>
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                            {option === "up" &&
-                                                <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
-                                            {option === "down" &&
-                                                <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "warn" &&
-                                                <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>}
-                                            {option === "n/a" &&
-                                                <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
-                                            {option === "unprovisioned" &&
-                                                <WarningAmberIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
-                                        </Box>
-                                    </li>
-                                )}
-                            />
-                            <Autocomplete
-                                key={`namespace-${selectedNamespace}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...namespaces]}
-                                value={selectedNamespace}
-                                onChange={(e, val) => val && setSelectedNamespace(val)}
-                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                            />
-                            <Autocomplete
-                                key={`kind-${selectedKind}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...kinds]}
-                                value={selectedKind}
-                                onChange={(e, val) => val && setSelectedKind(val)}
-                                renderInput={(params) => <TextField {...params} label="Kind"/>}
-                            />
-                            <TextField
-                                label="Name"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                sx={{minWidth: 200}}
-                            />
-                        </Box>
-                    </Collapse>
+
                     <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">

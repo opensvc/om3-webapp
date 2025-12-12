@@ -27,6 +27,7 @@ import {
 } from "@mui/icons-material";
 import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {useDarkMode} from "../context/DarkModeContext";
 
 const LogsViewer = ({
                         nodename,
@@ -38,6 +39,7 @@ const LogsViewer = ({
                         height = "500px",
                     }) => {
     const theme = useTheme();
+    const {isDarkMode} = useDarkMode();
     const [logs, setLogs] = useState([]);
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -500,7 +502,7 @@ const LogsViewer = ({
                 sx={{
                     flexGrow: 1,
                     overflow: "auto",
-                    bgcolor: theme.palette.grey[100],
+                    bgcolor: isDarkMode ? theme.palette.background.default : theme.palette.grey[100],
                     p: 2,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,

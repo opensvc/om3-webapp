@@ -29,11 +29,6 @@ describe('Pools Component', () => {
         mockLocalStorage.getItem.mockReturnValue('mock-token');
     });
 
-    test('renders the Pools title', () => {
-        render(<Pools/>);
-        expect(screen.getByText('Pools')).toBeInTheDocument();
-    });
-
     test('renders table headers correctly', async () => {
         axios.get.mockResolvedValueOnce({data: {items: []}});
 

@@ -144,26 +144,26 @@ const Namespaces = () => {
                 bgcolor: "background.default",
                 display: "flex",
                 justifyContent: "center",
-                p: 3,
+                p: 0,
                 position: 'relative',
-                minHeight: '100vh'
+                minHeight: '100vh',
+                width: '100vw',
+                margin: 0,
             }}
         >
             <Box
                 sx={{
                     width: "100%",
-                    maxWidth: "1000px",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Namespaces Status Overview
-                </Typography>
+
 
                 {/* Namespace Filter */}
                 <Box sx={{mb: 3}}>

@@ -291,36 +291,7 @@ const EventLogger = ({
         return `eventLogger_${baseKey}_${hash}`;
     }, [objectName, filteredEventTypes]);
 
-    const usePersistedState = (key, initialValue) => {
-        const [value, setValue] = useState(() => {
-            const readFromStorage = () => {
-                try {
-                    if (typeof window !== 'undefined' && window.localStorage) {
-                        const item = window.localStorage.getItem(key);
-                        return item ? JSON.parse(item) : initialValue;
-                    }
-                } catch (error) {
-                    logger.warn(`Failed to read from localStorage for key ${key}:`, error);
-                }
-                return initialValue;
-            };
-            return readFromStorage();
-        });
-
-        useEffect(() => {
-            try {
-                if (typeof window !== 'undefined' && window.localStorage) {
-                    window.localStorage.setItem(key, JSON.stringify(value));
-                }
-            } catch (error) {
-                logger.warn(`Failed to write to localStorage for key ${key}:`, error);
-            }
-        }, [key, value]);
-
-        return [value, setValue];
-    };
-
-    const [manualSubscriptions, setManualSubscriptions] = usePersistedState(pageKey, [...filteredEventTypes]);
+    const [manualSubscriptions, setManualSubscriptions] = useState([...filteredEventTypes]);
 
     const subscribedEventTypes = useMemo(() => {
         const validSubscriptions = manualSubscriptions.filter(type =>
@@ -808,6 +779,20 @@ const EventLogger = ({
         return () => {
         };
     }, [subscribedEventTypes, objectName, eventTypes, pageKey]);
+
+    useEffect(() => {
+        const currentSubscriptionsSet = new Set(manualSubscriptions);
+        const pageEventsSet = new Set(filteredEventTypes);
+
+        const areDifferent =
+            manualSubscriptions.length !== filteredEventTypes.length ||
+            !filteredEventTypes.every(event => currentSubscriptionsSet.has(event)) ||
+            !manualSubscriptions.every(event => pageEventsSet.has(event));
+
+        if (areDifferent) {
+            setManualSubscriptions([...filteredEventTypes]);
+        }
+    }, [filteredEventTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const EventTypeChip = ({eventType, searchTerm}) => {
         const color = getEventColor(eventType);

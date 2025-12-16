@@ -371,7 +371,14 @@ describe('Objects Component', () => {
 
         // Open actions menu and select Delete
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Delete/i));
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const menu = screen.getByRole('menu');
+        const deleteOption = within(menu).getByText(/^Delete$/i);
+        fireEvent.click(deleteOption);
 
         // Wait for DeleteDialog to appear
         await waitFor(() => {

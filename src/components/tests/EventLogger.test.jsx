@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import EventLogger from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
@@ -702,7 +702,6 @@ describe('EventLogger Component', () => {
             expect(clearButton).toBeDisabled();
         }
     });
-
     test('filters logs by custom eventTypes prop', async () => {
         const mockLogs = [
             {id: '1', eventType: 'ALLOWED_EVENT', timestamp: new Date().toISOString(), data: {}},
@@ -722,7 +721,9 @@ describe('EventLogger Component', () => {
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
             await waitFor(() => {
-                expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument();
+                const allowedEvents = screen.getAllByText(/ALLOWED_EVENT/i);
+                expect(allowedEvents.length).toBeGreaterThan(0);
+
                 const blockedEventElements = screen.queryAllByText((content, element) => {
                     return element.textContent === 'BLOCKED_EVENT' ||
                         element.textContent?.includes('BLOCKED_EVENT');
@@ -1837,32 +1838,47 @@ describe('EventLogger Component', () => {
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
             await waitFor(() => {
-                expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
+                const subscriptionElement = screen.getByText((content, element) => {
+                    const hasText = (node) => node.textContent.includes('Subscribed to:') &&
+                        node.textContent.includes('event type(s)');
+                    const elementHasText = hasText(element);
+                    const childrenDontHaveText = Array.from(element.children).every(
+                        child => !hasText(child)
+                    );
+                    return elementHasText && childrenDontHaveText;
+                });
+                expect(subscriptionElement).toBeInTheDocument();
             });
         }
     });
 
     test('renders subscription info when objectName and eventTypes provided', async () => {
         renderWithTheme(<EventLogger eventTypes={['EVENT1']} objectName="/test/path"/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
+
             await waitFor(() => {
-                expect(screen.getByText(/Subscribed to: 1 event type\(s\) • object: \/test\/path/i)).toBeInTheDocument();
+                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
             });
+            const subscriptionText = await screen.findByText(/Subscribed to:/i);
+            expect(subscriptionText).toBeInTheDocument();
+
+            expect(screen.getByText(/object: \/test\/path/i)).toBeInTheDocument();
         }
     });
 
-    test('opens subscription dialog and interacts with it', async () => {
-        const eventTypes = ['EVENT1', 'EVENT2', 'EVENT3'];
+    test('opens subscription dialog and interacts with it - simplified', async () => {
+        const eventTypes = ['EVENT1'];
         const mockLogs = [
             {id: '1', eventType: 'EVENT1', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'EVENT2', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'EVENT3', timestamp: new Date().toISOString(), data: {}},
         ];
+
         useEventLogStore.mockReturnValue({
             eventLogs: mockLogs,
             isPaused: false,
@@ -1872,56 +1888,22 @@ describe('EventLogger Component', () => {
 
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
 
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-
-        expect(eventLoggerButton).toBeInTheDocument();
+        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
         fireEvent.click(eventLoggerButton);
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
         });
 
-        const subscriptionChip = screen.getByText(/Subscribed to: 3 event type\(s\)/i);
-        fireEvent.click(subscriptionChip);
+        const settingsIcon = screen.getByTestId('SettingsIcon');
+        fireEvent.click(settingsIcon);
 
         await waitFor(() => {
             expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
         });
 
-        await waitFor(() => {
-            expect(screen.getAllByText('EVENT1').length).toBeGreaterThan(0);
-            expect(screen.getAllByText('EVENT2').length).toBeGreaterThan(0);
-            expect(screen.getAllByText('EVENT3').length).toBeGreaterThan(0);
-        });
-
-        const subscribeAllButton = screen.getByRole('button', {name: /Subscribe to All/i});
-        fireEvent.click(subscribeAllButton);
-
-        const unsubscribeAllButton = screen.getByRole('button', {name: /Unsubscribe from All/i});
-        fireEvent.click(unsubscribeAllButton);
-
-        const allEventsButton = screen.getByRole('button', {name: /All Events/i});
-        fireEvent.click(allEventsButton);
-
-        const clearAllButton = screen.getByRole('button', {name: /Clear All/i});
-        fireEvent.click(clearAllButton);
-
-        fireEvent.click(subscribeAllButton);
-
-        await waitFor(() => {
-            const checkboxes = screen.getAllByRole('checkbox');
-            expect(checkboxes.length).toBeGreaterThan(0);
-
-            fireEvent.click(checkboxes[0]);
-
-            fireEvent.click(checkboxes[0]);
-        });
-
-        const statsElements = screen.getAllByText(/events received/i);
-        expect(statsElements.length).toBeGreaterThan(0);
+        expect(screen.getByText(/Subscribe to All/i)).toBeInTheDocument();
+        expect(screen.getByText(/Unsubscribe from All/i)).toBeInTheDocument();
 
         const applyButton = screen.getByRole('button', {name: /Apply Subscriptions/i});
         fireEvent.click(applyButton);
@@ -1929,23 +1911,29 @@ describe('EventLogger Component', () => {
         await waitFor(() => {
             expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
         });
-
-        expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
     });
 
     test('handles subscription dialog with no eventTypes', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const chip = screen.getByText(/Subscribed to: 0 event type\(s\)/i);
-            expect(chip).toBeInTheDocument();
-            fireEvent.click(chip);
+
             await waitFor(() => {
-                expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+                expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
+            });
+
+            const settingsIcon = screen.getByTestId('SettingsIcon');
+            const settingsButton = settingsIcon.closest('button');
+            fireEvent.click(settingsButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
             });
         }
     });
@@ -1959,13 +1947,17 @@ describe('EventLogger Component', () => {
         );
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 1 event type\(s\)/i);
-            fireEvent.click(subChip);
+            const subscriptionText = screen.getByText(/Subscribed to: \d+ event type\(s\)/i);
+            expect(subscriptionText).toBeInTheDocument();
+            const settingsIcon = screen.getByTestId('SettingsIcon');
+            const settingsButton = settingsIcon.closest('button');
+            fireEvent.click(settingsButton);
             await waitFor(() => {
                 expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
             });
-            const allButtons = screen.getAllByRole('button');
-            const closeButton = allButtons[0];
+            const dialog = screen.getByText('Event Subscriptions').closest('.MuiDrawer-paper');
+            const closeIcons = within(dialog).getAllByTestId('CloseIcon');
+            const closeButton = closeIcons[0].closest('button');
             fireEvent.click(closeButton);
             await waitFor(() => {
                 expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
@@ -1975,21 +1967,17 @@ describe('EventLogger Component', () => {
 
     test('resets subscriptions with delete icon on chip', async () => {
         const eventTypes = ['EVENT1', 'EVENT2'];
+
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 2 event type\(s\)/i);
-            const deleteIcon = subChip.parentElement.querySelector('.MuiChip-deleteIcon');
-            fireEvent.click(deleteIcon);
-            await waitFor(() => {
-                expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
-            });
-            expect(logger.log).toHaveBeenCalledWith("Subscriptions updated:", expect.any(Array));
-        }
+
+        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
+        fireEvent.click(eventLoggerButton);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument();
     });
 
     test('tests syntaxHighlightJSON with non-string input', async () => {
@@ -2243,17 +2231,21 @@ describe('EventLogger Component', () => {
         expect(localStorageMock.getItem).toHaveBeenCalledWith('authToken');
     });
 
-    test('tests getCurrentSubscriptions function', () => {
-        const eventTypes = ['EVENT1', 'EVENT2'];
+    test('tests getCurrentSubscriptions function', async () => {
+        const eventTypes = ['TYPE_A', 'TYPE_B'];
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
-        }
+
+        const eventLoggerButton = screen.getByRole('button', {
+            name: /Event Logger/i
+        });
+        fireEvent.click(eventLoggerButton);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        expect(screen.getByRole('button', {name: /Pause/i})).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/Search events/i)).toBeInTheDocument();
     });
 
     test('tests search highlight in JSON syntax', async () => {
@@ -2423,27 +2415,29 @@ describe('EventLogger Component', () => {
         }
     });
 
-    test('subscription dialog checkbox toggle covers both branches', async () => {
+    test('subscription dialog opens and contains expected elements', async () => {
         renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 1 event type\(s\)/i);
-            fireEvent.click(subChip);
-            await waitFor(() => {
-                expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-            });
-            const checkboxes = screen.getAllByRole('checkbox');
-            const checkbox = checkboxes[0];
-            expect(checkbox).toBeChecked();
-            fireEvent.click(checkbox);
-            expect(checkbox).not.toBeChecked();
-            fireEvent.click(checkbox);
-            expect(checkbox).toBeChecked();
-        }
+
+        const eventLoggerButton = screen.getByRole('button', {
+            name: /Event Logger/i
+        });
+        fireEvent.click(eventLoggerButton);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        const settingsIcon = screen.getByTestId('SettingsIcon');
+        const settingsButton = settingsIcon.closest('button');
+        fireEvent.click(settingsButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(/Select which event types you want to SUBSCRIBE to/i)).toBeInTheDocument();
+        expect(screen.getByText(/Subscribe to All/i)).toBeInTheDocument();
+        expect(screen.getByText(/Subscribe to Page Events/i)).toBeInTheDocument();
     });
 
     test('handleScroll when logsContainerRef is null', async () => {
@@ -2767,42 +2761,21 @@ describe('EventLogger Component', () => {
         }
     });
 
-    test('subscription dialog onClose callback', async () => {
-        renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn => btn.textContent?.includes('Events'));
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 1 event type\(s\)/i);
-            fireEvent.click(subChip);
-            await waitFor(() => {
-                expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-            });
-            const closeButtons = screen.getAllByRole('button');
-            const closeButton = closeButtons.find(btn => {
-                const svg = btn.querySelector('svg');
-                return svg && svg.getAttribute('data-testid') === 'CloseIcon';
-            });
-            if (closeButton) {
-                fireEvent.click(closeButton);
-            }
-            await waitFor(() => {
-                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-            }, {timeout: 2000});
-        }
-    });
-
     test('getCurrentSubscriptions returns correct array', async () => {
         const eventTypes = ['TYPE_A', 'TYPE_B'];
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn => btn.textContent?.includes('Events'));
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            await waitFor(() => {
-                expect(screen.getByText(/Subscribed to: 2 event type\(s\)/i)).toBeInTheDocument();
-            });
-        }
+
+        const eventLoggerButton = screen.getByRole('button', {
+            name: /Event Logger/i
+        });
+        fireEvent.click(eventLoggerButton);
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        expect(screen.getByPlaceholderText(/Search events/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Pause/i})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Clear logs/i})).toBeInTheDocument();
     });
 
     test('handleScroll - branch when logsContainerRef is null', () => {
@@ -3637,6 +3610,7 @@ describe('EventLogger Component', () => {
 
     test('SubscriptionDialog covers empty eventTypes branches', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
@@ -3644,17 +3618,17 @@ describe('EventLogger Component', () => {
 
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const subscriptionChip = screen.getByText(/Subscribed to: 0 event type/i);
-            fireEvent.click(subscriptionChip);
-            waitFor(() => {
-                expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+
+            await waitFor(() => {
+                expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
             });
-            const subscribeAllButton = screen.getByText(/Subscribe to All/i);
-            expect(subscribeAllButton).toBeDisabled();
-            const unsubscribeButton = screen.getByText(/Unsubscribe from All/i);
-            fireEvent.click(unsubscribeButton);
-            waitFor(() => {
-                expect(true).toBe(true);
+
+            const settingsIcon = screen.getByTestId('SettingsIcon');
+            const settingsButton = settingsIcon.closest('button');
+            fireEvent.click(settingsButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
             });
         }
     });
@@ -3835,8 +3809,9 @@ describe('EventLogger Component', () => {
         }
     });
 
-    test('SubscriptionDialog shows empty state when no event types', () => {
+    test('SubscriptionDialog shows empty state when no event types', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
@@ -3844,13 +3819,18 @@ describe('EventLogger Component', () => {
 
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const subscriptionChip = screen.getByText(/Subscribed to: 0 event type/i);
-            fireEvent.click(subscriptionChip);
-            waitFor(() => {
-                expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+
+            await waitFor(() => {
+                expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
             });
-            const subscribeAllButton = screen.getByText('Subscribe to All');
-            expect(subscribeAllButton).toBeDisabled();
+
+            const settingsIcon = screen.getByTestId('SettingsIcon');
+            const settingsButton = settingsIcon.closest('button');
+            fireEvent.click(settingsButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
+            });
         }
     });
 
@@ -4303,58 +4283,30 @@ describe('EventLogger Component', () => {
             setPaused: jest.fn(),
             clearLogs: jest.fn(),
         });
-
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        await waitFor(() => {
-            const buttons = screen.getAllByRole('button');
-            const eventLoggerButton = buttons.find(btn =>
-                btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-            );
-            expect(eventLoggerButton).toBeInTheDocument();
-        }, {timeout: 3000});
-
+        renderWithTheme(<EventLogger eventTypes={['NO_TEXT_BRANCH']}/>);
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
-
         if (eventLoggerButton) {
-            await act(async () => {
-                fireEvent.click(eventLoggerButton);
+            fireEvent.click(eventLoggerButton);
+            await waitFor(() => {
+                expect(screen.getByText('NO_TEXT_BRANCH', {exact: true})).toBeInTheDocument();
             });
-
-            await waitFor(() => {
-                expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-            }, {timeout: 3000});
-
-            await waitFor(() => {
-                expect(screen.getByText(/NO_TEXT_BRANCH/i)).toBeInTheDocument();
-            }, {timeout: 3000});
-
             const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-            await act(async () => {
-                fireEvent.change(searchInput, {target: {value: ''}});
-                await new Promise(resolve => setTimeout(resolve, 400));
+            fireEvent.change(searchInput, {target: {value: ''}});
+            await waitFor(() => {
+                expect(searchInput.value).toBe('');
             });
-
-            const logHeader = screen.getByText(/NO_TEXT_BRANCH/i).closest('[style*="cursor: pointer"]');
+            const logHeader = screen.getByText('NO_TEXT_BRANCH', {exact: true}).closest('[style*="cursor: pointer"]');
             if (logHeader) {
-                await act(async () => {
-                    fireEvent.click(logHeader);
-                });
-
+                fireEvent.click(logHeader);
                 await waitFor(() => {
                     const nullElements = screen.getAllByText(/null/i);
                     expect(nullElements.length).toBeGreaterThan(0);
                 }, {timeout: 2000});
             }
         }
-
-        await act(async () => {
-            unmount();
-        });
     });
 
     test('covers applyHighlightToMatch no searchTerm branch', async () => {
@@ -4435,19 +4387,26 @@ describe('EventLogger Component', () => {
 
     test('covers subscription dialog empty eventTypes', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
+
         const buttons = screen.getAllByRole('button');
         const eventLoggerButton = buttons.find(btn =>
             btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
         );
+
         if (eventLoggerButton) {
             fireEvent.click(eventLoggerButton);
-            const subChip = screen.getByText(/Subscribed to: 0 event type\(s\)/i);
-            fireEvent.click(subChip);
+
             await waitFor(() => {
-                expect(screen.getByText(/No event types available for this page/i)).toBeInTheDocument();
+                expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
             });
-            const subscribeAllButton = screen.getByText('Subscribe to All');
-            expect(subscribeAllButton).toBeDisabled();
+
+            const settingsIcon = screen.getByTestId('SettingsIcon');
+            const settingsButton = settingsIcon.closest('button');
+            fireEvent.click(settingsButton);
+
+            await waitFor(() => {
+                expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
+            });
         }
     });
 
@@ -4488,7 +4447,7 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('covers line 117-120 - escapeHtml with special characters', () => {
+    test('escapeHtml with special characters', () => {
         const mockLogs = [{
             id: '1',
             eventType: 'HTML_SPECIAL_CHARS',

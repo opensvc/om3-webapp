@@ -109,10 +109,10 @@ describe('NodesTable', () => {
                 },
             })
         );
-        jest.spyOn(eventSourceManager, 'startEventReception').mockImplementation(() => {
-        });
-        jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {
-        });
+        jest.spyOn(eventSourceManager, 'startEventReception').mockImplementation(() => {});
+        jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {});
+        jest.spyOn(eventSourceManager, 'startLoggerReception').mockImplementation(() => {});
+        jest.spyOn(eventSourceManager, 'closeLoggerEventSource').mockImplementation(() => {});
         localStorage.setItem('authToken', 'test-token');
     });
 

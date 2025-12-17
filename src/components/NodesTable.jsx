@@ -383,17 +383,37 @@ const NodesTable = () => {
                     }),
                 }}
             >
+                {/* Container for the actions button */}
+                <Box
+                    sx={{
+                        mb: 2,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 10,
+                        backgroundColor: "background.paper",
+                        pt: 2,
+                        pb: 1
+                    }}
+                >
+                    {/* Left section  */}
+                    <Box sx={{ flexGrow: 1 }}></Box>
 
-                <Box sx={{mb: 2, display: "flex", gap: 2}}>
+                    {/* Right section */}
                     <Button
                         variant="contained"
                         color="primary"
                         onClick={handleActionsMenuOpen}
                         disabled={selectedNodes.length === 0}
                         ref={actionsMenuAnchorRef}
+                        sx={{ flexShrink: 0 }}
                     >
                         Actions on selected nodes
                     </Button>
+
                     <Menu
                         anchorEl={actionsMenuAnchor}
                         open={Boolean(actionsMenuAnchor)}

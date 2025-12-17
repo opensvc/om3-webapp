@@ -275,20 +275,22 @@ const Heartbeats = () => {
     return (
         <Box
             sx={{
+                height: "100vh",
+                bgcolor: 'background.default',
+                display: 'flex',
+                flexDirection: 'column',
                 p: 0,
                 position: 'relative',
                 width: '100vw',
                 margin: 0,
-                minHeight: '100vh',
-                bgcolor: 'background.default',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'flex-start'
+                overflow: 'hidden',
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
@@ -296,9 +298,18 @@ const Heartbeats = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    overflow: 'hidden',
                 }}
             >
-                <Box sx={{position: "sticky", top: 64, zIndex: 20, backgroundColor: "background.paper", pb: 2, mb: 2}}>
+                <Box sx={{
+                    position: "sticky",
+                    top: 64,
+                    zIndex: 20,
+                    backgroundColor: "background.paper",
+                    pb: 2,
+                    mb: 2,
+                    flexShrink: 0,
+                }}>
                     <Box sx={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -368,9 +379,20 @@ const Heartbeats = () => {
                     </Box>
                 </Box>
 
-                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
+                <TableContainer sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    boxShadow: "none",
+                    border: "none"
+                }}>
                     <Table size="small">
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
+                        <TableHead sx={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 1,
+                            backgroundColor: "background.paper"
+                        }}>
                             <TableRow>
                                 {["RUNNING", "BEATING", "ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].map(label => (
                                     <TableCell

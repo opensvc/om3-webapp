@@ -761,20 +761,22 @@ const Objects = () => {
     return (
         <Box
             sx={{
-                minHeight: "100vh",
+                height: "100vh",
                 bgcolor: "background.default",
                 display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
+                flexDirection: "column",
                 p: 0,
                 position: 'relative',
                 width: '100vw',
                 margin: 0,
+                overflow: 'hidden',
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
@@ -782,6 +784,7 @@ const Objects = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    overflow: 'hidden',
                 }}
             >
 
@@ -793,7 +796,8 @@ const Objects = () => {
                     backgroundColor: "background.paper",
                     pt: 2,
                     pb: 1,
-                    mb: 2
+                    mb: 2,
+                    flexShrink: 0,
                 }}>
                     <Box sx={{
                         display: "flex",
@@ -913,7 +917,13 @@ const Objects = () => {
                 </Box>
 
                 {/* Objects table */}
-                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
+                <TableContainer sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    boxShadow: "none",
+                    border: "none"
+                }}>
                     <Table>
                         <TableHead sx={{
                             position: "sticky",

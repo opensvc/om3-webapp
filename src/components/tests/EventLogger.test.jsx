@@ -4477,4 +4477,39 @@ describe('EventLogger Component', () => {
             }
         });
     });
+
+    test('SubscriptionDialog handles all interaction types', async () => {
+        renderWithTheme(<EventLogger eventTypes={['PAGE_EVENT1', 'PAGE_EVENT2']}/>);
+
+        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
+        fireEvent.click(eventLoggerButton);
+
+        const settingsButton = screen.getByTestId('SettingsIcon').closest('button');
+        fireEvent.click(settingsButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+
+        const subscribeAllButton = screen.getByText(/Subscribe to All/i);
+        fireEvent.click(subscribeAllButton);
+
+        const unsubscribeAllButton = screen.getByText(/Unsubscribe from All/i);
+        fireEvent.click(unsubscribeAllButton);
+
+        const subscribePageButton = screen.getByText(/Subscribe to Page Events/i);
+        fireEvent.click(subscribePageButton);
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        if (checkboxes.length > 0) {
+            fireEvent.click(checkboxes[0]);
+        }
+
+        const applyButton = screen.getByText(/Apply Subscriptions/i);
+        fireEvent.click(applyButton);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
+        });
+    });
 });

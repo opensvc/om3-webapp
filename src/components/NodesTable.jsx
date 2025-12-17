@@ -314,6 +314,14 @@ const NodesTable = () => {
                 diff = (nodeStats[a]?.swap_avail || 0) - (nodeStats[b]?.swap_avail || 0);
             } else if (sortColumn === "version") {
                 diff = (nodeStatus[a]?.agent || '').localeCompare(nodeStatus[b]?.agent || '');
+            } else if (sortColumn === "booted_at") {
+                const bootedA = nodeStatus[a]?.booted_at || "0001-01-01T00:00:00Z";
+                const bootedB = nodeStatus[b]?.booted_at || "0001-01-01T00:00:00Z";
+                diff = new Date(bootedA).getTime() - new Date(bootedB).getTime();
+            } else if (sortColumn === "updated_at") {
+                const updatedA = nodeMonitor[a]?.updated_at || "0001-01-01T00:00:00Z";
+                const updatedB = nodeMonitor[b]?.updated_at || "0001-01-01T00:00:00Z";
+                diff = new Date(updatedA).getTime() - new Date(updatedB).getTime();
             }
             return sortDirection === "asc" ? diff : -diff;
         });
@@ -400,7 +408,7 @@ const NodesTable = () => {
                     }}
                 >
                     {/* Left section  */}
-                    <Box sx={{ flexGrow: 1 }}></Box>
+                    <Box sx={{flexGrow: 1}}></Box>
 
                     {/* Right section */}
                     <Button
@@ -409,7 +417,7 @@ const NodesTable = () => {
                         onClick={handleActionsMenuOpen}
                         disabled={selectedNodes.length === 0}
                         ref={actionsMenuAnchorRef}
-                        sx={{ flexShrink: 0 }}
+                        sx={{flexShrink: 0}}
                     >
                         Actions on selected nodes
                     </Button>
@@ -448,12 +456,12 @@ const NodesTable = () => {
                     </Box>
                 ) : (
                     <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
-                        <Table sx={{minWidth: 900}} aria-label="nodes table">
+                        <Table sx={{minWidth: 1100}} aria-label="nodes table">
                             <TableHead
                                 sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}
                             >
                                 <TableRow>
-                                    <TableCell>
+                                    <TableCell align="center" sx={{width: 50}}>
                                         <Checkbox
                                             checked={selectedNodes.length === Object.keys(nodeStatus).length}
                                             onChange={(e) =>
@@ -461,64 +469,107 @@ const NodesTable = () => {
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("name")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Name</strong>
                                             {sortColumn === "name" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("state")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("state")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>State</strong>
                                             {sortColumn === "state" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("score")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("score")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Score</strong>
                                             {sortColumn === "score" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("load_15m")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("load_15m")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Load (15m)</strong>
                                             {sortColumn === "load_15m" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("mem_avail")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("mem_avail")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Mem Avail</strong>
                                             {sortColumn === "mem_avail" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("swap_avail")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("swap_avail")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Swap Avail</strong>
                                             {sortColumn === "swap_avail" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("version")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("version")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Version</strong>
                                             {sortColumn === "version" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell><strong>Actions</strong></TableCell>
-                                    <TableCell><strong>Logs</strong></TableCell>
+                                    <TableCell
+                                        onClick={() => handleSort("booted_at")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Booted At</strong>
+                                            {sortColumn === "booted_at" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell
+                                        onClick={() => handleSort("updated_at")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Updated At</strong>
+                                            {sortColumn === "updated_at" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center"><strong>Actions</strong></TableCell>
+                                    <TableCell align="center"><strong>Logs</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>

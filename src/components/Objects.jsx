@@ -33,6 +33,8 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import debounce from "lodash/debounce";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
@@ -61,6 +63,7 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
+
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
         sx={{
@@ -135,6 +138,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
         )}
     </Box>
 ));
+
 const GlobalExpectDisplay = React.memo(({globalExpect}) => (
     <Box
         sx={{
@@ -162,6 +166,7 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
         )}
     </Box>
 ));
+
 const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
     <Box
         sx={{
@@ -232,6 +237,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         )}
     </Box>
 ));
+
 const NodeStateDisplay = React.memo(({nodeState, node}) => (
     <Box
         sx={{
@@ -260,6 +266,7 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => (
         )}
     </Box>
 ));
+
 const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
     const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState, provisioned: nodeProvisioned} = getNodeState(
         objectName,
@@ -295,6 +302,7 @@ const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
         </Box>
     );
 });
+
 const TableRowComponent = React.memo(
     ({
          objectName,
@@ -410,6 +418,7 @@ const TableRowComponent = React.memo(
         );
     }
 );
+
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -459,6 +468,7 @@ const Objects = () => {
         "CONNECTION_CLOSED"
     ], []);
     const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
+
     const getObjectStatus = useCallback(
         (objectName, objs) => {
             const obj = objs[objectName] || {};
@@ -481,6 +491,7 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
+
     const getNodeState = useCallback(
         (objectName, node) => {
             const instanceStatus = objectInstanceStatus[objectName] || {};
@@ -498,16 +509,20 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
+
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
+
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
+
     const namespaces = useMemo(() => Array.from(new Set(allObjectNames.map(extractNamespace))).sort(), [allObjectNames]);
     const kinds = useMemo(() => Array.from(new Set(allObjectNames.map(extractKind))).sort(), [allObjectNames]);
+
     const allNodes = useMemo(
         () =>
             Array.from(
@@ -519,6 +534,7 @@ const Objects = () => {
             ).sort(),
         [objectInstanceStatus]
     );
+
     const filteredObjectNames = useMemo(
         () =>
             allObjectNames.filter((name) => {
@@ -537,6 +553,7 @@ const Objects = () => {
             }),
         [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, getObjectStatus, objects]
     );
+
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         return [...filteredObjectNames].sort((a, b) => {
@@ -555,6 +572,7 @@ const Objects = () => {
             return sortDirection === "asc" ? diff : -diff;
         });
     }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
+
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
@@ -572,10 +590,12 @@ const Objects = () => {
             }, 300),
         [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]
     );
+
     useEffect(() => {
         debouncedUpdateQuery();
         return debouncedUpdateQuery.cancel;
     }, [debouncedUpdateQuery]);
+
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
@@ -586,11 +606,13 @@ const Objects = () => {
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
+
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
+
     const eventStarted = useRef(false);
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -608,25 +630,31 @@ const Objects = () => {
             eventStarted.current = false;
         };
     }, []);
+
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
         );
     }, []);
+
     const handleActionsMenuOpen = useCallback((event) => {
         setActionsMenuAnchor(event.currentTarget);
     }, []);
+
     const handleActionsMenuClose = useCallback(() => {
         setActionsMenuAnchor(null);
     }, []);
+
     const handleRowMenuOpen = useCallback((event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
     }, []);
+
     const handleRowMenuClose = useCallback(() => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
     }, []);
+
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
@@ -635,6 +663,7 @@ const Objects = () => {
         },
         [handleRowMenuClose, handleActionsMenuClose]
     );
+
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -692,12 +721,23 @@ const Objects = () => {
         },
         [pendingAction, selectedObjects, objectStatus, removeObject]
     );
+
     const handleObjectClick = useCallback(
         (objectName) => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
     );
+
+    const handleSort = useCallback((column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
+    }, [sortColumn, sortDirection]);
+
     const popperProps = useCallback(
         () => ({
             placement: "bottom-end",
@@ -717,6 +757,7 @@ const Objects = () => {
         }),
         [getZoomLevel]
     );
+
     return (
         <Box
             sx={{
@@ -870,6 +911,7 @@ const Objects = () => {
                         </ClickAwayListener>
                     </Popper>
                 </Box>
+
                 {/* Objects table */}
                 <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
                     <Table>
@@ -891,8 +933,10 @@ const Objects = () => {
                                     sx={{
                                         minWidth: "150px",
                                         width: "150px",
-                                        position: "relative"
+                                        position: "relative",
+                                        cursor: "pointer"
                                     }}
+                                    onClick={() => handleSort("status")}
                                 >
                                     <Box sx={{
                                         width: "100%",
@@ -906,16 +950,31 @@ const Objects = () => {
                                                 width: "80px",
                                                 display: "flex",
                                                 justifyContent: "center",
+                                                alignItems: "center",
+                                                gap: 0.5
                                             }}
                                         >
                                             <strong>Status</strong>
+                                            {sortColumn === "status" && (
+                                                sortDirection === "asc" ?
+                                                    <KeyboardArrowUpIcon fontSize="small"/> :
+                                                    <KeyboardArrowDownIcon fontSize="small"/>
+                                            )}
                                         </Box>
                                         <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
-                                <TableCell>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                <TableCell
+                                    sx={{cursor: "pointer"}}
+                                    onClick={() => handleSort("object")}
+                                >
+                                    <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
                                         <strong>Object</strong>
+                                        {sortColumn === "object" && (
+                                            sortDirection === "asc" ?
+                                                <KeyboardArrowUpIcon fontSize="small"/> :
+                                                <KeyboardArrowDownIcon fontSize="small"/>
+                                        )}
                                     </Box>
                                 </TableCell>
                                 {isWideScreen &&
@@ -925,8 +984,10 @@ const Objects = () => {
                                             sx={{
                                                 minWidth: "130px",
                                                 width: "130px",
-                                                position: "relative"
+                                                position: "relative",
+                                                cursor: "pointer"
                                             }}
+                                            onClick={() => handleSort(node)}
                                         >
                                             <Box sx={{
                                                 width: "100%",
@@ -940,9 +1001,16 @@ const Objects = () => {
                                                         width: "80px",
                                                         display: "flex",
                                                         justifyContent: "center",
+                                                        alignItems: "center",
+                                                        gap: 0.5
                                                     }}
                                                 >
                                                     <strong>{node}</strong>
+                                                    {sortColumn === node && (
+                                                        sortDirection === "asc" ?
+                                                            <KeyboardArrowUpIcon fontSize="small"/> :
+                                                            <KeyboardArrowDownIcon fontSize="small"/>
+                                                    )}
                                                 </Box>
                                                 <Box sx={{width: "50px"}}></Box>
                                             </Box>
@@ -982,6 +1050,7 @@ const Objects = () => {
                         No objects found matching the current filters.
                     </Typography>
                 )}
+
                 {/* Feedback and dialogs */}
                 <Snackbar
                     open={snackbar.open}

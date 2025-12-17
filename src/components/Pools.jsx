@@ -119,19 +119,21 @@ const Pools = () => {
     return (
         <Box
             sx={{
+                height: "100vh",
+                bgcolor: 'background.default',
+                display: 'flex',
+                flexDirection: 'column',
                 p: 0,
                 width: '100vw',
                 margin: 0,
-                minHeight: '100vh',
-                bgcolor: 'background.default',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'flex-start'
+                overflow: 'hidden',
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
@@ -139,9 +141,10 @@ const Pools = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    overflow: 'hidden',
                 }}
             >
-                
+
                 {loading ? (
                     <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}>
                         <CircularProgress/>
@@ -160,7 +163,13 @@ const Pools = () => {
                         </Alert>
                     </Box>
                 ) : (
-                    <TableContainer component={Paper} sx={{width: "100%"}}>
+                    <TableContainer
+                        sx={{
+                            flex: 1,
+                            minHeight: 0,
+                            overflow: "auto",
+                        }}
+                    >
                         <Table sx={{minWidth: 700}} aria-label="pools table">
                             <TableHead>
                                 <TableRow>

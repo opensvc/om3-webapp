@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from "react";
+import React, {useEffect, useState, useMemo, useRef} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
@@ -33,6 +33,15 @@ const NetworkDetails = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const {networkName} = useParams();
+    const containerRef = useRef(null);
+
+    // Scroll to top on component mount and when networkName changes
+    useEffect(() => {
+        window.scrollTo(0, 0);
+        if (containerRef.current) {
+            containerRef.current.scrollTop = 0;
+        }
+    }, [networkName]);
 
     useEffect(() => {
         let isMounted = true;
@@ -129,19 +138,22 @@ const NetworkDetails = () => {
     return (
         <Box
             sx={{
+                height: "100vh",
+                bgcolor: 'background.default',
+                display: 'flex',
+                flexDirection: 'column',
                 p: 0,
                 width: '100vw',
                 margin: 0,
-                minHeight: '100vh',
-                bgcolor: 'background.default',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'flex-start'
+                overflow: 'hidden',
             }}
         >
             <Box
+                ref={containerRef}
                 sx={{
-                    width: "100%",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
@@ -149,18 +161,19 @@ const NetworkDetails = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    overflow: 'hidden',
                 }}
             >
                 <Typography
                     variant="h4"
                     gutterBottom
-                    sx={{mb: 3}}
+                    sx={{mb: 3, flexShrink: 0}}
                     align="center"
                 >
                     Network Details: {networkName || "N/A"} ({networkType})
                 </Typography>
                 {error && (
-                    <Alert severity="error" sx={{mb: 2}}>
+                    <Alert severity="error" sx={{mb: 2, flexShrink: 0}}>
                         {error}
                     </Alert>
                 )}
@@ -173,6 +186,7 @@ const NetworkDetails = () => {
                         pt: 2,
                         pb: 1,
                         mb: 2,
+                        flexShrink: 0,
                     }}
                 >
                     <Box
@@ -225,11 +239,19 @@ const NetworkDetails = () => {
                     </Collapse>
                 </Box>
                 {isLoading ? (
-                    <Box sx={{display: "flex", justifyContent: "center", my: 4}}>
+                    <Box sx={{display: "flex", justifyContent: "center", my: 4, flex: 1}}>
                         <CircularProgress aria-label="Loading network details"/>
                     </Box>
                 ) : (
-                    <TableContainer component={Paper} sx={{width: "100%"}}>
+                    <TableContainer
+                        component={Paper}
+                        sx={{
+                            flex: 1,
+                            minHeight: 0,
+                            overflow: "auto",
+                            width: "100%"
+                        }}
+                    >
                         <Table sx={{minWidth: 700}} aria-label="Network details table">
                             <TableHead>
                                 <TableRow>

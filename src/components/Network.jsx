@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import {useNavigate} from "react-router-dom";
 import {
     Box,
@@ -24,6 +24,15 @@ const Network = () => {
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
     const navigate = useNavigate();
+    const containerRef = useRef(null);
+
+    // Scroll to top on component mount
+    useEffect(() => {
+        window.scrollTo(0, 0);
+        if (containerRef.current) {
+            containerRef.current.scrollTop = 0;
+        }
+    }, []);
 
     useEffect(() => {
         const fetchNetworks = async () => {
@@ -73,19 +82,22 @@ const Network = () => {
     return (
         <Box
             sx={{
+                height: "100vh",
+                bgcolor: 'background.default',
+                display: 'flex',
+                flexDirection: 'column',
                 p: 0,
                 width: '100vw',
                 margin: 0,
-                minHeight: '100vh',
-                bgcolor: 'background.default',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'flex-start'
+                overflow: 'hidden',
             }}
         >
             <Box
+                ref={containerRef}
                 sx={{
-                    width: "100%",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
@@ -93,10 +105,18 @@ const Network = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    overflow: 'hidden',
                 }}
             >
-                
-                <TableContainer component={Paper} sx={{width: "100%"}}>
+                <TableContainer
+                    component={Paper}
+                    sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflow: "auto",
+                        width: "100%"
+                    }}
+                >
                     <Table sx={{minWidth: 700}}>
                         <TableHead>
                             <TableRow>

@@ -23,32 +23,33 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {RESOURCE_ACTIONS} from "../constants/actions";
+import logger from '../utils/logger.js';
 
 const NodeCard = ({
                       node,
                       nodeData = {},
                       selectedNodes = [],
-                      toggleNode = () => console.warn("toggleNode not provided"),
+                      toggleNode = () => logger.warn("toggleNode not provided"),
                       selectedResourcesByNode = {},
-                      toggleResource = () => console.warn("toggleResource not provided"),
+                      toggleResource = () => logger.warn("toggleResource not provided"),
                       actionInProgress = false,
-                      setIndividualNodeMenuAnchor = () => console.warn("setIndividualNodeMenuAnchor not provided"),
-                      setCurrentNode = () => console.warn("setCurrentNode not provided"),
-                      handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
-                      handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
+                      setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
+                      setCurrentNode = () => logger.warn("setCurrentNode not provided"),
+                      handleResourcesActionsOpen = () => logger.warn("handleResourcesActionsOpen not provided"),
+                      handleResourceMenuOpen = () => logger.warn("handleResourceMenuOpen not provided"),
                       individualNodeMenuAnchorRef = null,
                       resourcesActionsAnchorRef = null,
                       resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
-                      handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
+                      handleNodeResourcesAccordionChange = () => logger.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
-                      setPendingAction = () => console.warn("setPendingAction not provided"),
-                      setSimpleDialogOpen = () => console.warn("setSimpleDialogOpen not provided"),
-                      setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
+                      setPendingAction = () => logger.warn("setPendingAction not provided"),
+                      setSimpleDialogOpen = () => logger.warn("setSimpleDialogOpen not provided"),
+                      setSelectedResourcesByNode = () => logger.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                       instanceName,
-                      onOpenLogs = () => console.warn("onOpenLogs not provided"),
+                      onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                   }) => {
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
@@ -57,11 +58,11 @@ const NodeCard = ({
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
 
     useEffect(() => {
-        console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
+        logger.info("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
 
     if (!node) {
-        console.error("Node name is required");
+        logger.error("Node name is required");
         return null;
     }
 
@@ -117,7 +118,7 @@ const NodeCard = ({
     // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
         if (typeof setSelectedResourcesByNode !== "function") {
-            console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
+            logger.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
             return;
         }
         const allResourceIds = [
@@ -166,23 +167,23 @@ const NodeCard = ({
 
     const getResourceType = (rid) => {
         if (!rid) {
-            console.warn("getResourceType called with undefined or null rid");
+            logger.warn("getResourceType called with undefined or null rid");
             return '';
         }
-        console.log(`getResourceType called for rid: ${rid}`);
+        logger.info(`getResourceType called for rid: ${rid}`);
         const topLevelType = resources[rid]?.type;
         if (topLevelType) {
-            console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
+            logger.info(`Found resource type in resources[${rid}]: ${topLevelType}`);
             return topLevelType;
         }
         for (const containerId of Object.keys(encapData)) {
             const encapType = encapData[containerId]?.resources?.[rid]?.type;
             if (encapType) {
-                console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
+                logger.info(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
                 return encapType;
             }
         }
-        console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
+        logger.warn(`Resource type not found for rid: ${rid}, returning empty string`);
         return '';
     };
 

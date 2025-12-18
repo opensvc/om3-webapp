@@ -2,8 +2,6 @@ import React, {useEffect, useState, useMemo} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
-    Paper,
-    Typography,
     Table,
     TableHead,
     TableRow,
@@ -303,7 +301,7 @@ const Heartbeats = () => {
             >
                 <Box sx={{
                     position: "sticky",
-                    top: 64,
+                    top: 0,
                     zIndex: 20,
                     backgroundColor: "background.paper",
                     pb: 2,
@@ -384,13 +382,14 @@ const Heartbeats = () => {
                     minHeight: 0,
                     overflow: "auto",
                     boxShadow: "none",
-                    border: "none"
+                    border: "none",
+                    position: 'relative',
                 }}>
-                    <Table size="small">
+                    <Table size="small" sx={{position: 'relative'}}>
                         <TableHead sx={{
                             position: "sticky",
                             top: 0,
-                            zIndex: 1,
+                            zIndex: 30,
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
@@ -400,7 +399,9 @@ const Heartbeats = () => {
                                         sx={{
                                             fontWeight: "bold",
                                             textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "left" : "center",
-                                            cursor: "pointer"
+                                            cursor: "pointer",
+                                            paddingLeft: 2,
+                                            paddingRight: 2,
                                         }}
                                         onClick={() => handleSort(label.toLowerCase())}
                                     >
@@ -411,8 +412,8 @@ const Heartbeats = () => {
                                         }}>
                                             {label}
                                             {sortColumn === label.toLowerCase() &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon fontSize="small"/> :
+                                                    <KeyboardArrowDownIcon fontSize="small"/>)}
                                         </Box>
                                     </TableCell>
                                 ))}

@@ -791,7 +791,7 @@ const Objects = () => {
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
-                    top: 64,
+                    top: 0,
                     zIndex: 10,
                     backgroundColor: "background.paper",
                     pt: 2,
@@ -922,17 +922,18 @@ const Objects = () => {
                     minHeight: 0,
                     overflow: "auto",
                     boxShadow: "none",
-                    border: "none"
+                    border: "none",
+                    position: 'relative',
                 }}>
-                    <Table>
+                    <Table sx={{position: 'relative'}}>
                         <TableHead sx={{
                             position: "sticky",
                             top: 0,
-                            zIndex: 3,
+                            zIndex: 20,  // Augmenté pour être au-dessus des filtres
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
-                                <TableCell>
+                                <TableCell sx={{paddingLeft: 2}}>
                                     <Checkbox
                                         checked={selectedObjects.length === filteredObjectNames.length}
                                         onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
@@ -944,7 +945,8 @@ const Objects = () => {
                                         minWidth: "150px",
                                         width: "150px",
                                         position: "relative",
-                                        cursor: "pointer"
+                                        cursor: "pointer",
+                                        paddingLeft: 2
                                     }}
                                     onClick={() => handleSort("status")}
                                 >
@@ -975,7 +977,7 @@ const Objects = () => {
                                     </Box>
                                 </TableCell>
                                 <TableCell
-                                    sx={{cursor: "pointer"}}
+                                    sx={{cursor: "pointer", paddingLeft: 2}}
                                     onClick={() => handleSort("object")}
                                 >
                                     <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
@@ -995,7 +997,8 @@ const Objects = () => {
                                                 minWidth: "130px",
                                                 width: "130px",
                                                 position: "relative",
-                                                cursor: "pointer"
+                                                cursor: "pointer",
+                                                paddingLeft: 2
                                             }}
                                             onClick={() => handleSort(node)}
                                         >
@@ -1026,7 +1029,7 @@ const Objects = () => {
                                             </Box>
                                         </TableCell>
                                     ))}
-                                <TableCell>
+                                <TableCell sx={{paddingLeft: 2}}>
                                     <strong>Actions</strong>
                                 </TableCell>
                             </TableRow>

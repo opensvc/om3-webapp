@@ -79,8 +79,8 @@ async function oidcConfiguration(authInfo) {
         redirect_uri: `${baseUrl}/auth-callback`,
         // Use a dedicated silent renew endpoint so the iframe can call `signinSilentCallback`
         silent_redirect_uri: `${baseUrl}/silent-renew`,
-        // Explicitly control refresh token usage for SPAs. Set to false to prefer iframe-based silent renew.
-        useRefreshToken: false,
+        // Explicitly control refresh token usage for SPAs. Set to true to use refresh tokens for silent renew.
+        useRefreshToken: true,
         post_logout_redirect_uri: `${baseUrl}/`,
         userStore: new WebStorageStateStore({store: window.localStorage}),
     };

@@ -204,6 +204,62 @@ const OidcInitializer = ({children}) => {
         return () => window.removeEventListener('om3:auth-redirect', handler);
     }, [navigate]);
 
+    // Handle auth check on resume for OIDC
+    useEffect(() => {
+        const handleCheckAuthOnResume = () => {
+            try {
+                const authChoice = localStorage.getItem('authChoice');
+                const token = localStorage.getItem('authToken');
+                if (authChoice === 'openid') {
+                    if (!token) {
+                        logger.warn('No OIDC token found on resume, redirecting to /auth-choice');
+                        navigate('/auth-choice', {replace: true});
+                    } else if (!isTokenValid(token)) {
+                        logger.warn('OIDC token expired on resume, attempting silent renew');
+                        if (userManager) {
+                            userManager.signinSilent().then((user) => {
+                                if (user && !user.expired) {
+                                    logger.info('Silent renew succeeded on resume');
+                                    onUserRefreshed(user);
+                                } else {
+                                    logger.warn('Silent renew failed on resume, redirecting to /auth-choice');
+                                    navigate('/auth-choice', {replace: true});
+                                }
+                            }).catch((error) => {
+                                logger.error('Silent renew error on resume:', error);
+                                navigate('/auth-choice', {replace: true});
+                            });
+                        } else {
+                            navigate('/auth-choice', {replace: true});
+                        }
+                    }
+                    return;
+                }
+                if (!isTokenValid(token)) {
+                    logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('tokenExpiration');
+                    localStorage.removeItem('authChoice');
+                    navigate('/auth-choice', {replace: true});
+                }
+            } catch (err) {
+                logger.error('Error while checking auth on resume:', err);
+            }
+        };
+
+        const visibilityHandler = () => {
+            if (document.visibilityState === 'visible') handleCheckAuthOnResume();
+        };
+
+        document.addEventListener('visibilitychange', visibilityHandler);
+        window.addEventListener('focus', handleCheckAuthOnResume);
+
+        return () => {
+            document.removeEventListener('visibilitychange', visibilityHandler);
+            window.removeEventListener('focus', handleCheckAuthOnResume);
+        };
+    }, [navigate, userManager, onUserRefreshed]);
+
     return children;
 };
 
@@ -234,44 +290,7 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     logger.info("App init");
-    const navigate = useNavigate();
-
-    useEffect(() => {
-        const handleCheckAuthOnResume = () => {
-            try {
-                const authChoice = localStorage.getItem('authChoice');
-                const token = localStorage.getItem('authToken');
-                if (authChoice === 'openid') {
-                    if (!token) {
-                        logger.warn('No OIDC token found on resume, redirecting to /auth-choice');
-                        navigate('/auth-choice', {replace: true});
-                    }
-                    return;
-                }
-                if (!isTokenValid(token)) {
-                    logger.warn('Token invalid or expired on resume, redirecting to /auth-choice');
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('tokenExpiration');
-                    localStorage.removeItem('authChoice');
-                    navigate('/auth-choice', {replace: true});
-                }
-            } catch (err) {
-                logger.error('Error while checking auth on resume:', err);
-            }
-        };
-
-        const visibilityHandler = () => {
-            if (document.visibilityState === 'visible') handleCheckAuthOnResume();
-        };
-
-        document.addEventListener('visibilitychange', visibilityHandler);
-        window.addEventListener('focus', handleCheckAuthOnResume);
-
-        return () => {
-            document.removeEventListener('visibilitychange', visibilityHandler);
-            window.removeEventListener('focus', handleCheckAuthOnResume);
-        };
-    }, [navigate]);
+    useNavigate();
 
     useEffect(() => {
         const checkTokenChange = () => {

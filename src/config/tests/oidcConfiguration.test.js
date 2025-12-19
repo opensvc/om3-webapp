@@ -89,7 +89,7 @@ describe('oidcConfiguration', () => {
             scope: 'openid profile',
             redirect_uri: 'https://example.com/app/subpath/auth-callback',
             silent_redirect_uri: 'https://example.com/app/subpath/silent-renew',
-            useRefreshToken: false,
+            useRefreshToken: true,
             post_logout_redirect_uri: 'https://example.com/app/subpath/',
             userStore: expect.any(Object),
         });
@@ -115,7 +115,7 @@ describe('oidcConfiguration', () => {
             scope: 'openid profile email offline_access opensvc:om3 opensvc:om3:root opensvc:om3:guest opensvc:badscope',
             redirect_uri: 'https://example.com/app/subpath/auth-callback',
             silent_redirect_uri: 'https://example.com/app/subpath/silent-renew',
-            useRefreshToken: false,
+            useRefreshToken: true,
             post_logout_redirect_uri: 'https://example.com/app/subpath/',
             userStore: expect.any(Object),
         });

@@ -117,7 +117,7 @@ const SubscriptionDialog = ({
                 <Typography variant="h6" color={isDarkMode ? '#ffffff' : 'inherit'}>
                     Event Subscriptions
                 </Typography>
-                <IconButton onClick={onClose}>
+                <IconButton onClick={onClose} aria-label="Close">
                     <Close sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}/>
                 </IconButton>
             </Box>
@@ -893,6 +893,7 @@ const EventLogger = ({
                         transition: "background-color 0.2s ease"
                     }}
                     className="resize-handle"
+                    aria-label="Resize handle"
                 >
                     <div style={{
                         width: 60,

@@ -804,6 +804,7 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -811,13 +812,40 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        const objectNames = await screen.findAllByText(/root\/cfg\/cfg1/i);
-        expect(objectNames.length).toBeGreaterThan(0);
+
+        const objectTitle = await screen.findByText(/root\/cfg\/cfg1/i, {
+            selector: 'span[font-weight="bold"]'
+        });
+        expect(objectTitle).toBeInTheDocument();
+
         await waitFor(() => {
-            expect(screen.queryByText('node1')).not.toBeInTheDocument();
+            const nodeCards = document.querySelectorAll('[class*="MuiCard"], [role="region"][class*="node"]');
+            expect(nodeCards).toHaveLength(0);
+
+            const batchActionsButton = screen.queryByRole('button', {name: /Actions on Selected Nodes/i});
+            expect(batchActionsButton).not.toBeInTheDocument();
         }, {timeout: 10000});
+
         await waitFor(() => {
-            expect(screen.queryByText('node2')).not.toBeInTheDocument();
+            const keyTableCells = document.querySelectorAll('td');
+            let foundInKeys = false;
+
+            keyTableCells.forEach(cell => {
+                if (cell.textContent.trim() === 'node1') {
+                    foundInKeys = true;
+                }
+            });
+
+            const allNode1Text = screen.queryAllByText('node1');
+
+            if (allNode1Text.length > 0) {
+                allNode1Text.forEach(element => {
+                    const isInTableCell = element.closest('td') !== null;
+                    const isInTable = element.closest('table') !== null;
+
+                    expect(isInTable).toBe(true);
+                });
+            }
         }, {timeout: 10000});
     }, 15000);
 

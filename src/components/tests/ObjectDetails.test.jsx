@@ -840,7 +840,6 @@ type = flag
 
             if (allNode1Text.length > 0) {
                 allNode1Text.forEach(element => {
-                    const isInTableCell = element.closest('td') !== null;
                     const isInTable = element.closest('table') !== null;
 
                     expect(isInTable).toBe(true);
@@ -2528,8 +2527,6 @@ type = flag
     });
 
     test('getFilteredResourceActions handles all resource type branches', () => {
-        // Import or define RESOURCE_ACTIONS if not available
-        const {RESOURCE_ACTIONS} = require('../../constants/actions');
         // Test task types
         const taskActions = getFilteredResourceActions('task.daily');
         expect(taskActions).toHaveLength(1);
@@ -2829,7 +2826,7 @@ type = flag
 
         // Mock fetch to reject for config update
         let callCount = 0;
-        global.fetch.mockImplementation((url) => {
+        global.fetch.mockImplementation(() => {
             callCount++;
             if (callCount === 1) {
                 // Initial config fetch succeeds
@@ -2841,11 +2838,6 @@ type = flag
             // Subsequent config update fails
             return Promise.reject(new Error('Failed to load updated configuration'));
         });
-
-        const openSnackbarSpy = jest.fn();
-        // We need to mock the openSnackbar function call inside the component
-        // This is tricky, so we'll verify the error handling through the fetch mock
-
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>

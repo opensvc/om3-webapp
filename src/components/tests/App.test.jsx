@@ -77,9 +77,6 @@ jest.mock('../../context/OidcAuthContext.tsx', () => {
             recreateUserManager: mockRecreateUserManager,
             isInitialized: mockIsInitialized,
         }),
-        __setMockUserManager: (um) => {
-            mockUserManager = um;
-        },
         __setMockRecreateUserManager: (fn) => {
             mockRecreateUserManager = fn;
         },

@@ -686,7 +686,6 @@ describe('NodesTable', () => {
     test('calculateMenuPosition handles null anchorRef', () => {
         const {rerender} = renderWithRouter(<NodesTable/>);
         expect(() => {
-            const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
             rerender(<div>Test</div>);
             rerender(<BrowserRouter><NodesTable/></BrowserRouter>);
         }).not.toThrow();

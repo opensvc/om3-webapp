@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import EventLogger from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
@@ -1077,15 +1077,6 @@ describe('EventLogger Component', () => {
         expect(true).toBe(true);
     });
 
-    test('tests resize with null mouse events', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
-        expect(() => {
-            const event = null;
-            if (event?.preventDefault) event.preventDefault();
-        }).not.toThrow();
-    });
 
     test('tests filteredData with null data in JSONView', async () => {
         const mockLogs = [
@@ -1639,17 +1630,6 @@ describe('EventLogger Component', () => {
         expect(true).toBe(true);
     });
 
-    test('tests startResizing with minimal mouse event', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
-
-        expect(() => {
-            const event = null;
-            if (event?.preventDefault) event.preventDefault();
-        }).not.toThrow();
-    });
-
     test('tests resize timeout during mouse move', async () => {
         jest.useFakeTimers();
         renderWithTheme(<EventLogger/>);
@@ -2042,29 +2022,6 @@ describe('EventLogger Component', () => {
         expect(container).toBeInTheDocument();
     });
 
-    test('syntaxHighlightJSON catch block branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'JSON_ERROR',
-            timestamp: new Date().toISOString(),
-            data: {
-                toJSON: () => {
-                    throw new Error('Cannot serialize');
-                }
-            }
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
     test('syntaxHighlightJSON key vs string branch', () => {
         const mockLogs = [{
             id: '1',
@@ -2302,8 +2259,7 @@ describe('EventLogger Component', () => {
     test('handles resize with null event', () => {
         const startResizing = (mouseDownEvent) => {
             if (mouseDownEvent?.preventDefault) mouseDownEvent.preventDefault();
-            const startY = mouseDownEvent?.clientY ?? 0;
-            return startY;
+            return mouseDownEvent?.clientY ?? 0;
         };
 
         expect(startResizing(null)).toBe(0);

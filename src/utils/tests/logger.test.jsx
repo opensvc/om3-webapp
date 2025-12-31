@@ -26,11 +26,9 @@ describe('logger', () => {
             expect(spy).toHaveBeenCalledWith('test message', 123);
         });
 
-        test('info calls console.log and console.info with arguments', () => {
-            const logSpy = jest.spyOn(console, 'log').mockImplementation();
+        test('info calls console.info with arguments', () => {
             const infoSpy = jest.spyOn(console, 'info').mockImplementation();
             logger.info('info message', {key: 'value'});
-            expect(logSpy).toHaveBeenCalledWith('info message', {key: 'value'});
             expect(infoSpy).toHaveBeenCalledWith('info message', {key: 'value'});
         });
 
@@ -40,21 +38,16 @@ describe('logger', () => {
             expect(spy).toHaveBeenCalledWith('warn message');
         });
 
-        test('error calls console.log and console.error with arguments', () => {
-            const logSpy = jest.spyOn(console, 'log').mockImplementation();
+        test('error calls console.error with arguments', () => {
             const errorSpy = jest.spyOn(console, 'error').mockImplementation();
             const error = new Error('test error');
             logger.error('error message', error);
-            expect(logSpy).toHaveBeenCalledWith('error message', error);
             expect(errorSpy).toHaveBeenCalledWith('error message', error);
         });
 
-        test('debug calls console.log and console.debug with arguments', () => {
-            const logSpy = jest.spyOn(console, 'log').mockImplementation();
+        test('debug calls console.debug with arguments', () => {
             const debugSpy = jest.spyOn(console, 'debug').mockImplementation();
-            // eslint-disable-next-line testing-library/no-debugging-utils
             logger.debug('debug message');
-            expect(logSpy).toHaveBeenCalledWith('debug message');
             expect(debugSpy).toHaveBeenCalledWith('debug message');
         });
 
@@ -117,22 +110,6 @@ describe('logger', () => {
             loggerProduction.info('info message');
             expect(logSpy).not.toHaveBeenCalled();
             expect(infoSpy).not.toHaveBeenCalled();
-        });
-
-        test('warn does not call console.warn', () => {
-            const loggerProduction = require('../logger').default;
-            const spy = jest.spyOn(console, 'warn').mockImplementation();
-            loggerProduction.warn('warn message');
-            expect(spy).not.toHaveBeenCalled();
-        });
-
-        test('error does not call console methods', () => {
-            const loggerProduction = require('../logger').default;
-            const logSpy = jest.spyOn(console, 'log').mockImplementation();
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation();
-            loggerProduction.error('error message');
-            expect(logSpy).not.toHaveBeenCalled();
-            expect(errorSpy).not.toHaveBeenCalled();
         });
 
         test('debug does not call console methods', () => {

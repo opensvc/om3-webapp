@@ -158,6 +158,11 @@ const LogsViewer = ({
                     setIsConnected(false);
                     return;
                 }
+                if (!response.body) {
+                    setErrorMessage("Response has no readable stream");
+                    setIsConnected(false);
+                    return;
+                }
                 setIsConnected(true);
                 setErrorMessage("");
                 setIsLoading(false);

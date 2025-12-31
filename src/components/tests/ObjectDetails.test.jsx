@@ -37,7 +37,7 @@ jest.mock('@mui/material', () => {
                 {children}
             </div>
         ),
-        AccordionSummary: ({children, id, onChange, expanded, ...props}) => (
+        AccordionSummary: ({children, id, onChange, expanded, expandIcon, ...props}) => (
             <div
                 role="button"
                 aria-expanded={expanded ? 'true' : 'false'}
@@ -49,7 +49,7 @@ jest.mock('@mui/material', () => {
             </div>
         ),
         AccordionDetails: ({children, ...props}) => <div {...props}>{children}</div>,
-        Menu: ({children, open, anchorEl, onClose, ...props}) =>
+        Menu: ({children, open, anchorEl, onClose, disablePortal, ...props}) =>
             open ? <div role="menu" {...props}>{children}</div> : null,
         MenuItem: ({children, onClick, ...props}) => (
             <div role="menuitem" onClick={onClick} {...props}>
@@ -58,12 +58,12 @@ jest.mock('@mui/material', () => {
         ),
         ListItemIcon: ({children, ...props}) => <span {...props}>{children}</span>,
         ListItemText: ({children, ...props}) => <span {...props}>{children}</span>,
-        Dialog: ({children, open, maxWidth, fullWidth, ...props}) =>
+        Dialog: ({children, open, maxWidth, fullWidth, slotProps, ...props}) =>
             open ? <div role="dialog" {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
-        Snackbar: ({children, open, autoHideDuration, ...props}) => {
+        Snackbar: ({children, open, autoHideDuration, anchorOrigin, ...props}) => {
             return open ? <div role="alert" {...props}>{children}</div> : null;
         },
         Alert: ({children, severity, ...props}) => (
@@ -76,7 +76,6 @@ jest.mock('@mui/material', () => {
                 type="checkbox"
                 checked={checked}
                 onChange={onChange}
-                style={{...sx}}
                 {...props}
             />
         ),
@@ -84,13 +83,12 @@ jest.mock('@mui/material', () => {
             <button
                 onClick={onClick}
                 disabled={disabled}
-                style={{...sx}}
                 {...props}
             >
                 {children}
             </button>
         ),
-        TextField: ({label, value, onChange, disabled, multiline, rows, id, ...props}) => {
+        TextField: ({label, value, onChange, disabled, multiline, rows, id, fullWidth, helperText, slotProps, ...props}) => {
             const inputId = id || `textfield-${label}`;
             return (
                 <div>
@@ -113,25 +111,24 @@ jest.mock('@mui/material', () => {
         ),
         CircularProgress: () => <div role="progressbar">Loading...</div>,
         Box: ({children, sx, ...props}) => (
-            <div style={{...sx, minWidth: sx?.minWidth || 'auto'}} {...props}>
+            <div {...props}>
                 {children}
             </div>
         ),
-        Typography: ({children, sx, ...props}) => <span style={{...sx}} {...props}>{children}</span>,
+        Typography: ({children, sx, ...props}) => <span {...props}>{children}</span>,
         FiberManualRecordIcon: ({sx, ...props}) => (
-            <svg style={{color: sx?.color, fontSize: sx?.fontSize}} {...props} />
+            <svg {...props} />
         ),
         Tooltip: ({children, title, ...props}) => (
             <span {...props} title={title}>
                 {children}
             </span>
         ),
-        Button: ({children, onClick, disabled, variant, component, htmlFor, sx, ...props}) => (
+        Button: ({children, onClick, disabled, variant, component, htmlFor, sx, startIcon, ...props}) => (
             <button
                 onClick={onClick}
                 disabled={disabled}
                 data-variant={variant}
-                style={{...sx}}
                 {...(component === 'label' ? {htmlFor} : {})}
                 {...props}
             >
@@ -142,6 +139,8 @@ jest.mock('@mui/material', () => {
         Paper: ({elevation, children, ...props}) => <div {...props}>{children}</div>,
         ClickAwayListener: ({onClickAway, children, ...props}) => <div
             onClick={onClickAway} {...props}>{children}</div>,
+        Drawer: ({children, open, anchor, onClose, slotProps, ...props}) =>
+            open ? <div role="complementary" {...props}>{children}</div> : null,
     };
 });
 
@@ -185,6 +184,12 @@ jest.mock('../../constants/actions', () => ({
         {name: 'console', icon: 'ConsoleIcon'},
     ],
 }));
+
+jest.mock('../LogsViewer.jsx', () => ({nodename, type, height}) => (
+    <div data-testid="logs-viewer" nodename={nodename} type={type} height={height}>
+        Logs Viewer Mock
+    </div>
+));
 
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();

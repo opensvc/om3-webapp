@@ -32,10 +32,10 @@ jest.mock('@mui/material', () => {
         TableBody: ({children, ...props}) => (
             <tbody data-testid="table-body" {...props}>{children}</tbody>
         ),
-        TableRow: ({children, onClick, ...props}) => (
+        TableRow: ({children, onClick, hover, ...props}) => (
             <tr data-testid="table-row" onClick={onClick} {...props}>{children}</tr>
         ),
-        TableCell: ({children, onClick, ...props}) => (
+        TableCell: ({children, onClick, justifyContent, alignItems, ...props}) => (
             <td data-testid="table-cell" onClick={onClick} {...props}>{children}</td>
         ),
         TableContainer: ({children, ...props}) => (
@@ -65,6 +65,8 @@ jest.mock('@mui/material', () => {
                 <input {...inputProps} {...props} />
             </div>
         ),
+        Drawer: ({children, open, anchor, onClose, ...props}) =>
+            open ? <div role="complementary" {...props}>{children}</div> : null,
     };
 });
 

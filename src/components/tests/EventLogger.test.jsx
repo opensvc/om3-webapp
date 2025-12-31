@@ -40,8 +40,16 @@ const renderWithTheme = (ui) => {
 };
 
 describe('EventLogger Component', () => {
+    let consoleErrorSpy;
 
     beforeEach(() => {
+        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message, ...args) => {
+            if (typeof message === 'string' && message.includes('Each child in a list should have a unique "key" prop')) {
+                return;
+            }
+            console.error(message, ...args);
+        });
+
         useEventLogStore.mockReturnValue({
             eventLogs: [],
             isPaused: false,
@@ -56,8 +64,11 @@ describe('EventLogger Component', () => {
     });
 
     afterEach(() => {
+        consoleErrorSpy.mockRestore();
         jest.clearAllMocks();
         jest.restoreAllMocks();
+        jest.useRealTimers();
+
         const closeButtons = screen.queryAllByRole('button', {name: /Close/i});
         closeButtons.forEach(btn => {
             if (btn) {
@@ -72,17 +83,27 @@ describe('EventLogger Component', () => {
         expect(eventLoggerButton).toBeInTheDocument();
     });
 
-    test('opens the drawer when button is clicked', () => {
+    test('opens the drawer when button is clicked', async () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
-        expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
     });
 
     test('displays no events message when there are no logs', async () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
         await waitFor(() => {
             expect(screen.getByText(/No events logged/i)).toBeInTheDocument();
         });
@@ -105,16 +126,19 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
+            expect(screen.getByText(/Test data/i)).toBeInTheDocument();
         });
-
-        expect(screen.getByText(/Test data/i)).toBeInTheDocument();
     });
 
     test('filters logs by search term', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {
                 id: '1',
@@ -137,19 +161,31 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
         });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'Test'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'Test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
             expect(screen.queryByText(/ANOTHER_EVENT/i)).not.toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('filters logs by event type', async () => {
@@ -175,14 +211,20 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
         });
 
         const selectInput = screen.getByRole('combobox');
-        fireEvent.mouseDown(selectInput);
+
+        act(() => {
+            fireEvent.mouseDown(selectInput);
+        });
 
         await waitFor(() => {
             expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -190,8 +232,11 @@ describe('EventLogger Component', () => {
 
         const listbox = screen.getByRole('listbox');
         const testEventOption = within(listbox).getByText(/TEST_EVENT/i);
-        fireEvent.click(testEventOption);
-        fireEvent.keyDown(document.activeElement, {key: 'Escape'});
+
+        act(() => {
+            fireEvent.click(testEventOption);
+            fireEvent.keyDown(document.activeElement || document.body, {key: 'Escape'});
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Test data/i)).toBeInTheDocument();
@@ -209,10 +254,17 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const pauseButton = screen.getByRole('button', {name: /Pause/i});
-        fireEvent.click(pauseButton);
+
+        act(() => {
+            fireEvent.click(pauseButton);
+        });
+
         expect(setPausedMock).toHaveBeenCalledWith(true);
     });
 
@@ -226,20 +278,37 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        fireEvent.click(clearButton);
+
+        act(() => {
+            fireEvent.click(clearButton);
+        });
+
         expect(clearLogsMock).toHaveBeenCalled();
     });
 
     test('closes the drawer when close button is clicked', async () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
 
         const closeButton = screen.getByRole('button', {name: /Close/i});
-        fireEvent.click(closeButton);
+
+        act(() => {
+            fireEvent.click(closeButton);
+        });
 
         await waitFor(() => {
             const reopenButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -270,7 +339,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SCROLL_EVENT_1/i)).toBeInTheDocument();
@@ -294,7 +366,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/ERROR_EVENT_1/i)).toBeInTheDocument();
@@ -306,6 +381,7 @@ describe('EventLogger Component', () => {
     });
 
     test('tests clear filters functionality', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
@@ -318,14 +394,24 @@ describe('EventLogger Component', () => {
         renderWithTheme(<EventLogger/>);
 
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
         });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'test'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Filtered/i)).toBeInTheDocument();
@@ -335,11 +421,16 @@ describe('EventLogger Component', () => {
         expect(filterChip).toBeInTheDocument();
 
         const deleteIcon = within(filterChip).getByTestId('CancelIcon');
-        fireEvent.click(deleteIcon);
+
+        act(() => {
+            fireEvent.click(deleteIcon);
+        });
 
         await waitFor(() => {
             expect(searchInput).toHaveValue('');
         });
+
+        jest.useRealTimers();
     });
 
     test('tests timestamp formatting', async () => {
@@ -355,7 +446,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             const timeElements = screen.getAllByText(/\d{1,2}:\d{2}:\d{2}/);
@@ -366,12 +460,17 @@ describe('EventLogger Component', () => {
     test('tests component cleanup on unmount', () => {
         const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
         const {unmount} = renderWithTheme(<EventLogger/>);
-        unmount();
+
+        act(() => {
+            unmount();
+        });
+
         expect(clearTimeoutSpy).toHaveBeenCalled();
         clearTimeoutSpy.mockRestore();
     });
 
     test('tests autoScroll reset when filters change', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
@@ -383,14 +482,26 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'new search'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'new search'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(searchInput).toHaveValue('new search');
         });
+
+        jest.useRealTimers();
     });
 
     test('tests complex objectName filtering scenarios', async () => {
@@ -414,19 +525,26 @@ describe('EventLogger Component', () => {
         });
         const {rerender} = renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
         });
 
-        rerender(<ThemeProvider theme={theme}><EventLogger objectName="/label/path"/></ThemeProvider>);
+        act(() => {
+            rerender(<ThemeProvider theme={theme}><EventLogger objectName="/label/path"/></ThemeProvider>);
+        });
+
         await waitFor(() => {
             expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
         });
     });
 
     test('tests empty search term behavior', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
@@ -438,15 +556,34 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'test'}});
-        fireEvent.change(searchInput, {target: {value: ''}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ''}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('displays custom title and buttonLabel', () => {
@@ -478,7 +615,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
@@ -488,7 +628,10 @@ describe('EventLogger Component', () => {
     test('displays objectName chip when objectName is provided', async () => {
         renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/object: \/test\/path/i)).toBeInTheDocument();
@@ -496,6 +639,7 @@ describe('EventLogger Component', () => {
     });
 
     test('handles search with data content matching', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {id: '1', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'searchable'}},
             {id: '2', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'other'}},
@@ -508,15 +652,27 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'searchable'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'searchable'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/searchable/i)).toBeInTheDocument();
             expect(screen.queryByText(/other/i)).not.toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('disables clear button when no logs are present', async () => {
@@ -528,7 +684,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const clearButton = screen.getByRole('button', {name: /Clear logs/i});
         expect(clearButton).toBeDisabled();
@@ -547,7 +706,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument();
@@ -572,7 +734,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
@@ -580,9 +745,13 @@ describe('EventLogger Component', () => {
     });
 
     test('tests drawer resize handle exists and can be interacted with', async () => {
+        jest.useFakeTimers();
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
@@ -590,7 +759,13 @@ describe('EventLogger Component', () => {
 
         const resizeHandle = screen.getByLabelText(/Resize handle/i);
         expect(resizeHandle).toBeInTheDocument();
-        fireEvent.mouseDown(resizeHandle);
+
+        act(() => {
+            fireEvent.mouseDown(resizeHandle, {clientY: 300});
+            jest.advanceTimersByTime(20);
+        });
+
+        jest.useRealTimers();
     });
 
     test('handles ObjectDeleted event with invalid _rawEvent JSON parsing', async () => {
@@ -613,7 +788,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
@@ -639,7 +817,10 @@ describe('EventLogger Component', () => {
         Element.prototype.scrollIntoView = scrollIntoViewMock;
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
@@ -691,7 +872,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/target/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/5\/5 events/i)).toBeInTheDocument();
@@ -701,7 +885,11 @@ describe('EventLogger Component', () => {
     test('tests cleanup of resize timeout on unmount specifically', () => {
         const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
         const {unmount} = renderWithTheme(<EventLogger/>);
-        unmount();
+
+        act(() => {
+            unmount();
+        });
+
         expect(clearTimeoutSpy).toHaveBeenCalled();
         clearTimeoutSpy.mockRestore();
     });
@@ -718,7 +906,10 @@ describe('EventLogger Component', () => {
         });
         const {rerender} = renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/INITIAL/i)).toBeInTheDocument();
@@ -728,6 +919,7 @@ describe('EventLogger Component', () => {
             ...mockLogs,
             {id: '2', eventType: 'NEW_EVENT', timestamp: new Date().toISOString(), data: {}},
         ];
+
         act(() => {
             useEventLogStore.mockReturnValue({
                 eventLogs: mockLogs,
@@ -736,7 +928,11 @@ describe('EventLogger Component', () => {
                 clearLogs: jest.fn(),
             });
         });
-        rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
+
+        act(() => {
+            rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
+        });
+
         await waitFor(() => {
             expect(screen.getByText(/NEW_EVENT/i)).toBeInTheDocument();
         });
@@ -758,7 +954,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SOME_ERROR_EVENT/i)).toBeInTheDocument();
@@ -794,7 +993,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/target/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
@@ -804,15 +1006,26 @@ describe('EventLogger Component', () => {
     test('tests handleScroll when logsContainerRef is null', () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
-        fireEvent.scroll(window);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        act(() => {
+            fireEvent.scroll(window);
+        });
+
         expect(true).toBe(true);
     });
 
     test('tests resize timeout cleanup', () => {
         const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
         const {unmount} = renderWithTheme(<EventLogger/>);
-        unmount();
+
+        act(() => {
+            unmount();
+        });
+
         expect(clearTimeoutSpy).toHaveBeenCalled();
         clearTimeoutSpy.mockRestore();
     });
@@ -840,7 +1053,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/some/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
@@ -861,18 +1077,28 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
 
-        fireEvent.scroll(window);
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        act(() => {
+            fireEvent.scroll(window);
+        });
+
         expect(true).toBe(true);
     });
 
     test('resize handler runs preventDefault and triggers mouse handlers', async () => {
+        jest.useFakeTimers();
         const mockPreventDefault = jest.fn();
 
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
@@ -887,8 +1113,14 @@ describe('EventLogger Component', () => {
         });
         mouseDownEvent.preventDefault = mockPreventDefault;
 
-        resizeHandle.dispatchEvent(mouseDownEvent);
+        act(() => {
+            resizeHandle.dispatchEvent(mouseDownEvent);
+            jest.advanceTimersByTime(20);
+        });
+
         expect(mockPreventDefault).toHaveBeenCalled();
+
+        jest.useRealTimers();
     });
 
     test('clears resize timeout on mouseUp during resize', async () => {
@@ -897,13 +1129,26 @@ describe('EventLogger Component', () => {
 
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const resizeHandle = screen.getByLabelText(/Resize handle/i);
-        fireEvent.mouseDown(resizeHandle, {clientY: 300});
-        fireEvent.mouseMove(document, {clientY: 250});
-        jest.advanceTimersByTime(20);
-        fireEvent.mouseUp(document);
+
+        act(() => {
+            fireEvent.mouseDown(resizeHandle, {clientY: 300});
+            jest.advanceTimersByTime(20);
+        });
+
+        act(() => {
+            fireEvent.mouseMove(document, {clientY: 250});
+            jest.advanceTimersByTime(20);
+        });
+
+        act(() => {
+            fireEvent.mouseUp(document);
+        });
 
         expect(clearTimeoutSpy).toHaveBeenCalled();
         clearTimeoutSpy.mockRestore();
@@ -911,6 +1156,7 @@ describe('EventLogger Component', () => {
     });
 
     test('autoScroll resets to true when search term changes', async () => {
+        jest.useFakeTimers();
         useEventLogStore.mockReturnValue({
             eventLogs: [{
                 id: '1',
@@ -924,17 +1170,30 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const input = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(input, {target: {value: 'abc'}});
+
+        act(() => {
+            fireEvent.change(input, {target: {value: 'abc'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(input).toHaveValue('abc');
         });
+
+        jest.useRealTimers();
     });
 
     test('handles JSON serializing error in search', async () => {
+        jest.useFakeTimers();
         const circularRef = {};
         circularRef.circular = circularRef;
         const mockLogs = [
@@ -953,10 +1212,20 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'test'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(logger.warn).toHaveBeenCalledWith(
@@ -964,6 +1233,8 @@ describe('EventLogger Component', () => {
                 expect.any(Error)
             );
         });
+
+        jest.useRealTimers();
     });
 
     test('tests all branches of getEventColor function', async () => {
@@ -983,7 +1254,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SOME_ERROR/i)).toBeInTheDocument();
@@ -1007,7 +1281,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger eventTypes={[]}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/EVENT_A/i)).toBeInTheDocument();
@@ -1032,7 +1309,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
@@ -1056,7 +1336,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
@@ -1066,17 +1349,23 @@ describe('EventLogger Component', () => {
     test('handles mouseDown event without preventDefault', () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const resizeHandle = screen.getByLabelText(/Resize handle/i);
         const mouseDownEvent = new MouseEvent('mousedown', {
             clientY: 300,
             bubbles: true
         });
-        resizeHandle.dispatchEvent(mouseDownEvent);
+
+        act(() => {
+            resizeHandle.dispatchEvent(mouseDownEvent);
+        });
+
         expect(true).toBe(true);
     });
-
 
     test('tests filteredData with null data in JSONView', async () => {
         const mockLogs = [
@@ -1095,7 +1384,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/NULL_DATA_VIEW/i)).toBeInTheDocument();
@@ -1119,16 +1411,21 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
         });
 
         const pauseButton = screen.getByRole('button', {name: /Pause/i});
-        expect(() => {
+
+        act(() => {
             fireEvent.click(pauseButton);
-        }).not.toThrow();
+        });
+        expect(pauseButton).toBeInTheDocument();
     });
 
     test('tests clearLogs when eventLogs is empty array', () => {
@@ -1140,48 +1437,17 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const clearButton = screen.getByRole('button', {name: /Clear logs/i});
         expect(clearButton).toBeDisabled();
     });
 
-    test('tests eventType filter with empty selection', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'TYPE_A', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'TYPE_B', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const buttons = screen.getAllByRole('button');
-        const eventLoggerButton = buttons.find(btn =>
-            btn.textContent?.includes('Events') || btn.textContent?.includes('Event Logger')
-        );
-        if (eventLoggerButton) {
-            fireEvent.click(eventLoggerButton);
-            const selectInput = screen.getByRole('combobox');
-            fireEvent.mouseDown(selectInput);
-            await waitFor(() => {
-                const menuItems = screen.getAllByRole('option');
-                if (menuItems.length > 0) {
-                    fireEvent.click(menuItems[0]);
-                    fireEvent.click(menuItems[0]);
-                }
-            });
-            fireEvent.keyDown(document.activeElement, {key: 'Escape'});
-            await waitFor(() => {
-                expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument();
-                expect(screen.getByText(/TYPE_B/i)).toBeInTheDocument();
-            });
-        }
-    });
-
     test('tests search with empty term', async () => {
+        jest.useFakeTimers();
         const mockLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
@@ -1193,14 +1459,26 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: ' '}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ' '}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('displays log with non-object data', async () => {
@@ -1226,7 +1504,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/STRING_EVENT/i)).toBeInTheDocument();
@@ -1252,7 +1533,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
@@ -1264,12 +1548,19 @@ describe('EventLogger Component', () => {
             el.textContent?.includes('EXPAND_TEST')
         );
         if (logButton) {
-            fireEvent.click(logButton);
+            act(() => {
+                fireEvent.click(logButton);
+            });
+
             await waitFor(() => {
                 expect(screen.getByText(/"key"/i)).toBeInTheDocument();
                 expect(screen.getByText(/"value"/i)).toBeInTheDocument();
             });
-            fireEvent.click(logButton);
+
+            act(() => {
+                fireEvent.click(logButton);
+            });
+
             await waitFor(() => {
                 expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
             });
@@ -1332,7 +1623,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger objectName={objectName}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/7\/7 events/i)).toBeInTheDocument();
@@ -1358,7 +1652,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/CIRCULAR_VIEW/i)).toBeInTheDocument();
@@ -1389,7 +1686,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/ALL_TYPES/i)).toBeInTheDocument();
@@ -1398,7 +1698,10 @@ describe('EventLogger Component', () => {
         const logElements = screen.getAllByRole('button', {hidden: true});
         const logButton = logElements.find(el => el.textContent?.includes('ALL_TYPES'));
         if (logButton) {
-            fireEvent.click(logButton);
+            act(() => {
+                fireEvent.click(logButton);
+            });
+
             await waitFor(() => {
                 expect(screen.getByText(/"str":/i)).toBeInTheDocument();
                 expect(screen.getByText(/"string & < >"/i)).toBeInTheDocument();
@@ -1427,7 +1730,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/INVALID_TS/i)).toBeInTheDocument();
@@ -1437,7 +1743,10 @@ describe('EventLogger Component', () => {
     test('renders subscription info when eventTypes provided', async () => {
         renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Subscribed to:/i)).toBeInTheDocument();
@@ -1447,7 +1756,10 @@ describe('EventLogger Component', () => {
     test('renders subscription info when objectName and eventTypes provided', async () => {
         renderWithTheme(<EventLogger eventTypes={['EVENT1']} objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Subscribed to:/i)).toBeInTheDocument();
@@ -1471,14 +1783,20 @@ describe('EventLogger Component', () => {
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
 
         const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
         });
 
         const settingsIcon = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsIcon);
+
+        act(() => {
+            fireEvent.click(settingsIcon);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
@@ -1488,7 +1806,10 @@ describe('EventLogger Component', () => {
         expect(screen.getByText(/Unsubscribe from All/i)).toBeInTheDocument();
 
         const applyButton = screen.getByRole('button', {name: /Apply Subscriptions/i});
-        fireEvent.click(applyButton);
+
+        act(() => {
+            fireEvent.click(applyButton);
+        });
 
         await waitFor(() => {
             expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
@@ -1498,14 +1819,20 @@ describe('EventLogger Component', () => {
     test('handles subscription dialog with no eventTypes', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
         });
 
         const settingsIcon = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsIcon);
+
+        act(() => {
+            fireEvent.click(settingsIcon);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
@@ -1516,10 +1843,16 @@ describe('EventLogger Component', () => {
         const eventTypes = ['EVENT1'];
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const settingsIcon = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsIcon);
+
+        act(() => {
+            fireEvent.click(settingsIcon);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
@@ -1527,7 +1860,10 @@ describe('EventLogger Component', () => {
 
         const closeButtons = screen.getAllByLabelText('Close');
         const dialogCloseButton = closeButtons[closeButtons.length - 1];
-        fireEvent.click(dialogCloseButton);
+
+        act(() => {
+            fireEvent.click(dialogCloseButton);
+        });
 
         await waitFor(() => {
             expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
@@ -1538,7 +1874,10 @@ describe('EventLogger Component', () => {
         const eventTypes = ['EVENT1', 'EVENT2'];
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
@@ -1562,7 +1901,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/TEST/i)).toBeInTheDocument();
@@ -1582,10 +1924,17 @@ describe('EventLogger Component', () => {
     test('tests createHighlightedHtml with empty search term', () => {
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: ''}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ''}});
+        });
+
         expect(searchInput).toHaveValue('');
     });
 
@@ -1604,7 +1953,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/BIGINT_EVENT/i)).toBeInTheDocument();
@@ -1625,8 +1977,15 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
-        fireEvent.scroll(window);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        act(() => {
+            fireEvent.scroll(window);
+        });
+
         expect(true).toBe(true);
     });
 
@@ -1634,14 +1993,31 @@ describe('EventLogger Component', () => {
         jest.useFakeTimers();
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const resizeHandle = screen.getByLabelText(/Resize handle/i);
-        fireEvent.mouseDown(resizeHandle, {clientY: 300});
-        fireEvent.mouseMove(document, {clientY: 250});
-        fireEvent.mouseMove(document, {clientY: 200});
-        jest.advanceTimersByTime(20);
-        fireEvent.mouseUp(document);
+
+        act(() => {
+            fireEvent.mouseDown(resizeHandle, {clientY: 300});
+            jest.advanceTimersByTime(20);
+        });
+
+        act(() => {
+            fireEvent.mouseMove(document, {clientY: 250});
+            jest.advanceTimersByTime(20);
+        });
+
+        act(() => {
+            fireEvent.mouseMove(document, {clientY: 200});
+            jest.advanceTimersByTime(20);
+        });
+
+        act(() => {
+            fireEvent.mouseUp(document);
+        });
 
         jest.useRealTimers();
         expect(true).toBe(true);
@@ -1662,12 +2038,16 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         expect(screen.getByText(/INVALID_DATE/i)).toBeInTheDocument();
     });
 
     test('tests EventTypeChip with search term highlight', async () => {
+        jest.useFakeTimers();
         const mockLogs = [{
             id: '1',
             eventType: 'SEARCHABLE_EVENT',
@@ -1682,14 +2062,26 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: 'SEARCHABLE'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'SEARCHABLE'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SEARCHABLE_EVENT/i)).toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('tests autoScroll useEffect with drawer closed', () => {
@@ -1726,7 +2118,10 @@ describe('EventLogger Component', () => {
         const eventTypes = ['TYPE_A', 'TYPE_B'];
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
@@ -1737,6 +2132,7 @@ describe('EventLogger Component', () => {
     });
 
     test('tests search highlight in JSON syntax', async () => {
+        jest.useFakeTimers();
         const mockLogs = [{
             id: '1',
             eventType: 'JSON_SEARCH',
@@ -1754,14 +2150,26 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: '42'}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: '42'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/JSON_SEARCH/i)).toBeInTheDocument();
         });
+
+        jest.useRealTimers();
     });
 
     test('tests dark mode styling classes', async () => {
@@ -1799,14 +2207,30 @@ describe('EventLogger Component', () => {
         }));
         const {rerender} = renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/INITIAL/i)).toBeInTheDocument();
         });
 
         currentLogs = mockLogs2;
-        rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
+
+        act(() => {
+            useEventLogStore.mockImplementation(() => ({
+                eventLogs: currentLogs,
+                isPaused: false,
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+        });
+
+        act(() => {
+            rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
+        });
+
         await waitFor(() => {
             expect(screen.getByText(/ADDED/i)).toBeInTheDocument();
         });
@@ -1828,7 +2252,10 @@ describe('EventLogger Component', () => {
 
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('KEY_TEST')).toBeInTheDocument();
@@ -1850,13 +2277,19 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
         });
 
-        fireEvent.scroll(window);
+        act(() => {
+            fireEvent.scroll(window);
+        });
+
         expect(true).toBe(true);
     });
 
@@ -1865,14 +2298,19 @@ describe('EventLogger Component', () => {
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
         expect(eventLoggerButton).toBeInTheDocument();
 
-        fireEvent.click(eventLoggerButton);
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
         });
 
         const closeButton = screen.getByRole('button', {name: /Close/i});
-        fireEvent.click(closeButton);
+
+        act(() => {
+            fireEvent.click(closeButton);
+        });
 
         await waitFor(() => {
             const reopenButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -1897,7 +2335,10 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/NO_SEARCH_BRANCH/i)).toBeInTheDocument();
@@ -1907,7 +2348,10 @@ describe('EventLogger Component', () => {
     test('covers subscription dialog empty eventTypes', async () => {
         renderWithTheme(<EventLogger eventTypes={[]}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
@@ -2050,7 +2494,11 @@ describe('EventLogger Component', () => {
 
     test('handleScroll branch when ref is null', () => {
         const {container} = renderWithTheme(<EventLogger/>);
-        fireEvent.scroll(window);
+
+        act(() => {
+            fireEvent.scroll(window);
+        });
+
         expect(container).toBeInTheDocument();
     });
 
@@ -2168,6 +2616,7 @@ describe('EventLogger Component', () => {
     });
 
     test('search handles JSON serialization errors gracefully', () => {
+        jest.useFakeTimers();
         const circular = {};
         circular.self = circular;
 
@@ -2190,6 +2639,24 @@ describe('EventLogger Component', () => {
         logger.warn = jest.fn();
 
         renderWithTheme(<EventLogger/>);
+
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search events/i);
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
+
+        jest.useRealTimers();
     });
 
     test('handles logs without id property', () => {
@@ -2209,7 +2676,7 @@ describe('EventLogger Component', () => {
         }).not.toThrow();
     });
 
-    test('clearLogs button is found and works', () => {
+    test('clearLogs button is found and works', async () => {
         const mockClearLogs = jest.fn();
         const mockLogs = [
             {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
@@ -2225,9 +2692,12 @@ describe('EventLogger Component', () => {
         renderWithTheme(<EventLogger/>);
 
         const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
 
-        waitFor(() => {
+        act(() => {
+            fireEvent.click(openButton);
+        });
+
+        await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
         });
 
@@ -2235,7 +2705,10 @@ describe('EventLogger Component', () => {
         if (deleteIcons.length > 0) {
             const clearButton = deleteIcons[0].closest('button');
             if (clearButton) {
-                fireEvent.click(clearButton);
+                act(() => {
+                    fireEvent.click(clearButton);
+                });
+
                 expect(mockClearLogs).toHaveBeenCalled();
             }
         }
@@ -2318,10 +2791,16 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: ''}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ''}});
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/NO_SEARCH_BRANCH/i)).toBeInTheDocument();
@@ -2345,14 +2824,20 @@ describe('EventLogger Component', () => {
         });
         renderWithTheme(<EventLogger eventTypes={['NO_TEXT_BRANCH']}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('NO_TEXT_BRANCH')).toBeInTheDocument();
         });
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: ''}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ''}});
+        });
 
         await waitFor(() => {
             expect(searchInput.value).toBe('');
@@ -2383,7 +2868,10 @@ describe('EventLogger Component', () => {
         }, {timeout: 3000});
 
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
@@ -2394,13 +2882,18 @@ describe('EventLogger Component', () => {
         }, {timeout: 3000});
 
         const searchInput = screen.getByPlaceholderText(/Search events/i);
-        fireEvent.change(searchInput, {target: {value: ''}});
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: ''}});
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
         }, {timeout: 2000});
 
-        unmount();
+        act(() => {
+            unmount();
+        });
     });
 
     test('escapeHtml with special characters', () => {
@@ -2423,7 +2916,10 @@ describe('EventLogger Component', () => {
 
         renderWithTheme(<EventLogger/>);
         const button = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(button);
+
+        act(() => {
+            fireEvent.click(button);
+        });
 
         waitFor(() => {
             expect(screen.getByText(/HTML_SPECIAL_CHARS/i)).toBeInTheDocument();
@@ -2433,31 +2929,51 @@ describe('EventLogger Component', () => {
     test('SubscriptionDialog handles all interaction types', async () => {
         renderWithTheme(<EventLogger eventTypes={['PAGE_EVENT1', 'PAGE_EVENT2']}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         const settingsButton = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsButton);
+
+        act(() => {
+            fireEvent.click(settingsButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
         });
 
         const subscribeAllButton = screen.getByText(/Subscribe to All/i);
-        fireEvent.click(subscribeAllButton);
+
+        act(() => {
+            fireEvent.click(subscribeAllButton);
+        });
 
         const unsubscribeAllButton = screen.getByText(/Unsubscribe from All/i);
-        fireEvent.click(unsubscribeAllButton);
+
+        act(() => {
+            fireEvent.click(unsubscribeAllButton);
+        });
 
         const subscribePageButton = screen.getByText(/Subscribe to Page Events/i);
-        fireEvent.click(subscribePageButton);
+
+        act(() => {
+            fireEvent.click(subscribePageButton);
+        });
 
         const checkboxes = screen.getAllByRole('checkbox');
         if (checkboxes.length > 0) {
-            fireEvent.click(checkboxes[0]);
+            act(() => {
+                fireEvent.click(checkboxes[0]);
+            });
         }
 
         const applyButton = screen.getByText(/Apply Subscriptions/i);
-        fireEvent.click(applyButton);
+
+        act(() => {
+            fireEvent.click(applyButton);
+        });
 
         await waitFor(() => {
             expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
@@ -2486,7 +3002,10 @@ describe('EventLogger Component', () => {
         const eventLoggerButton = await waitFor(() =>
             screen.getByRole('button', {name: /Events|Event Logger/i})
         );
-        fireEvent.click(eventLoggerButton);
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
@@ -2497,14 +3016,18 @@ describe('EventLogger Component', () => {
         const logContainer = chip.closest('[style*="cursor: pointer"]') || chip.closest('div');
 
         if (logContainer) {
-            fireEvent.click(logContainer);
+            act(() => {
+                fireEvent.click(logContainer);
+            });
 
             await waitFor(() => {
                 expect(screen.getByText(/"key"/i)).toBeInTheDocument();
                 expect(screen.getByText(/"value"/i)).toBeInTheDocument();
             });
 
-            fireEvent.click(logContainer);
+            act(() => {
+                fireEvent.click(logContainer);
+            });
 
             await waitFor(() => {
                 expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();

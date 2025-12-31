@@ -265,7 +265,7 @@ const NodesTable = () => {
                 }
                 successCount++;
             } catch (error) {
-                logger.error(`Failed to execute ${action} on ${node}:`, error);
+                logger.error(`Failed to execute ${action} on ${node}: ${error.message}`);
                 errorCount++;
             }
         });

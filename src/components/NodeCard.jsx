@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, forwardRef} from "react";
 import {
     Box,
     Typography,
@@ -24,6 +24,22 @@ import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {RESOURCE_ACTIONS} from "../constants/actions";
 import logger from '../utils/logger.js';
+
+
+const BoxWithRef = forwardRef((props, ref) => (
+    <Box ref={ref} {...props} />
+));
+BoxWithRef.displayName = 'BoxWithRef';
+
+const IconButtonWithRef = forwardRef((props, ref) => (
+    <IconButton ref={ref} {...props} />
+));
+IconButtonWithRef.displayName = 'IconButtonWithRef';
+
+const ButtonWithRef = forwardRef((props, ref) => (
+    <Button ref={ref} {...props} />
+));
+ButtonWithRef.displayName = 'ButtonWithRef';
 
 const NodeCard = ({
                       node,
@@ -291,7 +307,7 @@ const NodeCard = ({
         };
 
         return (
-            <Box
+            <BoxWithRef
                 key={rid}
                 sx={{
                     display: "flex",
@@ -431,7 +447,7 @@ const NodeCard = ({
                                 </Tooltip>
                             )}
                             <Box onClick={(e) => e.stopPropagation()}>
-                                <IconButton
+                                <IconButtonWithRef
                                     onClick={(e) => {
                                         e.persist();
                                         e.stopPropagation();
@@ -446,7 +462,7 @@ const NodeCard = ({
                                     <Tooltip title="Actions">
                                         <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                     </Tooltip>
-                                </IconButton>
+                                </IconButtonWithRef>
                             </Box>
                         </Box>
                     </Box>
@@ -552,7 +568,7 @@ const NodeCard = ({
                             </Tooltip>
                         )}
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <IconButton
+                            <IconButtonWithRef
                                 onClick={(e) => {
                                     e.persist();
                                     e.stopPropagation();
@@ -567,7 +583,7 @@ const NodeCard = ({
                                 <Tooltip title="Actions">
                                     <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                 </Tooltip>
-                            </IconButton>
+                            </IconButtonWithRef>
                         </Box>
                     </Box>
                 </Box>
@@ -600,12 +616,12 @@ const NodeCard = ({
                         ))}
                     </Box>
                 )}
-            </Box>
+            </BoxWithRef>
         );
     };
 
     return (
-        <Box
+        <BoxWithRef
             sx={{
                 mb: 5,
                 display: "flex",
@@ -634,13 +650,13 @@ const NodeCard = ({
                     </Box>
                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                         <Tooltip title="View logs">
-                            <IconButton
+                            <IconButtonWithRef
                                 onClick={() => onOpenLogs(node, resolvedInstanceName)}
                                 color="primary"
                                 aria-label={`View logs for instance ${resolvedInstanceName || node}`}
                             >
                                 <ArticleIcon/>
-                            </IconButton>
+                            </IconButtonWithRef>
                         </Tooltip>
                         <Tooltip title={avail || "unknown"}>
                             <FiberManualRecordIcon
@@ -664,7 +680,7 @@ const NodeCard = ({
                             </Tooltip>
                         )}
                         {state && <Typography variant="caption">{state}</Typography>}
-                        <IconButton
+                        <IconButtonWithRef
                             onClick={(e) => {
                                 e.persist();
                                 e.stopPropagation();
@@ -678,7 +694,7 @@ const NodeCard = ({
                             <Tooltip title="Actions">
                                 <MoreVertIcon/>
                             </Tooltip>
-                        </IconButton>
+                        </IconButtonWithRef>
                     </Box>
                 </Box>
             </Box>
@@ -724,7 +740,7 @@ const NodeCard = ({
                     <Box sx={{flexGrow: 1}}/>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <Button
+                            <ButtonWithRef
                                 variant="outlined"
                                 onClick={(e) => {
                                     e.persist();
@@ -737,9 +753,9 @@ const NodeCard = ({
                                 ref={resourcesActionsAnchorRef}
                             >
                                 Actions on Selected Resources
-                            </Button>
+                            </ButtonWithRef>
                         </Box>
-                        <IconButton
+                        <IconButtonWithRef
                             onClick={() => handleNodeResourcesAccordionChange(node)(null, !expandedNodeResources[node])}
                             aria-label={`Expand resources for node ${node}`}
                         >
@@ -749,7 +765,7 @@ const NodeCard = ({
                                     transition: "transform 0.2s",
                                 }}
                             />
-                        </IconButton>
+                        </IconButtonWithRef>
                     </Box>
                 </Box>
                 <AccordionDetails>
@@ -872,7 +888,7 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-        </Box>
+        </BoxWithRef>
     );
 };
 

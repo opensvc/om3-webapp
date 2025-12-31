@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import NodesTable from '../NodesTable.jsx';
 import * as useFetchDaemonStatusModule from '../../hooks/useFetchDaemonStatus.jsx';
 import * as useEventStoreModule from '../../hooks/useEventStore.js';
@@ -109,10 +109,14 @@ describe('NodesTable', () => {
                 },
             })
         );
-        jest.spyOn(eventSourceManager, 'startEventReception').mockImplementation(() => {});
-        jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {});
-        jest.spyOn(eventSourceManager, 'startLoggerReception').mockImplementation(() => {});
-        jest.spyOn(eventSourceManager, 'closeLoggerEventSource').mockImplementation(() => {});
+        jest.spyOn(eventSourceManager, 'startEventReception').mockImplementation(() => {
+        });
+        jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {
+        });
+        jest.spyOn(eventSourceManager, 'startLoggerReception').mockImplementation(() => {
+        });
+        jest.spyOn(eventSourceManager, 'closeLoggerEventSource').mockImplementation(() => {
+        });
         localStorage.setItem('authToken', 'test-token');
     });
 
@@ -195,6 +199,8 @@ describe('NodesTable', () => {
     });
 
     test('handles partial success in handleDialogConfirm', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
         global.fetch = jest.fn((url) =>
             url.includes('node-1')
                 ? Promise.resolve({ok: true, json: () => ({})})
@@ -213,6 +219,12 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/⚠️ 'Freeze' partially succeeded: 1 ok, 1 errors\./i)).toBeInTheDocument();
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to execute freeze on node-2: HTTP error')
+            );
+        });
+        consoleErrorSpy.mockRestore();
     });
 
     test('logs error on HTTP failure in handleDialogConfirm', async () => {
@@ -251,6 +263,8 @@ describe('NodesTable', () => {
     });
 
     test('shows error snackbar if all requests fail', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
         global.fetch = jest.fn(() => Promise.reject(new Error('fail')));
         renderWithRouter(<NodesTable/>);
         const freezeButtons = await screen.findAllByText('Freeze');
@@ -260,6 +274,12 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/❌ 'Freeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to execute freeze on node-1: fail')
+            );
+        });
+        consoleErrorSpy.mockRestore();
     });
 
     test('selects all nodes using header checkbox', async () => {
@@ -614,7 +634,9 @@ describe('NodesTable', () => {
         fireEvent.click(checkboxes[1]); // select node-1
         const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
         fireEvent.click(actionsButton);
-        jest.advanceTimersByTime(100);
+        await act(async () => {
+            jest.advanceTimersByTime(100);
+        });
         await screen.findByRole('menu');
         // Close menu
         fireEvent.keyDown(screen.getByRole('presentation'), {key: 'Escape'});
@@ -859,7 +881,7 @@ describe('NodesTable', () => {
         window.devicePixelRatio = originalDevicePixelRatio;
     });
 
-    test('startResizing with touch events', () => {
+    test('startResizing with touch events', async () => {
         jest.useFakeTimers();
 
         Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
@@ -889,29 +911,37 @@ describe('NodesTable', () => {
             touches: [{clientX: 750}],
             bubbles: true
         });
-        fireEvent(document, touchMoveEvent);
+        await act(async () => {
+            fireEvent(document, touchMoveEvent);
+        });
 
         const touchMoveEventMin = new TouchEvent('touchmove', {
             touches: [{clientX: 1200}],
             bubbles: true
         });
-        fireEvent(document, touchMoveEventMin);
+        await act(async () => {
+            fireEvent(document, touchMoveEventMin);
+        });
 
         const touchMoveEventMax = new TouchEvent('touchmove', {
             touches: [{clientX: 400}],
             bubbles: true
         });
-        fireEvent(document, touchMoveEventMax);
+        await act(async () => {
+            fireEvent(document, touchMoveEventMax);
+        });
 
         const touchEndEvent = new Event('touchend', {bubbles: true});
-        fireEvent(document, touchEndEvent);
+        await act(async () => {
+            fireEvent(document, touchEndEvent);
+        });
 
         expect(document.body.style.cursor).toBe('default');
 
         jest.useRealTimers();
     });
 
-    test('startResizing handles touch cancel event', () => {
+    test('startResizing handles touch cancel event', async () => {
         jest.useFakeTimers();
 
         Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
@@ -936,14 +966,16 @@ describe('NodesTable', () => {
         fireEvent(resizeHandle, touchStartEvent);
 
         const touchCancelEvent = new Event('touchcancel', {bubbles: true});
-        fireEvent(document, touchCancelEvent);
+        await act(async () => {
+            fireEvent(document, touchCancelEvent);
+        });
 
         expect(document.body.style.cursor).toBe('default');
 
         jest.useRealTimers();
     });
 
-    test('menu props for Safari browser', () => {
+    test('menu props for Safari browser', async () => {
         const originalUserAgent = navigator.userAgent;
         Object.defineProperty(navigator, 'userAgent', {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
@@ -959,7 +991,9 @@ describe('NodesTable', () => {
         const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
         fireEvent.click(actionsButton);
 
-        jest.advanceTimersByTime(100);
+        await act(async () => {
+            jest.advanceTimersByTime(100);
+        });
 
         expect(screen.getByRole('menu')).toBeInTheDocument();
 

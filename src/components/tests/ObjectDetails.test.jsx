@@ -185,8 +185,12 @@ jest.mock('../../constants/actions', () => ({
     ],
 }));
 
-jest.mock('../LogsViewer.jsx', () => ({nodename, type, height}) => (
-    <div data-testid="logs-viewer" nodename={nodename} type={type} height={height}>
+jest.mock('../LogsViewer.jsx', () => ({nodename, height}) => (
+    <div
+        data-testid="logs-viewer"
+        data-nodename={nodename}
+        style={{ height: height }}
+    >
         Logs Viewer Mock
     </div>
 ));

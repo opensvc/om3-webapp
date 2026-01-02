@@ -57,7 +57,7 @@ const NodeCard = ({
                       resourcesActionsAnchorRef = null,
                       resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
-                      handleNodeResourcesAccordionChange = () => logger.warn("handleNodeResourcesAccordionChange not provided"),
+                      handleNodeResourcesAccordionChange = () => () => logger.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
                       setPendingAction = () => logger.warn("setPendingAction not provided"),

@@ -58,7 +58,7 @@ const hashCode = (str) => {
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
+        hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
 };
@@ -275,7 +275,6 @@ const EventLogger = ({
     const [eventTypeFilter, setEventTypeFilter] = useState([]);
     const [autoScroll, setAutoScroll] = useState(true);
     const [drawerHeight, setDrawerHeight] = useState(320);
-    const [forceUpdate, setForceUpdate] = useState(0);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
     const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
@@ -342,29 +341,6 @@ const EventLogger = ({
             .replace(/'/g, '&#039;');
     }, []);
 
-    const createHighlightedHtml = useCallback((text, searchTerm) => {
-        if (!searchTerm || !text) return escapeHtml(text);
-        const term = searchTerm.toLowerCase();
-        const lowerText = text.toLowerCase();
-        let lastIndex = 0;
-        const parts = [];
-        while (lastIndex < text.length) {
-            const index = lowerText.indexOf(term, lastIndex);
-            if (index === -1) {
-                parts.push(escapeHtml(text.substring(lastIndex)));
-                break;
-            }
-            if (index > lastIndex) {
-                parts.push(escapeHtml(text.substring(lastIndex, index)));
-            }
-            parts.push(
-                `<span class="search-highlight">${escapeHtml(text.substring(index, index + term.length))}</span>`
-            );
-            lastIndex = index + term.length;
-        }
-        return parts.join('');
-    }, [escapeHtml]);
-
     const toggleExpand = useCallback((id) => {
         setExpandedLogIds(prev =>
             prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -379,18 +355,15 @@ const EventLogger = ({
                 json = String(json);
             }
         }
-        let highlightedJson = json;
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            const escapedTerm = escapeHtml(searchTerm).toLowerCase();
-            const escapedJson = escapeHtml(json);
-            highlightedJson = escapedJson.replace(
-                new RegExp(`(${escapedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+
+        const escapedJson = escapeHtml(json);
+        const highlightedJson = searchTerm ?
+            escapedJson.replace(
+                new RegExp(`(${escapeHtml(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
                 '<span class="search-highlight">$1</span>'
-            );
-        } else {
-            highlightedJson = escapeHtml(json);
-        }
+            ) :
+            escapedJson;
+
         return highlightedJson.replace(
             /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
             (match) => {
@@ -500,9 +473,8 @@ const EventLogger = ({
                 if (data.path === objectName) return true;
                 if (data.labels?.path === objectName) return true;
                 if (data.data?.path === objectName) return true;
-                if (data.data?.labels?.path === objectName) return true;
 
-                return false;
+                return data.data?.labels?.path === objectName;
             });
         }
 
@@ -595,10 +567,6 @@ const EventLogger = ({
         );
     };
 
-    const getCurrentSubscriptions = useCallback(() => {
-        return [...subscribedEventTypes];
-    }, [subscribedEventTypes]);
-
     useEffect(() => {
         logger.log("Subscriptions updated:", {
             subscribedEventTypes,
@@ -606,10 +574,6 @@ const EventLogger = ({
             pageKey
         });
     }, [subscribedEventTypes, filteredEventTypes, pageKey]);
-
-    useEffect(() => {
-        setForceUpdate(prev => prev + 1);
-    }, [eventLogs.length, drawerOpen]);
 
     useEffect(() => {
         if (autoScroll && logsEndRef.current && filteredLogs.length > 0 && drawerOpen) {
@@ -630,8 +594,7 @@ const EventLogger = ({
         e.stopPropagation();
         setIsResizing(true);
         isDraggingRef.current = true;
-        const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-        startYRef.current = clientY;
+        startYRef.current = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
         startHeightRef.current = drawerHeight;
         document.body.style.userSelect = 'none';
         document.body.style.touchAction = 'none';
@@ -657,10 +620,8 @@ const EventLogger = ({
         }, 16);
     }, []);
 
-    const handleResizeEnd = useCallback((e) => {
+    const handleResizeEnd = useCallback(() => {
         if (!isDraggingRef.current) return;
-        e.preventDefault();
-        e.stopPropagation();
         setIsResizing(false);
         isDraggingRef.current = false;
         document.body.style.userSelect = '';
@@ -792,7 +753,7 @@ const EventLogger = ({
         if (areDifferent) {
             setManualSubscriptions([...filteredEventTypes]);
         }
-    }, [filteredEventTypes]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [filteredEventTypes]);
 
     const EventTypeChip = ({eventType, searchTerm}) => {
         const color = getEventColor(eventType);
@@ -867,7 +828,11 @@ const EventLogger = ({
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
                 variant="persistent"
-                PaperProps={{style: paperStyle}}
+                slotProps={{
+                    paper: {
+                        style: paperStyle
+                    }
+                }}
             >
                 <div
                     onMouseDown={handleResizeStart}
@@ -1001,16 +966,18 @@ const EventLogger = ({
                                 borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
                             }
                         }}
-                        InputProps={{
-                            endAdornment: searchTerm && (
-                                <IconButton
-                                    size="small"
-                                    onClick={() => setSearchTerm("")}
-                                    sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                                >
-                                    <Close fontSize="small"/>
-                                </IconButton>
-                            )
+                        slotProps={{
+                            input: {
+                                endAdornment: searchTerm && (
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setSearchTerm("")}
+                                        sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                                    >
+                                        <Close fontSize="small"/>
+                                    </IconButton>
+                                )
+                            }
                         }}
                     />
                     {availableEventTypes.length > 0 && (

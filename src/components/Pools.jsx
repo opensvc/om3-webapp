@@ -1,8 +1,6 @@
 import React, {useEffect, useState, useMemo} from "react";
 import {
     Box,
-    Paper,
-    Typography,
     Table,
     TableBody,
     TableCell,

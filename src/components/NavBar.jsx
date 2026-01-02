@@ -11,8 +11,7 @@ import {
     FaCubes,
     FaNetworkWired
 } from "react-icons/fa";
-import {useOidc} from "../context/OidcAuthContext.tsx";
-import {useAuth, useAuthDispatch} from "../context/AuthProvider.jsx";
+import {useAuth} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useMemo, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import useEventStore from "../hooks/useEventStore.js";
@@ -23,11 +22,9 @@ import {red, orange} from "@mui/material/colors";
 import Tooltip from "@mui/material/Tooltip";
 
 const NavBar = () => {
-    const {userManager} = useOidc();
     const navigate = useNavigate();
     const auth = useAuth();
     const location = useLocation();
-    const authDispatch = useAuthDispatch();
     const {clusterName, fetchNodes, loading, daemon} = useFetchDaemonStatus();
     const [breadcrumb, setBreadcrumb] = useState([]);
     const [menuAnchor, setMenuAnchor] = useState(null);

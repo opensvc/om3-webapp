@@ -105,7 +105,7 @@ const ObjectDetail = () => {
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
-    const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
+    // État supprimé: const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [configNode, setConfigNode] = useState(null);
 
     // States for batch & actions
@@ -906,7 +906,7 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
+                    handleManageParamsSubmit={() => {}}
                     configData={configData}
                     configLoading={configLoading}
                     configError={configError}
@@ -1140,7 +1140,7 @@ const ObjectDetail = () => {
                         configNode={configNode}
                         setConfigNode={setConfigNode}
                         openSnackbar={openSnackbar}
-                        handleManageParamsSubmit={() => setManageParamsDialogOpen(false)}
+                        handleManageParamsSubmit={() => {}}
                         configData={configData}
                         configLoading={configLoading}
                         configError={configError}

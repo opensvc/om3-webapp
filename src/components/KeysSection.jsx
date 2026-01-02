@@ -42,9 +42,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
     const [keyToDelete, setKeyToDelete] = useState(null);
-    const [keyToUpdate, setKeyToUpdate] = useState(null);
-    const [newKeyName, setNewKeyName] = useState("");
     const [updateKeyName, setUpdateKeyName] = useState("");
+    const [newKeyName, setNewKeyName] = useState("");
     const [newKeyFile, setNewKeyFile] = useState(null);
     const [updateKeyFile, setUpdateKeyFile] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
@@ -222,7 +221,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         } finally {
             setActionLoading(false);
             setUpdateDialogOpen(false);
-            setKeyToUpdate(null);
             setUpdateKeyName("");
             setUpdateKeyFile(null);
         }
@@ -231,6 +229,12 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     // Handle accordion expansion
     const handleKeysAccordionChange = (event, isExpanded) => {
         setKeysAccordionExpanded(isExpanded);
+    };
+
+    // Open update dialog for a specific key
+    const handleOpenUpdateDialog = (keyName) => {
+        setUpdateKeyName(keyName);
+        setUpdateDialogOpen(true);
     };
 
     // Initial load effect
@@ -335,11 +339,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                                 <Tooltip title="Edit">
                                                     <span>
                                                         <IconButton
-                                                            onClick={() => {
-                                                                setKeyToUpdate(key.name);
-                                                                setUpdateKeyName(key.name);
-                                                                setUpdateDialogOpen(true);
-                                                            }}
+                                                            onClick={() => handleOpenUpdateDialog(key.name)}
                                                             disabled={actionLoading}
                                                             aria-label={`Edit key ${key.name}`}
                                                         >

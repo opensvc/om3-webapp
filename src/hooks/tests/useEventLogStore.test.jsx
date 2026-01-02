@@ -1,8 +1,6 @@
-// useEventLogStore.test.js
-import { act } from '@testing-library/react';
-import useEventLogStore from '../useEventLogStore'; // Ajustez le chemin d'import
+import {act} from '@testing-library/react';
+import useEventLogStore from '../useEventLogStore';
 
-// Mock de Date pour contrôler les timestamps
 beforeAll(() => {
     global.Date = class extends Date {
         constructor() {
@@ -13,23 +11,21 @@ beforeAll(() => {
 
 describe('useEventLogStore', () => {
     beforeEach(() => {
-        // Réinitialise le store avant chaque test
         act(() => {
             useEventLogStore.getState().clearLogs();
             useEventLogStore.getState().setPaused(false);
         });
     });
 
-    test('devrait avoir un état initial correct', () => {
+    test('should have correct initial state', () => {
         const state = useEventLogStore.getState();
         expect(state.eventLogs).toEqual([]);
         expect(state.maxLogs).toBe(500);
         expect(state.isPaused).toBe(false);
     });
 
-
-    test('ne devrait pas ajouter de log quand pause est activée', () => {
-        const { addEventLog, setPaused, eventLogs } = useEventLogStore.getState();
+    test('should not add log when paused', () => {
+        const {addEventLog, setPaused, eventLogs} = useEventLogStore.getState();
 
         act(() => {
             setPaused(true);
@@ -39,8 +35,8 @@ describe('useEventLogStore', () => {
         expect(eventLogs).toHaveLength(0);
     });
 
-    test('devrait vider les logs', () => {
-        const { addEventLog, clearLogs, eventLogs } = useEventLogStore.getState();
+    test('should clear logs', () => {
+        const {addEventLog, clearLogs, eventLogs} = useEventLogStore.getState();
 
         act(() => {
             addEventLog('TEST_EVENT', {});
@@ -50,8 +46,8 @@ describe('useEventLogStore', () => {
         expect(eventLogs).toHaveLength(0);
     });
 
-    test('devrait calculer les statistiques des événements', () => {
-        const { addEventLog, getEventStats } = useEventLogStore.getState();
+    test('should calculate event statistics', () => {
+        const {addEventLog, getEventStats} = useEventLogStore.getState();
 
         act(() => {
             addEventLog('TYPE_A', {});

@@ -45,7 +45,6 @@ const NodesTable = () => {
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
     const theme = useTheme();
-    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     const [anchorEls, setAnchorEls] = useState({});

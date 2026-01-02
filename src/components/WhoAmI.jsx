@@ -8,7 +8,6 @@ import {
     Typography,
     Button,
     Box,
-    useTheme
 } from '@mui/material';
 import {FaSignOutAlt, FaServer, FaUser, FaLock, FaCode, FaWifi, FaMoon, FaSun} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
@@ -29,7 +28,6 @@ const WhoAmI = () => {
     const navigate = useNavigate();
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const {isDarkMode, toggleDarkMode} = useDarkMode();
-    const theme = useTheme();
 
     // Fetch version from GitHub
     useEffect(() => {

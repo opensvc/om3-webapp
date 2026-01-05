@@ -18,7 +18,6 @@ import {
     TextField,
     Snackbar,
     Alert,
-    Collapse,
     ListItemIcon,
     ListItemText,
     useMediaQuery,
@@ -31,10 +30,11 @@ import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import debounce from "lodash/debounce";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
@@ -62,6 +62,11 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
+
+const renderTextField = (label) => (params) => (
+    <TextField {...params} label={label} />
+);
+
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
         sx={{
@@ -84,22 +89,22 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
         >
             {avail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label="Object is up"/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
                 </Tooltip>
             )}
             {avail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label="Object is down"/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is down"/>
                 </Tooltip>
             )}
             {avail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label="Object has warning"/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
                 </Tooltip>
             )}
             {avail === "n/a" && (
                 <Tooltip title="n/a">
-                    <FiberManualRecordIcon sx={{color: grey[500]}} aria-label="Object status is n/a"/>
+                    <FiberManualRecordIcon sx={{color: grey[500], fontSize: 24}} aria-label="Object status is n/a"/>
                 </Tooltip>
             )}
         </Box>
@@ -114,7 +119,7 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label="Object is not provisioned"/>
                 </Tooltip>
             </Box>
@@ -130,12 +135,13 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label="Object is frozen"/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label="Object is frozen"/>
                 </Tooltip>
             </Box>
         )}
     </Box>
 ));
+
 const GlobalExpectDisplay = React.memo(({globalExpect}) => (
     <Box
         sx={{
@@ -163,6 +169,7 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => (
         )}
     </Box>
 ));
+
 const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => (
     <Box
         sx={{
@@ -185,17 +192,18 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         >
             {nodeAvail === "up" && (
                 <Tooltip title="up">
-                    <FiberManualRecordIcon sx={{color: green[500]}} aria-label={`Node ${node} is up`}/>
+                    <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label={`Node ${node} is up`}/>
                 </Tooltip>
             )}
             {nodeAvail === "down" && (
                 <Tooltip title="down">
-                    <FiberManualRecordIcon sx={{color: red[500]}} aria-label={`Node ${node} is down`}/>
+                    <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label={`Node ${node} is down`}/>
                 </Tooltip>
             )}
             {nodeAvail === "warn" && (
                 <Tooltip title="warn">
-                    <WarningAmberIcon sx={{color: orange[500]}} aria-label={`Node ${node} has warning`}/>
+                    <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}}
+                                           aria-label={`Node ${node} has warning`}/>
                 </Tooltip>
             )}
         </Box>
@@ -210,7 +218,7 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="Not Provisioned">
-                    <WarningAmberIcon sx={{color: red[500], fontSize: "1.2rem"}}
+                    <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
                                       aria-label={`Node ${node} is not provisioned`}/>
                 </Tooltip>
             </Box>
@@ -226,12 +234,13 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                 }}
             >
                 <Tooltip title="frozen">
-                    <AcUnit sx={{color: blue[600]}} aria-label={`Node ${node} is frozen`}/>
+                    <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label={`Node ${node} is frozen`}/>
                 </Tooltip>
             </Box>
         )}
     </Box>
 ));
+
 const NodeStateDisplay = React.memo(({nodeState, node}) => (
     <Box
         sx={{
@@ -260,6 +269,7 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => (
         )}
     </Box>
 ));
+
 const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
     const {avail: nodeAvail, frozen: nodeFrozen, state: nodeState, provisioned: nodeProvisioned} = getNodeState(
         objectName,
@@ -295,6 +305,7 @@ const NodeStatus = React.memo(({objectName, node, getNodeState}) => {
         </Box>
     );
 });
+
 const TableRowComponent = React.memo(
     ({
          objectName,
@@ -308,7 +319,6 @@ const TableRowComponent = React.memo(
          getNodeState,
          allNodes,
          isWideScreen,
-         popperProps,
          handleActionClick,
          handleRowMenuClose,
          objects
@@ -384,8 +394,16 @@ const TableRowComponent = React.memo(
                     >
                         <MoreVertIcon/>
                     </IconButton>
-                    <Popper open={Boolean(rowMenuAnchor) && currentObject === objectName}
-                            anchorEl={rowMenuAnchor} {...popperProps}>
+                    <Popper
+                        open={Boolean(rowMenuAnchor) && currentObject === objectName}
+                        anchorEl={rowMenuAnchor}
+                        placement="bottom-end"
+                        disablePortal={isSafari}
+                        sx={{
+                            zIndex: 1300,
+                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
+                        }}
+                    >
                         <ClickAwayListener onClickAway={handleRowMenuClose}>
                             <Paper elevation={3} role="menu">
                                 {filteredActions.map(({name, icon}) => (
@@ -410,6 +428,7 @@ const TableRowComponent = React.memo(
         );
     }
 );
+
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -426,8 +445,8 @@ const Objects = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
     const [selectedObjects, setSelectedObjects] = useState([]);
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
+    const [rowMenuAnchor, setRowMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
     const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
     const [selectedKind, setSelectedKind] = useState(rawKind);
@@ -458,7 +477,19 @@ const Objects = () => {
         "MAX_RECONNECTIONS_REACHED",
         "CONNECTION_CLOSED"
     ], []);
-    const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
+
+    const debounce = useCallback((func, wait) => {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }, []);
+
     const getObjectStatus = useCallback(
         (objectName, objs) => {
             const obj = objs[objectName] || {};
@@ -481,6 +512,7 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
+
     const getNodeState = useCallback(
         (objectName, node) => {
             const instanceStatus = objectInstanceStatus[objectName] || {};
@@ -498,16 +530,20 @@ const Objects = () => {
         },
         [objectInstanceStatus, instanceMonitor]
     );
+
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
+
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
+
     const namespaces = useMemo(() => Array.from(new Set(allObjectNames.map(extractNamespace))).sort(), [allObjectNames]);
     const kinds = useMemo(() => Array.from(new Set(allObjectNames.map(extractKind))).sort(), [allObjectNames]);
+
     const allNodes = useMemo(
         () =>
             Array.from(
@@ -519,6 +555,7 @@ const Objects = () => {
             ).sort(),
         [objectInstanceStatus]
     );
+
     const filteredObjectNames = useMemo(
         () =>
             allObjectNames.filter((name) => {
@@ -537,6 +574,7 @@ const Objects = () => {
             }),
         [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, getObjectStatus, objects]
     );
+
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         return [...filteredObjectNames].sort((a, b) => {
@@ -555,6 +593,7 @@ const Objects = () => {
             return sortDirection === "asc" ? diff : -diff;
         });
     }, [filteredObjectNames, sortColumn, sortDirection, getObjectStatus, objects, getNodeState, allNodes]);
+
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
@@ -570,12 +609,18 @@ const Objects = () => {
                     navigate(newUrl, {replace: true});
                 }
             }, 300),
-        [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]
+        [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search, debounce]
     );
+
     useEffect(() => {
         debouncedUpdateQuery();
-        return debouncedUpdateQuery.cancel;
+        return () => {
+            if (debouncedUpdateQuery.cancel) {
+                debouncedUpdateQuery.cancel();
+            }
+        };
     }, [debouncedUpdateQuery]);
+
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
@@ -586,11 +631,13 @@ const Objects = () => {
         setSelectedKind(newKind);
         setSearchQuery(newSearchQuery);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
+
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
+
     const eventStarted = useRef(false);
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -608,25 +655,31 @@ const Objects = () => {
             eventStarted.current = false;
         };
     }, []);
+
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
         );
     }, []);
+
     const handleActionsMenuOpen = useCallback((event) => {
         setActionsMenuAnchor(event.currentTarget);
     }, []);
+
     const handleActionsMenuClose = useCallback(() => {
         setActionsMenuAnchor(null);
     }, []);
+
     const handleRowMenuOpen = useCallback((event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
     }, []);
+
     const handleRowMenuClose = useCallback(() => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
     }, []);
+
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
@@ -635,6 +688,7 @@ const Objects = () => {
         },
         [handleRowMenuClose, handleActionsMenuClose]
     );
+
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -692,138 +746,164 @@ const Objects = () => {
         },
         [pendingAction, selectedObjects, objectStatus, removeObject]
     );
+
     const handleObjectClick = useCallback(
         (objectName) => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
     );
-    const popperProps = useCallback(
-        () => ({
-            placement: "bottom-end",
-            disablePortal: isSafari,
-            modifiers: [
-                {
-                    name: "offset",
-                    options: {offset: [0, 8 / getZoomLevel()]},
-                },
-                {name: "preventOverflow", options: {boundariesElement: "viewport"}},
-                {name: "flip", options: {enabled: true}},
-            ],
-            sx: {
-                zIndex: 1300,
-                "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
-            },
-        }),
-        [getZoomLevel]
-    );
+
+    const handleSort = useCallback((column) => {
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(column);
+            setSortDirection("asc");
+        }
+    }, [sortColumn, sortDirection]);
+
     return (
         <Box
             sx={{
-                minHeight: "100vh",
+                height: "100vh",
                 bgcolor: "background.default",
                 display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
-                p: 2,
-                position: 'relative'
+                flexDirection: "column",
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
+                overflow: 'hidden',
             }}
         >
             <Box
                 sx={{
-                    width: "100%",
-                    maxWidth: isWideScreen ? "1600px" : "1000px",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
+                    overflow: 'hidden',
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Objects
-                </Typography>
+
                 {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
-                    top: 64,
+                    top: 0,
                     zIndex: 10,
                     backgroundColor: "background.paper",
                     pt: 2,
                     pb: 1,
-                    mb: 2
+                    mb: 2,
+                    flexShrink: 0,
                 }}>
-                    <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1}}>
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            aria-label={showFilters ? "Hide filters" : "Show filters"}
-                        >
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
+                    <Box sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                    }}>
+                        {/* Left section with Show Filters button and filters */}
+                        <Box sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 2,
+                            flexGrow: 1,
+                            overflowX: "auto",
+                            py: 1
+                        }}>
+                            <Button
+                                onClick={() => setShowFilters(!showFilters)}
+                                aria-label={showFilters ? "Hide filters" : "Show filters"}
+                                sx={{minWidth: 'auto', flexShrink: 0}}
+                            >
+                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                            </Button>
+
+                            {showFilters && (
+                                <>
+                                    <Autocomplete
+                                        key={`global-state-${selectedGlobalState}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={globalStates}
+                                        value={selectedGlobalState}
+                                        onChange={(_event, val) => val && setSelectedGlobalState(val)}
+                                        renderInput={renderTextField("Global State")}
+                                        renderOption={(props, option) => (
+                                            <li {...props}>
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    {option === "up" &&
+                                                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
+                                                    {option === "down" &&
+                                                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "warn" &&
+                                                        <FiberManualRecordIcon
+                                                            sx={{color: orange[500], fontSize: 18}}/>}
+                                                    {option === "n/a" &&
+                                                        <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
+                                                    {option === "unprovisioned" &&
+                                                        <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                    {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
+                                                </Box>
+                                            </li>
+                                        )}
+                                    />
+                                    <Autocomplete
+                                        key={`namespace-${selectedNamespace}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...namespaces]}
+                                        value={selectedNamespace}
+                                        onChange={(_event, val) => val && setSelectedNamespace(val)}
+                                        renderInput={renderTextField("Namespace")}
+                                    />
+                                    <Autocomplete
+                                        key={`kind-${selectedKind}`}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        options={["all", ...kinds]}
+                                        value={selectedKind}
+                                        onChange={(_event, val) => val && setSelectedKind(val)}
+                                        renderInput={renderTextField("Kind")}
+                                    />
+                                    <TextField
+                                        label="Name"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        sx={{minWidth: 200, flexShrink: 0}}
+                                    />
+                                </>
+                            )}
+                        </Box>
+
+                        {/* Right section with Actions button */}
                         <Button
                             variant="contained"
                             color="primary"
                             onClick={handleActionsMenuOpen}
                             disabled={!selectedObjects.length}
                             aria-label="Actions on selected objects"
+                            sx={{flexShrink: 0}}
                         >
                             Actions on selected objects
                         </Button>
                     </Box>
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                        <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", pb: 2}}>
-                            <Autocomplete
-                                key={`global-state-${selectedGlobalState}`}
-                                sx={{minWidth: 200}}
-                                options={globalStates}
-                                value={selectedGlobalState}
-                                onChange={(e, val) => val && setSelectedGlobalState(val)}
-                                renderInput={(params) => <TextField {...params} label="Global State"/>}
-                                renderOption={(props, option) => (
-                                    <li {...props}>
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                            {option === "up" &&
-                                                <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
-                                            {option === "down" &&
-                                                <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "warn" &&
-                                                <WarningAmberIcon sx={{color: orange[500], fontSize: 18}}/>}
-                                            {option === "n/a" &&
-                                                <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
-                                            {option === "unprovisioned" &&
-                                                <WarningAmberIcon sx={{color: red[500], fontSize: 18}}/>}
-                                            {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
-                                        </Box>
-                                    </li>
-                                )}
-                            />
-                            <Autocomplete
-                                key={`namespace-${selectedNamespace}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...namespaces]}
-                                value={selectedNamespace}
-                                onChange={(e, val) => val && setSelectedNamespace(val)}
-                                renderInput={(params) => <TextField {...params} label="Namespace"/>}
-                            />
-                            <Autocomplete
-                                key={`kind-${selectedKind}`}
-                                sx={{minWidth: 200}}
-                                options={["all", ...kinds]}
-                                value={selectedKind}
-                                onChange={(e, val) => val && setSelectedKind(val)}
-                                renderInput={(params) => <TextField {...params} label="Kind"/>}
-                            />
-                            <TextField
-                                label="Name"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                sx={{minWidth: 200}}
-                            />
-                        </Box>
-                    </Collapse>
-                    <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
+
+                    <Popper
+                        open={Boolean(actionsMenuAnchor)}
+                        anchorEl={actionsMenuAnchor}
+                        placement="bottom-end"
+                        disablePortal={isSafari}
+                        sx={{
+                            zIndex: 1300,
+                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
+                        }}
+                    >
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">
                                 {OBJECT_ACTIONS.map(({name, icon}) => {
@@ -849,17 +929,25 @@ const Objects = () => {
                         </ClickAwayListener>
                     </Popper>
                 </Box>
+
                 {/* Objects table */}
-                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
-                    <Table>
+                <TableContainer sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    boxShadow: "none",
+                    border: "none",
+                    position: 'relative',
+                }}>
+                    <Table sx={{position: 'relative'}}>
                         <TableHead sx={{
                             position: "sticky",
                             top: 0,
-                            zIndex: 3,
+                            zIndex: 20,
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
-                                <TableCell>
+                                <TableCell sx={{paddingLeft: 2}}>
                                     <Checkbox
                                         checked={selectedObjects.length === filteredObjectNames.length}
                                         onChange={(e) => setSelectedObjects(e.target.checked ? filteredObjectNames : [])}
@@ -870,8 +958,11 @@ const Objects = () => {
                                     sx={{
                                         minWidth: "150px",
                                         width: "150px",
-                                        position: "relative"
+                                        position: "relative",
+                                        cursor: "pointer",
+                                        paddingLeft: 2
                                     }}
+                                    onClick={() => handleSort("status")}
                                 >
                                     <Box sx={{
                                         width: "100%",
@@ -885,16 +976,31 @@ const Objects = () => {
                                                 width: "80px",
                                                 display: "flex",
                                                 justifyContent: "center",
+                                                alignItems: "center",
+                                                gap: 0.5
                                             }}
                                         >
                                             <strong>Status</strong>
+                                            {sortColumn === "status" && (
+                                                sortDirection === "asc" ?
+                                                    <KeyboardArrowUpIcon fontSize="small"/> :
+                                                    <KeyboardArrowDownIcon fontSize="small"/>
+                                            )}
                                         </Box>
                                         <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
-                                <TableCell>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
+                                <TableCell
+                                    sx={{cursor: "pointer", paddingLeft: 2}}
+                                    onClick={() => handleSort("object")}
+                                >
+                                    <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
                                         <strong>Object</strong>
+                                        {sortColumn === "object" && (
+                                            sortDirection === "asc" ?
+                                                <KeyboardArrowUpIcon fontSize="small"/> :
+                                                <KeyboardArrowDownIcon fontSize="small"/>
+                                        )}
                                     </Box>
                                 </TableCell>
                                 {isWideScreen &&
@@ -904,8 +1010,11 @@ const Objects = () => {
                                             sx={{
                                                 minWidth: "130px",
                                                 width: "130px",
-                                                position: "relative"
+                                                position: "relative",
+                                                cursor: "pointer",
+                                                paddingLeft: 2
                                             }}
+                                            onClick={() => handleSort(node)}
                                         >
                                             <Box sx={{
                                                 width: "100%",
@@ -919,15 +1028,22 @@ const Objects = () => {
                                                         width: "80px",
                                                         display: "flex",
                                                         justifyContent: "center",
+                                                        alignItems: "center",
+                                                        gap: 0.5
                                                     }}
                                                 >
                                                     <strong>{node}</strong>
+                                                    {sortColumn === node && (
+                                                        sortDirection === "asc" ?
+                                                            <KeyboardArrowUpIcon fontSize="small"/> :
+                                                            <KeyboardArrowDownIcon fontSize="small"/>
+                                                    )}
                                                 </Box>
                                                 <Box sx={{width: "50px"}}></Box>
                                             </Box>
                                         </TableCell>
                                     ))}
-                                <TableCell>
+                                <TableCell sx={{paddingLeft: 2}}>
                                     <strong>Actions</strong>
                                 </TableCell>
                             </TableRow>
@@ -947,7 +1063,6 @@ const Objects = () => {
                                     getNodeState={getNodeState}
                                     allNodes={allNodes}
                                     isWideScreen={isWideScreen}
-                                    popperProps={popperProps()}
                                     handleActionClick={handleActionClick}
                                     handleRowMenuClose={handleRowMenuClose}
                                     objects={objects}
@@ -961,6 +1076,7 @@ const Objects = () => {
                         No objects found matching the current filters.
                     </Typography>
                 )}
+
                 {/* Feedback and dialogs */}
                 <Snackbar
                     open={snackbar.open}

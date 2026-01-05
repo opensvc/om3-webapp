@@ -1,15 +1,23 @@
 const isDev = (() => {
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env.NODE_ENV !== 'production';
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            return process.env.NODE_ENV !== 'production';
+        }
+        return true;
+    } catch (e) {
+        return true;
     }
-    return true;
 })();
 
 const isTest = (() => {
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env.NODE_ENV === 'test';
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            return process.env.NODE_ENV === 'test';
+        }
+        return false;
+    } catch (e) {
+        return false;
     }
-    return false;
 })();
 
 const safeSerialize = (arg) => {
@@ -23,13 +31,14 @@ const safeSerialize = (arg) => {
     }
 };
 
-// Configuration du comportement
+const shouldLog = isDev || isTest;
+
 const LOGGER_BEHAVIOR = {
-    // En mode test: double logging pour la compatibilité des tests
-    // En mode dev: simple logging sans duplication
-    info: isTest ? ['log', 'info'] : ['info'],
-    error: isTest ? ['log', 'error'] : ['error'],
-    debug: isTest ? ['log', 'debug'] : ['debug'],
+    log: ['log'],
+    info: ['log', 'info'],
+    error: ['log', 'error'],
+    debug: ['log', 'debug'],
+    warn: ['warn'],
 };
 
 const callConsoleMethod = (methods, args) => {
@@ -45,19 +54,19 @@ const callConsoleMethod = (methods, args) => {
 
 const logger = {
     log: (...args) => {
-        if (isDev) console.log(...args);
+        if (shouldLog) callConsoleMethod(LOGGER_BEHAVIOR.log, args);
     },
     info: (...args) => {
-        if (isDev) callConsoleMethod(LOGGER_BEHAVIOR.info, args);
+        if (shouldLog) callConsoleMethod(LOGGER_BEHAVIOR.info, args);
     },
     warn: (...args) => {
-        if (isDev) console.warn(...args);
+        if (shouldLog) callConsoleMethod(LOGGER_BEHAVIOR.warn, args);
     },
     error: (...args) => {
-        if (isDev) callConsoleMethod(LOGGER_BEHAVIOR.error, args);
+        if (shouldLog) callConsoleMethod(LOGGER_BEHAVIOR.error, args);
     },
     debug: (...args) => {
-        if (isDev) callConsoleMethod(LOGGER_BEHAVIOR.debug, args);
+        if (shouldLog) callConsoleMethod(LOGGER_BEHAVIOR.debug, args);
     },
     serialize: safeSerialize,
 };

@@ -4,14 +4,17 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import Namespaces from '../Namespaces';
 import useEventStore from '../../hooks/useEventStore.js';
 import {startEventReception, closeEventSource} from '../../eventSourceManager.jsx';
+
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
     useNavigate: jest.fn(),
     useLocation: jest.fn(),
 }));
+
 jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx');
+
 // Mock Material-UI components to add data-testid
 jest.mock('@mui/material', () => {
     const originalModule = jest.requireActual('@mui/material');
@@ -29,10 +32,10 @@ jest.mock('@mui/material', () => {
         TableBody: ({children, ...props}) => (
             <tbody data-testid="table-body" {...props}>{children}</tbody>
         ),
-        TableRow: ({children, onClick, ...props}) => (
+        TableRow: ({children, onClick, hover, ...props}) => (
             <tr data-testid="table-row" onClick={onClick} {...props}>{children}</tr>
         ),
-        TableCell: ({children, onClick, ...props}) => (
+        TableCell: ({children, onClick, justifyContent, alignItems, ...props}) => (
             <td data-testid="table-cell" onClick={onClick} {...props}>{children}</td>
         ),
         TableContainer: ({children, ...props}) => (
@@ -62,17 +65,22 @@ jest.mock('@mui/material', () => {
                 <input {...inputProps} {...props} />
             </div>
         ),
+        Drawer: ({children, open, anchor, onClose, ...props}) =>
+            open ? <div role="complementary" {...props}>{children}</div> : null,
     };
 });
+
 // Mock icons with proper test IDs
 jest.mock('@mui/icons-material/KeyboardArrowUp', () => ({
     __esModule: true,
     default: (props) => <span data-testid="arrow-up" {...props} />,
 }));
+
 jest.mock('@mui/icons-material/KeyboardArrowDown', () => ({
     __esModule: true,
     default: (props) => <span data-testid="arrow-down" {...props} />,
 }));
+
 jest.mock('@mui/icons-material/FiberManualRecord', () => ({
     __esModule: true,
     default: ({sx = {}, ...props}) => {
@@ -80,8 +88,18 @@ jest.mock('@mui/icons-material/FiberManualRecord', () => ({
         return <span data-testid="status-icon" style={{color}} {...props} />;
     },
 }));
+
+jest.mock('@mui/icons-material/PriorityHigh', () => ({
+    __esModule: true,
+    default: ({sx = {}, ...props}) => {
+        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
+        return <span data-testid="status-icon" style={{color}} {...props} />;
+    },
+}));
+
 // Mock useLocation
 const mockUseLocation = useLocation;
+
 // Helper function to get header cell for a column
 const getHeaderCellFor = (columnName) => {
     const head = screen.getByTestId('table-head');
@@ -90,7 +108,8 @@ const getHeaderCellFor = (columnName) => {
     const regex = new RegExp(columnName, 'i');
     return headCells.find(cell => within(cell).queryByText(regex) !== null);
 };
-// Helper functions to test - DÉPLACÉES AVANT les describe blocks
+
+// Helper functions to test
 const getColorByStatus = (status) => {
     const {green, red, orange, grey} = require('@mui/material/colors');
     switch (status) {
@@ -109,6 +128,7 @@ describe('Namespaces Component', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = startEventReception;
     const mockCloseEventSource = closeEventSource;
+
     beforeEach(() => {
         jest.clearAllMocks();
         Storage.prototype.getItem = jest.fn(() => 'valid-token');
@@ -126,17 +146,25 @@ describe('Namespaces Component', () => {
         };
         useEventStore.mockImplementation((selector) => selector(mockState));
     });
-    test('renders title and table structure', async () => {
+
+    test('renders table structure', async () => {
         render(
             <MemoryRouter>
                 <Namespaces/>
             </MemoryRouter>
         );
-        expect(await screen.findByText('Namespaces Status Overview')).toBeInTheDocument();
         expect(screen.getByTestId('table')).toBeInTheDocument();
         expect(screen.getByTestId('table-head')).toBeInTheDocument();
         expect(screen.getByTestId('table-body')).toBeInTheDocument();
+
+        expect(screen.getByText('Namespace')).toBeInTheDocument();
+        expect(screen.getByText('Up')).toBeInTheDocument();
+        expect(screen.getByText('Down')).toBeInTheDocument();
+        expect(screen.getByText('Warn')).toBeInTheDocument();
+        expect(screen.getByText('N/A')).toBeInTheDocument();
+        expect(screen.getByText('Total')).toBeInTheDocument();
     });
+
     test('renders namespaces with correct status counts', async () => {
         render(
             <MemoryRouter>
@@ -151,6 +179,7 @@ describe('Namespaces Component', () => {
         expect(rootCells[3]).toHaveTextContent('0'); // Warn
         expect(rootCells[4]).toHaveTextContent('0'); // n/a
         expect(rootCells[5]).toHaveTextContent('2'); // Total
+
         // Check prod namespace
         const prodRow = await screen.findByRole('row', {name: /prod/i});
         const prodCells = within(prodRow).getAllByTestId('table-cell');
@@ -160,6 +189,7 @@ describe('Namespaces Component', () => {
         expect(prodCells[4]).toHaveTextContent('0'); // n/a
         expect(prodCells[5]).toHaveTextContent('2'); // Total
     });
+
     test('displays correct status icons with colors', async () => {
         render(
             <MemoryRouter>
@@ -173,6 +203,7 @@ describe('Namespaces Component', () => {
         expect(rootIcons[2]).toHaveStyle({color: '#ff9800'}); // Warn
         expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'}); // n/a
     });
+
     test('navigates to objects page with namespace on row click', async () => {
         render(
             <MemoryRouter>
@@ -183,6 +214,7 @@ describe('Namespaces Component', () => {
         fireEvent.click(row);
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
     });
+
     test('navigates to objects page with namespace and status on status cell click', async () => {
         render(
             <MemoryRouter>
@@ -195,6 +227,7 @@ describe('Namespaces Component', () => {
         fireEvent.click(statusCells[1]);
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=up');
     });
+
     test('startEventReception on mount with auth token', async () => {
         render(
             <MemoryRouter>
@@ -208,6 +241,7 @@ describe('Namespaces Component', () => {
             );
         });
     });
+
     test('calls closeEventSource on unmount', async () => {
         const {unmount} = render(
             <MemoryRouter>
@@ -219,6 +253,7 @@ describe('Namespaces Component', () => {
         });
         expect(mockCloseEventSource).toHaveBeenCalled();
     });
+
     test('does not call startEventReception without auth token', () => {
         Storage.prototype.getItem = jest.fn(() => null);
         render(
@@ -228,6 +263,7 @@ describe('Namespaces Component', () => {
         );
         expect(mockStartEventReception).not.toHaveBeenCalled();
     });
+
     test('displays no namespaces message when no data is available', async () => {
         useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
         render(
@@ -237,6 +273,7 @@ describe('Namespaces Component', () => {
         );
         expect(await screen.findByText(/No namespaces available/i)).toBeInTheDocument();
     });
+
     test('handles malformed objectStatus data', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -252,8 +289,9 @@ describe('Namespaces Component', () => {
             </MemoryRouter>
         );
         // Should still render without crashing
-        expect(await screen.findByText('Namespaces Status Overview')).toBeInTheDocument();
+        expect(await screen.findByText('prod')).toBeInTheDocument();
     });
+
     test('sorts namespaces when clicking column headers', async () => {
         render(
             <MemoryRouter>
@@ -271,6 +309,7 @@ describe('Namespaces Component', () => {
             expect(screen.getAllByTestId('table-row').length).toBeGreaterThan(0);
         });
     });
+
     test('filters namespaces using autocomplete', async () => {
         render(
             <MemoryRouter>
@@ -284,6 +323,7 @@ describe('Namespaces Component', () => {
         // Should navigate to filtered URL
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces?namespace=prod');
     });
+
     test('displays filtered message when no namespaces match', async () => {
         useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
         mockUseLocation.mockReturnValue({search: '?namespace=nonexistent'});
@@ -294,6 +334,7 @@ describe('Namespaces Component', () => {
         );
         expect(await screen.findByText(/No namespaces match the selected filter/i)).toBeInTheDocument();
     });
+
     test('handles URL namespace parameter on load', async () => {
         mockUseLocation.mockReturnValue({search: '?namespace=prod'});
         render(
@@ -324,7 +365,7 @@ describe('Namespaces Component', () => {
                 <Namespaces/>
             </MemoryRouter>
         );
-        // Should render without crashing and handle null/undefined values
+        // Should handle null/undefined values
         await waitFor(() => {
             expect(screen.getByText('valid')).toBeInTheDocument();
         });
@@ -335,6 +376,7 @@ describe('Namespaces Component', () => {
         expect(validCells[3]).toHaveTextContent('0'); // Warn
         expect(validCells[4]).toHaveTextContent('3'); // n/a count
     });
+
     test('handles edge cases in getColorByStatus function', () => {
         const testCases = [
             {input: 'up', expected: '#4caf50'},
@@ -351,6 +393,7 @@ describe('Namespaces Component', () => {
             expect(result).toBe(expected);
         });
     });
+
     test('handles all sorting columns with both directions', async () => {
         render(
             <MemoryRouter>
@@ -374,6 +417,7 @@ describe('Namespaces Component', () => {
             });
         }
     });
+
     test('handles status counting for unknown status values', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -401,6 +445,7 @@ describe('Namespaces Component', () => {
         expect(testCells[3]).toHaveTextContent('0'); // Warn
         expect(testCells[4]).toHaveTextContent('2'); // n/a
     });
+
     test('handles Autocomplete with null value', async () => {
         render(
             <MemoryRouter>
@@ -413,6 +458,7 @@ describe('Namespaces Component', () => {
         // Should handle null value by defaulting to "all"
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
     });
+
     test('handles URL namespace parameter with empty string', async () => {
         mockUseLocation.mockReturnValue({search: '?namespace='});
         render(
@@ -425,6 +471,7 @@ describe('Namespaces Component', () => {
             expect(screen.getByTestId('autocomplete-input')).toHaveValue('all');
         });
     });
+
     test('handles empty namespaces array in Autocomplete', async () => {
         useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
         render(
@@ -440,6 +487,7 @@ describe('Namespaces Component', () => {
         fireEvent.keyDown(autocompleteInput, {key: 'Enter'});
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
     });
+
     test('handles filteredNamespaces with empty statusByNamespace', async () => {
         useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
         render(
@@ -450,6 +498,7 @@ describe('Namespaces Component', () => {
         // Should display no namespaces message
         expect(await screen.findByText(/No namespaces available/i)).toBeInTheDocument();
     });
+
     test('handles allObjectNames with various edge cases', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -474,6 +523,7 @@ describe('Namespaces Component', () => {
         expect(rootCells[1]).toHaveTextContent('0');
         expect(rootCells[2]).toHaveTextContent('1');
     });
+
     test('handles handleSort with same column toggle', async () => {
         render(
             <MemoryRouter>
@@ -495,6 +545,7 @@ describe('Namespaces Component', () => {
             expect(screen.getAllByTestId('table-row').length).toBeGreaterThan(0);
         });
     });
+
     test('handles handleSort with different column selection', async () => {
         render(
             <MemoryRouter>
@@ -516,6 +567,7 @@ describe('Namespaces Component', () => {
             expect(screen.getAllByTestId('table-row').length).toBeGreaterThan(0);
         });
     });
+
     test('handles filteredNamespaces with single namespace match', async () => {
         mockUseLocation.mockReturnValue({search: '?namespace=dev'});
         render(
@@ -531,6 +583,7 @@ describe('Namespaces Component', () => {
         expect(screen.queryByText('root')).not.toBeInTheDocument();
         expect(screen.queryByText('prod')).not.toBeInTheDocument();
     });
+
     test('handles useEffect cleanup with event source', async () => {
         const {unmount} = render(
             <MemoryRouter>

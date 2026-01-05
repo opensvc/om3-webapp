@@ -90,12 +90,12 @@ export const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => 
                     {sortedNamespaceSubtitle.map(({namespace, status}) => (
                         <Box key={namespace}
                              sx={{
-                                position: 'relative',
-                                display: 'inline-flex',
-                                flexShrink: 0,
-                                margin: "4px",
-                                alignItems: "center"
-                            }}
+                                 position: 'relative',
+                                 display: 'inline-flex',
+                                 flexShrink: 0,
+                                 margin: "4px",
+                                 alignItems: "center"
+                             }}
                         >
                             <Chip
                                 label={namespace}

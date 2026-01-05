@@ -29,6 +29,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {parseObjectPath} from '../utils/objectUtils';
 
 const KeysSection = ({decodedObjectName, openSnackbar}) => {
     // State for keys
@@ -42,38 +43,11 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
     const [keyToDelete, setKeyToDelete] = useState(null);
-    const [keyToUpdate, setKeyToUpdate] = useState(null);
-    const [newKeyName, setNewKeyName] = useState("");
     const [updateKeyName, setUpdateKeyName] = useState("");
+    const [newKeyName, setNewKeyName] = useState("");
     const [newKeyFile, setNewKeyFile] = useState(null);
     const [updateKeyFile, setUpdateKeyFile] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
-
-    // Helper function to parse object path
-    const parseObjectPath = (objName) => {
-        if (!objName || typeof objName !== "string") {
-            return {namespace: "root", kind: "svc", name: ""};
-        }
-
-        const parts = objName.split("/");
-        let name, kind, namespace;
-
-        if (parts.length === 3) {
-            namespace = parts[0];
-            kind = parts[1];
-            name = parts[2];
-        } else if (parts.length === 2) {
-            namespace = "root";
-            kind = parts[0];
-            name = parts[1];
-        } else {
-            namespace = "root";
-            name = parts[0];
-            kind = name === "cluster" ? "ccfg" : "svc";
-        }
-
-        return {namespace, kind, name};
-    };
 
     // Fetch keys for cfg or sec objects
     const fetchKeys = useCallback(async () => {
@@ -222,22 +196,29 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         } finally {
             setActionLoading(false);
             setUpdateDialogOpen(false);
-            setKeyToUpdate(null);
             setUpdateKeyName("");
             setUpdateKeyFile(null);
         }
     };
 
     // Handle accordion expansion
-    const handleKeysAccordionChange = (event, isExpanded) => {
+    const handleKeysAccordionChange = (isExpanded) => {
         setKeysAccordionExpanded(isExpanded);
     };
 
-    // Initial load effect
+    // Open update dialog for a specific key
+    const handleOpenUpdateDialog = (keyName) => {
+        setUpdateKeyName(keyName);
+        setUpdateDialogOpen(true);
+    };
+
+    // Initial load effect with error handling
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchKeys();
+            fetchKeys().catch((error) => {
+                logger.error("Error in fetchKeys:", error);
+            });
         }
     }, [decodedObjectName, fetchKeys]);
 
@@ -248,6 +229,12 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     if (!showKeys) {
         return null;
     }
+
+    // Helper to check if keysError has a value
+    const hasKeysError = Boolean(keysError);
+
+    // Helper to ensure keys is an array and map to safe structure
+    const safeKeys = Array.isArray(keys) ? keys : [];
 
     return (
         <Box
@@ -261,7 +248,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         >
             <Accordion
                 expanded={keysAccordionExpanded}
-                onChange={handleKeysAccordionChange}
+                onChange={(isExpanded) => handleKeysAccordionChange(isExpanded)}
                 sx={{
                     border: "none",
                     boxShadow: "none",
@@ -287,7 +274,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     id="panel-keys-header"
                 >
                     <Typography variant="h6" fontWeight="medium">
-                        Object Keys ({keys.length})
+                        Object Keys ({safeKeys.length})
                     </Typography>
                 </AccordionSummary>
                 <AccordionDetails>
@@ -304,15 +291,15 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                         </Tooltip>
                     </Box>
                     {keysLoading && <CircularProgress size={24}/>}
-                    {keysError && (
+                    {hasKeysError && (
                         <Alert severity="error" sx={{mb: 2}}>
-                            {keysError}
+                            {String(keysError)}
                         </Alert>
                     )}
-                    {!keysLoading && !keysError && keys.length === 0 && (
+                    {!keysLoading && !hasKeysError && safeKeys.length === 0 && (
                         <Typography color="textSecondary">No keys available.</Typography>
                     )}
-                    {!keysLoading && !keysError && keys.length > 0 && (
+                    {!keysLoading && !hasKeysError && safeKeys.length > 0 && (
                         <TableContainer component={Paper} sx={{boxShadow: "none"}}>
                             <Table sx={{minWidth: 650}} aria-label="keys table">
                                 <TableHead>
@@ -324,46 +311,48 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {keys.map((key) => (
-                                        <TableRow key={key.name}>
-                                            <TableCell component="th" scope="row">
-                                                {key.name}
-                                            </TableCell>
-                                            <TableCell>{key.node}</TableCell>
-                                            <TableCell>{key.size} bytes</TableCell>
-                                            <TableCell>
-                                                <Tooltip title="Edit">
-                                                    <span>
-                                                        <IconButton
-                                                            onClick={() => {
-                                                                setKeyToUpdate(key.name);
-                                                                setUpdateKeyName(key.name);
-                                                                setUpdateDialogOpen(true);
-                                                            }}
-                                                            disabled={actionLoading}
-                                                            aria-label={`Edit key ${key.name}`}
-                                                        >
-                                                            <EditIcon/>
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                                <Tooltip title="Delete">
-                                                    <span>
-                                                        <IconButton
-                                                            onClick={() => {
-                                                                setKeyToDelete(key.name);
-                                                                setDeleteDialogOpen(true);
-                                                            }}
-                                                            disabled={actionLoading}
-                                                            aria-label={`Delete key ${key.name}`}
-                                                        >
-                                                            <DeleteIcon/>
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {(() => {
+                                        const rows = [];
+                                        for (const key of safeKeys) {
+                                            rows.push(
+                                                <TableRow key={key.name}>
+                                                    <TableCell component="th" scope="row">
+                                                        {key.name}
+                                                    </TableCell>
+                                                    <TableCell>{key.node}</TableCell>
+                                                    <TableCell>{key.size} bytes</TableCell>
+                                                    <TableCell>
+                                                        <Tooltip title="Edit">
+                                                            <span>
+                                                                <IconButton
+                                                                    onClick={() => handleOpenUpdateDialog(key.name)}
+                                                                    disabled={actionLoading}
+                                                                    aria-label={`Edit key ${key.name}`}
+                                                                >
+                                                                    <EditIcon/>
+                                                                </IconButton>
+                                                            </span>
+                                                        </Tooltip>
+                                                        <Tooltip title="Delete">
+                                                            <span>
+                                                                <IconButton
+                                                                    onClick={() => {
+                                                                        setKeyToDelete(key.name);
+                                                                        setDeleteDialogOpen(true);
+                                                                    }}
+                                                                    disabled={actionLoading}
+                                                                    aria-label={`Delete key ${key.name}`}
+                                                                >
+                                                                    <DeleteIcon/>
+                                                                </IconButton>
+                                                            </span>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        }
+                                        return rows;
+                                    })()}
                                 </TableBody>
                             </Table>
                         </TableContainer>

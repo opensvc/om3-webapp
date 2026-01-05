@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, forwardRef} from "react";
 import {
     Box,
     Typography,
@@ -18,37 +18,54 @@ import {
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, orange, red} from "@mui/material/colors";
 import {RESOURCE_ACTIONS} from "../constants/actions";
+import logger from '../utils/logger.js';
+
+
+const BoxWithRef = forwardRef((props, ref) => (
+    <Box ref={ref} {...props} />
+));
+BoxWithRef.displayName = 'BoxWithRef';
+
+const IconButtonWithRef = forwardRef((props, ref) => (
+    <IconButton ref={ref} {...props} />
+));
+IconButtonWithRef.displayName = 'IconButtonWithRef';
+
+const ButtonWithRef = forwardRef((props, ref) => (
+    <Button ref={ref} {...props} />
+));
+ButtonWithRef.displayName = 'ButtonWithRef';
 
 const NodeCard = ({
                       node,
                       nodeData = {},
                       selectedNodes = [],
-                      toggleNode = () => console.warn("toggleNode not provided"),
+                      toggleNode = () => logger.warn("toggleNode not provided"),
                       selectedResourcesByNode = {},
-                      toggleResource = () => console.warn("toggleResource not provided"),
+                      toggleResource = () => logger.warn("toggleResource not provided"),
                       actionInProgress = false,
-                      setIndividualNodeMenuAnchor = () => console.warn("setIndividualNodeMenuAnchor not provided"),
-                      setCurrentNode = () => console.warn("setCurrentNode not provided"),
-                      handleResourcesActionsOpen = () => console.warn("handleResourcesActionsOpen not provided"),
-                      handleResourceMenuOpen = () => console.warn("handleResourceMenuOpen not provided"),
+                      setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
+                      setCurrentNode = () => logger.warn("setCurrentNode not provided"),
+                      handleResourcesActionsOpen = () => logger.warn("handleResourcesActionsOpen not provided"),
+                      handleResourceMenuOpen = () => logger.warn("handleResourceMenuOpen not provided"),
                       individualNodeMenuAnchorRef = null,
                       resourcesActionsAnchorRef = null,
                       resourceMenuAnchorRef = null,
                       expandedNodeResources = {},
-                      handleNodeResourcesAccordionChange = () => console.warn("handleNodeResourcesAccordionChange not provided"),
+                      handleNodeResourcesAccordionChange = () => () => logger.warn("handleNodeResourcesAccordionChange not provided"),
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
-                      setPendingAction = () => console.warn("setPendingAction not provided"),
-                      setSimpleDialogOpen = () => console.warn("setSimpleDialogOpen not provided"),
-                      setSelectedResourcesByNode = () => console.warn("setSelectedResourcesByNode not provided"),
+                      setPendingAction = () => logger.warn("setPendingAction not provided"),
+                      setSimpleDialogOpen = () => logger.warn("setSimpleDialogOpen not provided"),
+                      setSelectedResourcesByNode = () => logger.warn("setSelectedResourcesByNode not provided"),
                       parseProvisionedState = (state) => !!state,
                       instanceName,
-                      onOpenLogs = () => console.warn("onOpenLogs not provided"),
+                      onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                   }) => {
     // Local state for menus
     const [resourcesActionsAnchor, setResourcesActionsAnchor] = useState(null);
@@ -57,11 +74,11 @@ const NodeCard = ({
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name;
 
     useEffect(() => {
-        console.log("selectedResourcesByNode changed:", selectedResourcesByNode);
+        logger.info("selectedResourcesByNode changed:", selectedResourcesByNode);
     }, [selectedResourcesByNode]);
 
     if (!node) {
-        console.error("Node name is required");
+        logger.error("Node name is required");
         return null;
     }
 
@@ -117,7 +134,7 @@ const NodeCard = ({
     // Handler for selecting all resources
     const handleSelectAllResources = (checked) => {
         if (typeof setSelectedResourcesByNode !== "function") {
-            console.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
+            logger.error("setSelectedResourcesByNode is not a function:", setSelectedResourcesByNode);
             return;
         }
         const allResourceIds = [
@@ -166,23 +183,23 @@ const NodeCard = ({
 
     const getResourceType = (rid) => {
         if (!rid) {
-            console.warn("getResourceType called with undefined or null rid");
+            logger.warn("getResourceType called with undefined or null rid");
             return '';
         }
-        console.log(`getResourceType called for rid: ${rid}`);
+        logger.info(`getResourceType called for rid: ${rid}`);
         const topLevelType = resources[rid]?.type;
         if (topLevelType) {
-            console.log(`Found resource type in resources[${rid}]: ${topLevelType}`);
+            logger.info(`Found resource type in resources[${rid}]: ${topLevelType}`);
             return topLevelType;
         }
         for (const containerId of Object.keys(encapData)) {
             const encapType = encapData[containerId]?.resources?.[rid]?.type;
             if (encapType) {
-                console.log(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
+                logger.info(`Found resource type in encapData[${containerId}].resources[${rid}]: ${encapType}`);
                 return encapType;
             }
         }
-        console.warn(`Resource type not found for rid: ${rid}, returning empty string`);
+        logger.warn(`Resource type not found for rid: ${rid}, returning empty string`);
         return '';
     };
 
@@ -229,6 +246,8 @@ const NodeCard = ({
             letters[5] = "P";
             tooltipDescriptions[5] = "Not Provisioned";
         } else if (provisionedState === "true" || provisionedState === true) {
+            tooltipDescriptions[5] = "Provisioned";
+        } else {
             tooltipDescriptions[5] = "Provisioned";
         }
         const isStandby = instanceConfig?.resources?.[rid]?.is_standby;
@@ -288,7 +307,7 @@ const NodeCard = ({
         };
 
         return (
-            <Box
+            <BoxWithRef
                 key={rid}
                 sx={{
                     display: "flex",
@@ -414,21 +433,21 @@ const NodeCard = ({
                             <Tooltip title={res.status || "unknown"}>
                                 <FiberManualRecordIcon
                                     sx={{
-                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500],
                                         fontSize: "1rem",
+                                        color: typeof getColor === "function" ? getColor(res.status) : grey[500]
                                     }}
                                 />
                             </Tooltip>
                             {isResourceNotProvisioned && (
                                 <Tooltip title="Not Provisioned">
-                                    <WarningAmberIcon
+                                    <PriorityHighIcon
                                         sx={{color: red[500], fontSize: "1rem"}}
                                         aria-label={`Resource ${rid} is not provisioned`}
                                     />
                                 </Tooltip>
                             )}
                             <Box onClick={(e) => e.stopPropagation()}>
-                                <IconButton
+                                <IconButtonWithRef
                                     onClick={(e) => {
                                         e.persist();
                                         e.stopPropagation();
@@ -443,7 +462,7 @@ const NodeCard = ({
                                     <Tooltip title="Actions">
                                         <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                     </Tooltip>
-                                </IconButton>
+                                </IconButtonWithRef>
                             </Box>
                         </Box>
                     </Box>
@@ -535,21 +554,21 @@ const NodeCard = ({
                         <Tooltip title={res.status || "unknown"}>
                             <FiberManualRecordIcon
                                 sx={{
-                                    color: typeof getColor === "function" ? getColor(res.status) : grey[500],
                                     fontSize: "1rem",
+                                    color: typeof getColor === "function" ? getColor(res.status) : grey[500]
                                 }}
                             />
                         </Tooltip>
                         {isResourceNotProvisioned && (
                             <Tooltip title="Not Provisioned">
-                                <WarningAmberIcon
+                                <PriorityHighIcon
                                     sx={{color: red[500], fontSize: "1rem"}}
                                     aria-label={`Resource ${rid} is not provisioned`}
                                 />
                             </Tooltip>
                         )}
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <IconButton
+                            <IconButtonWithRef
                                 onClick={(e) => {
                                     e.persist();
                                     e.stopPropagation();
@@ -564,7 +583,7 @@ const NodeCard = ({
                                 <Tooltip title="Actions">
                                     <MoreVertIcon sx={{fontSize: '1rem'}}/>
                                 </Tooltip>
-                            </IconButton>
+                            </IconButtonWithRef>
                         </Box>
                     </Box>
                 </Box>
@@ -597,12 +616,12 @@ const NodeCard = ({
                         ))}
                     </Box>
                 )}
-            </Box>
+            </BoxWithRef>
         );
     };
 
     return (
-        <Box
+        <BoxWithRef
             sx={{
                 mb: 5,
                 display: "flex",
@@ -631,27 +650,22 @@ const NodeCard = ({
                     </Box>
                     <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
                         <Tooltip title="View logs">
-                            <IconButton
+                            <IconButtonWithRef
                                 onClick={() => onOpenLogs(node, resolvedInstanceName)}
                                 color="primary"
                                 aria-label={`View logs for instance ${resolvedInstanceName || node}`}
                             >
                                 <ArticleIcon/>
-                            </IconButton>
+                            </IconButtonWithRef>
                         </Tooltip>
                         <Tooltip title={avail || "unknown"}>
                             <FiberManualRecordIcon
                                 sx={{
-                                    color: typeof getColor === "function" ? getColor(avail) : grey[500],
                                     fontSize: "1.2rem",
+                                    color: typeof getColor === "function" ? getColor(avail) : grey[500]
                                 }}
                             />
                         </Tooltip>
-                        {avail === "warn" && (
-                            <Tooltip title="warn">
-                                <WarningAmberIcon sx={{color: orange[500], fontSize: "1.2rem"}}/>
-                            </Tooltip>
-                        )}
                         {frozen === "frozen" && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
@@ -659,14 +673,14 @@ const NodeCard = ({
                         )}
                         {isInstanceNotProvisioned && (
                             <Tooltip title="Not Provisioned">
-                                <WarningAmberIcon
+                                <PriorityHighIcon
                                     sx={{color: red[500], fontSize: "1.2rem"}}
                                     aria-label={`Instance on node ${node} is not provisioned`}
                                 />
                             </Tooltip>
                         )}
                         {state && <Typography variant="caption">{state}</Typography>}
-                        <IconButton
+                        <IconButtonWithRef
                             onClick={(e) => {
                                 e.persist();
                                 e.stopPropagation();
@@ -680,7 +694,7 @@ const NodeCard = ({
                             <Tooltip title="Actions">
                                 <MoreVertIcon/>
                             </Tooltip>
-                        </IconButton>
+                        </IconButtonWithRef>
                     </Box>
                 </Box>
             </Box>
@@ -726,7 +740,7 @@ const NodeCard = ({
                     <Box sx={{flexGrow: 1}}/>
                     <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <Button
+                            <ButtonWithRef
                                 variant="outlined"
                                 onClick={(e) => {
                                     e.persist();
@@ -739,9 +753,9 @@ const NodeCard = ({
                                 ref={resourcesActionsAnchorRef}
                             >
                                 Actions on Selected Resources
-                            </Button>
+                            </ButtonWithRef>
                         </Box>
-                        <IconButton
+                        <IconButtonWithRef
                             onClick={() => handleNodeResourcesAccordionChange(node)(null, !expandedNodeResources[node])}
                             aria-label={`Expand resources for node ${node}`}
                         >
@@ -751,7 +765,7 @@ const NodeCard = ({
                                     transition: "transform 0.2s",
                                 }}
                             />
-                        </IconButton>
+                        </IconButtonWithRef>
                     </Box>
                 </Box>
                 <AccordionDetails>
@@ -874,7 +888,7 @@ const NodeCard = ({
                     </Paper>
                 </ClickAwayListener>
             </Popper>
-        </Box>
+        </BoxWithRef>
     );
 };
 

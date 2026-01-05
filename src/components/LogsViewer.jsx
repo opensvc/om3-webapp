@@ -27,7 +27,7 @@ import {
 } from "@mui/icons-material";
 import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
-
+import {useDarkMode} from "../context/DarkModeContext";
 const LogsViewer = ({
                         nodename,
                         type = "node",
@@ -38,6 +38,7 @@ const LogsViewer = ({
                         height = "500px",
                     }) => {
     const theme = useTheme();
+    const {isDarkMode} = useDarkMode();
     const [logs, setLogs] = useState([]);
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -156,6 +157,11 @@ const LogsViewer = ({
                     setIsConnected(false);
                     return;
                 }
+                if (!response.body) {
+                    setErrorMessage("Response has no readable stream");
+                    setIsConnected(false);
+                    return;
+                }
                 setIsConnected(true);
                 setErrorMessage("");
                 setIsLoading(false);
@@ -223,7 +229,7 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        fetchLogs(controller.signal);
+        void fetchLogs(controller.signal);
     }, [fetchLogs]);
     const isFiltered = useMemo(() => {
         return levelFilter.length > 0 || searchTerm !== "";
@@ -475,7 +481,7 @@ const LogsViewer = ({
                         ))}
                     </Select>
                 </FormControl>
-                {isFiltered && (
+                {isFiltered ? (
                     <Chip
                         label="Filters active - Click any log to clear"
                         color="info"
@@ -485,7 +491,7 @@ const LogsViewer = ({
                             setLevelFilter([]);
                         }}
                     />
-                )}
+                ) : null}
                 <Typography
                     variant="caption"
                     sx={{alignSelf: "center", color: "text.secondary"}}
@@ -500,7 +506,7 @@ const LogsViewer = ({
                 sx={{
                     flexGrow: 1,
                     overflow: "auto",
-                    bgcolor: theme.palette.grey[100],
+                    bgcolor: isDarkMode ? theme.palette.background.default : theme.palette.grey[100],
                     p: 2,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,

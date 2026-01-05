@@ -5,14 +5,79 @@ import {
     CardContent,
     LinearProgress,
     Alert,
-    Typography
+    Typography,
+    Button,
+    Box,
 } from '@mui/material';
+import {FaSignOutAlt, FaServer, FaUser, FaLock, FaCode, FaWifi, FaMoon, FaSun} from "react-icons/fa";
+import {useOidc} from "../context/OidcAuthContext.tsx";
+import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
+import {useNavigate} from "react-router-dom";
+import logger from '../utils/logger.js';
+import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
+import {useDarkMode} from "../context/DarkModeContext";
 
 const WhoAmI = () => {
     const [userInfo, setUserInfo] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [appVersion, setAppVersion] = useState('Loading...');
+    const {userManager} = useOidc();
+    const auth = useAuth();
+    const authDispatch = useAuthDispatch();
+    const navigate = useNavigate();
+    const {daemon, fetchNodes} = useFetchDaemonStatus();
+    const {isDarkMode, toggleDarkMode} = useDarkMode();
 
+    // Fetch version from GitHub
+    useEffect(() => {
+        const fetchVersion = async () => {
+            const cached = localStorage.getItem('appVersion');
+            const cacheTime = localStorage.getItem('appVersionTime');
+            const now = Date.now();
+
+            if (cached && cacheTime && (now - parseInt(cacheTime)) < 3600000) {
+                setAppVersion(cached);
+                return;
+            }
+
+            try {
+                const response = await fetch('https://api.github.com/repos/opensvc/om3-webapp/releases', {
+                    headers: {'User-Agent': 'MonTestCurl'}
+                });
+                const data = await response.json();
+                const latestVersion = data[0]?.tag_name || 'Unknown';
+                const cleanVersion = latestVersion.startsWith('v') ? latestVersion.slice(1) : latestVersion;
+
+                setAppVersion(cleanVersion);
+                localStorage.setItem('appVersion', cleanVersion);
+                localStorage.setItem('appVersionTime', now.toString());
+            } catch (error) {
+                logger.error('Error fetching version:', error);
+                setAppVersion(cached || 'Unknown');
+            }
+        };
+
+        void fetchVersion();
+    }, []);
+
+    // Fetch daemon status
+    useEffect(() => {
+        const fetchDaemonData = async () => {
+            const token = localStorage.getItem("authToken");
+            if (token) {
+                try {
+                    await fetchNodes(token);
+                } catch (error) {
+                    logger.error("Error fetching daemon status:", error);
+                }
+            }
+        };
+
+        void fetchDaemonData();
+    }, [fetchNodes]);
+
+    // Fetch WhoAmI
     useEffect(() => {
         const fetchUserInfo = async () => {
             try {
@@ -35,75 +100,203 @@ const WhoAmI = () => {
             }
         };
 
-        fetchUserInfo();
+        void fetchUserInfo();
     }, []);
 
-    if (loading) return <LinearProgress/>;
-    if (error) return <Alert severity="error">{error}</Alert>;
-
-    const infoSections = [
-        {
-            title: "Identity",
-            items: [
-                {label: "Username", value: userInfo.name},
-                {label: "Authentication Method", value: userInfo.auth}
-            ]
-        },
-        {
-            title: "Access",
-            items: [
-                {label: "Namespace", value: userInfo.namespace},
-                {label: "Raw Permissions", value: userInfo.raw_grant || 'None'}
-            ]
+    const handleLogout = () => {
+        if (auth?.authChoice === "openid") {
+            void userManager.signoutRedirect();
+            void userManager.removeUser();
         }
-    ];
+        localStorage.removeItem("authToken");
+        if (authDispatch) {
+            authDispatch({type: Logout});
+        }
+        navigate("/auth-choice");
+    };
+
+    if (loading) return <LinearProgress/>;
+    if (error) return <Alert severity="error">{String(error)}</Alert>;
 
     return (
-        <div className="p-4 max-w-2xl mx-auto">
-            <Card className="rounded-lg shadow-sm">
-                <CardContent className="space-y-6">
-                    <Typography variant="h5" component="h1" className="font-bold text-gray-800">
-                        My Information
-                    </Typography>
+        <Box sx={{p: 3}}>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: {xs: 'column', lg: 'row'},
+                gap: 3,
+                alignItems: 'stretch'
+            }}>
+                {/* My Information Panel */}
+                <Card
+                    sx={{
+                        flex: 2,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {transform: 'translateY(-2px)', boxShadow: 4}
+                    }}
+                >
+                    <CardContent>
+                        <Box sx={{display: 'flex', alignItems: 'center', mb: 3}}>
+                            <FaUser style={{marginRight: '8px', color: '#1976d2'}}/>
+                            <Typography variant="h5">My Information</Typography>
+                        </Box>
 
-                    {infoSections.map((section, index) => (
-                        <div key={index} className="space-y-3">
-                            <Typography variant="subtitle1" className="font-medium text-gray-600">
-                                {section.title}
+                        {/* Identity */}
+                        <Box>
+                            <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                <FaUser style={{marginRight: '8px', fontSize: '1rem'}}/>
+                                Identity
                             </Typography>
 
-                            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                                {section.items.map((item, i) => (
-                                    <div key={i} className="flex">
-                                        <div className="w-1/3">
-                                            <Typography variant="body2" className="text-gray-500">
-                                                {item.label}
-                                            </Typography>
-                                        </div>
-                                        <div className="w-2/3">
-                                            <Typography variant="body1" className="font-mono">
-                                                {item.value}
-                                            </Typography>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+                            <Box>
+                                <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                    <Typography variant="body2" color="text.secondary">Username</Typography>
+                                    <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                        {userInfo?.name || "N/A"}
+                                    </Typography>
+                                </Box>
 
-                    <div className="space-y-3">
-                        <Typography variant="subtitle1" className="font-medium text-gray-600">
-                            Permission Details
-                        </Typography>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <pre className="text-sm text-gray-800 overflow-x-auto">
-                                {JSON.stringify(userInfo.grant, null, 2)}
-                            </pre>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                                <Box sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    py: 1,
+                                    borderTop: '1px solid',
+                                    borderColor: 'divider'
+                                }}>
+                                    <Typography variant="body2" color="text.secondary">Auth Method</Typography>
+                                    <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                        {userInfo?.auth || "N/A"}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        </Box>
+
+                        {/* Permission Details */}
+                        <Box sx={{mt: 3}}>
+                            <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                <FaLock style={{marginRight: '8px'}}/>
+                                Permission Details
+                            </Typography>
+
+                            <Box sx={{
+                                bgcolor: isDarkMode ? 'background.default' : 'grey.50',
+                                p: 2,
+                                borderRadius: 1
+                            }}>
+                                <Typography variant="body2" color="text.secondary">Raw Permissions</Typography>
+                                <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                    {userInfo?.raw_grant || "None"}
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </CardContent>
+                </Card>
+
+                {/* RIGHT PANEL */}
+                <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
+
+                    {/* Server Info */}
+                    <Card
+                        sx={{
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {transform: 'translateY(-2px)', boxShadow: 4}
+                        }}
+                    >
+                        <CardContent>
+
+                            <Box sx={{display: 'flex', alignItems: 'center', mb: 3}}>
+                                <FaServer style={{marginRight: '8px', color: '#1976d2'}}/>
+                                <Typography variant="h5">Server Information</Typography>
+                            </Box>
+
+                            {/* Connected Node */}
+                            <Box sx={{mb: 3}}>
+                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                    <FaWifi style={{marginRight: '8px'}}/>
+                                    Connected Node
+                                </Typography>
+
+                                <Box>
+                                    <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Node Name
+                                        </Typography>
+                                        <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                            {daemon?.nodename || "Loading..."}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </Box>
+
+                            {/* App Version */}
+                            <Box>
+                                <Typography variant="h6" sx={{mb: 2, display: 'flex', alignItems: 'center'}}>
+                                    <FaCode style={{marginRight: '8px'}}/>
+                                    WebApp Version
+                                </Typography>
+
+                                <Box>
+                                    <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
+                                        <Typography variant="body2" color="text.secondary">Version</Typography>
+                                        <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
+                                            v{appVersion}
+                                        </Typography>
+                                    </Box>
+
+                                    <Box sx={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        py: 1,
+                                        borderTop: '1px solid',
+                                        borderColor: 'divider'
+                                    }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Description
+                                        </Typography>
+                                        <Typography variant="body1" color="text-secondary">
+                                            OM3 WebApp
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </Box>
+                        </CardContent>
+                    </Card>
+
+                    {/* Dark Mode */}
+                    <Button
+                        startIcon={isDarkMode ? <FaSun/> : <FaMoon/>}
+                        onClick={toggleDarkMode}
+                        size="large"
+                        fullWidth
+                        sx={{
+                            backgroundColor: isDarkMode ? "#ff9800" : "#333333",
+                            color: "white",
+                            fontWeight: 'bold',
+                            borderRadius: 2
+                        }}
+                    >
+                        {isDarkMode ? "Light Mode" : "Dark Mode"}
+                    </Button>
+
+                    {/* Logout */}
+                    <Button
+                        startIcon={<FaSignOutAlt/>}
+                        onClick={handleLogout}
+                        size="large"
+                        fullWidth
+                        sx={{
+                            backgroundColor: "red",
+                            color: "white",
+                            fontWeight: 'bold',
+                            borderRadius: 2
+                        }}
+                    >
+                        Logout
+                    </Button>
+                </Box>
+            </Box>
+        </Box>
     );
 };
 

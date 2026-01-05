@@ -54,8 +54,8 @@ jest.mock('@mui/material', () => {
 jest.mock('@mui/icons-material/FiberManualRecord', () => () => (
     <svg data-testid="FiberManualRecordIcon"/>
 ));
-jest.mock('@mui/icons-material/WarningAmber', () => () => (
-    <svg data-testid="WarningAmberIcon"/>
+jest.mock('@mui/icons-material/PriorityHigh', () => () => (
+    <svg data-testid="PriorityHighIcon"/>
 ));
 jest.mock('@mui/icons-material/AcUnit', () => () => <svg data-testid="AcUnitIcon"/>);
 jest.mock('@mui/icons-material/MoreVert', () => () => (
@@ -126,7 +126,6 @@ describe('HeaderSection Component', () => {
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
         expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
         expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
-        expect(screen.queryByTestId('WarningAmberIcon')).not.toBeInTheDocument();
         expect(screen.getByText('placed@node1')).toBeInTheDocument();
     });
 
@@ -141,7 +140,6 @@ describe('HeaderSection Component', () => {
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
         expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
-        expect(screen.getByTestId('WarningAmberIcon')).toBeInTheDocument();
         expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
         expect(screen.queryByText('placed@node1')).not.toBeInTheDocument();
     });
@@ -155,7 +153,7 @@ describe('HeaderSection Component', () => {
         render(<HeaderSection {...props} />);
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getAllByTestId('WarningAmberIcon')).toHaveLength(1);
+        expect(screen.getAllByTestId('PriorityHighIcon')).toHaveLength(1);
         expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
         expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
     });

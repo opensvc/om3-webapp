@@ -2,8 +2,6 @@ import React, {useEffect, useState, useMemo} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
-    Paper,
-    Typography,
     Table,
     TableHead,
     TableRow,
@@ -15,7 +13,6 @@ import {
     Select,
     MenuItem,
     Button,
-    Collapse,
     Tooltip,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -274,68 +271,127 @@ const Heartbeats = () => {
     };
 
     return (
-        <Box sx={{p: 4, position: 'relative'}}>
-            <Paper elevation={3} sx={{p: 3, borderRadius: 2}}>
-                <Typography variant="h4" gutterBottom align="center">
-                    Heartbeats
-                </Typography>
+        <Box
+            sx={{
+                height: "100vh",
+                bgcolor: 'background.default',
+                display: 'flex',
+                flexDirection: 'column',
+                p: 0,
+                position: 'relative',
+                width: '100vw',
+                margin: 0,
+                overflow: 'hidden',
+            }}
+        >
+            <Box
+                sx={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3,
+                    p: 3,
+                    m: 0,
+                    overflow: 'hidden',
+                }}
+            >
+                <Box sx={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 20,
+                    backgroundColor: "background.paper",
+                    pb: 2,
+                    mb: 2,
+                    flexShrink: 0,
+                }}>
+                    <Box sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                    }}>
+                        {/* Left section with Show Filters button and filters */}
+                        <Box sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 2,
+                            flexGrow: 1,
+                            overflowX: "auto",
+                            py: 1
+                        }}>
+                            <Button
+                                onClick={() => setShowFilters(!showFilters)}
+                                sx={{minWidth: 'auto', flexShrink: 0}}
+                            >
+                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                            </Button>
 
-                <Box sx={{position: "sticky", top: 64, zIndex: 20, backgroundColor: "background.paper", pb: 2, mb: 2}}>
-                    <Box sx={{display: "flex", justifyContent: "space-between", mb: 1}}>
-                        <Button onClick={() => setShowFilters(!showFilters)}
-                                startIcon={showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}>
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
-                    </Box>
+                            {showFilters && (
+                                <>
+                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                        <InputLabel>Filter by Running</InputLabel>
+                                        <Select value={filterState} label="Filter by Running"
+                                                onChange={(e) => setFilterState(e.target.value)}>
+                                            <MenuItem value="all">All</MenuItem>
+                                            {availableStates.filter(s => s !== "all").map(state => (
+                                                <MenuItem key={state}
+                                                          value={state}>{state.charAt(0).toUpperCase() + state.slice(1)}</MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
 
-                    <Collapse in={showFilters}>
-                        <Box sx={{display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", mb: 2}}>
-                            <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by Running</InputLabel>
-                                <Select value={filterState} label="Filter by Running"
-                                        onChange={(e) => setFilterState(e.target.value)}>
-                                    <MenuItem value="all">All</MenuItem>
-                                    {availableStates.filter(s => s !== "all").map(state => (
-                                        <MenuItem key={state}
-                                                  value={state}>{state.charAt(0).toUpperCase() + state.slice(1)}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                        <InputLabel>Filter by Beating</InputLabel>
+                                        <Select value={filterBeating} label="Filter by Beating"
+                                                onChange={(e) => setFilterBeating(e.target.value)}>
+                                            <MenuItem value="all">All</MenuItem>
+                                            <MenuItem value="beating">Beating</MenuItem>
+                                            <MenuItem value="stale">Stale</MenuItem>
+                                        </Select>
+                                    </FormControl>
 
-                            <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by Beating</InputLabel>
-                                <Select value={filterBeating} label="Filter by Beating"
-                                        onChange={(e) => setFilterBeating(e.target.value)}>
-                                    <MenuItem value="all">All</MenuItem>
-                                    <MenuItem value="beating">Beating</MenuItem>
-                                    <MenuItem value="stale">Stale</MenuItem>
-                                </Select>
-                            </FormControl>
+                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                        <InputLabel>Filter by Node</InputLabel>
+                                        <Select value={filterNode} label="Filter by Node"
+                                                onChange={(e) => setFilterNode(e.target.value)}>
+                                            <MenuItem value="all">All</MenuItem>
+                                            {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
+                                        </Select>
+                                    </FormControl>
 
-                            <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by Node</InputLabel>
-                                <Select value={filterNode} label="Filter by Node"
-                                        onChange={(e) => setFilterNode(e.target.value)}>
-                                    <MenuItem value="all">All</MenuItem>
-                                    {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
-                                </Select>
-                            </FormControl>
-
-                            <FormControl sx={{minWidth: 200}}>
-                                <InputLabel>Filter by ID</InputLabel>
-                                <Select value={filterId} label="Filter by ID"
-                                        onChange={(e) => setFilterId(e.target.value)}>
-                                    <MenuItem value="all">All</MenuItem>
-                                    {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
-                                </Select>
-                            </FormControl>
+                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                        <InputLabel>Filter by ID</InputLabel>
+                                        <Select value={filterId} label="Filter by ID"
+                                                onChange={(e) => setFilterId(e.target.value)}>
+                                            <MenuItem value="all">All</MenuItem>
+                                            {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
+                                        </Select>
+                                    </FormControl>
+                                </>
+                            )}
                         </Box>
-                    </Collapse>
+                    </Box>
                 </Box>
 
-                <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
-                    <Table size="small">
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}>
+                <TableContainer sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    boxShadow: "none",
+                    border: "none",
+                    position: 'relative',
+                }}>
+                    <Table size="small" sx={{position: 'relative'}}>
+                        <TableHead sx={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 30,
+                            backgroundColor: "background.paper"
+                        }}>
                             <TableRow>
                                 {["RUNNING", "BEATING", "ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].map(label => (
                                     <TableCell
@@ -343,7 +399,9 @@ const Heartbeats = () => {
                                         sx={{
                                             fontWeight: "bold",
                                             textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "left" : "center",
-                                            cursor: "pointer"
+                                            cursor: "pointer",
+                                            paddingLeft: 2,
+                                            paddingRight: 2,
                                         }}
                                         onClick={() => handleSort(label.toLowerCase())}
                                     >
@@ -354,8 +412,8 @@ const Heartbeats = () => {
                                         }}>
                                             {label}
                                             {sortColumn === label.toLowerCase() &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon fontSize="small"/> :
+                                                    <KeyboardArrowDownIcon fontSize="small"/>)}
                                         </Box>
                                     </TableCell>
                                 ))}
@@ -387,9 +445,8 @@ const Heartbeats = () => {
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </Paper>
+            </Box>
 
-            {/* Ajout du EventLogger pour les événements Heartbeats */}
             <EventLogger
                 eventTypes={heartbeatEventTypes}
                 title="Heartbeat Events Logger"

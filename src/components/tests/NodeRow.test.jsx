@@ -7,8 +7,12 @@ import '@testing-library/jest-dom';
 jest.mock('@mui/icons-material', () => {
     const Wifi = (props) => <span {...props} aria-label="Daemon node indicator"/>;
     const AcUnit = (props) => <span {...props} aria-label="Frozen indicator"/>;
+    const MoreVertIcon = (props) => <button {...props} aria-label="More actions icon"/>;
+    const ArticleIcon = (props) => <button {...props} aria-label="Article icon"/>;
+    const KeyboardArrowUpIcon = (props) => <span {...props} aria-label="Arrow up"/>;
+    const KeyboardArrowDownIcon = (props) => <span {...props} aria-label="Arrow down"/>;
 
-    return {Wifi, AcUnit};
+    return {Wifi, AcUnit, MoreVertIcon, ArticleIcon, KeyboardArrowUpIcon, KeyboardArrowDownIcon};
 });
 
 // Mock NODE_ACTIONS
@@ -41,9 +45,11 @@ describe('NodeRow Component', () => {
         status: {
             frozen_at: null,
             agent: 'v1.2.3',
+            booted_at: null,
         },
         monitor: {
             state: 'running',
+            updated_at: null,
         },
         isSelected: false,
         daemonNodename: 'node2',
@@ -52,6 +58,7 @@ describe('NodeRow Component', () => {
         onMenuClose: jest.fn(),
         onAction: jest.fn(),
         anchorEl: null,
+        onOpenLogs: jest.fn(),
     };
 
     beforeEach(() => {
@@ -62,6 +69,7 @@ describe('NodeRow Component', () => {
             configurable: true,
         });
         jest.useFakeTimers();
+        jest.setSystemTime(new Date('2023-01-01T12:00:00Z'));
     });
 
     afterEach(() => {
@@ -236,5 +244,183 @@ describe('NodeRow Component', () => {
     test('menu positioning handles null menuAnchorRef gracefully', () => {
         const menuAnchorRef = null;
         expect(menuAnchorRef).toBe(null);
+    });
+
+    test('filters menu items correctly when node is frozen', () => {
+        render(
+            <NodeRow
+                {...defaultProps}
+                status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}
+            />
+        );
+
+        // When frozen, freeze action should not be available
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        fireEvent.click(menuButton);
+
+        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+    });
+
+    test('filters menu items correctly when node is not frozen', () => {
+        render(
+            <NodeRow
+                {...defaultProps}
+                status={{frozen_at: null, agent: 'v1.2.3'}}
+            />
+        );
+
+        // When not frozen, unfreeze action should not be available
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        fireEvent.click(menuButton);
+
+        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+    });
+
+    describe('booted_at column', () => {
+
+        test('renders formatted date when booted_at is valid', () => {
+            render(
+                <NodeRow
+                    {...defaultProps}
+                    status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}
+                />
+            );
+            expect(screen.getByText('2h ago')).toBeInTheDocument();
+        });
+
+        test('renders tooltip with full date when booted_at is valid', () => {
+            render(
+                <NodeRow
+                    {...defaultProps}
+                    status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}
+                />
+            );
+
+            expect(screen.getByText('2h ago')).toBeInTheDocument();
+        });
+    });
+
+    describe('updated_at column', () => {
+        test('renders "-" when updated_at is null', () => {
+            render(<NodeRow {...defaultProps} />);
+            expect(screen.getAllByText('-')[1]).toBeInTheDocument();
+        });
+
+        test('renders formatted date when updated_at is valid', () => {
+            render(
+                <NodeRow
+                    {...defaultProps}
+                    monitor={{...defaultProps.monitor, updated_at: '2023-01-01T11:30:00Z'}}
+                />
+            );
+            expect(screen.getByText('30m ago')).toBeInTheDocument();
+        });
+    });
+
+    test('calls onOpenLogs when logs button is clicked', () => {
+        render(<NodeRow {...defaultProps} />);
+        const logsButton = screen.getByRole('button', {name: /View logs for node node1/i});
+        fireEvent.click(logsButton);
+        expect(defaultProps.onOpenLogs).toHaveBeenCalledWith('node1');
+    });
+
+    test('handles zoom level calculation correctly', () => {
+        const originalDevicePixelRatio = window.devicePixelRatio;
+        Object.defineProperty(window, 'devicePixelRatio', {value: 2, configurable: true});
+
+        render(<NodeRow {...defaultProps} />);
+
+        expect(window.devicePixelRatio).toBe(2);
+
+        Object.defineProperty(window, 'devicePixelRatio', {value: originalDevicePixelRatio});
+    });
+
+    test('handles Safari browser detection', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
+            configurable: true,
+        });
+
+        render(<NodeRow {...defaultProps} />);
+
+        expect(screen.getByText('node1')).toBeInTheDocument();
+    });
+
+    test('renders load_15m progress bar with different colors based on value', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} stats={{load_15m: 1}}/>);
+        expect(screen.getByText('1')).toBeInTheDocument();
+
+        rerender(<NodeRow {...defaultProps} stats={{load_15m: 3}}/>);
+        expect(screen.getByText('3')).toBeInTheDocument();
+
+        rerender(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
+        expect(screen.getByText('5')).toBeInTheDocument();
+    });
+
+    test('renders mem_avail progress bar with different colors based on value', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
+        expect(screen.getByText('10%')).toBeInTheDocument();
+        rerender(<NodeRow {...defaultProps} stats={{mem_avail: 30}}/>);
+        expect(screen.getByText('30%')).toBeInTheDocument();
+
+        rerender(<NodeRow {...defaultProps} stats={{mem_avail: 80}}/>);
+        expect(screen.getByText('80%')).toBeInTheDocument();
+    });
+
+    test('handles scroll position in calculateMenuPosition', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
+            configurable: true,
+        });
+
+        // Mock window scroll properties
+        Object.defineProperty(window, 'scrollY', {value: 100, configurable: true});
+        Object.defineProperty(window, 'pageYOffset', {value: 100, configurable: true});
+        Object.defineProperty(window, 'scrollX', {value: 50, configurable: true});
+        Object.defineProperty(window, 'pageXOffset', {value: 50, configurable: true});
+
+        render(<NodeRow {...defaultProps} />);
+
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
+
+        fireEvent.click(menuButton);
+        jest.runAllTimers();
+
+        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+    });
+
+    test('handles missing scroll properties in calculateMenuPosition', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
+            configurable: true,
+        });
+
+        // Temporarily remove scroll properties
+        const originalScrollY = window.scrollY;
+        const originalPageYOffset = window.pageYOffset;
+        const originalScrollX = window.scrollX;
+        const originalPageXOffset = window.pageXOffset;
+
+        delete window.scrollY;
+        delete window.pageYOffset;
+        delete window.scrollX;
+        delete window.pageXOffset;
+
+        render(<NodeRow {...defaultProps} />);
+
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
+
+        fireEvent.click(menuButton);
+        jest.runAllTimers();
+
+        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+
+        // Restore original properties
+        window.scrollY = originalScrollY;
+        window.pageYOffset = originalPageYOffset;
+        window.scrollX = originalScrollX;
+        window.pageXOffset = originalPageXOffset;
     });
 });

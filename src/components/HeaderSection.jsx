@@ -12,10 +12,10 @@ import {
     ClickAwayListener,
 } from '@mui/material';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AcUnitIcon from '@mui/icons-material/AcUnit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {orange, blue, red} from '@mui/material/colors';
+import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
+import {blue, red} from '@mui/material/colors';
 import {OBJECT_ACTIONS} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 import logger from '../utils/logger.js';
@@ -96,11 +96,6 @@ const HeaderSection = ({
                                 sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
                             />
                         </Tooltip>
-                        {getObjectStatus().avail === 'warn' && (
-                            <Tooltip title="warn">
-                                <WarningAmberIcon sx={{color: orange[500], fontSize: '1.2rem'}}/>
-                            </Tooltip>
-                        )}
                         {getObjectStatus().frozen === 'frozen' && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>
@@ -108,7 +103,7 @@ const HeaderSection = ({
                         )}
                         {isNotProvisioned && (
                             <Tooltip title="Not Provisioned">
-                                <WarningAmberIcon
+                                <PriorityHighIcon
                                     sx={{color: red[500], fontSize: '1.2rem'}}
                                     aria-label="Object is not provisioned"
                                 />

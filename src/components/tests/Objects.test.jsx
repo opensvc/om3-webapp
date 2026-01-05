@@ -46,7 +46,19 @@ describe('Objects Component', () => {
     const mockRemoveObject = jest.fn();
     const allNodes = ['node1', 'node2'];
 
+    let originalConsoleError;
+
     beforeEach(() => {
+        originalConsoleError = console.error;
+        console.error = jest.fn((message, ...args) => {
+            if (typeof message === 'string' &&
+                (message.includes('A props object containing a "key" prop is being spread into JSX') ||
+                    message.includes('<li> cannot appear as a descendant of <li>'))) {
+                return;
+            }
+            originalConsoleError.call(console, message, ...args);
+        });
+
         jest.clearAllMocks();
 
         // Mock location and navigation
@@ -111,6 +123,7 @@ describe('Objects Component', () => {
     });
 
     afterEach(() => {
+        console.error = originalConsoleError;
         jest.restoreAllMocks();
     });
 
@@ -124,7 +137,7 @@ describe('Objects Component', () => {
 
     const waitForComponentToLoad = async () => {
         await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
     };
 
@@ -336,30 +349,45 @@ describe('Objects Component', () => {
     });
 
     test('handles failed action execution', async () => {
-        global.fetch.mockImplementation(() =>
-            Promise.resolve({
-                ok: false,
-                json: () => Promise.resolve({}),
-            })
-        );
+        const originalConsoleErrorInTest = console.error;
 
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Restart/i));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        console.error = jest.fn((message, ...args) => {
+            if (typeof message === 'string' &&
+                (message.includes('Failed to execute') ||
+                    message.includes('HTTP error!'))) {
+                return;
+            }
+            originalConsoleErrorInTest.call(console, message, ...args);
         });
 
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+        try {
+            global.fetch.mockImplementation(() =>
+                Promise.resolve({
+                    ok: false,
+                    status: 500,
+                })
+            );
 
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
-        });
+            setupComponent();
+            await waitForComponentToLoad();
+
+            await selectObject('test-ns/svc/test1');
+
+            fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+            fireEvent.click(screen.getByText(/Restart/i));
+
+            await waitFor(() => {
+                expect(screen.getByRole('dialog')).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+            await waitFor(() => {
+                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
+            });
+        } finally {
+            console.error = originalConsoleErrorInTest;
+        }
     });
 
     test('executes delete action and removes object', async () => {
@@ -371,7 +399,14 @@ describe('Objects Component', () => {
 
         // Open actions menu and select Delete
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Delete/i));
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const menu = screen.getByRole('menu');
+        const deleteOption = within(menu).getByText(/^Delete$/i);
+        fireEvent.click(deleteOption);
 
         // Wait for DeleteDialog to appear
         await waitFor(() => {
@@ -512,7 +547,6 @@ describe('Objects Component', () => {
 
         // Check filters are visible initially
         const toggleButton = await screen.findByRole('button', {name: /filters/i});
-        expect(toggleButton).toHaveTextContent('Hide filters');
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
 
         // Click to hide filters
@@ -520,17 +554,13 @@ describe('Objects Component', () => {
 
         // Check filters are hidden
         await waitFor(() => {
-            expect(toggleButton).toHaveTextContent('Show filters');
+            expect(toggleButton).toHaveTextContent('Filters');
         });
 
         expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
 
         // Click to show filters again
         fireEvent.click(toggleButton);
-
-        await waitFor(() => {
-            expect(toggleButton).toHaveTextContent('Hide filters');
-        });
 
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
     });
@@ -580,7 +610,7 @@ describe('Objects Component', () => {
         setupComponent();
 
         await waitFor(() => {
-            expect(screen.getByText('Objects')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
 
         // Only header row should be present

@@ -24,19 +24,23 @@ export const decodeToken = (token) => {
             // atob decodes base64 encoded string
             return atob(base64);
         } catch (e) {
-            throw new Error('Failed to decode base64url string');
+            return null; // Return null instead of throwing
         }
     };
 
     try {
         const parts = token.split('.');
         if (parts.length !== 3) {
-            throw new Error('Invalid token format: expected 3 parts');
+            const error = new Error('Invalid token format: expected 3 parts');
+            logger.error('Error decoding token:', error);
+            return null;
         }
         const payloadBase64 = parts[1];
         const decodedPayload = base64UrlDecode(payloadBase64);
         if (!decodedPayload) {
-            throw new Error('Failed to decode payload');
+            const error = new Error('Failed to decode payload');
+            logger.error('Error decoding token:', error);
+            return null;
         }
         return JSON.parse(decodedPayload);
     } catch (error) {

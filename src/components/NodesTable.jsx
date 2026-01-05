@@ -45,7 +45,6 @@ const NodesTable = () => {
     const nodeStats = useEventStore((state) => state.nodeStats);
     const nodeMonitor = useEventStore((state) => state.nodeMonitor);
     const theme = useTheme();
-    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
     const [anchorEls, setAnchorEls] = useState({});
@@ -144,7 +143,6 @@ const NodesTable = () => {
             }
             document.body.style.cursor = "default";
             document.body.style.userSelect = "";
-            document.body.style.webkitUserSelect = "";
         };
 
         if (isTouchEvent) {
@@ -158,13 +156,15 @@ const NodesTable = () => {
 
         document.body.style.cursor = "ew-resize";
         document.body.style.userSelect = "none";
-        document.body.style.webkitUserSelect = "none";
     };
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
+            // Handle the promise properly
+            fetchNodes(token).catch(error => {
+                logger.error("Failed to fetch nodes:", error);
+            });
             startEventReception(token, nodeEventTypes);
         }
 
@@ -265,7 +265,7 @@ const NodesTable = () => {
                 }
                 successCount++;
             } catch (error) {
-                logger.error(`Failed to execute ${action} on ${node}:`, error);
+                logger.error(`Failed to execute ${action} on ${node}: ${error.message}`);
                 errorCount++;
             }
         });
@@ -314,34 +314,32 @@ const NodesTable = () => {
                 diff = (nodeStats[a]?.swap_avail || 0) - (nodeStats[b]?.swap_avail || 0);
             } else if (sortColumn === "version") {
                 diff = (nodeStatus[a]?.agent || '').localeCompare(nodeStatus[b]?.agent || '');
+            } else if (sortColumn === "booted_at") {
+                const bootedA = nodeStatus[a]?.booted_at || "0001-01-01T00:00:00Z";
+                const bootedB = nodeStatus[b]?.booted_at || "0001-01-01T00:00:00Z";
+                diff = new Date(bootedA).getTime() - new Date(bootedB).getTime();
+            } else if (sortColumn === "updated_at") {
+                const updatedA = nodeMonitor[a]?.updated_at || "0001-01-01T00:00:00Z";
+                const updatedB = nodeMonitor[b]?.updated_at || "0001-01-01T00:00:00Z";
+                diff = new Date(updatedA).getTime() - new Date(updatedB).getTime();
             }
             return sortDirection === "asc" ? diff : -diff;
         });
     }, [nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
 
     // Menu props configuration
-    const menuProps = {
-        anchorOrigin: {
-            vertical: "bottom",
-            horizontal: "right",
-        },
-        transformOrigin: {
-            vertical: "top",
-            horizontal: "right",
-        },
-        sx: isSafari
-            ? {
-                "& .MuiMenu-paper": {
-                    position: "fixed",
-                    top: `${menuPosition.top}px !important`,
-                    left: `${menuPosition.left}px !important`,
-                    transform: "translateX(-100%)",
-                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                    zIndex: 1300,
-                },
-            }
-            : {},
-    };
+    const menuSx = isSafari
+        ? {
+            "& .MuiMenu-paper": {
+                position: "fixed",
+                top: `${menuPosition.top}px !important`,
+                left: `${menuPosition.left}px !important`,
+                transform: "translateX(-100%)",
+                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                zIndex: 1300,
+            },
+        }
+        : {};
 
     const handleSort = (column) => {
         if (sortColumn === column) {
@@ -359,22 +357,23 @@ const NodesTable = () => {
                 bgcolor: "background.default",
                 display: "flex",
                 flexDirection: "row",
-                width: "100%",
+                width: "100vw",
                 overflow: "hidden",
-                p: 2,
-                gap: 2,
+                p: 0,
+                margin: 0,
             }}
         >
             <Box
                 sx={{
-                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px - 16px)` : "1 1 100%",
-                    maxWidth: isWideScreen ? "1600px" : "1000px",
+                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
+                    width: "100%",
                     bgcolor: "background.paper",
                     border: "2px solid",
                     borderColor: "divider",
-                    borderRadius: 3,
+                    borderRadius: 0,
                     boxShadow: 3,
                     p: 3,
+                    m: 0,
                     overflow: "auto",
                     transition: theme.transitions.create("flex", {
                         easing: theme.transitions.easing.sharp,
@@ -382,25 +381,50 @@ const NodesTable = () => {
                     }),
                 }}
             >
-                <Typography variant="h4" gutterBottom align="center">
-                    Node Status
-                </Typography>
+                {/* Container for the actions button */}
+                <Box
+                    sx={{
+                        mb: 2,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 2,
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 10,
+                        backgroundColor: "background.paper",
+                        pt: 2,
+                        pb: 1
+                    }}
+                >
+                    {/* Left section  */}
+                    <Box sx={{flexGrow: 1}}></Box>
 
-                <Box sx={{mb: 2, display: "flex", gap: 2}}>
+                    {/* Right section */}
                     <Button
                         variant="contained"
                         color="primary"
                         onClick={handleActionsMenuOpen}
                         disabled={selectedNodes.length === 0}
                         ref={actionsMenuAnchorRef}
+                        sx={{flexShrink: 0}}
                     >
                         Actions on selected nodes
                     </Button>
+
                     <Menu
                         anchorEl={actionsMenuAnchor}
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
-                        {...menuProps}
+                        anchorOrigin={{
+                            vertical: "bottom",
+                            horizontal: "right",
+                        }}
+                        transformOrigin={{
+                            vertical: "top",
+                            horizontal: "right",
+                        }}
+                        sx={menuSx}
                     >
                         {filteredMenuItems.map(({name, icon}) => (
                             <MenuItem
@@ -430,12 +454,12 @@ const NodesTable = () => {
                     </Box>
                 ) : (
                     <TableContainer sx={{maxHeight: "60vh", overflow: "auto", boxShadow: "none", border: "none"}}>
-                        <Table sx={{minWidth: 900}} aria-label="nodes table">
+                        <Table sx={{minWidth: 1100}} aria-label="nodes table">
                             <TableHead
                                 sx={{position: "sticky", top: 0, zIndex: 1, backgroundColor: "background.paper"}}
                             >
                                 <TableRow>
-                                    <TableCell>
+                                    <TableCell align="center" sx={{width: 50}}>
                                         <Checkbox
                                             checked={selectedNodes.length === Object.keys(nodeStatus).length}
                                             onChange={(e) =>
@@ -443,64 +467,107 @@ const NodesTable = () => {
                                             }
                                         />
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("name")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Name</strong>
                                             {sortColumn === "name" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("state")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("state")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>State</strong>
                                             {sortColumn === "state" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("score")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("score")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Score</strong>
                                             {sortColumn === "score" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("load_15m")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("load_15m")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Load (15m)</strong>
                                             {sortColumn === "load_15m" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("mem_avail")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("mem_avail")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Mem Avail</strong>
                                             {sortColumn === "mem_avail" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("swap_avail")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("swap_avail")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Swap Avail</strong>
                                             {sortColumn === "swap_avail" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell onClick={() => handleSort("version")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
+                                    <TableCell
+                                        onClick={() => handleSort("version")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
                                             <strong>Version</strong>
                                             {sortColumn === "version" &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
                                                     <KeyboardArrowDownIcon/>)}
                                         </Box>
                                     </TableCell>
-                                    <TableCell><strong>Actions</strong></TableCell>
-                                    <TableCell><strong>Logs</strong></TableCell>
+                                    <TableCell
+                                        onClick={() => handleSort("booted_at")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Booted At</strong>
+                                            {sortColumn === "booted_at" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell
+                                        onClick={() => handleSort("updated_at")}
+                                        sx={{cursor: "pointer", textAlign: "center"}}
+                                    >
+                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
+                                            <strong>Updated At</strong>
+                                            {sortColumn === "updated_at" &&
+                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
+                                                    <KeyboardArrowDownIcon/>)}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell align="center"><strong>Actions</strong></TableCell>
+                                    <TableCell align="center"><strong>Logs</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -599,7 +666,7 @@ const NodesTable = () => {
                         <CloseIcon/>
                     </IconButton>
                 </Box>
-                {selectedNodeForLogs && (
+                {selectedNodeForLogs !== null && (
                     <LogsViewer
                         nodename={selectedNodeForLogs}
                         type="node"

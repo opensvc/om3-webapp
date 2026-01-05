@@ -6,7 +6,7 @@ import logger from './utils/logger.js';
 import {cleanup} from "@testing-library/react";
 
 // Constants for event names
-const EVENT_TYPES = {
+export const EVENT_TYPES = {
     NODE_STATUS_UPDATED: 'NodeStatusUpdated',
     NODE_MONITOR_UPDATED: 'NodeMonitorUpdated',
     NODE_STATS_UPDATED: 'NodeStatsUpdated',
@@ -31,13 +31,13 @@ const OBJECT_SPECIFIC_FILTERS = [
 ];
 
 let currentEventSource = null;
+let currentLoggerEventSource = null;
 let currentToken = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 
-// Optimized equality check to avoid unnecessary JSON serialization for simple objects
 const isEqual = (a, b) => {
     if (a === b) return true;
     if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
@@ -153,7 +153,6 @@ const navigationService = {
     }
 };
 
-// Create EventSource with improved reconnection logic
 export const createEventSource = (url, token) => {
     if (!token) {
         logger.error('❌ Missing token for EventSource!');
@@ -181,25 +180,10 @@ export const createEventSource = (url, token) => {
     currentEventSource.onopen = () => {
         logger.info('✅ EventSource connection established');
         reconnectAttempts = 0;
-
-        // Log connection event
-        useEventLogStore.getState().addEventLog('CONNECTION_OPENED', {
-            url,
-            timestamp: new Date().toISOString()
-        });
     };
 
     currentEventSource.onerror = (error) => {
         logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
-
-        // Log error event
-        useEventLogStore.getState().addEventLog('CONNECTION_ERROR', {
-            error: error.message,
-            status: error.status,
-            readyState: currentEventSource?.readyState,
-            url,
-            timestamp: new Date().toISOString()
-        });
 
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected');
@@ -231,14 +215,6 @@ export const createEventSource = (url, token) => {
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-            // Log reconnection attempt
-            useEventLogStore.getState().addEventLog('RECONNECTION_ATTEMPT', {
-                attempt: reconnectAttempts,
-                maxAttempts: MAX_RECONNECT_ATTEMPTS,
-                delay,
-                timestamp: new Date().toISOString()
-            });
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -247,35 +223,18 @@ export const createEventSource = (url, token) => {
             }, delay);
         } else {
             logger.error('❌ Max reconnection attempts reached');
-            useEventLogStore.getState().addEventLog('MAX_RECONNECTIONS_REACHED', {
-                maxAttempts: MAX_RECONNECT_ATTEMPTS,
-                timestamp: new Date().toISOString()
-            });
             navigationService.redirectToAuth();
         }
     };
 
-    // Event handlers with type checking and logging
+    // Event handlers with type checking
     const addEventListener = (eventType, handler) => {
         currentEventSource.addEventListener(eventType, (event) => {
             let parsed;
             try {
                 parsed = JSON.parse(event.data);
-
-                // Log the event
-                useEventLogStore.getState().addEventLog(eventType, {
-                    ...parsed,
-                    _rawEvent: event.data
-                });
-
             } catch (e) {
                 logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
-
-                // Log parsing errors
-                useEventLogStore.getState().addEventLog(`${eventType}_PARSE_ERROR`, {
-                    error: e.message,
-                    rawData: event.data
-                });
                 return;
             }
             handler(parsed);
@@ -376,8 +335,111 @@ export const createEventSource = (url, token) => {
         scheduleFlush();
     });
 
-    // attach cleanup to returned object (so callers can call .cleanup())
+    // attach cleanup to returned object
     const returned = currentEventSource;
+    returned._cleanup = cleanup;
+    return returned;
+};
+
+// Create Logger EventSource (only for logging)
+export const createLoggerEventSource = (url, token, filters) => {
+    if (!token) {
+        logger.error('❌ Missing token for Logger EventSource!');
+        return null;
+    }
+
+    if (currentLoggerEventSource) {
+        logger.info('Closing existing Logger EventSource');
+        currentLoggerEventSource.close();
+    }
+
+    logger.info('🔗 Creating Logger EventSource with URL:', url);
+    currentLoggerEventSource = new EventSourcePolyfill(url, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'text/event-stream',
+        },
+        withCredentials: true,
+    });
+
+    currentLoggerEventSource.onopen = () => {
+        logger.info('✅ Logger EventSource connection established');
+        reconnectAttempts = 0;
+    };
+
+    currentLoggerEventSource.onerror = (error) => {
+        logger.error('🚨 Logger EventSource error:', error, 'URL:', url, 'readyState:', currentLoggerEventSource?.readyState);
+
+        if (error.status === 401) {
+            logger.warn('🔐 Authentication error detected in logger');
+            const newToken = localStorage.getItem('authToken');
+            if (newToken && newToken !== token) {
+                logger.info('🔄 New token available, updating Logger EventSource');
+                updateLoggerEventSourceToken(newToken);
+                return;
+            }
+            if (window.oidcUserManager) {
+                window.oidcUserManager.signinSilent()
+                    .then(user => {
+                        const refreshedToken = user.access_token;
+                        localStorage.setItem('authToken', refreshedToken);
+                        localStorage.setItem('tokenExpiration', user.expires_at.toString());
+                        updateLoggerEventSourceToken(refreshedToken);
+                    })
+                    .catch(silentError => {
+                        logger.error('❌ Silent renew failed for logger:', silentError);
+                        navigationService.redirectToAuth();
+                    });
+                return;
+            }
+        }
+
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
+            logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+            setTimeout(() => {
+                const currentToken = getCurrentToken();
+                if (currentToken) {
+                    createLoggerEventSource(url, currentToken, filters);
+                }
+            }, delay);
+        } else {
+            logger.error('❌ Max reconnection attempts reached for logger');
+            navigationService.redirectToAuth();
+        }
+    };
+
+    // Event handlers for logging only
+    const addEventListener = (eventType, handler) => {
+        currentLoggerEventSource.addEventListener(eventType, (event) => {
+            handler(event);
+        });
+    };
+
+    // Add listeners only for subscribed event types
+    filters.filter(f => Object.values(EVENT_TYPES).includes(f)).forEach(eventType => {
+        addEventListener(eventType, (event) => {
+            let parsed;
+            try {
+                parsed = JSON.parse(event.data);
+                useEventLogStore.getState().addEventLog(eventType, {
+                    ...parsed,
+                    _rawEvent: event.data
+                });
+            } catch (e) {
+                logger.warn(`⚠️ Invalid JSON in ${eventType} event for logger:`, event.data);
+                useEventLogStore.getState().addEventLog(`${eventType}_PARSE_ERROR`, {
+                    error: e.message,
+                    rawData: event.data
+                });
+            }
+        });
+    });
+
+    // attach cleanup
+    const returned = currentLoggerEventSource;
     returned._cleanup = cleanup;
     return returned;
 };
@@ -394,16 +456,21 @@ export const updateEventSourceToken = (newToken) => {
     }
 };
 
+// Update Logger EventSource token
+export const updateLoggerEventSourceToken = (newToken) => {
+    if (!newToken) return;
+    if (currentLoggerEventSource && currentLoggerEventSource.readyState !== EventSource.CLOSED) {
+        logger.info('🔄 Token updated, restarting Logger EventSource');
+        const currentUrl = currentLoggerEventSource.url;
+        closeLoggerEventSource();
+        setTimeout(() => createLoggerEventSource(currentUrl, newToken), 100);
+    }
+};
+
 // Close EventSource
 export const closeEventSource = () => {
     if (currentEventSource) {
         logger.info('Closing current EventSource');
-
-        // Log closure
-        useEventLogStore.getState().addEventLog('CONNECTION_CLOSED', {
-            timestamp: new Date().toISOString()
-        });
-
         if (typeof currentEventSource._cleanup === 'function') {
             try {
                 currentEventSource._cleanup();
@@ -415,6 +482,22 @@ export const closeEventSource = () => {
         currentEventSource = null;
         currentToken = null;
         reconnectAttempts = 0;
+    }
+};
+
+// Close Logger EventSource
+export const closeLoggerEventSource = () => {
+    if (currentLoggerEventSource) {
+        logger.info('Closing current Logger EventSource');
+        if (typeof currentLoggerEventSource._cleanup === 'function') {
+            try {
+                currentLoggerEventSource._cleanup();
+            } catch (e) {
+                logger.debug('Error during logger eventSource cleanup', e);
+            }
+        }
+        currentLoggerEventSource.close();
+        currentLoggerEventSource = null;
     }
 };
 
@@ -430,13 +513,34 @@ export const configureEventSource = (token, objectName = null, filters = DEFAULT
     currentEventSource = createEventSource(url, token);
 };
 
-// Start Event Reception
+// Start Event Reception (main)
 export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
         return;
     }
     configureEventSource(token, null, filters);
+};
+
+// Configure Logger EventSource
+export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
+    if (!token) {
+        logger.error('❌ No token provided for Logger SSE!');
+        return;
+    }
+    const queryString = createQueryString(filters, objectName);
+    const url = `${URL_NODE_EVENT}?${queryString}`;
+    closeLoggerEventSource();
+    currentLoggerEventSource = createLoggerEventSource(url, token, filters);
+};
+
+// Start Logger Reception
+export const startLoggerReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
+    if (!token) {
+        logger.error('❌ No token provided for Logger SSE!');
+        return;
+    }
+    configureLoggerEventSource(token, objectName, filters);
 };
 
 // Export navigation service for external use

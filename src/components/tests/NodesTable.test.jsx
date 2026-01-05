@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import NodesTable from '../NodesTable.jsx';
 import * as useFetchDaemonStatusModule from '../../hooks/useFetchDaemonStatus.jsx';
 import * as useEventStoreModule from '../../hooks/useEventStore.js';
@@ -88,7 +88,7 @@ describe('NodesTable', () => {
     beforeEach(() => {
         jest.spyOn(useFetchDaemonStatusModule, 'default').mockReturnValue({
             daemon: {nodename: 'node-1'},
-            fetchNodes: jest.fn(),
+            fetchNodes: jest.fn(() => Promise.resolve()),
         });
         jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
             selector({
@@ -112,6 +112,10 @@ describe('NodesTable', () => {
         jest.spyOn(eventSourceManager, 'startEventReception').mockImplementation(() => {
         });
         jest.spyOn(eventSourceManager, 'closeEventSource').mockImplementation(() => {
+        });
+        jest.spyOn(eventSourceManager, 'startLoggerReception').mockImplementation(() => {
+        });
+        jest.spyOn(eventSourceManager, 'closeLoggerEventSource').mockImplementation(() => {
         });
         localStorage.setItem('authToken', 'test-token');
     });
@@ -195,6 +199,8 @@ describe('NodesTable', () => {
     });
 
     test('handles partial success in handleDialogConfirm', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
         global.fetch = jest.fn((url) =>
             url.includes('node-1')
                 ? Promise.resolve({ok: true, json: () => ({})})
@@ -213,6 +219,12 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/⚠️ 'Freeze' partially succeeded: 1 ok, 1 errors\./i)).toBeInTheDocument();
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to execute freeze on node-2: HTTP error')
+            );
+        });
+        consoleErrorSpy.mockRestore();
     });
 
     test('logs error on HTTP failure in handleDialogConfirm', async () => {
@@ -251,6 +263,8 @@ describe('NodesTable', () => {
     });
 
     test('shows error snackbar if all requests fail', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
         global.fetch = jest.fn(() => Promise.reject(new Error('fail')));
         renderWithRouter(<NodesTable/>);
         const freezeButtons = await screen.findAllByText('Freeze');
@@ -260,6 +274,12 @@ describe('NodesTable', () => {
         fireEvent.click(confirmBtn);
 
         expect(await screen.findByText(/❌ 'Freeze' failed on all 1 node\(s\)\./i)).toBeInTheDocument();
+        await waitFor(() => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to execute freeze on node-1: fail')
+            );
+        });
+        consoleErrorSpy.mockRestore();
     });
 
     test('selects all nodes using header checkbox', async () => {
@@ -614,7 +634,9 @@ describe('NodesTable', () => {
         fireEvent.click(checkboxes[1]); // select node-1
         const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
         fireEvent.click(actionsButton);
-        jest.advanceTimersByTime(100);
+        await act(async () => {
+            jest.advanceTimersByTime(100);
+        });
         await screen.findByRole('menu');
         // Close menu
         fireEvent.keyDown(screen.getByRole('presentation'), {key: 'Escape'});
@@ -650,5 +672,406 @@ describe('NodesTable', () => {
 
         fireEvent.mouseUp(document);
         expect(document.body.style.cursor).toBe('default');
+    });
+
+    test('handleAction without nodename closes actions menu', async () => {
+        renderWithRouter(<NodesTable/>);
+        const checkboxes = await screen.findAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]);
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        fireEvent.click(actionsButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const freezeMenuItem = screen.getByRole('menuitem', {name: /^Freeze$/i});
+        fireEvent.click(freezeMenuItem);
+
+        await waitFor(() => {
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handleAction with nodename closes node menu', async () => {
+        renderWithRouter(<NodesTable/>);
+        const freezeButtons = await screen.findAllByText('Freeze');
+        fireEvent.click(freezeButtons[0]);
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        expect(screen.getByRole('dialog')).toHaveTextContent('Confirm Freeze Action on node node-1');
+    });
+
+    test('calculateMenuPosition handles null anchorRef', () => {
+        const {rerender} = renderWithRouter(<NodesTable/>);
+        expect(() => {
+            rerender(<div>Test</div>);
+            rerender(<BrowserRouter><NodesTable/></BrowserRouter>);
+        }).not.toThrow();
+    });
+
+    test('handleDialogConfirm with null pendingAction does nothing', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = jest.fn(() => Promise.resolve({ok: true}));
+
+        renderWithRouter(<NodesTable/>);
+
+        const freezeButtons = await screen.findAllByText('Freeze');
+        fireEvent.click(freezeButtons[0]);
+
+        const cancelBtn = screen.getByText('Cancel');
+        fireEvent.click(cancelBtn);
+
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        global.fetch = originalFetch;
+    });
+
+    test('handleSort for booted_at column', async () => {
+        jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
+            selector({
+                nodeStatus: {
+                    'node-1': {agent: 'v1.0', booted_at: '2023-01-03T00:00:00Z'},
+                    'node-2': {agent: 'v2.0', booted_at: '2023-01-01T00:00:00Z'},
+                    'node-3': {agent: 'v3.0', booted_at: '2023-01-02T00:00:00Z'},
+                },
+                nodeStats: {
+                    'node-1': {},
+                    'node-2': {},
+                    'node-3': {},
+                },
+                nodeMonitor: {
+                    'node-1': {state: 'idle'},
+                    'node-2': {state: 'busy'},
+                    'node-3': {state: 'idle'},
+                },
+            })
+        );
+
+        renderWithRouter(<NodesTable/>);
+
+        const bootedAtHeader = screen.getByText('Booted At');
+        fireEvent.click(bootedAtHeader);
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-2');
+            expect(rows[1]).toHaveTextContent('node-3');
+            expect(rows[2]).toHaveTextContent('node-1');
+        });
+    });
+
+    test('handleSort for updated_at column', async () => {
+        jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
+            selector({
+                nodeStatus: {
+                    'node-1': {agent: 'v1.0'},
+                    'node-2': {agent: 'v2.0'},
+                    'node-3': {agent: 'v3.0'},
+                },
+                nodeStats: {
+                    'node-1': {},
+                    'node-2': {},
+                    'node-3': {},
+                },
+                nodeMonitor: {
+                    'node-1': {state: 'idle', updated_at: '2023-01-03T00:00:00Z'},
+                    'node-2': {state: 'busy', updated_at: '2023-01-01T00:00:00Z'},
+                    'node-3': {state: 'idle', updated_at: '2023-01-02T00:00:00Z'},
+                },
+            })
+        );
+
+        renderWithRouter(<NodesTable/>);
+
+        const updatedAtHeader = screen.getByText('Updated At');
+        fireEvent.click(updatedAtHeader);
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-2');
+            expect(rows[1]).toHaveTextContent('node-3');
+            expect(rows[2]).toHaveTextContent('node-1');
+        });
+    });
+
+    test('handleSort for version column with empty strings', async () => {
+        jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
+            selector({
+                nodeStatus: {
+                    'node-1': {agent: ''},
+                    'node-2': {agent: 'v2.0'},
+                    'node-3': {agent: 'v1.0'},
+                },
+                nodeStats: {
+                    'node-1': {},
+                    'node-2': {},
+                    'node-3': {},
+                },
+                nodeMonitor: {
+                    'node-1': {state: 'idle'},
+                    'node-2': {state: 'busy'},
+                    'node-3': {state: 'idle'},
+                },
+            })
+        );
+
+        renderWithRouter(<NodesTable/>);
+
+        const versionHeader = screen.getByText('Version');
+        fireEvent.click(versionHeader);
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-1');
+            expect(rows[1]).toHaveTextContent('node-3');
+            expect(rows[2]).toHaveTextContent('node-2');
+        });
+    });
+
+    test('handleSort toggles direction when same column clicked', async () => {
+        renderWithRouter(<NodesTable/>);
+
+        const nameHeaders = screen.getAllByText('Name');
+        const nameHeader = nameHeaders[0];
+
+        await waitFor(() => {
+            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+        });
+
+        fireEvent.click(nameHeader);
+        await waitFor(() => {
+            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+        });
+
+        fireEvent.click(nameHeader);
+        await waitFor(() => {
+            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+        });
+    });
+
+    test('handleSort sets new column with ascending direction', async () => {
+        renderWithRouter(<NodesTable/>);
+
+        const nameHeader = screen.getAllByText('Name')[0];
+        const scoreHeader = screen.getAllByText('Score')[0];
+
+        fireEvent.click(nameHeader);
+        await waitFor(() => {
+            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+        });
+
+        fireEvent.click(scoreHeader);
+        await waitFor(() => {
+            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+        });
+    });
+
+    test('getZoomLevel returns 1 when devicePixelRatio is undefined', () => {
+        const originalDevicePixelRatio = window.devicePixelRatio;
+        delete window.devicePixelRatio;
+
+        renderWithRouter(<NodesTable/>);
+
+        expect(screen.getByText('node-1')).toBeInTheDocument();
+
+        window.devicePixelRatio = originalDevicePixelRatio;
+    });
+
+    test('startResizing with touch events', async () => {
+        jest.useFakeTimers();
+
+        Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
+        renderWithRouter(<NodesTable/>);
+
+        const openLogsButtons = screen.getAllByText('Open Logs');
+        fireEvent.click(openLogsButtons[0]);
+
+        const resizeHandle = screen.getByLabelText('Resize drawer');
+
+        const touchStartEvent = new TouchEvent('touchstart', {
+            touches: [{clientX: 800}],
+            bubbles: true,
+            cancelable: true
+        });
+
+        Object.defineProperty(touchStartEvent, 'preventDefault', {
+            value: jest.fn(),
+            writable: true
+        });
+
+        fireEvent(resizeHandle, touchStartEvent);
+
+        expect(document.body.style.cursor).toBe('ew-resize');
+
+        const touchMoveEvent = new TouchEvent('touchmove', {
+            touches: [{clientX: 750}],
+            bubbles: true
+        });
+        await act(async () => {
+            fireEvent(document, touchMoveEvent);
+        });
+
+        const touchMoveEventMin = new TouchEvent('touchmove', {
+            touches: [{clientX: 1200}],
+            bubbles: true
+        });
+        await act(async () => {
+            fireEvent(document, touchMoveEventMin);
+        });
+
+        const touchMoveEventMax = new TouchEvent('touchmove', {
+            touches: [{clientX: 400}],
+            bubbles: true
+        });
+        await act(async () => {
+            fireEvent(document, touchMoveEventMax);
+        });
+
+        const touchEndEvent = new Event('touchend', {bubbles: true});
+        await act(async () => {
+            fireEvent(document, touchEndEvent);
+        });
+
+        expect(document.body.style.cursor).toBe('default');
+
+        jest.useRealTimers();
+    });
+
+    test('startResizing handles touch cancel event', async () => {
+        jest.useFakeTimers();
+
+        Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
+        renderWithRouter(<NodesTable/>);
+
+        const openLogsButtons = screen.getAllByText('Open Logs');
+        fireEvent.click(openLogsButtons[0]);
+
+        const resizeHandle = screen.getByLabelText('Resize drawer');
+
+        const touchStartEvent = new TouchEvent('touchstart', {
+            touches: [{clientX: 800}],
+            bubbles: true,
+            cancelable: true
+        });
+
+        Object.defineProperty(touchStartEvent, 'preventDefault', {
+            value: jest.fn(),
+            writable: true
+        });
+
+        fireEvent(resizeHandle, touchStartEvent);
+
+        const touchCancelEvent = new Event('touchcancel', {bubbles: true});
+        await act(async () => {
+            fireEvent(document, touchCancelEvent);
+        });
+
+        expect(document.body.style.cursor).toBe('default');
+
+        jest.useRealTimers();
+    });
+
+    test('menu props for Safari browser', async () => {
+        const originalUserAgent = navigator.userAgent;
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
+            configurable: true,
+        });
+
+        jest.useFakeTimers();
+
+        renderWithRouter(<NodesTable/>);
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]);
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        fireEvent.click(actionsButton);
+
+        await act(async () => {
+            jest.advanceTimersByTime(100);
+        });
+
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        jest.useRealTimers();
+        Object.defineProperty(navigator, 'userAgent', {
+            value: originalUserAgent,
+            configurable: true,
+        });
+    });
+
+    test('handleActionsMenuClose resets state', async () => {
+        renderWithRouter(<NodesTable/>);
+
+        const checkboxes = await screen.findAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]);
+        const actionsButton = screen.getByRole('button', {name: /actions on selected nodes/i});
+        fireEvent.click(actionsButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const popover = screen.getByRole('presentation');
+        fireEvent.keyDown(popover, {key: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        });
+
+        expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    });
+
+    test('sortedNodes handles missing nodeStats and nodeMonitor', async () => {
+        jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
+            selector({
+                nodeStatus: {
+                    'node-1': {agent: 'v1.0', booted_at: '2023-01-01T00:00:00Z'},
+                    'node-2': {agent: 'v2.0', booted_at: '2023-01-02T00:00:00Z'},
+                },
+                nodeStats: {
+                    'node-1': {score: 100, load_15m: 1.0, mem_avail: 50, swap_avail: 30},
+                },
+                nodeMonitor: {
+                    'node-1': {state: 'idle', updated_at: '2023-01-03T00:00:00Z'},
+                },
+            })
+        );
+
+        renderWithRouter(<NodesTable/>);
+
+        expect(screen.getByText('node-1')).toBeInTheDocument();
+        expect(screen.getByText('node-2')).toBeInTheDocument();
+
+        const scoreHeader = screen.getByText('Score');
+        fireEvent.click(scoreHeader);
+
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-2');
+            expect(rows[1]).toHaveTextContent('node-1');
+        });
+    });
+
+    test('handleCloseLogsDrawer resets logs state', async () => {
+        renderWithRouter(<NodesTable/>);
+
+        const openLogsButtons = await screen.findAllByText('Open Logs');
+        fireEvent.click(openLogsButtons[0]);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
+        });
+
+        const closeButtons = screen.getAllByTestId('CloseIcon');
+        fireEvent.click(closeButtons[0]);
+
+        await waitFor(() => {
+            expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument();
+        });
     });
 });

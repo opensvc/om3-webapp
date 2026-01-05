@@ -313,8 +313,8 @@ describe('WhoAmI Component', () => {
     });
 
     test('handles logout with openid auth', async () => {
-        const mockSignoutRedirect = jest.fn();
-        const mockRemoveUser = jest.fn();
+        const mockSignoutRedirect = jest.fn().mockResolvedValue(undefined);
+        const mockRemoveUser = jest.fn().mockResolvedValue(undefined);
 
         require('../../context/OidcAuthContext.tsx').useOidc.mockReturnValue({
             userManager: {
@@ -340,8 +340,14 @@ describe('WhoAmI Component', () => {
         const logoutButton = screen.getByRole('button', {name: /logout/i});
         fireEvent.click(logoutButton);
 
-        expect(mockSignoutRedirect).toHaveBeenCalled();
-        expect(mockRemoveUser).toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockSignoutRedirect).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
+            expect(mockRemoveUser).toHaveBeenCalled();
+        });
+
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'LOGOUT'});
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');

@@ -17,9 +17,21 @@ import axios from "axios";
 import {URL_POOL} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 
+/**
+ * @typedef {Object} Pool
+ * @property {string} [name]
+ * @property {string} [type]
+ * @property {number} [volume_count]
+ * @property {number} [size]
+ * @property {number} [used]
+ * @property {string} [head]
+ */
+
 const Pools = () => {
+    /** @type {[Pool[], function]} */
     const [pools, setPools] = useState([]);
     const [loading, setLoading] = useState(true);
+    /** @type {[string|null, function]} */
     const [error, setError] = useState(null);
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
@@ -53,13 +65,14 @@ const Pools = () => {
             }
         };
 
-        fetchPools();
+        void fetchPools();
         return () => {
             isMounted = false;
         };
     }, []);
 
     // Memoize sorted pools to optimize performance
+    /** @type {Pool[]} */
     const sortedPools = useMemo(() => {
         return [...pools].sort((a, b) => {
             let diff = 0;
@@ -102,7 +115,7 @@ const Pools = () => {
                 logger.error("Error retrieving pools", err);
             }
         };
-        fetchPools();
+        void fetchPools();
     };
 
     const handleSort = (column) => {
@@ -112,6 +125,33 @@ const Pools = () => {
             setSortColumn(column);
             setSortDirection("asc");
         }
+    };
+
+    const renderTableRows = () => {
+        if (sortedPools.length === 0) {
+            return (
+                <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{color: 'text.secondary'}}>
+                        No pools available.
+                    </TableCell>
+                </TableRow>
+            );
+        }
+
+        return sortedPools.map((pool) => {
+            const usedPercentage = pool.size && pool.used >= 0
+                ? ((pool.used / pool.size) * 100).toFixed(1)
+                : "N/A";
+            return (
+                <TableRow key={pool.name || Math.random()}>
+                    <TableCell>{pool.name || "N/A"}</TableCell>
+                    <TableCell>{pool.type || "N/A"}</TableCell>
+                    <TableCell align="center">{pool.volume_count ?? "N/A"}</TableCell>
+                    <TableCell align="center">{usedPercentage}%</TableCell>
+                    <TableCell>{pool.head || "N/A"}</TableCell>
+                </TableRow>
+            );
+        });
     };
 
     return (
@@ -157,7 +197,7 @@ const Pools = () => {
                                 </Button>
                             }
                         >
-                            {error}
+                            {String(error)}
                         </Alert>
                     </Box>
                 ) : (
@@ -216,28 +256,7 @@ const Pools = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {sortedPools.length > 0 ? (
-                                    sortedPools.map((pool) => {
-                                        const usedPercentage = pool.size && pool.used >= 0
-                                            ? ((pool.used / pool.size) * 100).toFixed(1)
-                                            : "N/A";
-                                        return (
-                                            <TableRow key={pool.name || Math.random()}>
-                                                <TableCell>{pool.name || "N/A"}</TableCell>
-                                                <TableCell>{pool.type || "N/A"}</TableCell>
-                                                <TableCell align="center">{pool.volume_count ?? "N/A"}</TableCell>
-                                                <TableCell align="center">{usedPercentage}%</TableCell>
-                                                <TableCell>{pool.head || "N/A"}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={5} align="center" sx={{color: 'text.secondary'}}>
-                                            No pools available.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
+                                {renderTableRows()}
                             </TableBody>
                         </Table>
                     </TableContainer>

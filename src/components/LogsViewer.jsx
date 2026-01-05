@@ -28,7 +28,6 @@ import {
 import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 import {useDarkMode} from "../context/DarkModeContext";
-
 const LogsViewer = ({
                         nodename,
                         type = "node",
@@ -230,7 +229,7 @@ const LogsViewer = ({
         setErrorMessage("");
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        fetchLogs(controller.signal);
+        void fetchLogs(controller.signal);
     }, [fetchLogs]);
     const isFiltered = useMemo(() => {
         return levelFilter.length > 0 || searchTerm !== "";
@@ -482,7 +481,7 @@ const LogsViewer = ({
                         ))}
                     </Select>
                 </FormControl>
-                {isFiltered && (
+                {isFiltered ? (
                     <Chip
                         label="Filters active - Click any log to clear"
                         color="info"
@@ -492,7 +491,7 @@ const LogsViewer = ({
                             setLevelFilter([]);
                         }}
                     />
-                )}
+                ) : null}
                 <Typography
                     variant="caption"
                     sx={{alignSelf: "center", color: "text.secondary"}}

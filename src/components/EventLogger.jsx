@@ -63,6 +63,29 @@ const hashCode = (str) => {
     return Math.abs(hash).toString(36);
 };
 
+const EventTypeItem = ({
+                           eventType,
+                           checked,
+                           onChange,
+                           eventCount
+                       }) => (
+    <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
+        <Checkbox
+            checked={checked}
+            onChange={onChange}
+            size="small"
+        />
+        <Box sx={{flex: 1}}>
+            <Typography variant="body2">
+                {eventType}
+            </Typography>
+            <Typography variant="caption">
+                {eventCount} events received
+            </Typography>
+        </Box>
+    </Box>
+);
+
 const SubscriptionDialog = ({
                                 open,
                                 onClose,
@@ -96,6 +119,34 @@ const SubscriptionDialog = ({
     const handleUnsubscribeAll = () => {
         setTempSubscribedEventTypes([]);
     };
+
+    const renderEventTypeList = (eventTypes, isPageEvents = false) => (
+        <Box sx={{mb: 3}}>
+            <Typography
+                variant="subtitle2"
+                color={isDarkMode ? (isPageEvents ? '#90caf9' : '#a5d6a7') : (isPageEvents ? 'primary.main' : 'success.dark')}
+                sx={{mb: 1}}
+            >
+                {isPageEvents ? 'Page Events' : 'Additional Events'} ({eventTypes.length})
+            </Typography>
+
+            {eventTypes.sort().map(eventType => (
+                <EventTypeItem
+                    key={String(eventType)}
+                    eventType={eventType}
+                    checked={tempSubscribedEventTypes.includes(eventType)}
+                    onChange={(e) => {
+                        setTempSubscribedEventTypes(prev =>
+                            e.target.checked
+                                ? [...new Set([...prev, eventType])]
+                                : prev.filter(et => et !== eventType)
+                        );
+                    }}
+                    eventCount={eventStats[eventType] || 0}
+                />
+            ))}
+        </Box>
+    );
 
     return (
         <Drawer
@@ -163,77 +214,9 @@ const SubscriptionDialog = ({
 
             {/* EVENT LIST */}
             <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
-                {filteredEventTypes.length > 0 && (
-                    <Box sx={{mb: 3}}>
-                        <Typography
-                            variant="subtitle2"
-                            color={isDarkMode ? '#90caf9' : 'primary.main'}
-                            sx={{mb: 1}}
-                        >
-                            Page Events ({filteredEventTypes.length})
-                        </Typography>
+                {filteredEventTypes.length > 0 && renderEventTypeList(filteredEventTypes, true)}
 
-                        {filteredEventTypes.sort().map(eventType => (
-                            <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
-                                <Checkbox
-                                    checked={tempSubscribedEventTypes.includes(eventType)}
-                                    onChange={(e) => {
-                                        setTempSubscribedEventTypes(prev =>
-                                            e.target.checked
-                                                ? [...new Set([...prev, eventType])]
-                                                : prev.filter(et => et !== eventType)
-                                        );
-                                    }}
-                                    size="small"
-                                />
-                                <Box sx={{flex: 1}}>
-                                    <Typography variant="body2">
-                                        {eventType}
-                                    </Typography>
-                                    <Typography variant="caption">
-                                        {eventStats[eventType] || 0} events received
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        ))}
-                    </Box>
-                )}
-
-                {otherEventTypes.length > 0 && (
-                    <Box sx={{mb: 3}}>
-                        <Typography
-                            variant="subtitle2"
-                            color={isDarkMode ? '#a5d6a7' : 'success.dark'}
-                            sx={{mb: 1}}
-                        >
-                            Additional Events ({otherEventTypes.length})
-                        </Typography>
-
-                        {otherEventTypes.map(eventType => (
-                            <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
-                                <Checkbox
-                                    checked={tempSubscribedEventTypes.includes(eventType)}
-                                    onChange={(e) => {
-                                        setTempSubscribedEventTypes(prev =>
-                                            e.target.checked
-                                                ? [...new Set([...prev, eventType])]
-                                                : prev.filter(et => et !== eventType)
-                                        );
-                                    }}
-                                    size="small"
-                                />
-                                <Box sx={{flex: 1}}>
-                                    <Typography variant="body2">
-                                        {eventType}
-                                    </Typography>
-                                    <Typography variant="caption">
-                                        {eventStats[eventType] || 0} events received
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        ))}
-                    </Box>
-                )}
+                {otherEventTypes.length > 0 && renderEventTypeList(otherEventTypes, false)}
 
                 {tempSubscribedEventTypes.length === 0 && (
                     <Typography sx={{textAlign: 'center', py: 4}}>
@@ -517,6 +500,33 @@ const EventLogger = ({
     }, [baseFilteredLogs, eventTypeFilter, debouncedSearchTerm]);
 
     const SubscriptionInfo = () => {
+        const eventTypeChips = useMemo(() => {
+            if (subscribedEventTypes.length === 0) return null;
+
+            return subscribedEventTypes.sort().map((type) => (
+                <Chip
+                    key={String(type)}
+                    label={`${type} (${eventStats[type] || 0})`}
+                    size="small"
+                    variant="outlined"
+                    onDelete={() => {
+                        setManualSubscriptions(prev => prev.filter(t => t !== type));
+                    }}
+                    sx={{
+                        backgroundColor: filteredEventTypes.includes(type)
+                            ? (isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)')
+                            : (isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)'),
+                        color: filteredEventTypes.includes(type)
+                            ? (isDarkMode ? '#90caf9' : 'primary.main')
+                            : (isDarkMode ? '#a5d6a7' : 'success.dark'),
+                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
+                        fontSize: '0.7rem',
+                        height: 20
+                    }}
+                />
+            ));
+        }, [subscribedEventTypes, eventStats, filteredEventTypes, isDarkMode, setManualSubscriptions]);
+
         return (
             <Box sx={{px: 1, py: 0.5}}>
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
@@ -539,28 +549,7 @@ const EventLogger = ({
 
                 {subscribedEventTypes.length > 0 && (
                     <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
-                        {subscribedEventTypes.sort().map(type => (
-                            <Chip
-                                key={type}
-                                label={`${type} (${eventStats[type] || 0})`}
-                                size="small"
-                                variant="outlined"
-                                onDelete={() => {
-                                    setManualSubscriptions(prev => prev.filter(t => t !== type));
-                                }}
-                                sx={{
-                                    backgroundColor: filteredEventTypes.includes(type)
-                                        ? (isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)')
-                                        : (isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)'),
-                                    color: filteredEventTypes.includes(type)
-                                        ? (isDarkMode ? '#90caf9' : 'primary.main')
-                                        : (isDarkMode ? '#a5d6a7' : 'success.dark'),
-                                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
-                                    fontSize: '0.7rem',
-                                    height: 20
-                                }}
-                            />
-                        ))}
+                        {eventTypeChips}
                     </Box>
                 )}
             </Box>
@@ -775,6 +764,45 @@ const EventLogger = ({
             />
         );
     };
+
+    const renderMenuItems = useMemo(() => {
+        if (availableEventTypes.length === 0) return null;
+
+        return availableEventTypes.map((et) => (
+            <MenuItem key={String(et)} value={String(et)}>
+                <Checkbox
+                    checked={eventTypeFilter.includes(et)}
+                    size="small"
+                    sx={{
+                        color: isDarkMode ? '#ffffff' : undefined,
+                        '&.Mui-checked': {
+                            color: isDarkMode ? '#90caf9' : undefined,
+                        }
+                    }}
+                />
+                <ListItemText
+                    primary={
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                            <Chip
+                                label={eventStats[et] || 0}
+                                size="small"
+                                variant="outlined"
+                                sx={{
+                                    height: 20,
+                                    minWidth: 20,
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                    color: isDarkMode ? '#ffffff' : undefined,
+                                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                }}
+                            />
+                            <span
+                                style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
+                        </Box>
+                    }
+                />
+            </MenuItem>
+        ));
+    }, [availableEventTypes, eventTypeFilter, eventStats, isDarkMode]);
 
     return (
         <>
@@ -1006,40 +1034,7 @@ const EventLogger = ({
                                     }
                                 }}
                             >
-                                {availableEventTypes.map((et) => (
-                                    <MenuItem key={et} value={et}>
-                                        <Checkbox
-                                            checked={eventTypeFilter.includes(et)}
-                                            size="small"
-                                            sx={{
-                                                color: isDarkMode ? '#ffffff' : undefined,
-                                                '&.Mui-checked': {
-                                                    color: isDarkMode ? '#90caf9' : undefined,
-                                                }
-                                            }}
-                                        />
-                                        <ListItemText
-                                            primary={
-                                                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                                    <Chip
-                                                        label={eventStats[et] || 0}
-                                                        size="small"
-                                                        variant="outlined"
-                                                        sx={{
-                                                            height: 20,
-                                                            minWidth: 20,
-                                                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                                            color: isDarkMode ? '#ffffff' : undefined,
-                                                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                                        }}
-                                                    />
-                                                    <span
-                                                        style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
-                                                </Box>
-                                            }
-                                        />
-                                    </MenuItem>
-                                ))}
+                                {renderMenuItems}
                             </Select>
                         </FormControl>
                     )}
@@ -1076,7 +1071,7 @@ const EventLogger = ({
                                 const isOpen = expandedLogIds.includes(safeId);
                                 return (
                                     <Box
-                                        key={safeId}
+                                        key={String(safeId)}
                                         onClick={() => toggleExpand(safeId)}
                                         sx={{
                                             cursor: "pointer",

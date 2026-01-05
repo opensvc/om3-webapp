@@ -105,7 +105,6 @@ const ObjectDetail = () => {
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
-    // État supprimé: const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
     const [configNode, setConfigNode] = useState(null);
 
     // States for batch & actions
@@ -142,7 +141,7 @@ const ObjectDetail = () => {
     const [stopCheckbox, setStopCheckbox] = useState(DEFAULT_STOP_CHECKBOX);
     const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
     const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
-    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success",});
+    const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
     // States for accordion expansion
     const [expandedResources, setExpandedResources] = useState({});
@@ -180,39 +179,6 @@ const ObjectDetail = () => {
     // States for console URL display
     const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
     const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
-
-    // Configuration of Popper props
-    const popperProps = {
-        placement: "bottom-end",
-        disablePortal: true,
-        modifiers: [
-            {
-                name: "offset",
-                options: {
-                    offset: [0, 8],
-                },
-            },
-            {
-                name: "preventOverflow",
-                options: {
-                    boundariesElement: "viewport",
-                },
-            },
-            {
-                name: "flip",
-                options: {
-                    enabled: true,
-                },
-            },
-        ],
-        sx: {
-            zIndex: 1300,
-            "& .MuiPaper-root": {
-                minWidth: 200,
-                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-            },
-        },
-    };
 
     // Cleanup on unmount
     useEffect(() => {
@@ -444,18 +410,18 @@ const ObjectDetail = () => {
         setConfigNode(node);
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
-            const response = await Promise.race([
+            const fetchResponse = await Promise.race([
                 fetch(url, {
                     headers: {Authorization: `Bearer ${token}`},
                     cache: "no-cache",
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 10000)),
             ]);
-            if (!response.ok) {
-                setConfigError(`Failed to fetch config: HTTP error! status: ${response.status}`);
+            if (!fetchResponse.ok) {
+                setConfigError(`Failed to fetch config: HTTP error! status: ${fetchResponse.status}`);
                 return;
             }
-            const text = await response.text();
+            const text = await fetchResponse.text();
             if (isMounted.current) {
                 setConfigData(text);
             }
@@ -484,11 +450,10 @@ const ObjectDetail = () => {
         const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
         const monitorKey = `${node}:${decodedObjectName}`;
         const monitor = instanceMonitor[monitorKey] || {};
-        return {
-            avail: instanceStatus[node]?.avail,
-            frozen: instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen",
-            state: monitor.state !== "idle" ? monitor.state : null,
-        };
+        const avail = instanceStatus[node]?.avail || '';
+        const frozen = instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen";
+        const state = monitor.state !== "idle" ? monitor.state : null;
+        return {avail, frozen, state};
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     // Object status helper
@@ -510,29 +475,31 @@ const ObjectDetail = () => {
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     // Accordion handlers
-    const handleNodeResourcesAccordionChange = useCallback((node) => (event, isExpanded) => {
-        setExpandedNodeResources((prev) => ({
-            ...prev,
-            [node]: isExpanded,
-        }));
+    const handleNodeResourcesAccordionChange = useCallback((node) => {
+        return (_event, isExpanded) => {
+            setExpandedNodeResources((prev) => ({
+                ...prev,
+                [node]: isExpanded,
+            }));
+        };
     }, []);
 
-    const handleAccordionChange = useCallback((node, rid) => (event, isExpanded) => {
-        setExpandedResources((prev) => ({
-            ...prev,
-            [`${node}:${rid}`]: isExpanded,
-        }));
+    const handleAccordionChange = useCallback((node, rid) => {
+        return (_event, isExpanded) => {
+            setExpandedResources((prev) => ({
+                ...prev,
+                [`${node}:${rid}`]: isExpanded,
+            }));
+        };
     }, []);
 
     // Batch node actions handlers
     const handleNodesActionsOpen = useCallback((e) => {
         setNodesActionsAnchor(e.currentTarget);
-        nodesActionsAnchorRef.current = e.currentTarget;
     }, []);
 
     const handleNodesActionsClose = useCallback(() => {
         setNodesActionsAnchor(null);
-        nodesActionsAnchorRef.current = null;
     }, []);
 
     const handleBatchNodeActionClick = useCallback((action) => {
@@ -554,12 +521,10 @@ const ObjectDetail = () => {
     const handleResourcesActionsOpen = useCallback((node, e) => {
         setResGroupNode(node);
         setResourcesActionsAnchor(e.currentTarget);
-        resourcesActionsAnchorRef.current = e.currentTarget;
     }, []);
 
     const handleResourcesActionsClose = useCallback(() => {
         setResourcesActionsAnchor(null);
-        resourcesActionsAnchorRef.current = null;
     }, []);
 
     const handleBatchResourceActionClick = useCallback((action) => {
@@ -580,13 +545,11 @@ const ObjectDetail = () => {
         setCurrentResourceId(rid);
         setResGroupNode(node);
         setResourceMenuAnchor(e.currentTarget);
-        resourceMenuAnchorRef.current = e.currentTarget;
     }, []);
 
     const handleResourceMenuClose = useCallback(() => {
         setResourceMenuAnchor(null);
         setCurrentResourceId(null);
-        resourceMenuAnchorRef.current = null;
     }, []);
 
     const handleResourceActionClick = useCallback((action) => {
@@ -618,19 +581,26 @@ const ObjectDetail = () => {
         }
         if (pendingAction.batch === "nodes") {
             selectedNodes.forEach((node) => {
-                if (node) postNodeAction({node, action: pendingAction.action});
+                if (node) {
+                    postNodeAction({node, action: pendingAction.action}).catch(() => {
+                    });
+                }
             });
             setSelectedNodes([]);
         } else if (pendingAction.node && !pendingAction.rid) {
-            postNodeAction({node: pendingAction.node, action: pendingAction.action});
+            postNodeAction({node: pendingAction.node, action: pendingAction.action}).catch(() => {
+            });
         } else if (pendingAction.batch === "resources") {
             const rids = selectedResourcesByNode[pendingAction.node] || [];
             rids.forEach((rid) => {
-                if (rid) postResourceAction({
-                    node: pendingAction.node,
-                    action: pendingAction.action,
-                    rid,
-                });
+                if (rid) {
+                    postResourceAction({
+                        node: pendingAction.node,
+                        action: pendingAction.action,
+                        rid,
+                    }).catch(() => {
+                    });
+                }
             });
             setSelectedResourcesByNode((prev) => ({
                 ...prev,
@@ -641,9 +611,11 @@ const ObjectDetail = () => {
                 node: pendingAction.node,
                 action: pendingAction.action,
                 rid: pendingAction.rid,
+            }).catch(() => {
             });
         } else {
-            postObjectAction({action: pendingAction.action});
+            postObjectAction({action: pendingAction.action}).catch(() => {
+            });
         }
         setPendingAction(null);
         setConfirmDialogOpen(false);
@@ -655,7 +627,13 @@ const ObjectDetail = () => {
 
     const handleConsoleConfirm = useCallback(() => {
         if (pendingAction && pendingAction.action === "console" && pendingAction.node && pendingAction.rid) {
-            postConsoleAction({node: pendingAction.node, rid: pendingAction.rid, seats, greet_timeout: greetTimeout});
+            postConsoleAction({
+                node: pendingAction.node,
+                rid: pendingAction.rid,
+                seats,
+                greet_timeout: greetTimeout
+            }).catch(() => {
+            });
         }
         setConsoleDialogOpen(false);
         setPendingAction(null);
@@ -855,7 +833,8 @@ const ObjectDetail = () => {
             }
             setInitialLoading(false);
         };
-        loadInitialConfig();
+        loadInitialConfig().catch(() => {
+        });
     }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
 
     // Memoize data to prevent unnecessary re-renders
@@ -906,7 +885,8 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => {}}
+                    handleManageParamsSubmit={() => {
+                    }}
                     configData={configData}
                     configLoading={configLoading}
                     configError={configError}
@@ -968,7 +948,7 @@ const ObjectDetail = () => {
                         getColor={getColor}
                         objectMenuAnchorRef={objectMenuAnchorRef}
                     />
-                    {pendingAction && pendingAction.action !== "console" && (
+                    {Boolean(pendingAction && pendingAction.action !== "console") && (
                         <ActionDialogManager
                             pendingAction={pendingAction}
                             handleConfirm={handleDialogConfirm}
@@ -1090,7 +1070,7 @@ const ObjectDetail = () => {
                                     whiteSpace: 'pre-wrap'
                                 }}
                             >
-                                {currentConsoleUrl || 'No URL available'}
+                                {currentConsoleUrl ? String(currentConsoleUrl) : 'No URL available'}
                             </Box>
                             <Box sx={{
                                 display: 'flex',
@@ -1103,8 +1083,9 @@ const ObjectDetail = () => {
                                     size={window.innerWidth < 600 ? "small" : "medium"}
                                     onClick={() => {
                                         if (currentConsoleUrl) {
-                                            navigator.clipboard.writeText(currentConsoleUrl);
-                                            openSnackbar('URL copied to clipboard', 'success');
+                                            navigator.clipboard.writeText(String(currentConsoleUrl)).catch(() => {
+                                                openSnackbar('Failed to copy URL', 'error');
+                                            });
                                         }
                                     }}
                                     disabled={!currentConsoleUrl}
@@ -1116,7 +1097,7 @@ const ObjectDetail = () => {
                                     size={window.innerWidth < 600 ? "small" : "medium"}
                                     onClick={() => {
                                         if (currentConsoleUrl) {
-                                            window.open(currentConsoleUrl, '_blank', 'noopener,noreferrer');
+                                            window.open(String(currentConsoleUrl), '_blank', 'noopener,noreferrer');
                                         }
                                     }}
                                     disabled={!currentConsoleUrl}
@@ -1140,7 +1121,8 @@ const ObjectDetail = () => {
                         configNode={configNode}
                         setConfigNode={setConfigNode}
                         openSnackbar={openSnackbar}
-                        handleManageParamsSubmit={() => {}}
+                        handleManageParamsSubmit={() => {
+                        }}
                         configData={configData}
                         configLoading={configLoading}
                         configError={configError}
@@ -1171,8 +1153,8 @@ const ObjectDetail = () => {
                                     toggleResource={toggleResource}
                                     actionInProgress={actionInProgress}
                                     individualNodeMenuAnchor={individualNodeMenuAnchor}
-                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                                    setCurrentNode={setCurrentNode}
+                                    setIndividualNodeMenuAnchor={(value) => setIndividualNodeMenuAnchor(value)}
+                                    setCurrentNode={(value) => setCurrentNode(value)}
                                     handleResourcesActionsOpen={handleResourcesActionsOpen}
                                     handleResourceMenuOpen={handleResourceMenuOpen}
                                     handleIndividualNodeActionClick={handleIndividualNodeActionClick}
@@ -1185,17 +1167,17 @@ const ObjectDetail = () => {
                                     getColor={getColor}
                                     getNodeState={getNodeState}
                                     parseProvisionedState={parseProvisionedState}
-                                    setPendingAction={setPendingAction}
+                                    setPendingAction={(value) => setPendingAction(value)}
                                     setConfirmDialogOpen={setConfirmDialogOpen}
                                     setStopDialogOpen={setStopDialogOpen}
                                     setUnprovisionDialogOpen={setUnprovisionDialogOpen}
                                     setPurgeDialogOpen={setPurgeDialogOpen}
-                                    setSimpleDialogOpen={setSimpleDialogOpen}
+                                    setSimpleDialogOpen={(value) => setSimpleDialogOpen(value)}
                                     setCheckboxes={setCheckboxes}
                                     setStopCheckbox={setStopCheckbox}
                                     setUnprovisionCheckboxes={setUnprovisionCheckboxes}
                                     setPurgeCheckboxes={setPurgeCheckboxes}
-                                    setSelectedResourcesByNode={setSelectedResourcesByNode}
+                                    setSelectedResourcesByNode={(value) => setSelectedResourcesByNode(value)}
                                     individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
                                     resourcesActionsAnchorRef={resourcesActionsAnchorRef}
                                     resourceMenuAnchorRef={resourceMenuAnchorRef}
@@ -1208,10 +1190,35 @@ const ObjectDetail = () => {
                             <Popper
                                 open={Boolean(nodesActionsAnchor)}
                                 anchorEl={nodesActionsAnchor}
-                                {...popperProps}
+                                placement="bottom-end"
+                                disablePortal
+                                modifiers={[
+                                    {
+                                        name: "offset",
+                                        options: {
+                                            offset: [0, 8],
+                                        },
+                                    },
+                                    {
+                                        name: "preventOverflow",
+                                        options: {
+                                            boundariesElement: "viewport",
+                                        },
+                                    },
+                                    {
+                                        name: "flip",
+                                        options: {
+                                            enabled: true,
+                                        },
+                                    },
+                                ]}
+                                style={{zIndex: 1300}}
                             >
                                 <ClickAwayListener onClickAway={handleNodesActionsClose}>
-                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu">
+                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu" sx={{
+                                        minWidth: 200,
+                                        boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                                    }}>
                                         {INSTANCE_ACTIONS.map(({name, icon}) => (
                                             <MenuItem
                                                 key={name}
@@ -1229,10 +1236,36 @@ const ObjectDetail = () => {
                             <Popper
                                 open={Boolean(individualNodeMenuAnchor)}
                                 anchorEl={individualNodeMenuAnchor}
-                                {...popperProps}
+                                placement="bottom-end"
+                                disablePortal
+                                modifiers={[
+                                    {
+                                        name: "offset",
+                                        options: {
+                                            offset: [0, 8],
+                                        },
+                                    },
+                                    {
+                                        name: "preventOverflow",
+                                        options: {
+                                            boundariesElement: "viewport",
+                                        },
+                                    },
+                                    {
+                                        name: "flip",
+                                        options: {
+                                            enabled: true,
+                                        },
+                                    },
+                                ]}
+                                style={{zIndex: 1300}}
                             >
                                 <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
-                                    <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}>
+                                    <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}
+                                           sx={{
+                                               minWidth: 200,
+                                               boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                                           }}>
                                         {INSTANCE_ACTIONS.map(({name, icon}) => (
                                             <MenuItem
                                                 key={name}
@@ -1250,11 +1283,36 @@ const ObjectDetail = () => {
                             <Popper
                                 open={Boolean(resourcesActionsAnchor)}
                                 anchorEl={resourcesActionsAnchor}
-                                {...popperProps}
+                                placement="bottom-end"
+                                disablePortal
+                                modifiers={[
+                                    {
+                                        name: "offset",
+                                        options: {
+                                            offset: [0, 8],
+                                        },
+                                    },
+                                    {
+                                        name: "preventOverflow",
+                                        options: {
+                                            boundariesElement: "viewport",
+                                        },
+                                    },
+                                    {
+                                        name: "flip",
+                                        options: {
+                                            enabled: true,
+                                        },
+                                    },
+                                ]}
+                                style={{zIndex: 1300}}
                             >
                                 <ClickAwayListener onClickAway={handleResourcesActionsClose}>
                                     <Paper elevation={3} role="menu"
-                                           aria-label={`Batch resource actions for node ${resGroupNode}`}>
+                                           aria-label={`Batch resource actions for node ${resGroupNode}`} sx={{
+                                        minWidth: 200,
+                                        boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                                    }}>
                                         {RESOURCE_ACTIONS.map(({name, icon}) => (
                                             <MenuItem
                                                 key={name}
@@ -1272,7 +1330,29 @@ const ObjectDetail = () => {
                             <Popper
                                 open={Boolean(resourceMenuAnchor) && Boolean(currentResourceId)}
                                 anchorEl={resourceMenuAnchor}
-                                {...popperProps}
+                                placement="bottom-end"
+                                disablePortal
+                                modifiers={[
+                                    {
+                                        name: "offset",
+                                        options: {
+                                            offset: [0, 8],
+                                        },
+                                    },
+                                    {
+                                        name: "preventOverflow",
+                                        options: {
+                                            boundariesElement: "viewport",
+                                        },
+                                    },
+                                    {
+                                        name: "flip",
+                                        options: {
+                                            enabled: true,
+                                        },
+                                    },
+                                ]}
+                                style={{zIndex: 1300}}
                             >
                                 <ClickAwayListener
                                     onClickAway={() => {
@@ -1281,7 +1361,10 @@ const ObjectDetail = () => {
                                     }}
                                 >
                                     <Paper elevation={3} role="menu"
-                                           aria-label={`Resource ${currentResourceId} actions menu`}>
+                                           aria-label={`Resource ${currentResourceId} actions menu`} sx={{
+                                        minWidth: 200,
+                                        boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                                    }}>
                                         {(() => {
                                             if (!currentResourceId || !resGroupNode || !memoizedObjectData[resGroupNode]) {
                                                 return null;
@@ -1322,65 +1405,67 @@ const ObjectDetail = () => {
                     </Snackbar>
                 </Box>
             </Box>
-            <Drawer
-                anchor="right"
-                open={logsDrawerOpen}
-                variant="persistent"
-                sx={{
-                    "& .MuiDrawer-paper": {
-                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
-                        maxWidth: "80vw",
-                        p: 2,
-                        boxSizing: "border-box",
-                        backgroundColor: theme.palette.background.paper,
-                        top: 0,
-                        height: "100vh",
-                        overflow: "auto",
-                        borderLeft: `1px solid ${theme.palette.divider}`,
-                        transition: theme.transitions.create("width", {
-                            easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.enteringScreen,
-                        }),
-                    },
-                }}
-            >
-                <Box
+            {Boolean(logsDrawerOpen && selectedNodeForLogs) && (
+                <Drawer
+                    anchor="right"
+                    open={logsDrawerOpen}
+                    variant="persistent"
                     sx={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "6px",
-                        height: "100%",
-                        cursor: "ew-resize",
-                        bgcolor: theme.palette.grey[300],
-                        "&:hover": {
-                            bgcolor: theme.palette.primary.light,
+                        "& .MuiDrawer-paper": {
+                            width: logsDrawerOpen ? `${drawerWidth}px` : 0,
+                            maxWidth: "80vw",
+                            p: 2,
+                            boxSizing: "border-box",
+                            backgroundColor: theme.palette.background.paper,
+                            top: 0,
+                            height: "100vh",
+                            overflow: "auto",
+                            borderLeft: `1px solid ${theme.palette.divider}`,
+                            transition: theme.transitions.create("width", {
+                                easing: theme.transitions.easing.sharp,
+                                duration: theme.transitions.duration.enteringScreen,
+                            }),
                         },
-                        transition: "background-color 0.2s",
                     }}
-                    onMouseDown={startResizing}
-                    onTouchStart={startResizing}
-                    aria-label="Resize drawer"
-                />
-                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                    <Typography variant="h6">
-                        {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
-                    </Typography>
-                    <IconButton onClick={handleCloseLogsDrawer}>
-                        <CloseIcon/>
-                    </IconButton>
-                </Box>
-                {selectedNodeForLogs && (
-                    <LogsViewer
-                        nodename={selectedNodeForLogs}
-                        type={selectedInstanceForLogs ? "instance" : "node"}
-                        namespace={namespace}
-                        kind={kind}
-                        instanceName={selectedInstanceForLogs}
-                        height="calc(100vh - 100px)"
+                >
+                    <Box
+                        sx={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "6px",
+                            height: "100%",
+                            cursor: "ew-resize",
+                            bgcolor: theme.palette.grey[300],
+                            "&:hover": {
+                                bgcolor: theme.palette.primary.light,
+                            },
+                            transition: "background-color 0.2s",
+                        }}
+                        onMouseDown={startResizing}
+                        onTouchStart={startResizing}
+                        aria-label="Resize drawer"
                     />
-                )}
-            </Drawer>
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                        <Typography variant="h6">
+                            {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
+                        </Typography>
+                        <IconButton onClick={handleCloseLogsDrawer}>
+                            <CloseIcon/>
+                        </IconButton>
+                    </Box>
+                    {Boolean(selectedNodeForLogs) && (
+                        <LogsViewer
+                            nodename={selectedNodeForLogs}
+                            type={selectedInstanceForLogs ? "instance" : "node"}
+                            namespace={namespace}
+                            kind={kind}
+                            instanceName={selectedInstanceForLogs}
+                            height="calc(100vh - 100px)"
+                        />
+                    )}
+                </Drawer>
+            )}
 
             <EventLogger
                 eventTypes={objectEventTypes}

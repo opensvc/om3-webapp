@@ -88,7 +88,7 @@ describe('NodesTable', () => {
     beforeEach(() => {
         jest.spyOn(useFetchDaemonStatusModule, 'default').mockReturnValue({
             daemon: {nodename: 'node-1'},
-            fetchNodes: jest.fn(),
+            fetchNodes: jest.fn(() => Promise.resolve()),
         });
         jest.spyOn(useEventStoreModule, 'default').mockImplementation((selector) =>
             selector({

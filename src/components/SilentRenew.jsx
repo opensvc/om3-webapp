@@ -19,7 +19,7 @@ const SilentRenew = () => {
             }
         };
 
-        doSigninSilentCallback();
+        void doSigninSilentCallback();
     }, [userManager]);
 
     return <div>Silent renew processing...</div>;

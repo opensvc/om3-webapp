@@ -13,9 +13,27 @@ const OidcCallback = () => {
     const navigate = useNavigate();
     const eventHandlersSet = useRef(false);
 
+    const handleLogout = useCallback(() => {
+        if (authDispatch) {
+            authDispatch({type: SetAccessToken, data: null});
+        }
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        localStorage.removeItem('authChoice');
+
+        if (typeof BroadcastChannel !== 'undefined') {
+            const channel = new BroadcastChannel('auth-channel');
+            channel.postMessage({type: 'logout'});
+            channel.close();
+        }
+        navigate('/auth-choice');
+    }, [authDispatch, navigate]);
+
     const onUserRefreshed = useCallback((user) => {
         logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
-        authDispatch({type: SetAccessToken, data: user.access_token});
+        if (authDispatch) {
+            authDispatch({type: SetAccessToken, data: user.access_token});
+        }
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at?.toString() || '');
 
@@ -29,40 +47,28 @@ const OidcCallback = () => {
 
     const handleTokenExpired = useCallback(() => {
         logger.warn('Access token expired, redirecting to /auth-choice');
-        authDispatch({type: SetAccessToken, data: null});
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('tokenExpiration');
-        localStorage.removeItem('authChoice');
-
-        if (typeof BroadcastChannel !== 'undefined') {
-            const channel = new BroadcastChannel('auth-channel');
-            channel.postMessage({type: 'logout'});
-            channel.close();
-        }
-        navigate('/auth-choice');
-    }, [authDispatch, navigate]);
+        handleLogout();
+    }, [handleLogout]);
 
     const handleSilentRenewError = useCallback((error) => {
         logger.error('Silent renew failed:', error);
-        authDispatch({type: SetAccessToken, data: null});
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('tokenExpiration');
-        localStorage.removeItem('authChoice');
-
-        if (typeof BroadcastChannel !== 'undefined') {
-            const channel = new BroadcastChannel('auth-channel');
-            channel.postMessage({type: 'logout'});
-            channel.close();
-        }
-        navigate('/auth-choice');
-    }, [authDispatch, navigate]);
+        handleLogout();
+    }, [handleLogout]);
 
     const handleSigninRedirect = useCallback(() => {
+        if (!userManager) {
+            logger.error("UserManager not available");
+            navigate('/auth-choice');
+            return;
+        }
+
         userManager.signinRedirectCallback()
             .then((user) => {
                 onUserRefreshed(user);
-                authDispatch({type: SetAuthChoice, data: "openid"});
-                authDispatch({type: Login, data: user.profile.preferred_username});
+                if (authDispatch) {
+                    authDispatch({type: SetAuthChoice, data: "openid"});
+                    authDispatch({type: Login, data: user.profile.preferred_username});
+                }
                 setupEventHandlers();
                 navigate('/');
             })
@@ -70,7 +76,7 @@ const OidcCallback = () => {
                 logger.error("signinRedirectCallback failed:", err);
                 navigate('/auth-choice');
             });
-    }, [userManager, authDispatch, navigate, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
+    }, [userManager, authDispatch, navigate, onUserRefreshed]);
 
     const setupEventHandlers = useCallback(() => {
         if (eventHandlersSet.current || !userManager) return;
@@ -96,7 +102,8 @@ const OidcCallback = () => {
                 }
             }
         };
-        initializeUserManager();
+
+        void initializeUserManager();
     }, [authInfo, userManager, recreateUserManager, navigate]);
 
     useEffect(() => {
@@ -123,7 +130,7 @@ const OidcCallback = () => {
                 handleSigninRedirect();
             }
         }
-    }, [userManager, authDispatch, navigate, handleSigninRedirect, setupEventHandlers, onUserRefreshed]);
+    }, [userManager, handleSigninRedirect, setupEventHandlers, onUserRefreshed]);
 
     useEffect(() => {
         // Only set up BroadcastChannel in browser environment
@@ -134,20 +141,19 @@ const OidcCallback = () => {
             const {type, data, expires_at} = event.data || {};
             if (type === 'logout') {
                 logger.info('Logout triggered from another tab');
-                authDispatch({type: SetAccessToken, data: null});
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('tokenExpiration');
-                localStorage.removeItem('authChoice');
-                navigate('/auth-choice');
+                handleLogout();
             } else if (type === 'tokenUpdated' && data && expires_at) {
                 logger.info('Token updated from another tab');
-                authDispatch({type: SetAccessToken, data});
+                if (authDispatch) {
+                    authDispatch({type: SetAccessToken, data});
+                }
                 localStorage.setItem('authToken', data);
                 localStorage.setItem('tokenExpiration', expires_at.toString());
             }
         };
+
         return () => channel.close();
-    }, [authDispatch, navigate]);
+    }, [authDispatch, navigate, handleLogout]);
 
     return <>Logging ...</>;
 };

@@ -35,7 +35,6 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import debounce from "lodash/debounce";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
@@ -63,6 +62,10 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
+
+const renderTextField = (label) => (params) => (
+    <TextField {...params} label={label} />
+);
 
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => (
     <Box
@@ -316,7 +319,6 @@ const TableRowComponent = React.memo(
          getNodeState,
          allNodes,
          isWideScreen,
-         popperProps,
          handleActionClick,
          handleRowMenuClose,
          objects
@@ -392,8 +394,16 @@ const TableRowComponent = React.memo(
                     >
                         <MoreVertIcon/>
                     </IconButton>
-                    <Popper open={Boolean(rowMenuAnchor) && currentObject === objectName}
-                            anchorEl={rowMenuAnchor} {...popperProps}>
+                    <Popper
+                        open={Boolean(rowMenuAnchor) && currentObject === objectName}
+                        anchorEl={rowMenuAnchor}
+                        placement="bottom-end"
+                        disablePortal={isSafari}
+                        sx={{
+                            zIndex: 1300,
+                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
+                        }}
+                    >
                         <ClickAwayListener onClickAway={handleRowMenuClose}>
                             <Paper elevation={3} role="menu">
                                 {filteredActions.map(({name, icon}) => (
@@ -435,8 +445,8 @@ const Objects = () => {
     const instanceMonitor = useEventStore((state) => state.instanceMonitor);
     const removeObject = useEventStore((state) => state.removeObject);
     const [selectedObjects, setSelectedObjects] = useState([]);
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
+    const [rowMenuAnchor, setRowMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
     const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
     const [selectedKind, setSelectedKind] = useState(rawKind);
@@ -467,7 +477,18 @@ const Objects = () => {
         "MAX_RECONNECTIONS_REACHED",
         "CONNECTION_CLOSED"
     ], []);
-    const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
+
+    const debounce = useCallback((func, wait) => {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }, []);
 
     const getObjectStatus = useCallback(
         (objectName, objs) => {
@@ -588,12 +609,16 @@ const Objects = () => {
                     navigate(newUrl, {replace: true});
                 }
             }, 300),
-        [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]
+        [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search, debounce]
     );
 
     useEffect(() => {
         debouncedUpdateQuery();
-        return debouncedUpdateQuery.cancel;
+        return () => {
+            if (debouncedUpdateQuery.cancel) {
+                debouncedUpdateQuery.cancel();
+            }
+        };
     }, [debouncedUpdateQuery]);
 
     useEffect(() => {
@@ -738,26 +763,6 @@ const Objects = () => {
         }
     }, [sortColumn, sortDirection]);
 
-    const popperProps = useCallback(
-        () => ({
-            placement: "bottom-end",
-            disablePortal: isSafari,
-            modifiers: [
-                {
-                    name: "offset",
-                    options: {offset: [0, 8 / getZoomLevel()]},
-                },
-                {name: "preventOverflow", options: {boundariesElement: "viewport"}},
-                {name: "flip", options: {enabled: true}},
-            ],
-            sx: {
-                zIndex: 1300,
-                "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
-            },
-        }),
-        [getZoomLevel]
-    );
-
     return (
         <Box
             sx={{
@@ -829,8 +834,8 @@ const Objects = () => {
                                         sx={{minWidth: 200, flexShrink: 0}}
                                         options={globalStates}
                                         value={selectedGlobalState}
-                                        onChange={(e, val) => val && setSelectedGlobalState(val)}
-                                        renderInput={(params) => <TextField {...params} label="Global State"/>}
+                                        onChange={(_event, val) => val && setSelectedGlobalState(val)}
+                                        renderInput={renderTextField("Global State")}
                                         renderOption={(props, option) => (
                                             <li {...props}>
                                                 <Box display="flex" alignItems="center" gap={1}>
@@ -855,16 +860,16 @@ const Objects = () => {
                                         sx={{minWidth: 200, flexShrink: 0}}
                                         options={["all", ...namespaces]}
                                         value={selectedNamespace}
-                                        onChange={(e, val) => val && setSelectedNamespace(val)}
-                                        renderInput={(params) => <TextField {...params} label="Namespace"/>}
+                                        onChange={(_event, val) => val && setSelectedNamespace(val)}
+                                        renderInput={renderTextField("Namespace")}
                                     />
                                     <Autocomplete
                                         key={`kind-${selectedKind}`}
                                         sx={{minWidth: 200, flexShrink: 0}}
                                         options={["all", ...kinds]}
                                         value={selectedKind}
-                                        onChange={(e, val) => val && setSelectedKind(val)}
-                                        renderInput={(params) => <TextField {...params} label="Kind"/>}
+                                        onChange={(_event, val) => val && setSelectedKind(val)}
+                                        renderInput={renderTextField("Kind")}
                                     />
                                     <TextField
                                         label="Name"
@@ -889,7 +894,16 @@ const Objects = () => {
                         </Button>
                     </Box>
 
-                    <Popper open={Boolean(actionsMenuAnchor)} anchorEl={actionsMenuAnchor} {...popperProps()}>
+                    <Popper
+                        open={Boolean(actionsMenuAnchor)}
+                        anchorEl={actionsMenuAnchor}
+                        placement="bottom-end"
+                        disablePortal={isSafari}
+                        sx={{
+                            zIndex: 1300,
+                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
+                        }}
+                    >
                         <ClickAwayListener onClickAway={handleActionsMenuClose}>
                             <Paper elevation={3} role="menu">
                                 {OBJECT_ACTIONS.map(({name, icon}) => {
@@ -929,7 +943,7 @@ const Objects = () => {
                         <TableHead sx={{
                             position: "sticky",
                             top: 0,
-                            zIndex: 20,  // Augmenté pour être au-dessus des filtres
+                            zIndex: 20,
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
@@ -1049,7 +1063,6 @@ const Objects = () => {
                                     getNodeState={getNodeState}
                                     allNodes={allNodes}
                                     isWideScreen={isWideScreen}
-                                    popperProps={popperProps()}
                                     handleActionClick={handleActionClick}
                                     handleRowMenuClose={handleRowMenuClose}
                                     objects={objects}

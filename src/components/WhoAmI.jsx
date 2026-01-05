@@ -21,7 +21,7 @@ const WhoAmI = () => {
     const [userInfo, setUserInfo] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [appVersion, setAppVersion] = useState(null);
+    const [appVersion, setAppVersion] = useState('Loading...');
     const {userManager} = useOidc();
     const auth = useAuth();
     const authDispatch = useAuthDispatch();
@@ -58,7 +58,7 @@ const WhoAmI = () => {
             }
         };
 
-        fetchVersion();
+        void fetchVersion();
     }, []);
 
     // Fetch daemon status
@@ -73,7 +73,8 @@ const WhoAmI = () => {
                 }
             }
         };
-        fetchDaemonData();
+
+        void fetchDaemonData();
     }, [fetchNodes]);
 
     // Fetch WhoAmI
@@ -99,21 +100,23 @@ const WhoAmI = () => {
             }
         };
 
-        fetchUserInfo();
+        void fetchUserInfo();
     }, []);
 
     const handleLogout = () => {
         if (auth?.authChoice === "openid") {
-            userManager.signoutRedirect();
-            userManager.removeUser();
+            void userManager.signoutRedirect();
+            void userManager.removeUser();
         }
         localStorage.removeItem("authToken");
-        authDispatch({type: Logout});
+        if (authDispatch) {
+            authDispatch({type: Logout});
+        }
         navigate("/auth-choice");
     };
 
     if (loading) return <LinearProgress/>;
-    if (error) return <Alert severity="error">{error}</Alert>;
+    if (error) return <Alert severity="error">{String(error)}</Alert>;
 
     return (
         <Box sx={{p: 3}}>
@@ -149,7 +152,7 @@ const WhoAmI = () => {
                                 <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
                                     <Typography variant="body2" color="text.secondary">Username</Typography>
                                     <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
-                                        {userInfo.name}
+                                        {userInfo?.name || "N/A"}
                                     </Typography>
                                 </Box>
 
@@ -162,7 +165,7 @@ const WhoAmI = () => {
                                 }}>
                                     <Typography variant="body2" color="text.secondary">Auth Method</Typography>
                                     <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
-                                        {userInfo.auth}
+                                        {userInfo?.auth || "N/A"}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -182,7 +185,7 @@ const WhoAmI = () => {
                             }}>
                                 <Typography variant="body2" color="text.secondary">Raw Permissions</Typography>
                                 <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
-                                    {userInfo.raw_grant || "None"}
+                                    {userInfo?.raw_grant || "None"}
                                 </Typography>
                             </Box>
                         </Box>
@@ -237,7 +240,7 @@ const WhoAmI = () => {
                                     <Box sx={{display: 'flex', justifyContent: 'space-between', py: 1}}>
                                         <Typography variant="body2" color="text.secondary">Version</Typography>
                                         <Typography variant="body1" sx={{fontFamily: 'monospace'}}>
-                                            v{appVersion || "Loading..."}
+                                            v{appVersion}
                                         </Typography>
                                     </Box>
 
@@ -251,7 +254,7 @@ const WhoAmI = () => {
                                         <Typography variant="body2" color="text.secondary">
                                             Description
                                         </Typography>
-                                        <Typography variant="body1" color="text.secondary">
+                                        <Typography variant="body1" color="text-secondary">
                                             OM3 WebApp
                                         </Typography>
                                     </Box>

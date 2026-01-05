@@ -143,7 +143,6 @@ const NodesTable = () => {
             }
             document.body.style.cursor = "default";
             document.body.style.userSelect = "";
-            document.body.style.webkitUserSelect = "";
         };
 
         if (isTouchEvent) {
@@ -157,13 +156,15 @@ const NodesTable = () => {
 
         document.body.style.cursor = "ew-resize";
         document.body.style.userSelect = "none";
-        document.body.style.webkitUserSelect = "none";
     };
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            fetchNodes(token);
+            // Handle the promise properly
+            fetchNodes(token).catch(error => {
+                logger.error("Failed to fetch nodes:", error);
+            });
             startEventReception(token, nodeEventTypes);
         }
 
@@ -327,28 +328,18 @@ const NodesTable = () => {
     }, [nodeStatus, nodeStats, nodeMonitor, sortColumn, sortDirection]);
 
     // Menu props configuration
-    const menuProps = {
-        anchorOrigin: {
-            vertical: "bottom",
-            horizontal: "right",
-        },
-        transformOrigin: {
-            vertical: "top",
-            horizontal: "right",
-        },
-        sx: isSafari
-            ? {
-                "& .MuiMenu-paper": {
-                    position: "fixed",
-                    top: `${menuPosition.top}px !important`,
-                    left: `${menuPosition.left}px !important`,
-                    transform: "translateX(-100%)",
-                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                    zIndex: 1300,
-                },
-            }
-            : {},
-    };
+    const menuSx = isSafari
+        ? {
+            "& .MuiMenu-paper": {
+                position: "fixed",
+                top: `${menuPosition.top}px !important`,
+                left: `${menuPosition.left}px !important`,
+                transform: "translateX(-100%)",
+                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                zIndex: 1300,
+            },
+        }
+        : {};
 
     const handleSort = (column) => {
         if (sortColumn === column) {
@@ -425,7 +416,15 @@ const NodesTable = () => {
                         anchorEl={actionsMenuAnchor}
                         open={Boolean(actionsMenuAnchor)}
                         onClose={handleActionsMenuClose}
-                        {...menuProps}
+                        anchorOrigin={{
+                            vertical: "bottom",
+                            horizontal: "right",
+                        }}
+                        transformOrigin={{
+                            vertical: "top",
+                            horizontal: "right",
+                        }}
+                        sx={menuSx}
                     >
                         {filteredMenuItems.map(({name, icon}) => (
                             <MenuItem
@@ -667,7 +666,7 @@ const NodesTable = () => {
                         <CloseIcon/>
                     </IconButton>
                 </Box>
-                {selectedNodeForLogs && (
+                {selectedNodeForLogs !== null && (
                     <LogsViewer
                         nodename={selectedNodeForLogs}
                         type="node"

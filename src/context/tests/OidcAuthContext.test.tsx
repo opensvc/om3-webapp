@@ -11,11 +11,15 @@ const mockUserManagerInstance = {
         removeAccessTokenExpiring: jest.fn().mockImplementation((cb) => cb()),
         removeSilentRenewError: jest.fn().mockImplementation((cb) => cb()),
     },
-    clearStaleState: jest.fn(),
+    clearStaleState: jest.fn().mockResolvedValue(undefined),
 };
 
 jest.mock('oidc-client-ts', () => ({
     UserManager: jest.fn().mockImplementation(() => mockUserManagerInstance),
+    Log: {
+        logger: console,
+        level: 0
+    }
 }));
 
 describe('OidcAuthContext', () => {
@@ -63,7 +67,7 @@ describe('OidcAuthContext', () => {
                 removeAccessTokenExpiring: jest.fn().mockImplementation((cb) => cb()),
                 removeSilentRenewError: jest.fn().mockImplementation((cb) => cb()),
             },
-            clearStaleState: jest.fn(),
+            clearStaleState: jest.fn().mockResolvedValue(undefined),
         };
         cleanupUserManager(mockUserManager as unknown as UserManager);
         expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalledWith(expect.any(Function));

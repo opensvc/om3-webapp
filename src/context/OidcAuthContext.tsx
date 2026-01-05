@@ -80,5 +80,8 @@ export function cleanupUserManager(userManager: UserManager | null) {
     });
     userManager.events.removeSilentRenewError(() => {
     });
-    userManager.clearStaleState();
+    userManager.clearStaleState()
+        .catch(error => {
+            logger.debug('Error during clearStaleState:', error);
+        });
 }

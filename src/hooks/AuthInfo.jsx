@@ -22,7 +22,12 @@ function useAuthInfo() {
             }
         }
 
-        fetchData();
+        fetchData()
+            .catch(error => {
+                if (isMounted) {
+                    logger.error("Erreur non gérée dans fetchData:", error);
+                }
+            });
 
         return () => {
             isMounted = false;

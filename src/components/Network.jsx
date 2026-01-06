@@ -1,8 +1,7 @@
-import React, {useEffect, useState, useRef} from "react";
+import React, {useEffect, useState, useRef, useMemo} from "react";
 import {useNavigate} from "react-router-dom";
 import {
     Box,
-    Paper,
     Typography,
     Table,
     TableBody,
@@ -49,10 +48,10 @@ const Network = () => {
             }
         };
 
-        fetchNetworks();
+        void fetchNetworks();
     }, []);
 
-    const sortedNetworks = React.useMemo(() => {
+    const sortedNetworks = useMemo(() => {
         return [...networks].sort((a, b) => {
             let diff = 0;
             if (sortColumn === "name") {
@@ -109,7 +108,6 @@ const Network = () => {
                 }}
             >
                 <TableContainer
-                    component={Paper}
                     sx={{
                         flex: 1,
                         minHeight: 0,

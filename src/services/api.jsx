@@ -1,70 +1,105 @@
 import {URL_CLUSTER_STATUS} from "../config/apiPath.js";
 
-// ApiError encapsulates HTTP errors with status and optional server body
 export class ApiError extends Error {
     constructor(message, {status = null, statusText = null, body = null} = {}) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.statusText = statusText;
-        this.body = body; // parsed JSON or text from server when available
+        this.body = body;
     }
 }
 
-// Centralized fetch wrapper that returns parsed JSON on success and throws ApiError on failure
 export async function apiFetch(url, options = {}) {
+    const controller = new AbortController();
+    const timeoutMs = options.timeout || 10000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     let response;
     try {
-        response = await fetch(url, options);
+        response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
     } catch (networkErr) {
-        // Network-level error (DNS, CORS, connection, aborted, etc.)
-        throw new ApiError(networkErr.message || 'Network error', { body: null });
+        clearTimeout(timeoutId);
+        if (networkErr.name === 'AbortError') {
+            throw new ApiError(`Request timed out after ${timeoutMs}ms`, {body: null});
+        }
+        throw new ApiError(networkErr.message || 'Network error', {body: null});
     }
 
-        const headers = response.headers || {};
-        const contentType = (headers.get && headers.get('content-type')) || '';
-        let parsedBody = null;
+    let parsedBody = null;
 
-        // Try to parse JSON when content-type indicates JSON
-        if (contentType.includes('application/json')) {
-            try {
+    // Vérification plus sûre pour headers.get
+    let contentType = null;
+    if (response.headers && typeof response.headers.get === 'function') {
+        contentType = response.headers.get('content-type');
+    }
+
+    try {
+        if (contentType && contentType.includes('application/json')) {
+            if (typeof response.json === 'function') {
                 parsedBody = await response.json();
-            } catch (e) {
-                parsedBody = null;
             }
         }
 
-        // Fallbacks: if no parsedBody yet, try response.json() if available, then response.text()
         if (parsedBody === null) {
             if (typeof response.json === 'function') {
                 try {
                     parsedBody = await response.json();
-                } catch (e) {
-                    parsedBody = null;
+                } catch (jsonError) {
+                    if (typeof response.text === 'function') {
+                        try {
+                            parsedBody = await response.text();
+                        } catch (textError) {
+                            parsedBody = null;
+                        }
+                    }
                 }
-            }
-        }
-
-        if (parsedBody === null) {
-            if (typeof response.text === 'function') {
+            } else if (typeof response.text === 'function') {
                 try {
                     parsedBody = await response.text();
-                } catch (e) {
+                } catch (textError) {
                     parsedBody = null;
                 }
             }
         }
+    } catch (parseError) {
+        parsedBody = null;
+    }
 
     if (!response.ok) {
-        const serverMessage = parsedBody && typeof parsedBody === 'object' ? parsedBody.message || JSON.stringify(parsedBody) : parsedBody;
-        const message = serverMessage || response.statusText || `Request failed with status ${response.status}`;
-        throw new ApiError(message, { status: response.status, statusText: response.statusText, body: parsedBody });
+        let serverMessage = parsedBody;
+
+        if (parsedBody && typeof parsedBody === 'object') {
+            serverMessage = parsedBody.message || JSON.stringify(parsedBody);
+        }
+
+        const message = serverMessage ||
+            response.statusText ||
+            `Request failed with status ${response.status}`;
+
+        throw new ApiError(message, {
+            status: response.status,
+            statusText: response.statusText,
+            body: parsedBody
+        });
     }
 
     return parsedBody;
 }
 
-export const fetchDaemonStatus = async (token) => {
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    return await apiFetch(URL_CLUSTER_STATUS, {method: 'GET', headers});
+export const fetchDaemonStatus = async (token, options = {}) => {
+    const headers = {
+        ...options.headers,
+        ...(token && {Authorization: `Bearer ${token}`})
+    };
+
+    return await apiFetch(URL_CLUSTER_STATUS, {
+        method: 'GET',
+        headers,
+        ...options
+    });
 };

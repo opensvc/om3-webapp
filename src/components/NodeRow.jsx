@@ -253,4 +253,4 @@ const NodeRow = ({
     );
 };
 
-export default NodeRow;
+export default React.memo(NodeRow);

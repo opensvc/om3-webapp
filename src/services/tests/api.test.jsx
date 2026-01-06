@@ -1,3 +1,4 @@
+// api.test.js
 import {fetchDaemonStatus} from "../api";
 import {URL_CLUSTER_STATUS} from "../../config/apiPath";
 
@@ -15,8 +16,27 @@ const createHeadersWithoutGet = () => ({});
 describe("fetchDaemonStatus", () => {
     const token = "fake-token";
 
-    afterEach(() => {
+    beforeEach(() => {
+        // Clear all mocks before each test
         jest.clearAllMocks();
+
+        // Mock AbortController for consistent testing
+        global.AbortController = jest.fn(() => ({
+            abort: jest.fn(),
+            signal: {
+                aborted: false,
+                addEventListener: jest.fn(),
+                removeEventListener: jest.fn(),
+                dispatchEvent: jest.fn(),
+            }
+        }));
+
+        // Mock clearTimeout to avoid timer issues
+        global.clearTimeout = jest.fn();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
     test("calls fetch with correct URL and headers", async () => {
@@ -31,12 +51,20 @@ describe("fetchDaemonStatus", () => {
 
         const result = await fetchDaemonStatus(token);
 
-        expect(fetch).toHaveBeenCalledWith(URL_CLUSTER_STATUS, {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
+        expect(fetch).toHaveBeenCalledWith(
+            URL_CLUSTER_STATUS,
+            expect.objectContaining({
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+        );
+
+        // Verify signal is present
+        const fetchCall = fetch.mock.calls[0];
+        expect(fetchCall[1]).toHaveProperty('signal');
+        expect(fetchCall[1].signal).toBeDefined();
 
         expect(result).toEqual(mockData);
     });
@@ -126,10 +154,18 @@ describe("fetchDaemonStatus", () => {
 
         const result = await fetchDaemonStatus(null);
 
-        expect(fetch).toHaveBeenCalledWith(URL_CLUSTER_STATUS, {
-            method: "GET",
-            headers: {},
-        });
+        expect(fetch).toHaveBeenCalledWith(
+            URL_CLUSTER_STATUS,
+            expect.objectContaining({
+                method: "GET",
+                headers: {},
+            })
+        );
+
+        // Verify signal is present
+        const fetchCall = fetch.mock.calls[0];
+        expect(fetchCall[1]).toHaveProperty('signal');
+        expect(fetchCall[1].signal).toBeDefined();
 
         expect(result).toEqual(mockData);
     });
@@ -156,8 +192,6 @@ describe("fetchDaemonStatus", () => {
             body: errorText
         });
     });
-
-    // New tests to improve branch coverage
 
     test("handles response without headers.get method", async () => {
         const mockData = {status: "ok"};

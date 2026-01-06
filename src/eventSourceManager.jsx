@@ -73,10 +73,23 @@ const createBufferManager = () => {
         configUpdated: new Set(),
     };
     let flushTimeout = null;
+    let eventCount = 0;
+    const FLUSH_DELAY = 500;
+    const BATCH_SIZE = 50;
 
     const scheduleFlush = () => {
+        eventCount++;
+        if (eventCount >= BATCH_SIZE) {
+            if (flushTimeout) {
+                clearTimeout(flushTimeout);
+                flushTimeout = null;
+            }
+            flushBuffers();
+            return;
+        }
+
         if (!flushTimeout) {
-            flushTimeout = setTimeout(flushBuffers, 250);
+            flushTimeout = setTimeout(flushBuffers, FLUSH_DELAY);
         }
     };
 
@@ -94,10 +107,20 @@ const createBufferManager = () => {
             setConfigUpdated,
         } = store;
 
+        let updateCount = 0;
+
+        if (Object.keys(buffers.nodeStatus).length) {
+            setNodeStatuses({...store.nodeStatus, ...buffers.nodeStatus});
+            buffers.nodeStatus = {};
+            updateCount++;
+        }
+
         if (Object.keys(buffers.objectStatus).length) {
             setObjectStatuses({...store.objectStatus, ...buffers.objectStatus});
             buffers.objectStatus = {};
+            updateCount++;
         }
+
         if (Object.keys(buffers.instanceStatus).length) {
             const mergedInst = {...store.objectInstanceStatus};
             for (const obj of Object.keys(buffers.instanceStatus)) {
@@ -105,28 +128,33 @@ const createBufferManager = () => {
             }
             setInstanceStatuses(mergedInst);
             buffers.instanceStatus = {};
+            updateCount++;
         }
-        if (Object.keys(buffers.nodeStatus).length) {
-            setNodeStatuses({...store.nodeStatus, ...buffers.nodeStatus});
-            buffers.nodeStatus = {};
-        }
+
         if (Object.keys(buffers.nodeMonitor).length) {
             setNodeMonitors({...store.nodeMonitor, ...buffers.nodeMonitor});
             buffers.nodeMonitor = {};
+            updateCount++;
         }
+
         if (Object.keys(buffers.nodeStats).length) {
             setNodeStats({...store.nodeStats, ...buffers.nodeStats});
             buffers.nodeStats = {};
+            updateCount++;
         }
+
         if (Object.keys(buffers.heartbeatStatus).length) {
             logger.debug('buffer:', buffers.heartbeatStatus);
             setHeartbeatStatuses({...store.heartbeatStatus, ...buffers.heartbeatStatus});
             buffers.heartbeatStatus = {};
         }
+
         if (Object.keys(buffers.instanceMonitor).length) {
             setInstanceMonitors({...store.instanceMonitor, ...buffers.instanceMonitor});
             buffers.instanceMonitor = {};
+            updateCount++;
         }
+
         if (Object.keys(buffers.instanceConfig).length) {
             for (const path of Object.keys(buffers.instanceConfig)) {
                 for (const node of Object.keys(buffers.instanceConfig[path])) {
@@ -134,13 +162,23 @@ const createBufferManager = () => {
                 }
             }
             buffers.instanceConfig = {};
+            updateCount++;
         }
+
         if (buffers.configUpdated.size) {
             setConfigUpdated([...buffers.configUpdated]);
             buffers.configUpdated.clear();
+            updateCount++;
         }
+
+        if (updateCount > 0) {
+            logger.debug(`Flushed ${updateCount} buffer types with ${eventCount} events`);
+        }
+
         flushTimeout = null;
+        eventCount = 0;
     };
+
     return {buffers, scheduleFlush};
 };
 
@@ -188,11 +226,13 @@ export const createEventSource = (url, token) => {
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected');
             const newToken = localStorage.getItem('authToken');
+
             if (newToken && newToken !== token) {
                 logger.info('🔄 New token available, updating EventSource');
                 updateEventSourceToken(newToken);
                 return;
             }
+
             if (window.oidcUserManager) {
                 logger.info('🔄 Attempting silent token renewal...');
                 window.oidcUserManager.signinSilent()
@@ -214,7 +254,6 @@ export const createEventSource = (url, token) => {
             reconnectAttempts++;
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {
@@ -373,11 +412,13 @@ export const createLoggerEventSource = (url, token, filters) => {
         if (error.status === 401) {
             logger.warn('🔐 Authentication error detected in logger');
             const newToken = localStorage.getItem('authToken');
+
             if (newToken && newToken !== token) {
                 logger.info('🔄 New token available, updating Logger EventSource');
                 updateLoggerEventSourceToken(newToken);
                 return;
             }
+
             if (window.oidcUserManager) {
                 window.oidcUserManager.signinSilent()
                     .then(user => {
@@ -398,7 +439,6 @@ export const createLoggerEventSource = (url, token, filters) => {
             reconnectAttempts++;
             const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
             logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
             setTimeout(() => {
                 const currentToken = getCurrentToken();
                 if (currentToken) {

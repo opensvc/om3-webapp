@@ -72,7 +72,10 @@ describe('useFetchDaemonStatus Hook', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         fetchDaemonStatus.mockReset();
-        console.error = jest.fn(); // Mock console.error for error logging
+        console.error = jest.fn();
+
+        // Clear localStorage before each test
+        localStorage.clear();
     });
 
     test('initializes with correct default states', () => {
@@ -164,8 +167,6 @@ describe('useFetchDaemonStatus Hook', () => {
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
     });
-
-    // NOUVEAUX TESTS POUR AMÉLIORER LE COVERAGE DES BRANCHES
 
     test('handles cluster config without name', async () => {
         const mockDaemonStatusWithoutClusterName = {
@@ -317,6 +318,7 @@ describe('useFetchDaemonStatus Hook', () => {
 
         expect(fetchDaemonStatus).not.toHaveBeenCalled();
         expect(screen.getByTestId('nodes').textContent).toBe('[]');
+        expect(screen.getByTestId('error').textContent).toBe('');
     });
 
     test('handles complex node structures', async () => {

@@ -25,7 +25,7 @@ function useAuthInfo() {
         fetchData()
             .catch(error => {
                 if (isMounted) {
-                    logger.error("Erreur non gérée dans fetchData:", error);
+                    logger.error("Unhandled error in fetchData:", error);
                 }
             });
 

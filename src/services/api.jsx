@@ -32,7 +32,6 @@ export async function apiFetch(url, options = {}) {
 
     let parsedBody = null;
 
-    // Vérification plus sûre pour headers.get
     let contentType = null;
     if (response.headers && typeof response.headers.get === 'function') {
         contentType = response.headers.get('content-type');

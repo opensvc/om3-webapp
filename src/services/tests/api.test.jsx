@@ -1,4 +1,3 @@
-// api.test.js
 import {fetchDaemonStatus} from "../api";
 import {URL_CLUSTER_STATUS} from "../../config/apiPath";
 
@@ -336,5 +335,58 @@ describe("fetchDaemonStatus", () => {
             status: 400,
             body: mockErrorBody
         });
+    });
+    test("throws ApiError on request timeout", async () => {
+        jest.useFakeTimers();
+        // Override AbortController mock to handle listeners properly
+        const listeners = [];
+        global.AbortController = jest.fn(() => ({
+            abort: () => {
+                listeners.forEach(listener => listener());
+            },
+            signal: {
+                aborted: false,
+                addEventListener: (type, listener) => {
+                    if (type === 'abort') {
+                        listeners.push(listener);
+                    }
+                },
+                removeEventListener: (type, listener) => {
+                    if (type === 'abort') {
+                        const index = listeners.indexOf(listener);
+                        if (index > -1) {
+                            listeners.splice(index, 1);
+                        }
+                    }
+                },
+                dispatchEvent: jest.fn(),
+            }
+        }));
+        // Mock fetch to reject on abort
+        fetch.mockImplementationOnce((url, options) => {
+            return new Promise((resolve, reject) => {
+                const abortError = new Error('Operation aborted');
+                abortError.name = 'AbortError';
+                options.signal.addEventListener('abort', () => reject(abortError));
+            });
+        });
+        const timeoutMs = 5000;
+        const promise = fetchDaemonStatus(token, { timeout: timeoutMs });
+        jest.advanceTimersByTime(timeoutMs);
+        await expect(promise).rejects.toMatchObject({
+            name: 'ApiError',
+            message: `Request timed out after ${timeoutMs}ms`,
+            body: null
+        });
+        jest.useRealTimers();
+    });
+    test("handles response without json and text methods", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("application/json"),
+            // No json or text methods
+        });
+        const result = await fetchDaemonStatus(token);
+        expect(result).toBeNull();
     });
 });

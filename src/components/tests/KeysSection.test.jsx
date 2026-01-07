@@ -51,8 +51,8 @@ jest.mock('@mui/material', () => {
         ),
         CircularProgress: () => <div role="progressbar">Loading...</div>,
         Typography: ({children, ...props}) => <span {...props}>{children}</span>,
-        Dialog: ({children, open, maxWidth, fullWidth, ...props}) =>
-            open ? <div role="dialog" {...props}>{children}</div> : null,
+        Dialog: ({children, open, maxWidth, fullWidth, onClose, ...props}) =>
+            open ? <div role="dialog" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
@@ -302,7 +302,6 @@ describe('KeysSection Component', () => {
         render(
             <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
         );
-
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
@@ -471,7 +470,9 @@ describe('KeysSection Component', () => {
 
         const dialog = await screen.findByRole('dialog');
         expect(dialog).toHaveTextContent(/Update Key/i);
-
+        await waitFor(() => {
+            expect(screen.getByText('No file chosen')).toBeInTheDocument();
+        });
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
         // Upload file and update name
@@ -958,6 +959,9 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
         const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(screen.getByText('No file selected')).toBeInTheDocument();
+        });
         const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
         await act(async () => {
             await user.click(cancelButton);
@@ -1039,5 +1043,539 @@ describe('KeysSection Component', () => {
         }, {timeout: 15000});
         // Verify fetch was not called for keys
         expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/data/keys'));
+    });
+
+    test('displays error when fetching keys returns not ok', async () => {
+        global.fetch.mockImplementationOnce((url, options) => Promise.resolve({ok: false, status: 500}));
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const keysAccordion = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(keysAccordion);
+        });
+        await waitFor(() => {
+            expect(screen.getByText(/Failed to fetch keys: 500/i)).toBeInTheDocument();
+        });
+    });
+
+    test('handles failed key deletion due to not ok response', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'DELETE') {
+                return Promise.resolve({ok: false, status: 400});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
+        await act(async () => {
+            await user.click(deleteButton[0]);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /Delete/i});
+        await act(async () => {
+            await user.click(confirmButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Deleting key key1…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Failed to delete key: 400', 'error');
+        });
+    });
+
+    test('handles error in key deletion due to network error', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'DELETE') {
+                return Promise.reject(new Error('Network error'));
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
+        await act(async () => {
+            await user.click(deleteButton[0]);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /Delete/i});
+        await act(async () => {
+            await user.click(confirmButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Deleting key key1…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Error: Network error', 'error');
+        });
+    });
+
+    test('handles failed key creation due to not ok response', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'POST') {
+                return Promise.resolve({ok: false, status: 400});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.type(nameInput, 'newKey');
+            await uploadFile(dialog, 'create');
+        });
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        await act(async () => {
+            await user.click(createButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Creating key newKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Failed to create key: 400', 'error');
+        });
+    });
+
+    test('handles error in key creation due to network error', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'POST') {
+                return Promise.reject(new Error('Network error'));
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.type(nameInput, 'newKey');
+            await uploadFile(dialog, 'create');
+        });
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        await act(async () => {
+            await user.click(createButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Creating key newKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Error: Network error', 'error');
+        });
+    });
+
+    test('handles failed key update due to not ok response', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'PUT') {
+                return Promise.resolve({ok: false, status: 400});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton[0]);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.clear(nameInput);
+            await user.type(nameInput, 'updatedKey');
+            await uploadFile(dialog, 'update');
+        });
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Updating key updatedKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Failed to update key: 400', 'error');
+        });
+    });
+
+    test('handles error in key update due to network error', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'PUT') {
+                return Promise.reject(new Error('Network error'));
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton[0]);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.clear(nameInput);
+            await user.type(nameInput, 'updatedKey');
+            await uploadFile(dialog, 'update');
+        });
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Updating key updatedKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Error: Network error', 'error');
+        });
+    });
+
+    test('handles non-array keys data', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: 'not an array'}),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        await waitFor(() => {
+            expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
+        });
+    });
+    test('handles invalid kind in fetchKeys', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/invalid/test" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.queryByText(/Object Keys/i)).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles key creation', async () => {
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+        const dialog = await screen.findByRole('dialog');
+        expect(dialog).toHaveTextContent(/Create New Key/i);
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'create');
+            expect(fileInput).toBeInTheDocument();
+        });
+        await act(async () => {
+            await user.type(nameInput, 'newKey');
+            await user.upload(fileInput, new File(['content'], 'test.txt'));
+        });
+        await waitFor(() => {
+            expect(screen.getByText('test.txt')).toBeInTheDocument();
+        });
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        await act(async () => {
+            await user.click(createButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Creating key newKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'newKey' created successfully");
+        });
+    });
+
+    test('disables buttons during key update', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'PUT') {
+                return new Promise(() => {});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            });
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton[0]);
+        });
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'update');
+            expect(fileInput).toBeInTheDocument();
+        });
+        await act(async () => {
+            await user.type(nameInput, 'updatedKey');
+            await user.upload(fileInput, new File(['content'], 'key.txt'));
+        });
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+        await waitFor(() => {
+            expect(updateButton).toBeDisabled();
+        });
+        const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
+        await waitFor(() => {
+            expect(cancelButton).toBeDisabled();
+        });
+        await waitFor(() => {
+            expect(fileInput).toBeDisabled();
+        });
+        // Check main add button disabled
+        expect(screen.getByRole('button', {name: /add new key/i})).toBeDisabled();
+        // Check table edit and delete disabled
+        expect(screen.getByRole('button', {name: /Edit key key1/i})).toBeDisabled();
+        expect(screen.getByRole('button', {name: /Delete key key1/i})).toBeDisabled();
+    }, 20000);
+
+    test('handles key creation with file selected display', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(screen.getByText('No file selected')).toBeInTheDocument();
+        });
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.type(nameInput, 'newKey');
+            await uploadFile(dialog, 'create');
+        });
+        await waitFor(() => {
+            expect(screen.getByText('test.txt')).toBeInTheDocument();
+        });
+    });
+
+    test('closes create dialog with escape key', async () => {
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+        await screen.findByRole('dialog');
+        await user.keyboard('{Escape}');
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes update dialog with escape key', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [
+                            {name: 'key1', node: 'node1', size: 2626},
+                        ],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+        render(
+            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
+        );
+        await waitFor(() => {
+            expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
+        }, {timeout: 15000});
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+        const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton[0]);
+        });
+        await screen.findByRole('dialog');
+        await user.keyboard('{Escape}');
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
     });
 });

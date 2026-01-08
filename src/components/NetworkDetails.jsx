@@ -2,7 +2,6 @@ import React, {useEffect, useState, useMemo, useRef} from "react";
 import {useParams} from "react-router-dom";
 import {
     Box,
-    Paper,
     Typography,
     Table,
     TableBody,
@@ -244,7 +243,6 @@ const NetworkDetails = () => {
                     </Box>
                 ) : (
                     <TableContainer
-                        component={Paper}
                         sx={{
                             flex: 1,
                             minHeight: 0,

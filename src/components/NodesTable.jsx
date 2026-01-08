@@ -161,11 +161,12 @@ const NodesTable = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            // Handle the promise properly
+            // Start event reception immediately
+            startEventReception(token, nodeEventTypes);
+            // Fetch daemon status in parallel
             fetchNodes(token).catch(error => {
                 logger.error("Failed to fetch nodes:", error);
             });
-            startEventReception(token, nodeEventTypes);
         }
 
         return () => {
@@ -571,9 +572,9 @@ const NodesTable = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {sortedNodes.map((nodename, index) => (
+                                {sortedNodes.map((nodename) => (
                                     <NodeRow
-                                        key={index}
+                                        key={nodename}
                                         nodename={nodename}
                                         stats={nodeStats[nodename]}
                                         status={nodeStatus[nodename]}

@@ -72,7 +72,10 @@ describe('useFetchDaemonStatus Hook', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         fetchDaemonStatus.mockReset();
-        console.error = jest.fn(); // Mock console.error for error logging
+        console.error = jest.fn();
+
+        // Clear localStorage before each test
+        localStorage.clear();
     });
 
     test('initializes with correct default states', () => {
@@ -164,8 +167,6 @@ describe('useFetchDaemonStatus Hook', () => {
 
         expect(fetchDaemonStatus).toHaveBeenCalledWith(mockToken);
     });
-
-    // NOUVEAUX TESTS POUR AMÉLIORER LE COVERAGE DES BRANCHES
 
     test('handles cluster config without name', async () => {
         const mockDaemonStatusWithoutClusterName = {
@@ -317,6 +318,7 @@ describe('useFetchDaemonStatus Hook', () => {
 
         expect(fetchDaemonStatus).not.toHaveBeenCalled();
         expect(screen.getByTestId('nodes').textContent).toBe('[]');
+        expect(screen.getByTestId('error').textContent).toBe('');
     });
 
     test('handles complex node structures', async () => {
@@ -381,5 +383,112 @@ describe('useFetchDaemonStatus Hook', () => {
 
         expect(screen.getByTestId('error').textContent).toBe('');
         expect(screen.getByTestId('nodes').textContent).not.toBe('[]');
+    });
+
+    test('should load cached data from localStorage on mount', () => {
+        const cachedData = {
+            nodes: [{nodename: 'cached-node', status: 'cached'}],
+            daemon: {status: 'cached-running'},
+            clusterStats: {nodeCount: 1},
+            clusterName: 'cached-cluster'
+        };
+
+        localStorage.setItem('cachedNodes', JSON.stringify(cachedData.nodes));
+        localStorage.setItem('cachedDaemon', JSON.stringify(cachedData.daemon));
+        localStorage.setItem('cachedClusterStats', JSON.stringify(cachedData.clusterStats));
+        localStorage.setItem('cachedClusterName', JSON.stringify(cachedData.clusterName));
+
+        render(<TestComponent token={mockToken}/>);
+
+        expect(screen.getByTestId('nodes').textContent).toBe(JSON.stringify(cachedData.nodes));
+        expect(screen.getByTestId('daemon').textContent).toBe(JSON.stringify(cachedData.daemon));
+        expect(screen.getByTestId('clusterStats').textContent).toBe(JSON.stringify(cachedData.clusterStats));
+        expect(screen.getByTestId('clusterName').textContent).toBe(cachedData.clusterName);
+    });
+
+    test('should handle localStorage errors when loading cache', () => {
+        const localStorageMock = {
+            getItem: jest.fn().mockImplementation(() => {
+                throw new Error('Storage error');
+            }),
+            setItem: jest.fn(),
+            removeItem: jest.fn(),
+            clear: jest.fn()
+        };
+        Object.defineProperty(window, 'localStorage', {value: localStorageMock});
+
+        render(<TestComponent token={mockToken}/>);
+
+        expect(console.warn).toHaveBeenCalledWith('Failed to load cached data:', expect.any(Error));
+
+        // Restore original localStorage
+        Object.defineProperty(window, 'localStorage', {value: localStorage});
+    });
+
+    test('should handle localStorage errors when caching data', async () => {
+        fetchDaemonStatus.mockResolvedValue(mockDaemonStatus);
+
+        const localStorageMock = {
+            getItem: jest.fn(),
+            setItem: jest.fn().mockImplementation(() => {
+                throw new Error('Storage write error');
+            }),
+            removeItem: jest.fn(),
+            clear: jest.fn()
+        };
+        Object.defineProperty(window, 'localStorage', {value: localStorageMock});
+
+        render(<TestComponent token={mockToken}/>);
+
+        fireEvent.click(screen.getByTestId('fetchNodes'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('loading').textContent).toBe('false');
+        });
+
+        expect(console.warn).toHaveBeenCalledWith('Failed to cache data:', expect.any(Error));
+
+        // Restore original localStorage
+        Object.defineProperty(window, 'localStorage', {value: localStorage});
+    });
+
+    test('should handle localStorage errors when clearing cache on API error', async () => {
+        fetchDaemonStatus.mockRejectedValue(new Error('API error'));
+
+        const localStorageMock = {
+            getItem: jest.fn(),
+            setItem: jest.fn(),
+            removeItem: jest.fn().mockImplementation(() => {
+                throw new Error('Storage remove error');
+            }),
+            clear: jest.fn()
+        };
+        Object.defineProperty(window, 'localStorage', {value: localStorageMock});
+
+        render(<TestComponent token={mockToken}/>);
+
+        fireEvent.click(screen.getByTestId('fetchNodes'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('loading').textContent).toBe('false');
+        });
+
+        expect(console.warn).toHaveBeenCalledWith('Failed to clear cache on error:', expect.any(Error));
+
+        // Restore original localStorage
+        Object.defineProperty(window, 'localStorage', {value: localStorage});
+    });
+
+    test('should not call API when token is empty', async () => {
+        render(<TestComponentManual token=""/>);
+
+        fireEvent.click(screen.getByTestId('fetchNodes'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('error').textContent).toBe('Token is required to fetch daemon status');
+        });
+
+        expect(fetchDaemonStatus).not.toHaveBeenCalled();
+        expect(screen.getByTestId('loading').textContent).toBe('false');
     });
 });

@@ -1,21 +1,11 @@
-import React, {useEffect, useCallback} from "react";
+import React, {useEffect, useCallback, lazy, Suspense} from "react";
 import {Routes, Route, Navigate, useNavigate} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
 import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
-import NodesTable from "./NodesTable";
-import Objects from "./Objects";
-import ObjectDetails from "./ObjectDetails";
-import ClusterOverview from "./Cluster";
 import NavBar from './NavBar';
-import Namespaces from "./Namespaces";
-import Heartbeats from "./Heartbeats";
-import Pools from "./Pools";
-import Network from "./Network";
-import NetworkDetails from "./NetworkDetails";
-import WhoAmI from "./WhoAmI";
 import {OidcProvider, useOidc} from "../context/OidcAuthContext.tsx";
 import {
     AuthProvider,
@@ -30,6 +20,25 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
 import {useDarkMode} from "../context/DarkModeContext";
 import {ThemeProvider, createTheme} from '@mui/material/styles';
+
+// Lazy load components for code splitting
+const NodesTable = lazy(() => import("./NodesTable"));
+const Objects = lazy(() => import("./Objects"));
+const ObjectDetails = lazy(() => import("./ObjectDetails"));
+const ClusterOverview = lazy(() => import("./Cluster"));
+const Namespaces = lazy(() => import("./Namespaces"));
+const Heartbeats = lazy(() => import("./Heartbeats"));
+const Pools = lazy(() => import("./Pools"));
+const Network = lazy(() => import("./Network"));
+const NetworkDetails = lazy(() => import("./NetworkDetails"));
+const WhoAmI = lazy(() => import("./WhoAmI"));
+
+// Loading component for Suspense fallback
+const Loading = () => (
+    <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
+    </div>
+);
 
 const DynamicThemeProvider = ({children}) => {
     const {isDarkMode} = useDarkMode();
@@ -309,26 +318,28 @@ const App = () => {
                     <DynamicThemeProvider>
                         <NavBar/>
                         <div className="min-h-screen bg-inherit">
-                            <Routes>
-                                <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                                <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
-                                <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                                <Route path="/heartbeats" element={<Heartbeats/>}/>
-                                <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                                <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                <Route path="/network/:networkName"
-                                       element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
-                                <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                <Route path="/objects/:objectName"
-                                       element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                                <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                                <Route path="/silent-renew" element={<SilentRenew/>}/>
-                                <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                <Route path="/auth-choice" element={<AuthChoice/>}/>
-                                <Route path="/auth/login" element={<Login/>}/>
-                                <Route path="*" element={<Navigate to="/"/>}/>
-                            </Routes>
+                            <Suspense fallback={<Loading/>}>
+                                <Routes>
+                                    <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                                    <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                    <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                    <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                    <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                    <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                    <Route path="/network/:networkName"
+                                           element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
+                                    <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                                    <Route path="/objects/:objectName"
+                                           element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                                    <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                    <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                    <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                    <Route path="/auth-choice" element={<AuthChoice/>}/>
+                                    <Route path="/auth/login" element={<Login/>}/>
+                                    <Route path="*" element={<Navigate to="/"/>}/>
+                                </Routes>
+                            </Suspense>
                         </div>
                     </DynamicThemeProvider>
                 </OidcInitializer>

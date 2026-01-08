@@ -17,6 +17,10 @@ jest.mock('../Heartbeats', () => () => <div data-testid="heartbeats">Heartbeats<
 jest.mock('../Pools', () => () => <div data-testid="pools">Pools</div>);
 jest.mock('../Objects', () => () => <div data-testid="objects">Objects</div>);
 jest.mock('../ObjectDetails', () => () => <div data-testid="object-details">ObjectDetails</div>);
+jest.mock('../Network', () => () => <div data-testid="network">Network</div>);
+jest.mock('../NetworkDetails', () => () => <div data-testid="network-details">NetworkDetails</div>);
+jest.mock('../WhoAmI', () => () => <div data-testid="whoami">WhoAmI</div>);
+jest.mock('../SilentRenew.jsx', () => () => <div data-testid="silent-renew">SilentRenew</div>);
 jest.mock('../AuthChoice.jsx', () => () => <div data-testid="auth-choice">AuthChoice</div>);
 jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
@@ -833,5 +837,493 @@ describe('App Component', () => {
         renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('handles silent renew error callback with error parameter', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        renderAppWithProviders(['/cluster']);
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled()
+        );
+
+        const errorCb = mockUserManager.events.addSilentRenewError.mock.calls[0][0];
+
+        act(() => errorCb(new Error('renew failed')));
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken')
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration')
+        );
+
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('onUserRefreshed callback handles user without profile', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        const userWithoutProfile = {
+            access_token: 'new-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+        };
+
+        // Simulate that getUser returns this user
+        mockUserManager.getUser.mockResolvedValue(userWithoutProfile);
+
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        renderAppWithProviders(['/cluster']);
+
+        // Wait for getUser to be called
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+
+        // The onUserRefreshed callback should still be called
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'SetAccessToken',
+                data: 'new-token'
+            })
+        );
+
+        // But Login action should not be dispatched since there's no profile
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(
+            expect.objectContaining({type: 'Login', data: expect.anything()})
+        );
+    });
+
+    test('visibilitychange triggers auth check on resume', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        // Mock document.visibilityState
+        Object.defineProperty(document, 'visibilityState', {
+            value: 'visible',
+            configurable: true,
+        });
+
+        // Trigger visibilitychange event
+        act(() => {
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+        // Should not redirect since token is valid
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+    });
+
+    test('handleCheckAuthOnResume handles OIDC with valid token', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        // Mock valid token (not expired)
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        // Simulate focus
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Should not redirect
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('handleCheckAuthOnResume handles basic auth with expired token', async () => {
+        mockAuthState.authChoice = 'basic';
+
+        // Mock expired token
+        const expiredToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return expiredToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        // Simulate focus
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Should redirect
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('event listeners are cleaned up on unmount', async () => {
+        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener');
+        const documentAddEventListenerSpy = jest.spyOn(document, 'addEventListener');
+        const documentRemoveEventListenerSpy = jest.spyOn(document, 'removeEventListener');
+
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        const {unmount} = renderAppWithProviders(['/']);
+
+        // Wait for initial render
+        await screen.findByTestId('navbar');
+
+        // Unmount the component
+        unmount();
+
+        // Check that event listeners were removed
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('storage', expect.any(Function));
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('focus', expect.any(Function));
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('om3:auth-redirect', expect.any(Function));
+        expect(documentRemoveEventListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    });
+
+    test('handles all route paths correctly', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        // Test each protected route
+        const routes = [
+            {path: '/namespaces', testId: 'namespaces'},
+            {path: '/nodes', testId: 'nodes'},
+            {path: '/storage-pools', testId: 'pools'},
+            {path: '/network', testId: 'network'},
+            {path: '/objects', testId: 'objects'},
+            {path: '/whoami', testId: 'whoami'},
+        ];
+
+        for (const route of routes) {
+            mockNavigate.mockClear();
+            const {unmount} = renderAppWithProviders([route.path]);
+
+            await waitFor(() => {
+                expect(screen.getByTestId(route.testId)).toBeInTheDocument();
+            });
+
+            unmount();
+        }
+
+        // Test non-protected routes
+        const nonProtectedRoutes = [
+            {path: '/heartbeats', testId: 'heartbeats'},
+            {path: '/silent-renew', testId: 'silent-renew'},
+            {path: '/auth-callback', testId: 'auth-callback'},
+            {path: '/auth-choice', testId: 'auth-choice'},
+            {path: '/auth/login', testId: 'login'},
+        ];
+
+        for (const route of nonProtectedRoutes) {
+            mockNavigate.mockClear();
+            const {unmount} = renderAppWithProviders([route.path]);
+
+            await waitFor(() => {
+                expect(screen.getByTestId(route.testId)).toBeInTheDocument();
+            });
+
+            unmount();
+        }
+    });
+
+    test('ProtectedRoute with null token and null authChoice', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return null;
+            if (k === 'authChoice') return null;
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('onUserRefreshed callback is called when user loaded event fires', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        renderAppWithProviders(['/cluster']);
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled()
+        );
+
+        const userLoadedCallback = mockUserManager.events.addUserLoaded.mock.calls[0][0];
+        expect(userLoadedCallback).toBeDefined();
+
+        const testUser = {
+            profile: {preferred_username: 'event-user'},
+            access_token: 'event-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+        };
+
+        // Call the callback directly
+        act(() => {
+            userLoadedCallback(testUser);
+        });
+
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'SetAccessToken',
+                data: 'event-token'
+            })
+        );
+
+        await waitFor(() =>
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'event-token')
+        );
+    });
+
+    // NOUVEAUX TESTS POUR AMÉLIORER LA COUVERTURE - SIMPLIFIÉS
+
+    test('isTokenValid returns false for null token', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return null; // null token
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('isTokenValid returns false for empty token string', async () => {
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return ''; // empty string token
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+    });
+
+    test('onUserRefreshed handles user with profile but no preferred_username', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        const userWithProfileNoUsername = {
+            profile: {}, // Profile exists but no preferred_username
+            access_token: 'token-no-username',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+        };
+
+        renderAppWithProviders(['/cluster']);
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled()
+        );
+
+        const userLoadedCallback = mockUserManager.events.addUserLoaded.mock.calls[0][0];
+
+        // Call the callback with user without preferred_username
+        act(() => {
+            userLoadedCallback(userWithProfileNoUsername);
+        });
+
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'SetAccessToken',
+                data: 'token-no-username'
+            })
+        );
+
+        // Login action should not be dispatched since there's no preferred_username
+        expect(mockAuthDispatch).not.toHaveBeenCalledWith(
+            expect.objectContaining({type: 'Login', data: expect.anything()})
+        );
+    });
+
+    test('handleTokenExpired callback navigates to auth-choice', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        renderAppWithProviders(['/cluster']);
+
+        await waitFor(() =>
+            expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled()
+        );
+
+        const expiredCb = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
+
+        act(() => expiredCb());
+
+        await waitFor(() =>
+            expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true})
+        );
+    });
+
+    test('silent renew on expired user with successful renew', async () => {
+        const expiredUser = {
+            profile: {preferred_username: 'expired-user'},
+            expired: true,
+        };
+
+        const refreshedUser = {
+            profile: {preferred_username: 'refreshed-user'},
+            access_token: 'refreshed-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expired: false,
+        };
+
+        mockUserManager.getUser.mockResolvedValue(expiredUser);
+        mockUserManager.signinSilent.mockResolvedValue(refreshedUser);
+
+        mockAuthState.authChoice = 'openid';
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'authToken' ? 'dummy' : (k === 'authChoice' ? 'openid' : null)
+        );
+
+        renderAppWithProviders(['/cluster']);
+
+        await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
+        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
+
+        // Should dispatch actions for refreshed user
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'SetAccessToken',
+                data: 'refreshed-token'
+            })
+        );
+
+        await waitFor(() =>
+            expect(mockAuthDispatch).toHaveBeenCalledWith({
+                type: 'Login',
+                data: 'refreshed-user'
+            })
+        );
+    });
+
+    test('network details route with parameter', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/network/test-network']);
+
+        expect(await screen.findByTestId('network-details')).toBeInTheDocument();
+    });
+
+    test('object details route with parameter', async () => {
+        const validToken = makeTokenWithExp(3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return validToken;
+            if (k === 'authChoice') return 'basic';
+            return null;
+        });
+
+        renderAppWithProviders(['/objects/test-object']);
+
+        expect(await screen.findByTestId('object-details')).toBeInTheDocument();
+    });
+
+    test('auth choice saved to localStorage when authChoice changes', async () => {
+        // Simulate authChoice changing from null to 'basic'
+        let currentAuthChoice = null;
+        mockAuthState.authChoice = 'basic';
+
+        mockLocalStorage.setItem.mockImplementation((key, value) => {
+            if (key === 'authChoice') {
+                currentAuthChoice = value;
+            }
+        });
+
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authChoice') return currentAuthChoice;
+            return null;
+        });
+
+        renderAppWithProviders(['/']);
+
+        await waitFor(() => {
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authChoice', 'basic');
+        });
+    });
+
+    test('handleCheckAuthOnResume for OIDC with no token', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return null; // No token
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+
+        renderAppWithProviders(['/cluster']);
+
+        // Simulate focus
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Should redirect
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
+    });
+
+    test('handleCheckAuthOnResume for OIDC with expired token and userManager', async () => {
+        mockAuthState.authChoice = 'openid';
+
+        // Mock expired token
+        const expiredToken = makeTokenWithExp(-3600);
+        mockLocalStorage.getItem.mockImplementation((k) => {
+            if (k === 'authToken') return expiredToken;
+            if (k === 'authChoice') return 'openid';
+            return null;
+        });
+
+        // Mock successful silent renew
+        const refreshedUser = {
+            profile: {preferred_username: 'refreshed-user'},
+            access_token: 'refreshed-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            expired: false,
+        };
+
+        mockUserManager.signinSilent.mockResolvedValue(refreshedUser);
+
+        renderAppWithProviders(['/cluster']);
+
+        // Simulate focus event
+        act(() => {
+            window.dispatchEvent(new Event('focus'));
+        });
+
+        // Wait for silent renew to complete
+        await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
+
+        // Should update storage
+        await waitFor(() =>
+            expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'refreshed-token')
+        );
+
+        // Should not redirect
+        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
     });
 });

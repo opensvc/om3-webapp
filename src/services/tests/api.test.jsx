@@ -15,8 +15,27 @@ const createHeadersWithoutGet = () => ({});
 describe("fetchDaemonStatus", () => {
     const token = "fake-token";
 
-    afterEach(() => {
+    beforeEach(() => {
+        // Clear all mocks before each test
         jest.clearAllMocks();
+
+        // Mock AbortController for consistent testing
+        global.AbortController = jest.fn(() => ({
+            abort: jest.fn(),
+            signal: {
+                aborted: false,
+                addEventListener: jest.fn(),
+                removeEventListener: jest.fn(),
+                dispatchEvent: jest.fn(),
+            }
+        }));
+
+        // Mock clearTimeout to avoid timer issues
+        global.clearTimeout = jest.fn();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
     test("calls fetch with correct URL and headers", async () => {
@@ -31,12 +50,20 @@ describe("fetchDaemonStatus", () => {
 
         const result = await fetchDaemonStatus(token);
 
-        expect(fetch).toHaveBeenCalledWith(URL_CLUSTER_STATUS, {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
+        expect(fetch).toHaveBeenCalledWith(
+            URL_CLUSTER_STATUS,
+            expect.objectContaining({
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+        );
+
+        // Verify signal is present
+        const fetchCall = fetch.mock.calls[0];
+        expect(fetchCall[1]).toHaveProperty('signal');
+        expect(fetchCall[1].signal).toBeDefined();
 
         expect(result).toEqual(mockData);
     });
@@ -126,10 +153,18 @@ describe("fetchDaemonStatus", () => {
 
         const result = await fetchDaemonStatus(null);
 
-        expect(fetch).toHaveBeenCalledWith(URL_CLUSTER_STATUS, {
-            method: "GET",
-            headers: {},
-        });
+        expect(fetch).toHaveBeenCalledWith(
+            URL_CLUSTER_STATUS,
+            expect.objectContaining({
+                method: "GET",
+                headers: {},
+            })
+        );
+
+        // Verify signal is present
+        const fetchCall = fetch.mock.calls[0];
+        expect(fetchCall[1]).toHaveProperty('signal');
+        expect(fetchCall[1].signal).toBeDefined();
 
         expect(result).toEqual(mockData);
     });
@@ -156,8 +191,6 @@ describe("fetchDaemonStatus", () => {
             body: errorText
         });
     });
-
-    // New tests to improve branch coverage
 
     test("handles response without headers.get method", async () => {
         const mockData = {status: "ok"};
@@ -302,5 +335,58 @@ describe("fetchDaemonStatus", () => {
             status: 400,
             body: mockErrorBody
         });
+    });
+    test("throws ApiError on request timeout", async () => {
+        jest.useFakeTimers();
+        // Override AbortController mock to handle listeners properly
+        const listeners = [];
+        global.AbortController = jest.fn(() => ({
+            abort: () => {
+                listeners.forEach(listener => listener());
+            },
+            signal: {
+                aborted: false,
+                addEventListener: (type, listener) => {
+                    if (type === 'abort') {
+                        listeners.push(listener);
+                    }
+                },
+                removeEventListener: (type, listener) => {
+                    if (type === 'abort') {
+                        const index = listeners.indexOf(listener);
+                        if (index > -1) {
+                            listeners.splice(index, 1);
+                        }
+                    }
+                },
+                dispatchEvent: jest.fn(),
+            }
+        }));
+        // Mock fetch to reject on abort
+        fetch.mockImplementationOnce((url, options) => {
+            return new Promise((resolve, reject) => {
+                const abortError = new Error('Operation aborted');
+                abortError.name = 'AbortError';
+                options.signal.addEventListener('abort', () => reject(abortError));
+            });
+        });
+        const timeoutMs = 5000;
+        const promise = fetchDaemonStatus(token, { timeout: timeoutMs });
+        jest.advanceTimersByTime(timeoutMs);
+        await expect(promise).rejects.toMatchObject({
+            name: 'ApiError',
+            message: `Request timed out after ${timeoutMs}ms`,
+            body: null
+        });
+        jest.useRealTimers();
+    });
+    test("handles response without json and text methods", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("application/json"),
+            // No json or text methods
+        });
+        const result = await fetchDaemonStatus(token);
+        expect(result).toBeNull();
     });
 });

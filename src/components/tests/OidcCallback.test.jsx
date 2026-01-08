@@ -28,6 +28,13 @@ jest.mock('../../context/OidcAuthContext.tsx', () => ({
 
 jest.mock('../../config/oidcConfiguration.js', () => jest.fn());
 
+jest.mock('../../utils/logger.js', () => ({
+    info: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+}));
+
 describe('OidcCallback Component', () => {
     const mockNavigate = jest.fn();
     const mockAuthDispatch = jest.fn();
@@ -39,6 +46,10 @@ describe('OidcCallback Component', () => {
             addAccessTokenExpiring: jest.fn(),
             addAccessTokenExpired: jest.fn(),
             addSilentRenewError: jest.fn(),
+            removeUserLoaded: jest.fn(),
+            removeAccessTokenExpiring: jest.fn(),
+            removeAccessTokenExpired: jest.fn(),
+            removeSilentRenewError: jest.fn(),
         },
     };
     const mockRecreateUserManager = jest.fn();
@@ -53,6 +64,7 @@ describe('OidcCallback Component', () => {
     };
 
     let broadcastChannelMock;
+    let logger;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -65,9 +77,9 @@ describe('OidcCallback Component', () => {
             recreateUserManager: mockRecreateUserManager,
         });
         oidcConfiguration.mockResolvedValue({some: 'config'});
-        console.error = jest.fn();
-        console.log = jest.fn();
-        console.warn = jest.fn();
+
+        // Import logger after mocking
+        logger = require('../../utils/logger.js');
 
         // Set up BroadcastChannel mock
         broadcastChannelMock = {
@@ -86,6 +98,7 @@ describe('OidcCallback Component', () => {
 
     afterEach(() => {
         delete global.BroadcastChannel;
+        jest.restoreAllMocks();
     });
 
     test('renders loading text', () => {
@@ -103,7 +116,7 @@ describe('OidcCallback Component', () => {
 
         expect(mockRecreateUserManager).toHaveBeenCalledWith({some: 'config'});
         expect(oidcConfiguration).toHaveBeenCalledWith(mockAuthInfo);
-        expect(console.log).toHaveBeenCalledWith('Initializing UserManager with authInfo');
+        expect(logger.info).toHaveBeenCalledWith('Initializing UserManager with authInfo');
     });
 
     test('does not call recreateUserManager when authInfo is null', async () => {
@@ -127,7 +140,7 @@ describe('OidcCallback Component', () => {
         });
 
         expect(oidcConfiguration).toHaveBeenCalledWith(mockAuthInfo);
-        expect(console.error).toHaveBeenCalledWith('Failed to initialize OIDC config:', error);
+        expect(logger.error).toHaveBeenCalledWith('Failed to initialize OIDC config:', error);
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
 
@@ -143,7 +156,7 @@ describe('OidcCallback Component', () => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
         });
 
-        expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
+        expect(logger.debug).toHaveBeenCalledWith('Handling OIDC callback or session check');
     });
 
     test('handles existing user session with expired token', async () => {
@@ -163,7 +176,7 @@ describe('OidcCallback Component', () => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
         });
 
-        expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
+        expect(logger.debug).toHaveBeenCalledWith('Handling OIDC callback or session check');
     });
 
     test('handles getUser returning null user', async () => {
@@ -183,7 +196,7 @@ describe('OidcCallback Component', () => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
         });
 
-        expect(console.log).toHaveBeenCalledWith('Handling OIDC callback or session check');
+        expect(logger.debug).toHaveBeenCalledWith('Handling OIDC callback or session check');
     });
 
     test('handles getUser error', async () => {
@@ -204,7 +217,7 @@ describe('OidcCallback Component', () => {
             expect(mockUserManager.signinRedirectCallback).toHaveBeenCalled();
         });
 
-        expect(console.error).toHaveBeenCalledWith('Failed to get user:', error);
+        expect(logger.error).toHaveBeenCalledWith('Failed to get user:', error);
     });
 
     test('handles successful signinRedirectCallback', async () => {
@@ -240,7 +253,7 @@ describe('OidcCallback Component', () => {
         expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled();
         expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled();
         expect(mockNavigate).toHaveBeenCalledWith('/');
-        expect(console.log).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
+        expect(logger.info).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
         expect(broadcastChannelMock.postMessage).toHaveBeenCalledWith({
             type: 'tokenUpdated',
             data: 'mock-access-token',
@@ -265,7 +278,7 @@ describe('OidcCallback Component', () => {
         expect(localStorage.getItem('tokenExpiration')).toBeNull();
         expect(mockAuthDispatch).not.toHaveBeenCalled();
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
-        expect(console.error).toHaveBeenCalledWith('signinRedirectCallback failed:', error);
+        expect(logger.error).toHaveBeenCalledWith('signinRedirectCallback failed:', error);
     });
 
     test('adds event listeners for user loaded and token expiring', async () => {
@@ -291,7 +304,7 @@ describe('OidcCallback Component', () => {
         });
         expect(localStorage.getItem('authToken')).toBe('mock-access-token');
         expect(localStorage.getItem('tokenExpiration')).toBe('1234567890');
-        expect(console.log).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
+        expect(logger.info).toHaveBeenCalledWith('User refreshed:', 'testuser', 'expires_at:', 1234567890);
         expect(broadcastChannelMock.postMessage).toHaveBeenCalledWith({
             type: 'tokenUpdated',
             data: 'mock-access-token',
@@ -301,7 +314,7 @@ describe('OidcCallback Component', () => {
         const addAccessTokenExpiringCallback = mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0];
         addAccessTokenExpiringCallback();
 
-        expect(console.log).toHaveBeenCalledWith('Access token is about to expire, attempting silent renew...');
+        expect(logger.debug).toHaveBeenCalledWith('Access token is about to expire, attempting silent renew...');
     });
 
     test('re-runs effect when authInfo changes', async () => {
@@ -339,6 +352,7 @@ describe('OidcCallback Component', () => {
         const newUserManager = {
             ...mockUserManager,
             signinRedirectCallback: jest.fn().mockResolvedValue(mockUser),
+            getUser: jest.fn().mockResolvedValue(null),
         };
         useOidc.mockReturnValue({
             userManager: newUserManager,
@@ -366,7 +380,7 @@ describe('OidcCallback Component', () => {
         const addAccessTokenExpiredCallback = mockUserManager.events.addAccessTokenExpired.mock.calls[0][0];
         addAccessTokenExpiredCallback();
 
-        expect(console.warn).toHaveBeenCalledWith('Access token expired, redirecting to /auth-choice');
+        expect(logger.warn).toHaveBeenCalledWith('Access token expired, redirecting to /auth-choice');
         expect(localStorage.getItem('authToken')).toBeNull();
         expect(localStorage.getItem('tokenExpiration')).toBeNull();
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
@@ -389,7 +403,7 @@ describe('OidcCallback Component', () => {
         const error = new Error('Silent renew error');
         addSilentRenewErrorCallback(error);
 
-        expect(console.error).toHaveBeenCalledWith('Silent renew failed:', error);
+        expect(logger.error).toHaveBeenCalledWith('Silent renew failed:', error);
         expect(localStorage.getItem('authToken')).toBeNull();
         expect(localStorage.getItem('tokenExpiration')).toBeNull();
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
@@ -423,7 +437,7 @@ describe('OidcCallback Component', () => {
         });
         expect(localStorage.getItem('authToken')).toBe('new-token');
         expect(localStorage.getItem('tokenExpiration')).toBe('9876543210');
-        expect(console.log).toHaveBeenCalledWith('Token updated from another tab');
+        expect(logger.info).toHaveBeenCalledWith('Token updated from another tab');
         expect(broadcastChannelMock.close).toHaveBeenCalled();
     });
 
@@ -453,7 +467,7 @@ describe('OidcCallback Component', () => {
         expect(localStorage.getItem('authToken')).toBeNull();
         expect(localStorage.getItem('tokenExpiration')).toBeNull();
         expect(localStorage.getItem('authChoice')).toBeNull();
-        expect(console.log).toHaveBeenCalledWith('Logout triggered from another tab');
+        expect(logger.info).toHaveBeenCalledWith('Logout triggered from another tab');
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
         expect(broadcastChannelMock.close).toHaveBeenCalled();
     });
@@ -555,5 +569,101 @@ describe('OidcCallback Component', () => {
         expect(() => {
             screen.getByText('Logging ...');
         }).not.toThrow();
+    });
+
+    test('sets up event handlers only once', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.getUser.mockResolvedValue(mockUser);
+
+        const {rerender} = render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addUserLoaded).toHaveBeenCalledTimes(1);
+        });
+
+        // Re-render and verify event handlers are not added again
+        rerender(<OidcCallback/>);
+
+        expect(mockUserManager.events.addUserLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    test('handles null authDispatch in onUserRefreshed', async () => {
+        useAuthDispatch.mockReturnValue(null);
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.getUser.mockResolvedValue(mockUser);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        // Should not crash even though authDispatch is null
+        expect(localStorage.getItem('authToken')).toBe('mock-access-token');
+        expect(broadcastChannelMock.postMessage).toHaveBeenCalled();
+    });
+
+    test('handles user with null profile in onUserRefreshed', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        const userWithNullProfile = {
+            ...mockUser,
+            profile: null,
+        };
+        mockUserManager.getUser.mockResolvedValue(userWithNullProfile);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        // Should not crash when profile is null
+        expect(logger.info).toHaveBeenCalledWith('User refreshed:', undefined, 'expires_at:', 1234567890);
+    });
+
+    test('handles user with null expires_at', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        const userWithoutExpiresAt = {
+            ...mockUser,
+            expires_at: null,
+        };
+        mockUserManager.getUser.mockResolvedValue(userWithoutExpiresAt);
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.getUser).toHaveBeenCalled();
+        });
+
+        expect(localStorage.getItem('tokenExpiration')).toBe('');
+    });
+
+    test('setupEventHandlers uses correct dependencies', async () => {
+        useOidc.mockReturnValue({
+            userManager: mockUserManager,
+            recreateUserManager: mockRecreateUserManager,
+        });
+        mockUserManager.getUser.mockResolvedValue(mockUser);
+
+        render(<OidcCallback/>);
+
+        await waitFor(() => {
+            expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled();
+        });
+
+        // Verify all event handlers were added
+        expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled();
+        expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled();
+        expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled();
+        expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled();
     });
 });

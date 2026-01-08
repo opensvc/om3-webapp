@@ -88,7 +88,19 @@ jest.mock('@mui/material', () => {
                 {children}
             </button>
         ),
-        TextField: ({label, value, onChange, disabled, multiline, rows, id, fullWidth, helperText, slotProps, ...props}) => {
+        TextField: ({
+                        label,
+                        value,
+                        onChange,
+                        disabled,
+                        multiline,
+                        rows,
+                        id,
+                        fullWidth,
+                        helperText,
+                        slotProps,
+                        ...props
+                    }) => {
             const inputId = id || `textfield-${label}`;
             return (
                 <div>
@@ -189,7 +201,7 @@ jest.mock('../LogsViewer.jsx', () => ({nodename, height}) => (
     <div
         data-testid="logs-viewer"
         data-nodename={nodename}
-        style={{ height: height }}
+        style={{height: height}}
     >
         Logs Viewer Mock
     </div>
@@ -3211,5 +3223,138 @@ type = flag
 
         // Component should have unmounted cleanly without errors
         expect(true).toBe(true);
+    });
+
+    test('handles console URL copy error', async () => {
+        require('react-router-dom').useParams.mockReturnValue({
+            objectName: 'root/svc/svc1',
+        });
+
+        const mockStateWithContainer = {
+            objectStatus: {
+                'root/svc/svc1': {avail: 'up', frozen: null},
+            },
+            objectInstanceStatus: {
+                'root/svc/svc1': {
+                    node1: {
+                        avail: 'up',
+                        frozen_at: null,
+                        resources: {
+                            containerRes: {
+                                status: 'up',
+                                label: 'Container Resource',
+                                type: 'container.docker',
+                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
+                                running: true,
+                            },
+                        },
+                    },
+                },
+            },
+            instanceMonitor: {
+                'node1:root/svc/svc1': {
+                    state: 'running',
+                    global_expect: 'placed@node1',
+                    resources: {containerRes: {restart: {remaining: 0}}},
+                },
+            },
+            instanceConfig: {
+                'root/svc/svc1': {
+                    resources: {
+                        containerRes: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
+                    },
+                },
+            },
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+        };
+
+        useEventStore.mockImplementation((selector) => selector(mockStateWithContainer));
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/console')) {
+                return Promise.resolve({
+                    ok: true,
+                    headers: {
+                        get: (header) => header === 'Location' ? 'https://console.example.com/session123' : null
+                    }
+                });
+            }
+            if (url.includes('/config/file') || url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    text: () => Promise.resolve('config data'),
+                    json: () => Promise.resolve({items: []})
+                });
+            }
+            return Promise.resolve({ok: true, text: () => Promise.resolve('success')});
+        });
+
+        // Mock clipboard to reject
+        const mockClipboard = {
+            writeText: jest.fn().mockRejectedValue(new Error('Clipboard error')),
+        };
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: mockClipboard,
+            writable: true,
+            configurable: true,
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
+                <Routes>
+                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('node1')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const resourcesAccordion = screen.getByRole('button', {
+            name: /expand resources for node node1/i,
+        });
+        await userEvent.click(resourcesAccordion);
+
+        await waitFor(() => {
+            expect(screen.getByText('containerRes')).toBeInTheDocument();
+        });
+
+        const resourceActionButtons = screen.getAllByRole('button').filter(button =>
+            button.getAttribute('aria-label')?.includes('Resource containerRes actions')
+        );
+        await userEvent.click(resourceActionButtons[0]);
+
+        const menus = await screen.findAllByRole('menu');
+        const consoleItem = within(menus[0]).getByRole('menuitem', {name: /console/i});
+        await userEvent.click(consoleItem);
+
+        await waitFor(() => {
+            const dialogs = screen.getAllByRole('dialog');
+            const consoleDialog = dialogs.find(d => d.textContent?.includes('Open Console') && d.textContent?.includes('containerRes'));
+            expect(consoleDialog).toBeInTheDocument();
+        });
+
+        const dialogs = screen.getAllByRole('dialog');
+        const consoleDialog = dialogs.find(d => d.textContent?.includes('Open Console') && d.textContent?.includes('containerRes'));
+        const openConsoleButton = within(consoleDialog).getByRole('button', {name: /Open Console/i});
+        await userEvent.click(openConsoleButton);
+
+        await waitFor(() => {
+            const urlDialogs = screen.getAllByRole('dialog');
+            const urlDialog = urlDialogs.find(d => d.textContent?.includes('Console URL') && !d.textContent?.includes('containerRes'));
+            expect(urlDialog).toBeInTheDocument();
+        });
+
+        const urlDialogs = screen.getAllByRole('dialog');
+        const urlDialog = urlDialogs.find(d => d.textContent?.includes('Console URL') && !d.textContent?.includes('containerRes'));
+        const copyButton = within(urlDialog).getByRole('button', {name: /Copy URL/i});
+        await userEvent.click(copyButton);
+
+        // Clipboard error is silently handled (catch block)
+        expect(mockClipboard.writeText).toHaveBeenCalled();
+
+        delete global.navigator.clipboard;
     });
 });

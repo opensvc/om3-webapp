@@ -1,4 +1,4 @@
-import {useState, useRef, useCallback} from "react";
+import {useState, useRef, useCallback, useEffect} from "react";
 import {fetchDaemonStatus} from "../services/api";
 import logger from '../utils/logger.js';
 
@@ -10,11 +10,45 @@ const useFetchDaemonStatus = () => {
     const cacheRef = useRef([]);
     const [clusterStats, setClusterStats] = useState({});
     const [clusterName, setClusterName] = useState("");
+    const isInitialMount = useRef(true);
+
+    // Load cached data on mount
+    useEffect(() => {
+        try {
+            const cachedNodes = localStorage.getItem('cachedNodes');
+            const cachedDaemon = localStorage.getItem('cachedDaemon');
+            const cachedClusterStats = localStorage.getItem('cachedClusterStats');
+            const cachedClusterName = localStorage.getItem('cachedClusterName');
+            if (cachedNodes) {
+                const nodesArray = JSON.parse(cachedNodes);
+                setNodes(nodesArray);
+                cacheRef.current = nodesArray;
+            }
+            if (cachedDaemon) {
+                setDaemon(JSON.parse(cachedDaemon));
+            }
+            if (cachedClusterStats) {
+                setClusterStats(JSON.parse(cachedClusterStats));
+            }
+            if (cachedClusterName) {
+                setClusterName(JSON.parse(cachedClusterName));
+            }
+        } catch (err) {
+            logger.warn("Failed to load cached data:", err);
+        }
+    }, []);
 
     // Memoize refreshDaemonStatus with useCallback
     const refreshDaemonStatus = useCallback(async (token) => {
-        setLoading(true);
+        if (!token) {
+            setError("Token is required to fetch daemon status");
+            return;
+        }
+
+        const hasCache = cacheRef.current.length > 0;
+        if (!hasCache) setLoading(true);
         setError("");
+
         try {
             const result = await fetchDaemonStatus(token);
             const nodesArray = Object.keys(result.cluster.node).map((key) => ({
@@ -28,9 +62,34 @@ const useFetchDaemonStatus = () => {
             });
             setClusterName(result.cluster.config.name || "Cluster");
             cacheRef.current = nodesArray;
+            // Cache in localStorage
+            try {
+                localStorage.setItem('cachedNodes', JSON.stringify(nodesArray));
+                localStorage.setItem('cachedDaemon', JSON.stringify(result.daemon));
+                localStorage.setItem('cachedClusterStats', JSON.stringify({nodeCount: nodesArray.length}));
+                localStorage.setItem('cachedClusterName', JSON.stringify(result.cluster.config.name || "Cluster"));
+            } catch (err) {
+                logger.warn("Failed to cache data:", err);
+            }
         } catch (err) {
             logger.error("Error while fetching daemon statuses:", err);
             setError("Failed to retrieve daemon statuses.");
+            // Clear cached data on error
+            setNodes([]);
+            setDaemon({});
+            setClusterStats({});
+            setClusterName("");
+            cacheRef.current = [];
+
+            // Clear localStorage on error
+            try {
+                localStorage.removeItem('cachedNodes');
+                localStorage.removeItem('cachedDaemon');
+                localStorage.removeItem('cachedClusterStats');
+                localStorage.removeItem('cachedClusterName');
+            } catch (storageErr) {
+                logger.warn("Failed to clear cache on error:", storageErr);
+            }
         } finally {
             setLoading(false);
         }

@@ -13,6 +13,7 @@ const mockLocalStorage = {
     getItem: jest.fn(),
     removeItem: jest.fn(),
     setItem: jest.fn(),
+    clear: jest.fn(),
 };
 Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
@@ -32,6 +33,13 @@ jest.mock('../../context/AuthProvider.jsx', () => ({
     Logout: 'LOGOUT',
 }));
 
+jest.mock('../../hooks/useFetchDaemonStatus', () => jest.fn());
+
+jest.mock('../../utils/logger.js', () => ({
+    error: jest.fn(),
+    info: jest.fn(),
+}));
+
 describe('WhoAmI Component', () => {
     const mockToken = 'mock-auth-token';
     const mockUserInfo = {
@@ -44,6 +52,8 @@ describe('WhoAmI Component', () => {
 
     const mockNavigate = jest.fn();
     const mockAuthDispatch = jest.fn();
+    const mockFetchNodes = jest.fn();
+    const mockUseFetchDaemonStatus = require('../../hooks/useFetchDaemonStatus');
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -86,6 +96,11 @@ describe('WhoAmI Component', () => {
                 signoutRedirect: jest.fn(),
                 removeUser: jest.fn(),
             },
+        });
+
+        mockUseFetchDaemonStatus.mockReturnValue({
+            daemon: {nodename: 'test-node'},
+            fetchNodes: mockFetchNodes,
         });
 
         // Mock GitHub API call for version
@@ -398,11 +413,102 @@ describe('WhoAmI Component', () => {
             expect(titles.length).toBeGreaterThan(0);
             expect(titles[0]).toBeInTheDocument();
         });
+
+        expect(mockFetchNodes).not.toHaveBeenCalled();
     });
 
-    test('sets appVersion to cached value or Unknown when GitHub fetch fails', async () => {
+    test('calls fetchNodes when authToken exists in localStorage', async () => {
         mockLocalStorage.getItem.mockImplementation((key) => {
-            if (key === 'appVersion') return null;
+            if (key === 'authToken') return mockToken;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockFetchNodes).toHaveBeenCalledWith(mockToken);
+        });
+    });
+
+    test('handles error in fetchNodes call', async () => {
+        const mockLogger = require('../../utils/logger.js');
+        mockFetchNodes.mockRejectedValue(new Error('Daemon fetch failed'));
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(mockLogger.error).toHaveBeenCalledWith('Error fetching daemon status:', expect.any(Error));
+        });
+    });
+
+    test('sets appVersion to cached value when cache is valid', async () => {
+        const cachedVersion = '1.0.0';
+        const cacheTime = Date.now().toString();
+
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'appVersion') return cachedVersion;
+            if (key === 'appVersionTime') return cacheTime;
+            if (key === 'authToken') return mockToken;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText(`v${cachedVersion}`)).toBeInTheDocument();
+        });
+
+        // Should not call GitHub API
+        expect(global.fetch).not.toHaveBeenCalledWith('https://api.github.com/repos/opensvc/om3-webapp/releases');
+    });
+
+    test('fetches appVersion from GitHub when cache is expired', async () => {
+        const oldCacheTime = (Date.now() - 4000000).toString(); // More than 1 hour ago
+        const cachedVersion = '1.0.0';
+
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'appVersion') return cachedVersion;
+            if (key === 'appVersionTime') return oldCacheTime;
+            if (key === 'authToken') return mockToken;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('v1.2.3')).toBeInTheDocument();
+        });
+
+        expect(mockLocalStorage.setItem).toHaveBeenCalledWith('appVersion', '1.2.3');
+        expect(mockLocalStorage.setItem).toHaveBeenCalledWith('appVersionTime', expect.any(String));
+    });
+
+    test('sets appVersion to cached value when GitHub fetch fails but cache exists', async () => {
+        const cachedVersion = '1.0.0';
+        const cacheTime = (Date.now() - 4000000).toString(); // Expired cache
+
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'appVersion') return cachedVersion;
+            if (key === 'appVersionTime') return cacheTime;
             if (key === 'authToken') return mockToken;
             if (key === 'darkMode') return 'false';
             return null;
@@ -427,7 +533,109 @@ describe('WhoAmI Component', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText(/vUnknown|vloading/i)).toBeInTheDocument();
+            expect(screen.getByText(`v${cachedVersion}`)).toBeInTheDocument();
+        });
+    });
+
+    test('sets appVersion to Unknown when GitHub fetch fails and no cache exists', async () => {
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'appVersion') return null;
+            if (key === 'appVersionTime') return null;
+            if (key === 'authToken') return mockToken;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        global.fetch.mockImplementation((url) => {
+            if (url === URL_AUTH_WHOAMI) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(mockUserInfo),
+                });
+            }
+            if (url.includes('github')) {
+                return Promise.reject(new Error('Network error'));
+            }
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('vUnknown')).toBeInTheDocument();
+        });
+    });
+
+    test('handles daemon status with missing nodename', async () => {
+        mockUseFetchDaemonStatus.mockReturnValue({
+            daemon: {},
+            fetchNodes: mockFetchNodes,
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Loading...')).toBeInTheDocument();
+        });
+    });
+
+    test('handles WhoAmI fetch with missing auth token', async () => {
+        mockLocalStorage.getItem.mockImplementation((key) => {
+            if (key === 'authToken') return null;
+            if (key === 'darkMode') return 'false';
+            return null;
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(URL_AUTH_WHOAMI, {
+                credentials: 'include',
+                headers: {
+                    Authorization: 'Bearer null',
+                },
+            });
+        });
+    });
+
+    test('handles WhoAmI response with missing fields', async () => {
+        const incompleteUserInfo = {
+            auth: null,
+            name: null,
+            raw_grant: null
+        };
+
+        global.fetch.mockImplementation((url) => {
+            if (url === URL_AUTH_WHOAMI) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve(incompleteUserInfo),
+                });
+            }
+            return Promise.resolve({
+                json: () => Promise.resolve([{tag_name: 'v1.2.3'}]),
+            });
+        });
+
+        renderWithDarkModeProvider(
+            <MemoryRouter>
+                <WhoAmI/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
         });
     });
 });

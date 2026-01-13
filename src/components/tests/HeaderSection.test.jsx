@@ -183,15 +183,17 @@ describe('HeaderSection Component', () => {
     });
 
     test('opens menu and logs position on button click', async () => {
-        jest.spyOn(console, 'log').mockImplementation(() => {
-        });
+        jest.spyOn(console, 'info').mockImplementation(() => {});
         render(<HeaderSection {...defaultProps} />);
 
         const button = screen.getByLabelText('Object actions');
         await userEvent.click(button);
 
         expect(defaultProps.setObjectMenuAnchor).toHaveBeenCalledWith(expect.anything());
-        expect(console.log).toHaveBeenCalledWith('Object menu opened at:', expect.any(Object));
+        expect(console.info).toHaveBeenCalledWith(
+            'Object menu opened at:',
+            expect.any(Object)
+        );
     });
 
     test('renders popper menu when objectMenuAnchor is set', () => {

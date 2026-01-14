@@ -3,7 +3,6 @@ import useEventLogStore from './hooks/useEventLogStore.js';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
 import logger from './utils/logger.js';
-import {cleanup} from "@testing-library/react";
 
 // Constants for event names
 export const EVENT_TYPES = {
@@ -18,8 +17,26 @@ export const EVENT_TYPES = {
     INSTANCE_CONFIG_UPDATED: 'InstanceConfigUpdated',
 };
 
-// Default filters
-const DEFAULT_FILTERS = Object.values(EVENT_TYPES);
+// Event Source connection event types (these are NOT API events)
+export const CONNECTION_EVENTS = {
+    CONNECTION_OPENED: 'CONNECTION_OPENED',
+    CONNECTION_ERROR: 'CONNECTION_ERROR',
+    RECONNECTION_ATTEMPT: 'RECONNECTION_ATTEMPT',
+    MAX_RECONNECTIONS_REACHED: 'MAX_RECONNECTIONS_REACHED',
+    CONNECTION_CLOSED: 'CONNECTION_CLOSED',
+};
+
+// Default filters for Cluster Overview (optimized - only essential events)
+export const OVERVIEW_FILTERS = [
+    EVENT_TYPES.NODE_STATUS_UPDATED,
+    EVENT_TYPES.OBJECT_STATUS_UPDATED,
+    EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED,
+    EVENT_TYPES.OBJECT_DELETED,
+    EVENT_TYPES.INSTANCE_STATUS_UPDATED,
+];
+
+// Default filters for all events
+export const DEFAULT_FILTERS = Object.values(EVENT_TYPES);
 
 // Filters for specific objectName
 const OBJECT_SPECIFIC_FILTERS = [
@@ -30,38 +47,217 @@ const OBJECT_SPECIFIC_FILTERS = [
     EVENT_TYPES.INSTANCE_CONFIG_UPDATED,
 ];
 
+// Global state
 let currentEventSource = null;
 let currentLoggerEventSource = null;
 let currentToken = null;
 let reconnectAttempts = 0;
+let isPageActive = true;
+let flushTimeoutId = null;
+let eventCount = 0;
+let isFlushing = false;
+
+// Performance optimizations
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+const BATCH_SIZE = 50;
+const FLUSH_DELAY = 500;
 
+// Buffer management
+let buffers = {
+    objectStatus: {},
+    instanceStatus: {},
+    nodeStatus: {},
+    nodeMonitor: {},
+    nodeStats: {},
+    heartbeatStatus: {},
+    instanceMonitor: {},
+    instanceConfig: {},
+    configUpdated: new Set(),
+};
+
+// Optimized equality check with type checking and shallow comparison
 const isEqual = (a, b) => {
     if (a === b) return true;
     if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
     return JSON.stringify(a) === JSON.stringify(b);
 };
 
-// Create query string for EventSource URL
+// Optimized create query string - ONLY include valid API events
 const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
+    // Filter out any non-API events (like connection events)
     const validFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
     if (validFilters.length < filters.length) {
         logger.warn(`Invalid filters detected: ${filters.filter(f => !validFilters.includes(f)).join(', ')}. Using only valid ones.`);
     }
+    if (validFilters.length === 0) {
+        logger.warn('No valid API event filters provided, using default filters');
+        validFilters.push(...DEFAULT_FILTERS);
+    }
+
     const queryFilters = objectName
         ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
         : validFilters;
+
     return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 };
 
 // Get current token
-export const getCurrentToken = () => localStorage.getItem('authToken') || currentToken;
+export const getCurrentToken = () => {
+    return currentToken || localStorage.getItem('authToken');
+};
 
-// Centralized buffer management
-const createBufferManager = () => {
-    const buffers = {
+const getAndClearBuffers = () => {
+    const buffersToFlush = {
+        objectStatus: {...buffers.objectStatus},
+        instanceStatus: {...buffers.instanceStatus},
+        nodeStatus: {...buffers.nodeStatus},
+        nodeMonitor: {...buffers.nodeMonitor},
+        nodeStats: {...buffers.nodeStats},
+        heartbeatStatus: {...buffers.heartbeatStatus},
+        instanceMonitor: {...buffers.instanceMonitor},
+        instanceConfig: {...buffers.instanceConfig},
+        configUpdated: new Set(buffers.configUpdated),
+    };
+
+    buffers.objectStatus = {};
+    buffers.instanceStatus = {};
+    buffers.nodeStatus = {};
+    buffers.nodeMonitor = {};
+    buffers.nodeStats = {};
+    buffers.heartbeatStatus = {};
+    buffers.instanceMonitor = {};
+    buffers.instanceConfig = {};
+    buffers.configUpdated.clear();
+
+    return buffersToFlush;
+};
+
+// Optimized flush buffers with batching using individual setters
+const flushBuffers = () => {
+    if (!isPageActive || isFlushing) return;
+    isFlushing = true;
+
+    try {
+        const buffersToFlush = getAndClearBuffers();
+        const store = useEventStore.getState();
+        let updateCount = 0;
+
+        // Node Status updates
+        if (Object.keys(buffersToFlush.nodeStatus).length > 0) {
+            store.setNodeStatuses({...store.nodeStatus, ...buffersToFlush.nodeStatus});
+            updateCount++;
+        }
+
+        // Object Status updates
+        if (Object.keys(buffersToFlush.objectStatus).length > 0) {
+            store.setObjectStatuses({...store.objectStatus, ...buffersToFlush.objectStatus});
+            updateCount++;
+        }
+
+        // Heartbeat Status updates
+        if (Object.keys(buffersToFlush.heartbeatStatus).length > 0) {
+            logger.debug('buffer:', buffersToFlush.heartbeatStatus);
+            store.setHeartbeatStatuses({...store.heartbeatStatus, ...buffersToFlush.heartbeatStatus});
+            updateCount++;
+        }
+
+        // Instance Status updates
+        if (Object.keys(buffersToFlush.instanceStatus).length > 0) {
+            const mergedInst = {...store.objectInstanceStatus};
+            for (const obj of Object.keys(buffersToFlush.instanceStatus)) {
+                if (!mergedInst[obj]) {
+                    mergedInst[obj] = {};
+                }
+                mergedInst[obj] = {...mergedInst[obj], ...buffersToFlush.instanceStatus[obj]};
+            }
+            store.setInstanceStatuses(mergedInst);
+            updateCount++;
+        }
+
+        // Node Monitor updates
+        if (Object.keys(buffersToFlush.nodeMonitor).length > 0) {
+            store.setNodeMonitors({...store.nodeMonitor, ...buffersToFlush.nodeMonitor});
+            updateCount++;
+        }
+
+        // Node Stats updates
+        if (Object.keys(buffersToFlush.nodeStats).length > 0) {
+            store.setNodeStats({...store.nodeStats, ...buffersToFlush.nodeStats});
+            updateCount++;
+        }
+
+        // Instance Monitor updates
+        if (Object.keys(buffersToFlush.instanceMonitor).length > 0) {
+            store.setInstanceMonitors({...store.instanceMonitor, ...buffersToFlush.instanceMonitor});
+            updateCount++;
+        }
+
+        // Instance Config updates
+        if (Object.keys(buffersToFlush.instanceConfig).length > 0) {
+            for (const path of Object.keys(buffersToFlush.instanceConfig)) {
+                for (const node of Object.keys(buffersToFlush.instanceConfig[path])) {
+                    store.setInstanceConfig(path, node, buffersToFlush.instanceConfig[path][node]);
+                }
+            }
+            updateCount++;
+        }
+
+        // Config Updated
+        if (buffersToFlush.configUpdated.size > 0) {
+            store.setConfigUpdated([...buffersToFlush.configUpdated]);
+            updateCount++;
+        }
+
+        if (updateCount > 0) {
+            logger.debug(`Flushed buffers with ${eventCount} events`);
+        }
+        eventCount = 0;
+    } catch (error) {
+        logger.error('Error during buffer flush:', error);
+    } finally {
+        isFlushing = false;
+    }
+};
+
+// Schedule flush with setTimeout for non-blocking
+const scheduleFlush = () => {
+    if (!isPageActive || isFlushing) return;
+
+    eventCount++;
+
+    if (eventCount >= BATCH_SIZE) {
+        if (flushTimeoutId) {
+            clearTimeout(flushTimeoutId);
+            flushTimeoutId = null;
+        }
+        setTimeout(flushBuffers, 0);
+        return;
+    }
+
+    if (!flushTimeoutId) {
+        flushTimeoutId = setTimeout(() => {
+            flushTimeoutId = null;
+            if (eventCount > 0) {
+                flushBuffers();
+            }
+        }, FLUSH_DELAY);
+    }
+};
+
+// Navigation service
+const navigationService = {
+    redirectToAuth: () => {
+        window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
+            detail: '/auth-choice'
+        }));
+    }
+};
+
+// Clear all buffers
+const clearBuffers = () => {
+    buffers = {
         objectStatus: {},
         instanceStatus: {},
         nodeStatus: {},
@@ -72,126 +268,72 @@ const createBufferManager = () => {
         instanceConfig: {},
         configUpdated: new Set(),
     };
-    let flushTimeout = null;
-    let eventCount = 0;
-    const FLUSH_DELAY = 500;
-    const BATCH_SIZE = 50;
-
-    const scheduleFlush = () => {
-        eventCount++;
-        if (eventCount >= BATCH_SIZE) {
-            if (flushTimeout) {
-                clearTimeout(flushTimeout);
-                flushTimeout = null;
-            }
-            flushBuffers();
-            return;
-        }
-
-        if (!flushTimeout) {
-            flushTimeout = setTimeout(flushBuffers, FLUSH_DELAY);
-        }
-    };
-
-    const flushBuffers = () => {
-        const store = useEventStore.getState();
-        const {
-            setObjectStatuses,
-            setInstanceStatuses,
-            setNodeStatuses,
-            setNodeMonitors,
-            setNodeStats,
-            setHeartbeatStatuses,
-            setInstanceMonitors,
-            setInstanceConfig,
-            setConfigUpdated,
-        } = store;
-
-        let updateCount = 0;
-
-        if (Object.keys(buffers.nodeStatus).length) {
-            setNodeStatuses({...store.nodeStatus, ...buffers.nodeStatus});
-            buffers.nodeStatus = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.objectStatus).length) {
-            setObjectStatuses({...store.objectStatus, ...buffers.objectStatus});
-            buffers.objectStatus = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.instanceStatus).length) {
-            const mergedInst = {...store.objectInstanceStatus};
-            for (const obj of Object.keys(buffers.instanceStatus)) {
-                mergedInst[obj] = {...mergedInst[obj], ...buffers.instanceStatus[obj]};
-            }
-            setInstanceStatuses(mergedInst);
-            buffers.instanceStatus = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.nodeMonitor).length) {
-            setNodeMonitors({...store.nodeMonitor, ...buffers.nodeMonitor});
-            buffers.nodeMonitor = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.nodeStats).length) {
-            setNodeStats({...store.nodeStats, ...buffers.nodeStats});
-            buffers.nodeStats = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.heartbeatStatus).length) {
-            logger.debug('buffer:', buffers.heartbeatStatus);
-            setHeartbeatStatuses({...store.heartbeatStatus, ...buffers.heartbeatStatus});
-            buffers.heartbeatStatus = {};
-        }
-
-        if (Object.keys(buffers.instanceMonitor).length) {
-            setInstanceMonitors({...store.instanceMonitor, ...buffers.instanceMonitor});
-            buffers.instanceMonitor = {};
-            updateCount++;
-        }
-
-        if (Object.keys(buffers.instanceConfig).length) {
-            for (const path of Object.keys(buffers.instanceConfig)) {
-                for (const node of Object.keys(buffers.instanceConfig[path])) {
-                    setInstanceConfig(path, node, buffers.instanceConfig[path][node]);
-                }
-            }
-            buffers.instanceConfig = {};
-            updateCount++;
-        }
-
-        if (buffers.configUpdated.size) {
-            setConfigUpdated([...buffers.configUpdated]);
-            buffers.configUpdated.clear();
-            updateCount++;
-        }
-
-        if (updateCount > 0) {
-            logger.debug(`Flushed ${updateCount} buffer types with ${eventCount} events`);
-        }
-
-        flushTimeout = null;
-        eventCount = 0;
-    };
-
-    return {buffers, scheduleFlush};
-};
-
-// Navigation service for SPA-friendly redirects
-const navigationService = {
-    redirectToAuth: () => {
-        window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
-            detail: '/auth-choice'
-        }));
+    if (flushTimeoutId) {
+        clearTimeout(flushTimeoutId);
+        flushTimeoutId = null;
     }
+    eventCount = 0;
+    isFlushing = false;
 };
 
-export const createEventSource = (url, token) => {
+// Helper function to add event listener with error handling
+const addEventListener = (eventSource, eventType, handler) => {
+    eventSource.addEventListener(eventType, (event) => {
+        if (!isPageActive) return;
+        try {
+            const parsed = JSON.parse(event.data);
+            handler(parsed);
+        } catch (e) {
+            logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
+        }
+    });
+};
+
+const updateBuffer = (bufferName, key, value) => {
+    if (bufferName === 'configUpdated') {
+        buffers.configUpdated.add(value);
+    } else if (bufferName === 'instanceStatus') {
+        const [path, node] = key.split(':');
+        if (!buffers.instanceStatus[path]) {
+            buffers.instanceStatus[path] = {};
+        }
+        const current = useEventStore.getState().objectInstanceStatus?.[path]?.[node];
+        if (!isEqual(current, value)) {
+            buffers.instanceStatus[path][node] = value;
+        } else {
+            return; // Skip if no change
+        }
+    } else if (bufferName === 'instanceConfig') {
+        const [path, node] = key.split(':');
+        if (!buffers.instanceConfig[path]) {
+            buffers.instanceConfig[path] = {};
+        }
+        buffers.instanceConfig[path][node] = value;
+    } else if (bufferName === 'instanceMonitor') {
+        const current = useEventStore.getState().instanceMonitor[key];
+        if (!isEqual(current, value)) {
+            buffers.instanceMonitor[key] = value;
+        } else {
+            return; // Skip if no change
+        }
+    } else {
+        const current = useEventStore.getState()[bufferName]?.[key];
+        if (!isEqual(current, value)) {
+            buffers[bufferName][key] = value;
+        } else {
+            return; // Skip if no change
+        }
+    }
+    scheduleFlush();
+};
+
+// Simple cleanup function for testing
+const cleanup = () => {
+    // No-op cleanup function
+};
+
+// Create EventSource with comprehensive event handlers
+export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
     if (!token) {
         logger.error('❌ Missing token for EventSource!');
         return null;
@@ -200,187 +342,215 @@ export const createEventSource = (url, token) => {
     if (currentEventSource) {
         logger.info('Closing existing EventSource');
         currentEventSource.close();
+        currentEventSource = null;
     }
 
     currentToken = token;
-    const {buffers, scheduleFlush} = createBufferManager();
-    const {removeObject} = useEventStore.getState();
+    isPageActive = true;
+    clearBuffers();
 
     logger.info('🔗 Creating EventSource with URL:', url);
     currentEventSource = new EventSourcePolyfill(url, {
         headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'text/event-stream',
         },
         withCredentials: true,
     });
 
+    // Attach cleanup function for testing
+    currentEventSource._cleanup = cleanup;
+
+    // Store reference for cleanup
+    const eventSourceRef = currentEventSource;
+
     currentEventSource.onopen = () => {
         logger.info('✅ EventSource connection established');
         reconnectAttempts = 0;
+        // Log connection event
+        useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.CONNECTION_OPENED, {
+            url,
+            timestamp: new Date().toISOString()
+        });
+        // Flush any buffered data immediately on reconnect
+        if (eventCount > 0) {
+            flushBuffers();
+        }
     };
+
+    // Add event handlers for all API events in the filters
+    const validApiFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
+    validApiFilters.forEach(eventType => {
+        addEventListener(currentEventSource, eventType, (data) => {
+            // Process each event type
+            switch (eventType) {
+                case EVENT_TYPES.NODE_STATUS_UPDATED:
+                    if (data.node && data.node_status) {
+                        updateBuffer('nodeStatus', data.node, data.node_status);
+                    }
+                    break;
+                case EVENT_TYPES.OBJECT_STATUS_UPDATED:
+                    const name = data.path || data.labels?.path;
+                    if (name && data.object_status) {
+                        updateBuffer('objectStatus', name, data.object_status);
+                    }
+                    break;
+                case EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED:
+                    const nodeName = data.node || data.labels?.node;
+                    if (nodeName && data.heartbeat !== undefined) {
+                        updateBuffer('heartbeatStatus', nodeName, data.heartbeat);
+                    }
+                    break;
+                case EVENT_TYPES.OBJECT_DELETED:
+                    const objectName = data.path || data.labels?.path;
+                    if (objectName) {
+                        logger.debug('📩 Received ObjectDeleted event:', JSON.stringify({path: objectName}));
+                        useEventStore.getState().removeObject(objectName);
+                        // Clear from buffers
+                        delete buffers.objectStatus[objectName];
+                        delete buffers.instanceStatus[objectName];
+                        delete buffers.instanceConfig[objectName];
+                    } else {
+                        // Fix: Pass the parsed data object directly, not wrapped in {data}
+                        logger.warn('⚠️ ObjectDeleted event missing objectName:', data);
+                    }
+                    break;
+                case EVENT_TYPES.INSTANCE_STATUS_UPDATED:
+                    const instName = data.path || data.labels?.path;
+                    if (instName && data.node && data.instance_status) {
+                        updateBuffer('instanceStatus', `${instName}:${data.node}`, data.instance_status);
+                    }
+                    break;
+                case EVENT_TYPES.NODE_MONITOR_UPDATED:
+                    if (data.node && data.node_monitor) {
+                        updateBuffer('nodeMonitor', data.node, data.node_monitor);
+                    }
+                    break;
+                case EVENT_TYPES.NODE_STATS_UPDATED:
+                    if (data.node && data.node_stats) {
+                        updateBuffer('nodeStats', data.node, data.node_stats);
+                    }
+                    break;
+                case EVENT_TYPES.INSTANCE_MONITOR_UPDATED:
+                    if (data.node && data.path && data.instance_monitor) {
+                        const key = `${data.node}:${data.path}`;
+                        updateBuffer('instanceMonitor', key, data.instance_monitor);
+                    }
+                    break;
+                case EVENT_TYPES.INSTANCE_CONFIG_UPDATED:
+                    const configName = data.path || data.labels?.path;
+                    if (configName && data.node) {
+                        if (data.instance_config) {
+                            updateBuffer('instanceConfig', `${configName}:${data.node}`, data.instance_config);
+                        }
+                        updateBuffer('configUpdated', null, JSON.stringify({name: configName, node: data.node}));
+                    } else {
+                        // Fix: Pass the parsed data object directly
+                        logger.warn('⚠️ InstanceConfigUpdated event missing name or node:', data);
+                    }
+                    break;
+            }
+            // Also add to event log if logger is active
+            useEventLogStore.getState().addEventLog(eventType, data);
+        });
+    });
 
     currentEventSource.onerror = (error) => {
+        // Check if this is still the current EventSource
+        if (currentEventSource !== eventSourceRef) return;
+
         logger.error('🚨 EventSource error:', error, 'URL:', url, 'readyState:', currentEventSource?.readyState);
 
-        if (error.status === 401) {
-            logger.warn('🔐 Authentication error detected');
-            const newToken = localStorage.getItem('authToken');
-
-            if (newToken && newToken !== token) {
-                logger.info('🔄 New token available, updating EventSource');
-                updateEventSourceToken(newToken);
-                return;
-            }
-
-            if (window.oidcUserManager) {
-                logger.info('🔄 Attempting silent token renewal...');
-                window.oidcUserManager.signinSilent()
-                    .then(user => {
-                        const refreshedToken = user.access_token;
-                        localStorage.setItem('authToken', refreshedToken);
-                        localStorage.setItem('tokenExpiration', user.expires_at.toString());
-                        updateEventSourceToken(refreshedToken);
-                    })
-                    .catch(silentError => {
-                        logger.error('❌ Silent renew failed:', silentError);
-                        navigationService.redirectToAuth();
-                    });
-                return;
-            }
-        }
-
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            reconnectAttempts++;
-            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
-            logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-            setTimeout(() => {
-                const currentToken = getCurrentToken();
-                if (currentToken) {
-                    createEventSource(url, currentToken);
-                }
-            }, delay);
-        } else {
-            logger.error('❌ Max reconnection attempts reached');
-            navigationService.redirectToAuth();
-        }
-    };
-
-    // Event handlers with type checking
-    const addEventListener = (eventType, handler) => {
-        currentEventSource.addEventListener(eventType, (event) => {
-            let parsed;
-            try {
-                parsed = JSON.parse(event.data);
-            } catch (e) {
-                logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
-                return;
-            }
-            handler(parsed);
+        // Log connection error
+        useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.CONNECTION_ERROR, {
+            error: error.message || 'Unknown error',
+            status: error.status,
+            url,
+            timestamp: new Date().toISOString()
         });
+
+        if (error.status === 401) {
+            handleAuthError(token, url, filters);
+            return;
+        }
+
+        handleReconnection(url, token, filters);
     };
 
-    addEventListener(EVENT_TYPES.NODE_STATUS_UPDATED, ({node, node_status}) => {
-        if (!node || !node_status) return;
-        const current = useEventStore.getState().nodeStatus[node];
-        if (!isEqual(current, node_status)) {
-            buffers.nodeStatus[node] = node_status;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.NODE_MONITOR_UPDATED, ({node, node_monitor}) => {
-        if (!node || !node_monitor) return;
-        const current = useEventStore.getState().nodeMonitor[node];
-        if (!isEqual(current, node_monitor)) {
-            buffers.nodeMonitor[node] = node_monitor;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.NODE_STATS_UPDATED, ({node, node_stats}) => {
-        if (!node || !node_stats) return;
-        const current = useEventStore.getState().nodeStats[node];
-        if (!isEqual(current, node_stats)) {
-            buffers.nodeStats[node] = node_stats;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.OBJECT_STATUS_UPDATED, ({path, labels, object_status}) => {
-        const name = path || labels?.path;
-        if (!name || !object_status) return;
-        const current = useEventStore.getState().objectStatus[name];
-        if (!isEqual(current, object_status)) {
-            buffers.objectStatus[name] = object_status;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.INSTANCE_STATUS_UPDATED, ({path, labels, node, instance_status}) => {
-        const name = path || labels?.path;
-        if (!name || !node || !instance_status) return;
-        const current = useEventStore.getState().objectInstanceStatus?.[name]?.[node];
-        if (!isEqual(current, instance_status)) {
-            buffers.instanceStatus[name] = {...(buffers.instanceStatus[name] || {}), [node]: instance_status};
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED, ({node, labels, heartbeat}) => {
-        const nodeName = node || labels?.node;
-        if (!nodeName || heartbeat === undefined) return;
-        const current = useEventStore.getState().heartbeatStatus[nodeName];
-        if (!isEqual(current, heartbeat)) {
-            buffers.heartbeatStatus[nodeName] = heartbeat;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.OBJECT_DELETED, ({path, labels}) => {
-        logger.debug('📩 Received ObjectDeleted event:', JSON.stringify({path, labels}));
-        const name = path || labels?.path;
-        if (!name) {
-            logger.warn('⚠️ ObjectDeleted event missing objectName:', {path, labels});
-            return;
-        }
-        delete buffers.objectStatus[name];
-        delete buffers.instanceStatus[name];
-        delete buffers.instanceConfig[name];
-        removeObject(name);
-        scheduleFlush();
-    });
-
-    addEventListener(EVENT_TYPES.INSTANCE_MONITOR_UPDATED, ({node, path, instance_monitor}) => {
-        if (!node || !path || !instance_monitor) return;
-        const key = `${node}:${path}`;
-        const current = useEventStore.getState().instanceMonitor[key];
-        if (!isEqual(current, instance_monitor)) {
-            buffers.instanceMonitor[key] = instance_monitor;
-            scheduleFlush();
-        }
-    });
-
-    addEventListener(EVENT_TYPES.INSTANCE_CONFIG_UPDATED, ({path, labels, node, instance_config}) => {
-        const name = path || labels?.path;
-        if (!name || !node) {
-            logger.warn('⚠️ InstanceConfigUpdated event missing name or node:', {path, labels, node});
-            return;
-        }
-        if (instance_config) {
-            buffers.instanceConfig[name] = {...(buffers.instanceConfig[name] || {}), [node]: instance_config};
-        }
-        buffers.configUpdated.add(JSON.stringify({name, node}));
-        scheduleFlush();
-    });
-
-    // attach cleanup to returned object
-    const returned = currentEventSource;
-    returned._cleanup = cleanup;
-    return returned;
+    return currentEventSource;
 };
 
-// Create Logger EventSource (only for logging)
+const handleAuthError = (token, url, filters) => {
+    logger.warn('🔐 Authentication error detected');
+
+    useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.CONNECTION_ERROR, {
+        error: 'Authentication failed',
+        status: 401,
+        url,
+        timestamp: new Date().toISOString()
+    });
+
+    const newToken = localStorage.getItem('authToken');
+
+    if (newToken && newToken !== token) {
+        logger.info('🔄 New token available, updating EventSource');
+        updateEventSourceToken(newToken);
+        return;
+    }
+
+    if (window.oidcUserManager) {
+        logger.info('🔄 Attempting silent token renewal...');
+        window.oidcUserManager.signinSilent()
+            .then(user => {
+                const refreshedToken = user.access_token;
+                localStorage.setItem('authToken', refreshedToken);
+                localStorage.setItem('tokenExpiration', user.expires_at.toString());
+                updateEventSourceToken(refreshedToken);
+            })
+            .catch(silentError => {
+                logger.error('❌ Silent renew failed:', silentError);
+                navigationService.redirectToAuth();
+            });
+        return;
+    }
+
+    navigationService.redirectToAuth();
+};
+
+const handleReconnection = (url, token, filters) => {
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
+        reconnectAttempts++;
+
+        // Log reconnection attempt
+        useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.RECONNECTION_ATTEMPT, {
+            attempt: reconnectAttempts,
+            maxAttempts: MAX_RECONNECT_ATTEMPTS,
+            timestamp: new Date().toISOString()
+        });
+
+        const delay = Math.min(
+            BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100,
+            MAX_RECONNECT_DELAY
+        );
+
+        logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+        setTimeout(() => {
+            const currentToken = getCurrentToken();
+            if (currentToken && isPageActive) {
+                createEventSource(url, currentToken, filters);
+            }
+        }, delay);
+    } else if (isPageActive) {
+        logger.error('❌ Max reconnection attempts reached');
+        // Log max reconnections reached
+        useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.MAX_RECONNECTIONS_REACHED, {
+            maxAttempts: MAX_RECONNECT_ATTEMPTS,
+            timestamp: new Date().toISOString()
+        });
+        navigationService.redirectToAuth();
+    }
+};
+
 export const createLoggerEventSource = (url, token, filters) => {
     if (!token) {
         logger.error('❌ Missing token for Logger EventSource!');
@@ -390,16 +560,22 @@ export const createLoggerEventSource = (url, token, filters) => {
     if (currentLoggerEventSource) {
         logger.info('Closing existing Logger EventSource');
         currentLoggerEventSource.close();
+        currentLoggerEventSource = null;
     }
 
     logger.info('🔗 Creating Logger EventSource with URL:', url);
     currentLoggerEventSource = new EventSourcePolyfill(url, {
         headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'text/event-stream',
         },
         withCredentials: true,
     });
+
+    // Attach cleanup function for testing
+    currentLoggerEventSource._cleanup = cleanup;
+
+    // Store reference for cleanup
+    const loggerEventSourceRef = currentLoggerEventSource;
 
     currentLoggerEventSource.onopen = () => {
         logger.info('✅ Logger EventSource connection established');
@@ -407,6 +583,9 @@ export const createLoggerEventSource = (url, token, filters) => {
     };
 
     currentLoggerEventSource.onerror = (error) => {
+        // Check if this is still the current Logger EventSource
+        if (currentLoggerEventSource !== loggerEventSourceRef) return;
+
         logger.error('🚨 Logger EventSource error:', error, 'URL:', url, 'readyState:', currentLoggerEventSource?.readyState);
 
         if (error.status === 401) {
@@ -435,35 +614,34 @@ export const createLoggerEventSource = (url, token, filters) => {
             }
         }
 
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
             reconnectAttempts++;
-            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100, MAX_RECONNECT_DELAY);
+            const delay = Math.min(
+                BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 100,
+                MAX_RECONNECT_DELAY
+            );
+
             logger.info(`🔄 Logger reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
             setTimeout(() => {
                 const currentToken = getCurrentToken();
-                if (currentToken) {
+                if (currentToken && isPageActive) {
                     createLoggerEventSource(url, currentToken, filters);
                 }
             }, delay);
-        } else {
+        } else if (isPageActive) {
             logger.error('❌ Max reconnection attempts reached for logger');
             navigationService.redirectToAuth();
         }
     };
 
-    // Event handlers for logging only
-    const addEventListener = (eventType, handler) => {
+    // Event handlers for logging only - filter out non-API events
+    const validApiFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
+    validApiFilters.forEach(eventType => {
         currentLoggerEventSource.addEventListener(eventType, (event) => {
-            handler(event);
-        });
-    };
-
-    // Add listeners only for subscribed event types
-    filters.filter(f => Object.values(EVENT_TYPES).includes(f)).forEach(eventType => {
-        addEventListener(eventType, (event) => {
-            let parsed;
+            if (!isPageActive) return;
             try {
-                parsed = JSON.parse(event.data);
+                const parsed = JSON.parse(event.data);
                 useEventLogStore.getState().addEventLog(eventType, {
                     ...parsed,
                     _rawEvent: event.data
@@ -478,32 +656,47 @@ export const createLoggerEventSource = (url, token, filters) => {
         });
     });
 
-    // attach cleanup
-    const returned = currentLoggerEventSource;
-    returned._cleanup = cleanup;
-    return returned;
+    return currentLoggerEventSource;
 };
 
 // Update EventSource token
 export const updateEventSourceToken = (newToken) => {
     if (!newToken) return;
+
     currentToken = newToken;
+
     if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
         logger.info('🔄 Token updated, restarting EventSource');
         const currentUrl = currentEventSource.url;
         closeEventSource();
-        setTimeout(() => createEventSource(currentUrl, newToken), 100);
+
+        setTimeout(() => {
+            // Extract filters from current URL
+            const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
+            const filters = urlParams.getAll('filter').map(f => {
+                // Remove any path parameters from filter
+                return f.split(',')[0];
+            });
+            createEventSource(currentUrl, newToken, filters);
+        }, 100);
     }
 };
 
 // Update Logger EventSource token
 export const updateLoggerEventSourceToken = (newToken) => {
     if (!newToken) return;
+
     if (currentLoggerEventSource && currentLoggerEventSource.readyState !== EventSource.CLOSED) {
         logger.info('🔄 Token updated, restarting Logger EventSource');
         const currentUrl = currentLoggerEventSource.url;
         closeLoggerEventSource();
-        setTimeout(() => createLoggerEventSource(currentUrl, newToken), 100);
+
+        setTimeout(() => {
+            // Extract filters from current URL
+            const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
+            const filters = urlParams.getAll('filter').map(f => f.split(',')[0]);
+            createLoggerEventSource(currentUrl, newToken, filters);
+        }, 100);
     }
 };
 
@@ -511,6 +704,12 @@ export const updateLoggerEventSourceToken = (newToken) => {
 export const closeEventSource = () => {
     if (currentEventSource) {
         logger.info('Closing current EventSource');
+        // Log connection closed
+        useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.CONNECTION_CLOSED, {
+            timestamp: new Date().toISOString()
+        });
+
+        // Call cleanup if present
         if (typeof currentEventSource._cleanup === 'function') {
             try {
                 currentEventSource._cleanup();
@@ -518,6 +717,7 @@ export const closeEventSource = () => {
                 logger.debug('Error during eventSource cleanup', e);
             }
         }
+
         currentEventSource.close();
         currentEventSource = null;
         currentToken = null;
@@ -529,6 +729,8 @@ export const closeEventSource = () => {
 export const closeLoggerEventSource = () => {
     if (currentLoggerEventSource) {
         logger.info('Closing current Logger EventSource');
+
+        // Call cleanup if present
         if (typeof currentLoggerEventSource._cleanup === 'function') {
             try {
                 currentLoggerEventSource._cleanup();
@@ -536,24 +738,24 @@ export const closeLoggerEventSource = () => {
                 logger.debug('Error during logger eventSource cleanup', e);
             }
         }
+
         currentLoggerEventSource.close();
         currentLoggerEventSource = null;
     }
 };
 
-// Configure EventSource
 export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
         return;
     }
+
     const queryString = createQueryString(filters, objectName);
     const url = `${URL_NODE_EVENT}?${queryString}`;
     closeEventSource();
-    currentEventSource = createEventSource(url, token);
+    currentEventSource = createEventSource(url, token, filters);
 };
 
-// Start Event Reception (main)
 export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
@@ -562,19 +764,18 @@ export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
     configureEventSource(token, null, filters);
 };
 
-// Configure Logger EventSource
 export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
     if (!token) {
         logger.error('❌ No token provided for Logger SSE!');
         return;
     }
+
     const queryString = createQueryString(filters, objectName);
     const url = `${URL_NODE_EVENT}?${queryString}`;
     closeLoggerEventSource();
     currentLoggerEventSource = createLoggerEventSource(url, token, filters);
 };
 
-// Start Logger Reception
 export const startLoggerReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
     if (!token) {
         logger.error('❌ No token provided for Logger SSE!');
@@ -583,5 +784,32 @@ export const startLoggerReception = (token, filters = DEFAULT_FILTERS, objectNam
     configureLoggerEventSource(token, objectName, filters);
 };
 
+export const setPageActive = (active) => {
+    isPageActive = active;
+    if (!active) {
+        clearBuffers();
+        closeEventSource();
+        closeLoggerEventSource();
+    }
+};
+
+export const cleanupAllEventSources = () => {
+    setPageActive(false);
+    logger.info('🧹 All EventSources cleaned up');
+};
+
+export const forceFlush = () => {
+    if (flushTimeoutId) {
+        clearTimeout(flushTimeoutId);
+        flushTimeoutId = null;
+    }
+    if (eventCount > 0) {
+        setTimeout(flushBuffers, 0);
+    }
+};
+
 // Export navigation service for external use
 export {navigationService};
+
+// Export prepareForNavigation as alias to forceFlush
+export const prepareForNavigation = forceFlush;

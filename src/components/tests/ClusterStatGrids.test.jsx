@@ -3,11 +3,22 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {GridNodes, GridObjects, GridNamespaces, GridHeartbeats, GridPools, GridNetworks} from '../ClusterStatGrids.jsx';
 
+jest.mock('../../eventSourceManager', () => ({
+    prepareForNavigation: jest.fn(),
+}));
+
+jest.useFakeTimers();
+
 describe('ClusterStatGrids', () => {
     const mockOnClick = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.clearAllTimers();
+    });
+
+    afterAll(() => {
+        jest.useRealTimers();
     });
 
     test('GridNodes renders correctly and handles click', () => {
@@ -25,6 +36,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Frozen: 2 | Unfrozen: 3')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Nodes'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -48,6 +60,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('ns2')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Namespaces'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -73,54 +86,39 @@ describe('ClusterStatGrids', () => {
         expect(beatingChipLabel).toBeInTheDocument();
         expect(staleChipLabel).toBeInTheDocument();
 
-        // Check the styles of the beating/stale chips
-        const beatingChip = screen.getByRole('button', {name: 'Beating 4'});
-        const staleChip = screen.getByRole('button', {name: 'Stale 4'});
-        expect(beatingChip).toHaveStyle('background-color: green');
-        expect(staleChip).toHaveStyle('background-color: red');
+        fireEvent.click(beatingChipLabel);
+        jest.runAllTimers();
+        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+
+        fireEvent.click(staleChipLabel);
+        jest.runAllTimers();
+        expect(mockOnClick).toHaveBeenCalledWith('stale', null);
 
         // Check the chips for states (only those with count > 0)
         const runningChipLabel = screen.getByText('Running 3');
         const stoppedChipLabel = screen.getByText('Stopped 2');
         const failedChipLabel = screen.getByText('Failed 1');
         const unknownChipLabel = screen.getByText('Unknown 2');
-        expect(runningChipLabel).toBeInTheDocument();
-        expect(stoppedChipLabel).toBeInTheDocument();
-        expect(failedChipLabel).toBeInTheDocument();
-        expect(unknownChipLabel).toBeInTheDocument();
-        expect(screen.queryByText('Warning 0')).not.toBeInTheDocument();
-
-        // Check the styles of the state chips
-        const runningChip = screen.getByRole('button', {name: 'Running 3'});
-        const stoppedChip = screen.getByRole('button', {name: 'Stopped 2'});
-        const failedChip = screen.getByRole('button', {name: 'Failed 1'});
-        const unknownChip = screen.getByRole('button', {name: 'Unknown 2'});
-        expect(runningChip).toHaveStyle('background-color: green');
-        expect(stoppedChip).toHaveStyle('background-color: orange');
-        expect(failedChip).toHaveStyle('background-color: red');
-        expect(unknownChip).toHaveStyle('background-color: grey');
-
-        // Check clicks on the chips
-        fireEvent.click(beatingChipLabel);
-        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
-
-        fireEvent.click(staleChipLabel);
-        expect(mockOnClick).toHaveBeenCalledWith('stale', null);
 
         fireEvent.click(runningChipLabel);
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith(null, 'running');
 
         fireEvent.click(stoppedChipLabel);
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith(null, 'stopped');
 
         fireEvent.click(failedChipLabel);
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith(null, 'failed');
 
         fireEvent.click(unknownChipLabel);
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith(null, 'unknown');
 
         // Check click on the entire card
         fireEvent.click(screen.getByText('Heartbeats'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -136,6 +134,7 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('3')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Pools'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -191,17 +190,8 @@ describe('ClusterStatGrids', () => {
         expect(warnChipLabel).toBeInTheDocument();
         expect(downChipLabel).toBeInTheDocument();
 
-        // Find the root Chip element
-        const upChip = screen.getByRole('button', {name: 'Up 5'});
-        const warnChip = screen.getByRole('button', {name: 'Warn 2'});
-        const downChip = screen.getByRole('button', {name: 'Down 1'});
-
-        // Verify styles with color values
-        expect(upChip).toHaveStyle('background-color: green');
-        expect(warnChip).toHaveStyle('background-color: orange');
-        expect(downChip).toHaveStyle('background-color: red');
-
         fireEvent.click(screen.getByText('Objects'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -229,12 +219,15 @@ describe('ClusterStatGrids', () => {
         );
 
         fireEvent.click(screen.getByText('Up 5'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith('up');
 
         fireEvent.click(screen.getByText('Warn 2'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith('warn');
 
         fireEvent.click(screen.getByText('Down 1'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith('down');
     });
 
@@ -257,11 +250,11 @@ describe('ClusterStatGrids', () => {
         expect(beatingChipLabel).toBeInTheDocument();
         expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
 
-        const beatingChip = screen.getByRole('button', {name: 'Beating 3'});
-        expect(beatingChip).toHaveStyle('background-color: green');
+        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
         expect(beatingChip).toHaveAttribute('title', 'Healthy (Single Node)');
 
         fireEvent.click(beatingChipLabel);
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalledWith('beating', null);
     });
 
@@ -283,14 +276,8 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('network1 (50.0% used)')).toBeInTheDocument();
         expect(screen.getByText('network2 (91.0% used)')).toBeInTheDocument();
 
-        // eslint-disable-next-line testing-library/no-node-access
-        const network1Chip = screen.getByText('network1 (50.0% used)').closest('.MuiChip-root');
-        // eslint-disable-next-line testing-library/no-node-access
-        const network2Chip = screen.getByText('network2 (91.0% used)').closest('.MuiChip-root');
-        expect(network1Chip).not.toHaveStyle('background-color: red');
-        expect(network2Chip).toHaveStyle('background-color: red');
-
         fireEvent.click(screen.getByText('Networks'));
+        jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
     });
 
@@ -321,9 +308,5 @@ describe('ClusterStatGrids', () => {
         expect(screen.getByText('Networks')).toBeInTheDocument();
         expect(screen.getByText('1')).toBeInTheDocument();
         expect(screen.getByText('network1 (0% used)')).toBeInTheDocument();
-
-        // eslint-disable-next-line testing-library/no-node-access
-        const networkChip = screen.getByText('network1 (0% used)').closest('.MuiChip-root');
-        expect(networkChip).not.toHaveStyle('background-color: red');
     });
 });

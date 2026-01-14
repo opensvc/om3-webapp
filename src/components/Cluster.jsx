@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import React, {useEffect, useState, useRef, useMemo} from "react";
+import React, {useEffect, useState, useRef, useMemo, useCallback, memo} from "react";
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
 import axios from "axios";
@@ -13,8 +13,31 @@ import {
     GridNetworks
 } from "./ClusterStatGrids.jsx";
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
-import {startEventReception} from "../eventSourceManager";
+import {startEventReception, DEFAULT_FILTERS} from "../eventSourceManager";
 import EventLogger from "../components/EventLogger";
+
+const CLUSTER_EVENT_TYPES = [
+    "NodeStatusUpdated",
+    "NodeMonitorUpdated",
+    "NodeStatsUpdated",
+    "DaemonHeartbeatUpdated",
+    "ObjectStatusUpdated",
+    "InstanceStatusUpdated",
+    "ObjectDeleted",
+    "InstanceMonitorUpdated",
+    "CONNECTION_OPENED",
+    "CONNECTION_ERROR",
+    "RECONNECTION_ATTEMPT",
+    "MAX_RECONNECTIONS_REACHED",
+    "CONNECTION_CLOSED"
+];
+
+const MemoizedGridNodes = memo(GridNodes);
+const MemoizedGridObjects = memo(GridObjects);
+const MemoizedGridNamespaces = memo(GridNamespaces);
+const MemoizedGridHeartbeats = memo(GridHeartbeats);
+const MemoizedGridPools = memo(GridPools);
+const MemoizedGridNetworks = memo(GridNetworks);
 
 const ClusterOverview = () => {
     const navigate = useNavigate();
@@ -27,58 +50,44 @@ const ClusterOverview = () => {
     const [networks, setNetworks] = useState([]);
     const isMounted = useRef(true);
 
-    const clusterEventTypes = [
-        "NodeStatusUpdated",
-        "NodeMonitorUpdated",
-        "NodeStatsUpdated",
-        "DaemonHeartbeatUpdated",
-        "ObjectStatusUpdated",
-        "InstanceStatusUpdated",
-        "ObjectDeleted",
-        "InstanceMonitorUpdated",
-        "CONNECTION_OPENED",
-        "CONNECTION_ERROR",
-        "RECONNECTION_ATTEMPT",
-        "MAX_RECONNECTIONS_REACHED",
-        "CONNECTION_CLOSED"
-    ];
+    const handleNavigate = useCallback((path) => () => navigate(path), [navigate]);
 
     useEffect(() => {
         isMounted.current = true;
         const token = localStorage.getItem("authToken");
 
         if (token) {
-            startEventReception(token);
+            startEventReception(token, DEFAULT_FILTERS);
 
-            // Fetch pools
-            axios.get(URL_POOL, {
-                headers: {Authorization: `Bearer ${token}`}
-            })
-                .then((res) => {
+            const fetchData = async () => {
+                try {
+                    const [poolsRes, networksRes] = await Promise.all([
+                        axios.get(URL_POOL, {
+                            headers: {Authorization: `Bearer ${token}`},
+                            timeout: 5000
+                        }),
+                        axios.get(URL_NETWORK, {
+                            headers: {Authorization: `Bearer ${token}`},
+                            timeout: 5000
+                        })
+                    ]);
+
                     if (!isMounted.current) return;
-                    const items = res.data?.items || [];
-                    setPoolCount(items.length);
-                })
-                .catch((error) => {
+
+                    const poolItems = poolsRes.data?.items || [];
+                    const networkItems = networksRes.data?.items || [];
+
+                    setPoolCount(poolItems.length);
+                    setNetworks(networkItems);
+                } catch (error) {
                     if (!isMounted.current) return;
-                    logger.error('Failed to fetch pools:', error.message);
+                    logger.error('Failed to fetch cluster data:', error.message);
                     setPoolCount(0);
-                });
-
-            // Fetch networks
-            axios.get(URL_NETWORK, {
-                headers: {Authorization: `Bearer ${token}`}
-            })
-                .then((res) => {
-                    if (!isMounted.current) return;
-                    const items = res.data?.items || [];
-                    setNetworks(items);
-                })
-                .catch((error) => {
-                    if (!isMounted.current) return;
-                    logger.error('Failed to fetch networks:', error.message);
                     setNetworks([]);
-                });
+                }
+            };
+
+            fetchData();
         }
 
         return () => {
@@ -87,40 +96,62 @@ const ClusterOverview = () => {
     }, []);
 
     const nodeStats = useMemo(() => {
-        const count = Object.keys(nodeStatus).length;
+        const nodes = Object.values(nodeStatus);
+        if (nodes.length === 0) {
+            return {count: 0, frozen: 0, unfrozen: 0};
+        }
+
         let frozen = 0;
         let unfrozen = 0;
 
-        Object.values(nodeStatus).forEach((node) => {
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
             const isFrozen = node?.frozen_at && node?.frozen_at !== "0001-01-01T00:00:00Z";
             if (isFrozen) frozen++;
             else unfrozen++;
-        });
+        }
 
-        return {count, frozen, unfrozen};
+        return {count: nodes.length, frozen, unfrozen};
     }, [nodeStatus]);
 
     const objectStats = useMemo(() => {
+        const objectEntries = Object.entries(objectStatus);
+        if (objectEntries.length === 0) {
+            return {
+                objectCount: 0,
+                namespaceCount: 0,
+                statusCount: {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0},
+                namespaceSubtitle: []
+            };
+        }
+
         const namespaces = new Set();
         const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
         const objectsPerNamespace = {};
         const statusPerNamespace = {};
 
         const extractNamespace = (objectPath) => {
-            const parts = objectPath.split("/");
-            return parts.length === 3 ? parts[0] : "root";
+            const firstSlash = objectPath.indexOf('/');
+            if (firstSlash === -1) return "root";
+
+            const secondSlash = objectPath.indexOf('/', firstSlash + 1);
+            if (secondSlash === -1) return "root";
+
+            return objectPath.slice(0, firstSlash);
         };
 
-        Object.entries(objectStatus).forEach(([objectPath, status]) => {
+        for (let i = 0; i < objectEntries.length; i++) {
+            const [objectPath, status] = objectEntries[i];
             const ns = extractNamespace(objectPath);
+
             namespaces.add(ns);
             objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
 
-            const s = status?.avail?.toLowerCase() || "n/a";
             if (!statusPerNamespace[ns]) {
                 statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
             }
 
+            const s = status?.avail?.toLowerCase() || "n/a";
             if (s === "up" || s === "down" || s === "warn" || s === "n/a") {
                 statusPerNamespace[ns][s]++;
                 statusCount[s]++;
@@ -131,22 +162,25 @@ const ClusterOverview = () => {
 
             // Count unprovisioned objects
             const provisioned = status?.provisioned;
-            const isUnprovisioned = provisioned === "false" || provisioned === false;
-            if (isUnprovisioned) {
+            if (provisioned === "false" || provisioned === false) {
                 statusPerNamespace[ns].unprovisioned++;
                 statusCount.unprovisioned++;
             }
-        });
+        }
 
-        const namespaceSubtitle = Object.entries(objectsPerNamespace)
-            .map(([ns, count]) => ({
+        const namespaceSubtitle = [];
+        for (const ns in objectsPerNamespace) {
+            namespaceSubtitle.push({
                 namespace: ns,
-                count,
+                count: objectsPerNamespace[ns],
                 status: statusPerNamespace[ns]
-            }));
+            });
+        }
+
+        namespaceSubtitle.sort((a, b) => a.namespace.localeCompare(b.namespace));
 
         return {
-            objectCount: Object.keys(objectStatus).length,
+            objectCount: objectEntries.length,
             namespaceCount: namespaces.size,
             statusCount,
             namespaceSubtitle
@@ -154,17 +188,31 @@ const ClusterOverview = () => {
     }, [objectStatus]);
 
     const heartbeatStats = useMemo(() => {
+        const heartbeatValues = Object.values(heartbeatStatus);
+        if (heartbeatValues.length === 0) {
+            return {
+                count: 0,
+                beating: 0,
+                stale: 0,
+                stateCount: {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0}
+            };
+        }
+
         const heartbeatIds = new Set();
         let beating = 0;
         let stale = 0;
         const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
 
-        Object.values(heartbeatStatus).forEach(node => {
-            (node.streams || []).forEach(stream => {
-                const peer = Object.values(stream.peers || {})[0];
+        for (let i = 0; i < heartbeatValues.length; i++) {
+            const node = heartbeatValues[i];
+            const streams = node.streams || [];
+
+            for (let j = 0; j < streams.length; j++) {
+                const stream = streams[j];
                 const baseId = stream.id?.split('.')[0];
                 if (baseId) heartbeatIds.add(baseId);
 
+                const peer = Object.values(stream.peers || {})[0];
                 if (peer?.is_beating) {
                     beating++;
                 } else {
@@ -177,8 +225,8 @@ const ClusterOverview = () => {
                 } else {
                     stateCount.unknown++;
                 }
-            });
-        });
+            }
+        }
 
         return {
             count: heartbeatIds.size,
@@ -187,6 +235,17 @@ const ClusterOverview = () => {
             stateCount
         };
     }, [heartbeatStatus]);
+
+    const handleObjectsClick = useCallback((globalState) => {
+        navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
+    }, [navigate]);
+
+    const handleHeartbeatsClick = useCallback((status, state) => {
+        const params = new URLSearchParams();
+        if (status) params.append('status', status);
+        if (state) params.append('state', state);
+        navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+    }, [navigate]);
 
     return (
         <Box sx={{
@@ -228,52 +287,47 @@ const ClusterOverview = () => {
                         minHeight: '100%'
                     }}>
                         <Box>
-                            <GridNodes
+                            <MemoizedGridNodes
                                 nodeCount={nodeStats.count}
                                 frozenCount={nodeStats.frozen}
                                 unfrozenCount={nodeStats.unfrozen}
-                                onClick={() => navigate("/nodes")}
+                                onClick={handleNavigate("/nodes")}
                             />
                         </Box>
                         <Box>
-                            <GridObjects
+                            <MemoizedGridObjects
                                 objectCount={objectStats.objectCount}
                                 statusCount={objectStats.statusCount}
-                                onClick={(globalState) => navigate(globalState ? `/objects?globalState=${globalState}` : '/objects')}
+                                onClick={handleObjectsClick}
                             />
                         </Box>
                         <Box>
-                            <GridHeartbeats
+                            <MemoizedGridHeartbeats
                                 heartbeatCount={heartbeatStats.count}
                                 beatingCount={heartbeatStats.beating}
                                 nonBeatingCount={heartbeatStats.stale}
                                 stateCount={heartbeatStats.stateCount}
                                 nodeCount={nodeStats.count}
-                                onClick={(status, state) => {
-                                    const params = new URLSearchParams();
-                                    if (status) params.append('status', status);
-                                    if (state) params.append('state', state);
-                                    navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
-                                }}
+                                onClick={handleHeartbeatsClick}
                             />
                         </Box>
                         <Box>
-                            <GridPools
+                            <MemoizedGridPools
                                 poolCount={poolCount}
-                                onClick={() => navigate("/storage-pools")}
+                                onClick={handleNavigate("/storage-pools")}
                             />
                         </Box>
                         <Box>
-                            <GridNetworks
+                            <MemoizedGridNetworks
                                 networks={networks}
-                                onClick={() => navigate("/network")}
+                                onClick={handleNavigate("/network")}
                             />
                         </Box>
                     </Box>
 
                     {/* Right side - Namespaces */}
                     <Box sx={{flex: 1}}>
-                        <GridNamespaces
+                        <MemoizedGridNamespaces
                             namespaceCount={objectStats.namespaceCount}
                             namespaceSubtitle={objectStats.namespaceSubtitle}
                             onClick={(url) => navigate(url || "/namespaces")}
@@ -282,7 +336,7 @@ const ClusterOverview = () => {
                 </Box>
 
                 <EventLogger
-                    eventTypes={clusterEventTypes}
+                    eventTypes={CLUSTER_EVENT_TYPES}
                     title="Cluster Events Logger"
                     buttonLabel="Cluster Events"
                 />
@@ -291,4 +345,4 @@ const ClusterOverview = () => {
     );
 };
 
-export default ClusterOverview;
+export default memo(ClusterOverview);

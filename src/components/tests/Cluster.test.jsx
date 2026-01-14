@@ -90,6 +90,9 @@ jest.mock('../ClusterStatGrids.jsx', () => {
     };
 });
 
+// Mock setTimeout
+jest.useFakeTimers();
+
 describe('ClusterOverview', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = jest.fn();
@@ -136,6 +139,11 @@ describe('ClusterOverview', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
+        jest.clearAllTimers();
+    });
+
+    afterAll(() => {
+        jest.useRealTimers();
     });
 
     test('renders Cluster Overview title and stat cards', async () => {
@@ -173,12 +181,14 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
-        expect(mockStartEventReception).toHaveBeenCalledWith(mockToken);
+        expect(mockStartEventReception).toHaveBeenCalledWith(mockToken, expect.any(Array));
         expect(axios.get).toHaveBeenCalledWith(URL_POOL, {
             headers: {Authorization: `Bearer ${mockToken}`},
+            timeout: 5000
         });
         expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {
             headers: {Authorization: `Bearer ${mockToken}`},
+            timeout: 5000
         });
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
@@ -194,6 +204,9 @@ describe('ClusterOverview', () => {
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
+
+        jest.runAllTimers();
+
         fireEvent.click(screen.getByRole('button', {name: /Nodes stat card/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/nodes');
 

@@ -1,5 +1,5 @@
 import React, {useEffect, useCallback, lazy, Suspense} from "react";
-import {Routes, Route, Navigate, useNavigate} from "react-router-dom";
+import {Routes, Route, Navigate, useNavigate, useLocation} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
 import AuthChoice from "./AuthChoice.jsx";
@@ -20,6 +20,7 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
 import {useDarkMode} from "../context/DarkModeContext";
 import {ThemeProvider, createTheme} from '@mui/material/styles';
+import {prepareForNavigation} from "../eventSourceManager";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
@@ -299,7 +300,11 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     logger.info("App init");
-    useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        prepareForNavigation();
+    }, [location]);
 
     useEffect(() => {
         const checkTokenChange = () => {

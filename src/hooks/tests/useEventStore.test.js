@@ -101,10 +101,9 @@ describe('useEventStore', () => {
         expect(state.objectInstanceStatus).toEqual({
             object1: {
                 node1: {
-                    status: 'active',
                     node: 'node1',
                     path: 'object1',
-                    encap: {}
+                    status: 'active',
                 }
             }
         });
@@ -299,7 +298,7 @@ describe('useEventStore', () => {
                     status: 'updated',
                     node: 'node1',
                     path: 'object1',
-                    encap: {} // Dropped
+                    encap: {container1: {resources: {cpu: 100, memory: 200}}}
                 }
             }
         });

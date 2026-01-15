@@ -26,6 +26,7 @@ import {prepareForNavigation} from "../eventSourceManager";
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
 const ObjectDetails = lazy(() => import("./ObjectDetails"));
+const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
 const ClusterOverview = lazy(() => import("./Cluster"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
@@ -337,6 +338,8 @@ const App = () => {
                                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                                     <Route path="/objects/:objectName"
                                            element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                                    <Route path="/nodes/:node/objects/:objectName"
+                                           element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
                                     <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
                                     <Route path="/silent-renew" element={<SilentRenew/>}/>
                                     <Route path="/auth-callback" element={<OidcCallback/>}/>

@@ -545,7 +545,7 @@ const Objects = () => {
                 if (selectedGlobalState !== "all") newQueryParams.set("globalState", selectedGlobalState);
                 if (selectedNamespace !== "all") newQueryParams.set("namespace", selectedNamespace);
                 if (selectedKind !== "all") newQueryParams.set("kind", selectedKind);
-                if (searchQuery) newQueryParams.set("name", searchQuery);
+                if (searchQuery.trim()) newQueryParams.set("name", searchQuery.trim());
                 const queryString = newQueryParams.toString();
                 const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
                 if (newUrl !== location.pathname + location.search) {
@@ -568,12 +568,16 @@ const Objects = () => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
         const newKind = rawKind;
-        const newSearchQuery = rawSearchQuery;
+
         setSelectedGlobalState(newGlobalState);
         setSelectedNamespace(newNamespace);
         setSelectedKind(newKind);
-        setSearchQuery(newSearchQuery);
-    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
+    }, [rawGlobalState, rawNamespace, rawKind, globalStates]);
+
+    useEffect(() => {
+        setSearchQuery(rawSearchQuery);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -708,6 +712,10 @@ const Objects = () => {
         });
     }, []);
 
+    const handleSearchChange = useCallback((e) => {
+        setSearchQuery(e.target.value);
+    }, []);
+
     return (
         <Box sx={{
             height: "100vh",
@@ -786,7 +794,7 @@ const Objects = () => {
                                                   onChange={(_event, val) => val && setSelectedKind(val)}
                                                   renderInput={renderTextField("Kind")}/>
                                     <TextField label="Name" value={searchQuery}
-                                               onChange={(e) => setSearchQuery(e.target.value)}
+                                               onChange={handleSearchChange}
                                                sx={{minWidth: 200, flexShrink: 0}}/>
                                 </>
                             )}

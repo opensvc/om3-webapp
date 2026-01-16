@@ -14,9 +14,13 @@ jest.mock('react-router-dom', () => ({
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
-    const {useState} = jest.requireActual('react'); // Lazily require useState
+    const {useState} = jest.requireActual('react');
+
     const mocks = {
         ...actual,
+        Collapse: ({children, in: inProp, ...props}) =>
+            inProp ? <div data-testid="collapse-content">{children}</div> : null,
+
         Accordion: ({children, expanded, onChange, ...props}) => (
             <div data-testid="accordion" className={expanded ? 'expanded' : ''} {...props}>
                 {children}
@@ -164,6 +168,7 @@ jest.mock('@mui/icons-material/UploadFile', () => () => <span data-testid="Uploa
 jest.mock('@mui/icons-material/Edit', () => () => <span data-testid="EditIcon"/>);
 jest.mock('@mui/icons-material/Info', () => () => <span data-testid="InfoIcon"/>);
 jest.mock('@mui/icons-material/ExpandMore', () => () => <span data-testid="ExpandMoreIcon"/>);
+jest.mock('@mui/icons-material/ExpandLess', () => () => <span data-testid="ExpandLessIcon"/>);
 jest.mock('@mui/icons-material/Delete', () => () => <span data-testid="DeleteIcon"/>);
 
 // Mock localStorage
@@ -291,6 +296,10 @@ size = 10GB
         jest.resetAllMocks();
     });
 
+    const getUploadButton = () => screen.getByRole('button', {name: /Upload new configuration file/i});
+    const getManageParamsButton = () => screen.getByRole('button', {name: /Manage configuration parameters/i});
+    const getKeywordsButton = () => screen.getByRole('button', {name: /View configuration keywords/i});
+
     test('displays configuration with horizontal scrolling', async () => {
         render(
             <ConfigSection
@@ -298,13 +307,10 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
@@ -316,9 +322,10 @@ size = 10GB
             expect(screen.getByText(/size = 10GB/i)).toBeInTheDocument();
         }, {timeout: 10000});
 
-        const accordionDetails = screen.getByTestId('accordion-details');
-        // eslint-disable-next-line testing-library/no-node-access
-        const scrollableBox = accordionDetails.querySelector('div[style*="overflow-x: auto"]');
+        const configContent = screen.getByTestId('collapse-content');
+        expect(configContent).toBeInTheDocument();
+
+        const scrollableBox = configContent.querySelector('div[style*="overflow-x: auto"]');
         expect(scrollableBox).toBeInTheDocument();
         expect(scrollableBox).toHaveStyle({'overflow-x': 'auto'});
     }, 15000);
@@ -338,13 +345,10 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: HTTP 500/i);
@@ -361,13 +365,10 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -381,13 +382,10 @@ size = 10GB
                 configNode=""
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/No node available to fetch configuration/i);
@@ -403,10 +401,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -414,15 +414,18 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
+
         // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['[DEFAULT]\nnodes = node2'], 'config.ini');
         await act(async () => {
             await user.upload(fileInput, testFile);
         });
+
         await waitFor(() => {
             expect(screen.getByText('config.ini')).toBeInTheDocument();
         }, {timeout: 5000});
+
         const updateButton = screen.getByRole('button', {name: /Update/i});
         await act(async () => {
             await user.click(updateButton);
@@ -434,6 +437,7 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
         }, {timeout: 10000});
+
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
             expect.objectContaining({
@@ -445,6 +449,7 @@ size = 10GB
                 body: testFile,
             })
         );
+
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
@@ -457,10 +462,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -476,16 +483,19 @@ size = 10GB
 
     test('handles update config with missing token', async () => {
         mockLocalStorage.getItem.mockImplementation(() => null);
+
         render(
             <ConfigSection
                 decodedObjectName="root/cfg/cfg1"
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -493,6 +503,7 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
+
         // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
@@ -508,10 +519,12 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
         }, {timeout: 10000});
+
         expect(global.fetch).not.toHaveBeenCalledWith(
             expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
             expect.any(Object)
         );
+
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         }, {timeout: 10000});
@@ -543,10 +556,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -554,6 +569,7 @@ size = 10GB
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toHaveTextContent(/Update Configuration/i);
         }, {timeout: 5000});
+
         // eslint-disable-next-line testing-library/no-node-access
         const fileInput = document.querySelector('#update-config-file-upload');
         const testFile = new File(['new config content'], 'config.ini');
@@ -572,6 +588,7 @@ size = 10GB
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith('Error: Failed to update config: 500', 'error');
         }, {timeout: 10000});
+
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         }, {timeout: 10000});
@@ -584,6 +601,8 @@ size = 10GB
                 configNode=""
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -591,12 +610,16 @@ size = 10GB
             expect(screen.getByRole('alert')).toHaveTextContent('No node available to fetch configuration');
         }, {timeout: 5000});
 
+        jest.clearAllMocks();
+
         render(
             <ConfigSection
                 decodedObjectName="cluster"
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -609,19 +632,29 @@ size = 10GB
     });
 
     test('debounces fetchConfig calls', async () => {
-        render(
+        const onToggle = jest.fn();
+        const {rerender} = render(
             <ConfigSection
                 decodedObjectName="root/cfg/cfg1"
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={onToggle}
             />
         );
 
         await act(async () => {
-            setConfigNode('node1');
-            setConfigNode('node1');
-            setConfigNode('node1');
+            rerender(
+                <ConfigSection
+                    decodedObjectName="root/cfg/cfg1"
+                    configNode="node1"
+                    setConfigNode={setConfigNode}
+                    openSnackbar={openSnackbar}
+                    expanded={true}
+                    onToggle={onToggle}
+                />
+            );
         });
 
         await waitFor(() => {
@@ -636,10 +669,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -648,23 +683,29 @@ size = 10GB
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
         }, {timeout: 10000});
+
         const dialog = screen.getByRole('dialog');
         const table = within(dialog).getByRole('table');
+
         await waitFor(() => {
             expect(within(table).getByRole('row', {name: /nodes/})).toBeInTheDocument();
         }, {timeout: 10000});
+
         await waitFor(() => {
             expect(within(table).getByRole('row', {name: /size/})).toBeInTheDocument();
         }, {timeout: 10000});
+
         const nodesRow = within(table).getByRole('row', {name: /nodes/});
         expect(within(nodesRow).getByText('Nodes to deploy the service')).toBeInTheDocument();
         expect(within(nodesRow).getByText('string')).toBeInTheDocument();
         expect(within(nodesRow).getByText('DEFAULT')).toBeInTheDocument();
         expect(within(nodesRow).getByText('Yes')).toBeInTheDocument();
+
         const sizeRow = within(table).getByRole('row', {name: /size/});
         expect(within(sizeRow).getByText('Size of filesystem')).toBeInTheDocument();
         expect(within(sizeRow).getByText('fs')).toBeInTheDocument();
         expect(within(sizeRow).getByText('No')).toBeInTheDocument();
+
         const closeButton = screen.getByRole('button', {name: /Close/i});
         await act(async () => {
             await user.click(closeButton);
@@ -700,10 +741,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -712,6 +755,7 @@ size = 10GB
             const dialog = screen.getByRole('dialog');
             expect(dialog).toHaveTextContent(/Configuration Keywords/i);
         }, {timeout: 2000});
+
         await waitFor(() => {
             const alert = within(screen.getByRole('dialog')).getByRole('alert');
             expect(alert).toHaveTextContent(/Request timed out after 60 seconds/i);
@@ -742,10 +786,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -783,10 +829,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -808,10 +856,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -852,10 +902,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -917,10 +969,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -980,10 +1034,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1055,10 +1111,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1129,10 +1187,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1192,10 +1252,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1236,10 +1298,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1300,10 +1364,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -1357,10 +1423,12 @@ size = 10GB
                 configNode=""
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -1410,10 +1478,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1462,10 +1532,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1560,10 +1632,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1636,10 +1710,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1706,10 +1782,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1749,10 +1827,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1786,13 +1866,10 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: Network error/i);
@@ -1818,10 +1895,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const keywordsButton = screen.getByRole('button', {name: /View configuration keywords/i});
+        const keywordsButton = getKeywordsButton();
         await act(async () => {
             await user.click(keywordsButton);
         });
@@ -1856,10 +1935,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1884,10 +1965,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -1969,10 +2052,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2000,12 +2085,15 @@ size = 10GB
     });
 
     test('debounces fetchConfig calls within 1 second', async () => {
+        const onToggle = jest.fn();
         const {rerender} = render(
             <ConfigSection
                 decodedObjectName="root/cfg/cfg1"
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={onToggle}
             />
         );
 
@@ -2019,6 +2107,8 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={onToggle}
             />
         );
 
@@ -2038,13 +2128,10 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
-
-        const accordionSummary = screen.getByTestId('accordion-summary');
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: Network failure/i);
@@ -2058,6 +2145,8 @@ size = 10GB
                 configNode=""
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2071,6 +2160,8 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2089,6 +2180,8 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2107,6 +2200,8 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2126,6 +2221,8 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2135,6 +2232,8 @@ size = 10GB
                 configNode="node2"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
@@ -2153,10 +2252,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2206,10 +2307,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2251,7 +2354,6 @@ size = 10GB
         }, {timeout: 10000});
     });
 
-
     test('handles add parameters with TListLowercase converter - invalid comma-separated values', async () => {
         render(
             <ConfigSection
@@ -2259,10 +2361,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2317,10 +2421,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2368,10 +2474,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2427,10 +2535,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2479,10 +2589,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });
@@ -2532,10 +2644,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const uploadButton = screen.getByRole('button', {name: /Upload new configuration file/i});
+        const uploadButton = getUploadButton();
         await act(async () => {
             await user.click(uploadButton);
         });
@@ -2567,10 +2681,12 @@ size = 10GB
                 configNode="node1"
                 setConfigNode={setConfigNode}
                 openSnackbar={openSnackbar}
+                expanded={true}
+                onToggle={jest.fn()}
             />
         );
 
-        const manageParamsButton = screen.getByRole('button', {name: /Manage configuration parameters/i});
+        const manageParamsButton = getManageParamsButton();
         await act(async () => {
             await user.click(manageParamsButton);
         });

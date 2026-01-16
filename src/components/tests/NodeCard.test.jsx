@@ -18,14 +18,34 @@ jest.mock('@mui/material', () => {
     return {
         ...actual,
         Checkbox: ({checked, onChange, ...props}) => (
-            <input type="checkbox" checked={checked} onChange={onChange} {...props} />
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={onChange}
+                aria-label={props['aria-label']}
+                {...props}
+            />
         ),
         IconButton: ({children, onClick, disabled, ...props}) => (
-            <button onClick={onClick} disabled={disabled} {...props}>
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                aria-label={props['aria-label']}
+                {...props}
+            >
                 {children}
             </button>
         ),
-        Box: ({children, ...props}) => <div {...props}>{children}</div>,
+        Box: ({children, onClick, onMouseEnter, onMouseLeave, ...props}) => (
+            <div
+                onClick={onClick}
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
+                {...props}
+            >
+                {children}
+            </div>
+        ),
         Typography: ({children, ...props}) => <span {...props}>{children}</span>,
         FiberManualRecordIcon: ({sx, ...props}) => (
             <svg
@@ -45,7 +65,6 @@ jest.mock('@mui/material', () => {
 jest.mock('@mui/icons-material/AcUnit', () => () => <span data-testid="AcUnitIcon"/>);
 jest.mock('@mui/icons-material/MoreVert', () => () => <span data-testid="MoreVertIcon"/>);
 jest.mock('@mui/icons-material/Article', () => () => <span data-testid="ArticleIcon"/>);
-jest.mock('@mui/icons-material/OpenInNew', () => () => <span data-testid="OpenInNewIcon"/>);
 jest.mock('@mui/icons-material/PriorityHigh', () => () => <span data-testid="PriorityHighIcon"/>);
 
 describe('NodeCard Component', () => {
@@ -111,7 +130,7 @@ describe('NodeCard Component', () => {
         expect(onOpenLogs).toHaveBeenCalledWith('node1', 'instance1');
     });
 
-    test('calls onViewInstance when view instance button is clicked', async () => {
+    test('calls onViewInstance when card is clicked (except on interactive elements)', async () => {
         const onViewInstance = jest.fn();
 
         render(
@@ -120,10 +139,34 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
 
-        const viewButton = screen.getByLabelText(/View instance details for node1/i);
-        await user.click(viewButton);
+        // Click on the node name text (not on interactive elements)
+        await user.click(screen.getByText('node1'));
 
         expect(onViewInstance).toHaveBeenCalledWith('node1');
+    });
+
+    test('does not call onViewInstance when interactive elements are clicked', async () => {
+        const onViewInstance = jest.fn();
+
+        render(
+            <MemoryRouter>
+                <NodeCard node="node1" onViewInstance={onViewInstance}/>
+            </MemoryRouter>
+        );
+
+        // Click on checkbox (should not trigger onViewInstance)
+        const checkbox = screen.getByLabelText(/select node node1/i);
+        await user.click(checkbox);
+
+        // Click on logs button (should not trigger onViewInstance)
+        const logsButton = screen.getByLabelText(/View logs for instance node1/i);
+        await user.click(logsButton);
+
+        // Click on actions button (should not trigger onViewInstance)
+        const actionsButton = screen.getByLabelText(/Node node1 actions/i);
+        await user.click(actionsButton);
+
+        expect(onViewInstance).not.toHaveBeenCalled();
     });
 
     test('opens node actions menu when actions button is clicked', async () => {
@@ -232,6 +275,8 @@ describe('NodeCard Component', () => {
             </MemoryRouter>
         );
 
+        // Since we removed the "View instance details" button, this test should pass
+        // because there is no button to find
         expect(screen.queryByLabelText(/View instance details for node1/i)).not.toBeInTheDocument();
     });
 

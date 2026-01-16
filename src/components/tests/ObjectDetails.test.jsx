@@ -668,6 +668,7 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -675,19 +676,33 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        const configSections = screen.getAllByRole('button', {expanded: false});
-        const configSection = configSections.find(
-            (el) => el.textContent.toLowerCase().includes('configuration')
+
+        // Trouver l'en-tête Configuration et cliquer dessus pour développer
+        const configHeader = await screen.findByText('Configuration');
+
+        // Dans le mock, l'AccordionSummary est un div avec rôle button
+        const configButtons = screen.getAllByRole('button');
+        const configButton = configButtons.find(button =>
+            button.textContent && button.textContent.includes('Configuration')
         );
-        fireEvent.click(configSection);
+
+        if (configButton) {
+            fireEvent.click(configButton);
+        } else {
+            // Fallback: cliquer sur l'en-tête lui-même
+            fireEvent.click(configHeader);
+        }
+
         await waitFor(() => {
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
+
         await waitFor(() => {
             expect(screen.getByText(
                 /this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890/i
             )).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
+
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/config/file'),
             expect.any(Object)
@@ -928,6 +943,7 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -935,17 +951,44 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
         );
-        const viewInstanceButton = screen.getByRole('button', {
-            name: /View instance details for node1/i,
-        });
-        await user.click(viewInstanceButton);
-        expect(mockNavigate).toHaveBeenCalledWith('/nodes/node1/objects/root%2Fsvc%2Fsvc1');
+
+        // Trouver la carte du node (Paper) et cliquer dessus
+        // Dans le mock, Paper est un div, donc on cherche le div qui contient le texte node1
+        const nodeText = screen.getByText('node1');
+        const card = nodeText.closest('div[role="region"]') || nodeText.closest('div');
+
+        if (card) {
+            // Simuler un clic sur la carte (éviter les éléments interactifs)
+            // Créer un mock event pour simuler le comportement de handleCardClick
+            const mockEvent = {
+                target: card,
+                stopPropagation: jest.fn(),
+                closest: (selector) => {
+                    // Simuler le comportement de closest pour éviter les éléments interactifs
+                    if (selector === 'button' || selector === 'input' || selector === '.no-click') {
+                        return null; // Simuler que ce n'est pas un élément interactif
+                    }
+                    return null;
+                }
+            };
+
+            // Déclencher le clic sur la carte
+            fireEvent.click(card);
+        } else {
+            // Fallback: cliquer sur le texte du node
+            fireEvent.click(nodeText);
+        }
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith('/nodes/node1/objects/root%2Fsvc%2Fsvc1');
+        }, {timeout: 5000});
     });
 
     test('subscription without node does not trigger fetchConfig', async () => {

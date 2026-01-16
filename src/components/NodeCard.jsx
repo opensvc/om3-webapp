@@ -1,4 +1,4 @@
-import React, {forwardRef} from "react";
+import React, {forwardRef, useState} from "react";
 import {
     Box,
     Typography,
@@ -11,7 +11,6 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ArticleIcon from "@mui/icons-material/Article";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {grey, blue, red} from "@mui/material/colors";
 import logger from '../utils/logger.js';
 
@@ -42,6 +41,7 @@ const NodeCard = ({
                       onViewInstance,
                   }) => {
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name || node;
+    const [isHovered, setIsHovered] = useState(false);
 
     if (!node) {
         logger.error("Node name is required");
@@ -52,93 +52,117 @@ const NodeCard = ({
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 
+    const handleCardClick = (e) => {
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
+            return;
+        }
+        if (onViewInstance && typeof onViewInstance === 'function') {
+            onViewInstance(node);
+        }
+    };
+
     return (
         <BoxWithRef
             sx={{
                 mb: 2,
                 display: "flex",
                 flexDirection: "column",
-                gap: 1,
                 width: "100%",
                 maxWidth: "1400px",
-                overflowX: "auto",
+                cursor: onViewInstance ? 'pointer' : 'default',
+                transition: 'background-color 0.2s ease',
+                position: 'relative',
+                p: 2,
+                backgroundColor: isHovered && onViewInstance ? 'action.hover' : 'transparent',
+                borderRadius: 1,
+                '&:hover': onViewInstance ? {
+                    backgroundColor: 'action.hover',
+                } : {},
             }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            onClick={handleCardClick}
         >
-            <Box sx={{p: 1}}>
-                <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                    <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                        <Box onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                                checked={selectedNodes.includes(node)}
-                                onChange={() => toggleNode(node)}
-                                aria-label={`Select node ${node}`}
-                            />
-                        </Box>
-                        <Typography variant="h6">{node}</Typography>
+            <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                <Box sx={{display: "flex", alignItems: "center", gap: 1, flexWrap: 'wrap'}}>
+                    <Box onClick={(e) => e.stopPropagation()} className="no-click">
+                        <Checkbox
+                            checked={selectedNodes.includes(node)}
+                            onChange={() => toggleNode(node)}
+                            aria-label={`Select node ${node}`}
+                        />
                     </Box>
-                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                        {/* Bouton pour voir les logs de l'instance */}
-                        <Tooltip title="View instance logs">
-                            <IconButtonWithRef
-                                onClick={() => onOpenLogs(node, resolvedInstanceName)}
+                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                        <Typography variant="h6">
+                            {node}
+                        </Typography>
+                        {isHovered && onViewInstance && (
+                            <Typography
+                                variant="body2"
                                 color="primary"
-                                aria-label={`View logs for instance ${resolvedInstanceName || node}`}
-                            >
-                                <ArticleIcon/>
-                            </IconButtonWithRef>
-                        </Tooltip>
-
-                        {/* Bouton pour naviguer vers la vue instance détaillée */}
-                        {onViewInstance && (
-                            <Tooltip title="View instance details">
-                                <IconButtonWithRef
-                                    onClick={() => onViewInstance(node)}
-                                    color="primary"
-                                    aria-label={`View instance details for ${node}`}
-                                >
-                                    <OpenInNewIcon/>
-                                </IconButtonWithRef>
-                            </Tooltip>
-                        )}
-
-                        <Tooltip title={avail || "unknown"}>
-                            <FiberManualRecordIcon
                                 sx={{
-                                    fontSize: "1.2rem",
-                                    color: typeof getColor === "function" ? getColor(avail) : grey[500]
+                                    fontStyle: 'italic',
+                                    ml: 1,
+                                    opacity: 0.8
                                 }}
-                            />
-                        </Tooltip>
-                        {frozen === "frozen" && (
-                            <Tooltip title="frozen">
-                                <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                            </Tooltip>
+                            >
+                                (view resources)
+                            </Typography>
                         )}
-                        {isInstanceNotProvisioned && (
-                            <Tooltip title="Not Provisioned">
-                                <PriorityHighIcon
-                                    sx={{color: red[500], fontSize: "1.2rem"}}
-                                    aria-label={`Instance on node ${node} is not provisioned`}
-                                />
-                            </Tooltip>
-                        )}
-                        {state && <Typography variant="caption">{state}</Typography>}
+                    </Box>
+                </Box>
+                <Box sx={{display: "flex", alignItems: "center", gap: 2}} className="no-click">
+                    {/* Bouton pour voir les logs de l'instance */}
+                    <Tooltip title="View instance logs">
                         <IconButtonWithRef
                             onClick={(e) => {
-                                e.persist();
                                 e.stopPropagation();
-                                setCurrentNode(node);
-                                setIndividualNodeMenuAnchor(e.currentTarget);
+                                onOpenLogs(node, resolvedInstanceName);
                             }}
-                            disabled={actionInProgress}
-                            aria-label={`Node ${node} actions`}
-                            ref={individualNodeMenuAnchorRef}
+                            color="primary"
+                            aria-label={`View logs for instance ${resolvedInstanceName || node}`}
                         >
-                            <Tooltip title="Actions">
-                                <MoreVertIcon/>
-                            </Tooltip>
+                            <ArticleIcon/>
                         </IconButtonWithRef>
-                    </Box>
+                    </Tooltip>
+
+                    <Tooltip title={avail || "unknown"}>
+                        <FiberManualRecordIcon
+                            sx={{
+                                fontSize: "1.2rem",
+                                color: typeof getColor === "function" ? getColor(avail) : grey[500]
+                            }}
+                        />
+                    </Tooltip>
+                    {frozen === "frozen" && (
+                        <Tooltip title="frozen">
+                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
+                        </Tooltip>
+                    )}
+                    {isInstanceNotProvisioned && (
+                        <Tooltip title="Not Provisioned">
+                            <PriorityHighIcon
+                                sx={{color: red[500], fontSize: "1.2rem"}}
+                                aria-label={`Instance on node ${node} is not provisioned`}
+                            />
+                        </Tooltip>
+                    )}
+                    {state && <Typography variant="caption">{state}</Typography>}
+                    <IconButtonWithRef
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            e.persist();
+                            setCurrentNode(node);
+                            setIndividualNodeMenuAnchor(e.currentTarget);
+                        }}
+                        disabled={actionInProgress}
+                        aria-label={`Node ${node} actions`}
+                        ref={individualNodeMenuAnchorRef}
+                    >
+                        <Tooltip title="Actions">
+                            <MoreVertIcon/>
+                        </Tooltip>
+                    </IconButtonWithRef>
                 </Box>
             </Box>
         </BoxWithRef>

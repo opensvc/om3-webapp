@@ -21,6 +21,7 @@ import {
     IconButton,
     TextField,
     useTheme,
+    Grid,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import {green, grey, orange, red} from "@mui/material/colors";
@@ -106,7 +107,7 @@ const ObjectDetail = () => {
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
-    const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
+    const [configExpanded, setConfigExpanded] = useState(false);
     const [configNode, setConfigNode] = useState(null);
 
     // States for batch & actions
@@ -573,7 +574,7 @@ const ObjectDetail = () => {
                                     return;
                                 }
                                 await fetchConfig(matchingUpdate.node);
-                                setConfigAccordionExpanded(true);
+                                setConfigExpanded(true);
                                 openSnackbar("Configuration updated", "info");
                             } catch (err) {
                                 openSnackbar("Failed to load updated configuration", "error");
@@ -618,7 +619,7 @@ const ObjectDetail = () => {
                     const config = newConfig[decodedObjectName];
                     if (config && configNode) {
                         try {
-                            setConfigAccordionExpanded(true);
+                            setConfigExpanded(true);
                             openSnackbar("Instance configuration updated", "info");
                         } catch (err) {
                             openSnackbar("Failed to process instance configuration update", "error");
@@ -720,8 +721,8 @@ const ObjectDetail = () => {
                     configData={configData}
                     configLoading={configLoading}
                     configError={configError}
-                    configAccordionExpanded={configAccordionExpanded}
-                    setConfigAccordionExpanded={setConfigAccordionExpanded}
+                    expanded={configExpanded}
+                    onToggle={() => setConfigExpanded(!configExpanded)}
                 />
             </Box>
         );
@@ -767,17 +768,38 @@ const ObjectDetail = () => {
                         boxShadow: 3,
                     }}
                 >
-                    <HeaderSection
-                        decodedObjectName={decodedObjectName}
-                        globalStatus={objectStatus[decodedObjectName]}
-                        actionInProgress={actionInProgress}
-                        objectMenuAnchor={objectMenuAnchor}
-                        setObjectMenuAnchor={setObjectMenuAnchor}
-                        handleObjectActionClick={handleObjectActionClick}
-                        getObjectStatus={getObjectStatus}
-                        getColor={getColor}
-                        objectMenuAnchorRef={objectMenuAnchorRef}
-                    />
+                    {/* Header and Config Section in same line */}
+                    <Grid container spacing={2} alignItems="flex-start">
+                        <Grid item xs={12} md={8}>
+                            <HeaderSection
+                                decodedObjectName={decodedObjectName}
+                                globalStatus={objectStatus[decodedObjectName]}
+                                actionInProgress={actionInProgress}
+                                objectMenuAnchor={objectMenuAnchor}
+                                setObjectMenuAnchor={setObjectMenuAnchor}
+                                handleObjectActionClick={handleObjectActionClick}
+                                getObjectStatus={getObjectStatus}
+                                getColor={getColor}
+                                objectMenuAnchorRef={objectMenuAnchorRef}
+                            />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                            <ConfigSection
+                                decodedObjectName={decodedObjectName}
+                                configNode={configNode}
+                                setConfigNode={setConfigNode}
+                                openSnackbar={openSnackbar}
+                                handleManageParamsSubmit={() => {
+                                }}
+                                configData={configData}
+                                configLoading={configLoading}
+                                configError={configError}
+                                expanded={configExpanded}
+                                onToggle={() => setConfigExpanded(!configExpanded)}
+                            />
+                        </Grid>
+                    </Grid>
+
                     {Boolean(pendingAction && pendingAction.action !== "console") && (
                         <ActionDialogManager
                             pendingAction={pendingAction}
@@ -944,19 +966,6 @@ const ObjectDetail = () => {
                     {showKeys && (
                         <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
                     )}
-                    <ConfigSection
-                        decodedObjectName={decodedObjectName}
-                        configNode={configNode}
-                        setConfigNode={setConfigNode}
-                        openSnackbar={openSnackbar}
-                        handleManageParamsSubmit={() => {
-                        }}
-                        configData={configData}
-                        configLoading={configLoading}
-                        configError={configError}
-                        configAccordionExpanded={configAccordionExpanded}
-                        setConfigAccordionExpanded={setConfigAccordionExpanded}
-                    />
                     {!(["sec", "cfg", "usr"].includes(kind)) && (
                         <>
                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>

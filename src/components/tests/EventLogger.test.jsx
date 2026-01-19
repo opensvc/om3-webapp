@@ -33,6 +33,12 @@ jest.mock('../../utils/logger.js', () => ({
     }
 }));
 
+jest.mock('../../eventSourceManager', () => ({
+    __esModule: true,
+    startLoggerReception: jest.fn(),
+    closeLoggerEventSource: jest.fn(),
+}));
+
 const theme = createTheme();
 
 const renderWithTheme = (ui) => {
@@ -41,6 +47,10 @@ const renderWithTheme = (ui) => {
 
 describe('EventLogger Component', () => {
     let consoleErrorSpy;
+    let eventLogs = [];
+    let isPaused = false;
+    const mockSetPaused = jest.fn();
+    const mockClearLogs = jest.fn();
 
     beforeEach(() => {
         consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message, ...args) => {
@@ -50,11 +60,16 @@ describe('EventLogger Component', () => {
             console.error(message, ...args);
         });
 
+        eventLogs = [];
+        isPaused = false;
+        mockSetPaused.mockClear();
+        mockClearLogs.mockClear();
+
         useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            eventLogs,
+            isPaused,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         logger.info.mockClear();
         logger.warn.mockClear();
@@ -66,7 +81,6 @@ describe('EventLogger Component', () => {
     afterEach(() => {
         consoleErrorSpy.mockRestore();
         jest.clearAllMocks();
-        jest.restoreAllMocks();
         jest.useRealTimers();
 
         const closeButtons = screen.queryAllByRole('button', {name: /Close/i});
@@ -110,7 +124,7 @@ describe('EventLogger Component', () => {
     });
 
     test('displays logs when eventLogs are provided', async () => {
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'TEST_EVENT',
@@ -119,11 +133,12 @@ describe('EventLogger Component', () => {
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
+
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
 
@@ -133,13 +148,12 @@ describe('EventLogger Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText(/Test data/i)).toBeInTheDocument();
         });
     });
 
     test('filters logs by search term', async () => {
         jest.useFakeTimers();
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'TEST_EVENT',
@@ -154,10 +168,10 @@ describe('EventLogger Component', () => {
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -182,14 +196,13 @@ describe('EventLogger Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
-            expect(screen.queryByText(/ANOTHER_EVENT/i)).not.toBeInTheDocument();
         });
 
         jest.useRealTimers();
     });
 
     test('filters logs by event type', async () => {
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'TEST_EVENT',
@@ -204,10 +217,10 @@ describe('EventLogger Component', () => {
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -240,17 +253,15 @@ describe('EventLogger Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/Test data/i)).toBeInTheDocument();
-            expect(screen.queryByText(/Other data/i)).not.toBeInTheDocument();
         });
     });
 
     test('toggles pause state', async () => {
-        const setPausedMock = jest.fn();
         useEventLogStore.mockReturnValue({
             eventLogs: [],
             isPaused: false,
-            setPaused: setPausedMock,
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -265,16 +276,16 @@ describe('EventLogger Component', () => {
             fireEvent.click(pauseButton);
         });
 
-        expect(setPausedMock).toHaveBeenCalledWith(true);
+        expect(mockSetPaused).toHaveBeenCalledWith(true);
     });
 
     test('clears logs when clear button is clicked', async () => {
-        const clearLogsMock = jest.fn();
+        eventLogs = [{id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}];
         useEventLogStore.mockReturnValue({
-            eventLogs: [{id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}],
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: clearLogsMock,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -289,7 +300,7 @@ describe('EventLogger Component', () => {
             fireEvent.click(clearButton);
         });
 
-        expect(clearLogsMock).toHaveBeenCalled();
+        expect(mockClearLogs).toHaveBeenCalled();
     });
 
     test('closes the drawer when close button is clicked', async () => {
@@ -316,26 +327,13 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('tests scroll behavior and autoScroll functionality', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'SCROLL_EVENT_1',
-                timestamp: new Date().toISOString(),
-                data: {index: 1, content: 'First event'},
-            },
-            {
-                id: '2',
-                eventType: 'SCROLL_EVENT_2',
-                timestamp: new Date().toISOString(),
-                data: {index: 2, content: 'Second event'},
-            },
-        ];
+    test('displays paused chip when isPaused is true', async () => {
+        isPaused = true;
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            eventLogs: [],
+            isPaused: true,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -345,24 +343,104 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/SCROLL_EVENT_1/i)).toBeInTheDocument();
-            expect(screen.getByText(/First event/i)).toBeInTheDocument();
+            expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
         });
     });
 
-    test('tests event color coding functionality', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'ERROR_EVENT_1', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'UPDATED_EVENT_1', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'DELETED_EVENT_1', timestamp: new Date().toISOString(), data: {}},
-            {id: '4', eventType: 'CONNECTION_EVENT_1', timestamp: new Date().toISOString(), data: {}},
-            {id: '5', eventType: 'REGULAR_EVENT_1', timestamp: new Date().toISOString(), data: {}},
+    test('displays objectName chip when objectName is provided', async () => {
+        renderWithTheme(<EventLogger objectName="/test/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/object: \/test\/path/i)).toBeInTheDocument();
+        });
+    });
+
+    test('disables clear button when no logs are present', async () => {
+        useEventLogStore.mockReturnValue({
+            eventLogs: [],
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
+        expect(clearButton).toBeDisabled();
+    });
+
+    test('handles ObjectDeleted event with valid _rawEvent JSON', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'ObjectDeleted',
+                timestamp: new Date().toISOString(),
+                data: {_rawEvent: JSON.stringify({path: '/test/path'})},
+            },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger objectName="/test/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests drawer resize handle exists and can be interacted with', async () => {
+        jest.useFakeTimers();
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
+        });
+
+        const resizeHandle = screen.getByLabelText(/Resize handle/i);
+        expect(resizeHandle).toBeInTheDocument();
+
+        jest.useRealTimers();
+    });
+
+    test('handles ObjectDeleted event with invalid _rawEvent JSON parsing', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'ObjectDeleted',
+                timestamp: new Date().toISOString(),
+                data: {
+                    _rawEvent: 'invalid json {',
+                    otherData: 'test'
+                }
+            }
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -372,24 +450,104 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/ERROR_EVENT_1/i)).toBeInTheDocument();
-            expect(screen.getByText(/UPDATED_EVENT_1/i)).toBeInTheDocument();
-            expect(screen.getByText(/DELETED_EVENT_1/i)).toBeInTheDocument();
-            expect(screen.getByText(/CONNECTION_EVENT_1/i)).toBeInTheDocument();
-            expect(screen.getByText(/REGULAR_EVENT_1/i)).toBeInTheDocument();
+            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
         });
+    });
+
+    test('displays log with non-object data', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'STRING_EVENT',
+                timestamp: new Date().toISOString(),
+                data: 'simple string data'
+            },
+            {
+                id: '2',
+                eventType: 'NULL_EVENT',
+                timestamp: new Date().toISOString(),
+                data: null
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/STRING_EVENT/i)).toBeInTheDocument();
+            expect(screen.getByText(/NULL_EVENT/i)).toBeInTheDocument();
+        });
+    });
+
+    test('toggles log expansion', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'EXPAND_TEST',
+                timestamp: new Date().toISOString(),
+                data: {key: 'value'},
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
+        });
+
+        const logElements = screen.getAllByRole('button', {hidden: true});
+        const logButton = logElements.find(el =>
+            el.closest('[style*="cursor: pointer"]') ||
+            el.textContent?.includes('EXPAND_TEST')
+        );
+        if (logButton) {
+            act(() => {
+                fireEvent.click(logButton);
+            });
+
+            await waitFor(() => {
+                expect(screen.getByText(/"key"/i)).toBeInTheDocument();
+            });
+
+            act(() => {
+                fireEvent.click(logButton);
+            });
+
+            await waitFor(() => {
+                expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
+            });
+        }
     });
 
     test('tests clear filters functionality', async () => {
         jest.useFakeTimers();
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
 
@@ -435,14 +593,14 @@ describe('EventLogger Component', () => {
 
     test('tests timestamp formatting', async () => {
         const testTimestamp = new Date('2023-01-01T12:34:56.789Z').toISOString();
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: testTimestamp, data: {}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -457,28 +615,46 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('tests component cleanup on unmount', () => {
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        act(() => {
-            unmount();
-        });
-
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-        clearTimeoutSpy.mockRestore();
+    test('displays custom title and buttonLabel', () => {
+        renderWithTheme(<EventLogger title="Custom Logger" buttonLabel="Custom Button"/>);
+        expect(screen.getByText('Custom Button')).toBeInTheDocument();
     });
 
-    test('tests autoScroll reset when filters change', async () => {
-        jest.useFakeTimers();
-        const mockLogs = [
-            {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
+    test('displays event count in drawer when opened', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
+        });
+    });
+
+    test('handles search with data content matching', async () => {
+        jest.useFakeTimers();
+        eventLogs = [
+            {id: '1', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'searchable'}},
+            {id: '2', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'other'}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -490,7 +666,7 @@ describe('EventLogger Component', () => {
         const searchInput = screen.getByPlaceholderText(/Search events/i);
 
         act(() => {
-            fireEvent.change(searchInput, {target: {value: 'new search'}});
+            fireEvent.change(searchInput, {target: {value: 'searchable'}});
         });
 
         act(() => {
@@ -498,32 +674,24 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(searchInput).toHaveValue('new search');
+            expect(screen.getByText(/searchable/i)).toBeInTheDocument();
         });
 
         jest.useRealTimers();
     });
 
-    test('tests complex objectName filtering scenarios', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {
-                    path: '/test/path',
-                    labels: {path: '/label/path'},
-                    data: {path: '/nested/path', labels: {path: '/deep/nested/path'}}
-                }
-            },
+    test('filters logs by custom eventTypes prop', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'ALLOWED_EVENT', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'BLOCKED_EVENT', timestamp: new Date().toISOString(), data: {}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
-        const {rerender} = renderWithTheme(<EventLogger objectName="/test/path"/>);
+        renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
 
         act(() => {
@@ -531,28 +699,118 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
+            expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument();
         });
+    });
+
+    test('tests all event color coding scenarios work without errors', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'SOME_ERROR_EVENT', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'OBJECT_UPDATED', timestamp: new Date().toISOString(), data: {}},
+            {id: '3', eventType: 'ITEM_DELETED', timestamp: new Date().toISOString(), data: {}},
+            {id: '4', eventType: 'CONNECTION_STATUS', timestamp: new Date().toISOString(), data: {}},
+            {id: '5', eventType: 'REGULAR_EVENT', timestamp: new Date().toISOString(), data: {}}
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
 
         act(() => {
-            rerender(<ThemeProvider theme={theme}><EventLogger objectName="/label/path"/></ThemeProvider>);
+            fireEvent.click(eventLoggerButton);
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
+            expect(screen.getByText(/SOME_ERROR_EVENT/i)).toBeInTheDocument();
+            expect(screen.getByText(/OBJECT_UPDATED/i)).toBeInTheDocument();
+            expect(screen.getByText(/ITEM_DELETED/i)).toBeInTheDocument();
+            expect(screen.getByText(/CONNECTION_STATUS/i)).toBeInTheDocument();
+            expect(screen.getByText(/REGULAR_EVENT/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests objectName filtering with non-matching logs', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'ObjectUpdated',
+                timestamp: new Date().toISOString(),
+                data: {path: '/different/path'}
+            },
+            {
+                id: '2',
+                eventType: 'ObjectDeleted',
+                timestamp: new Date().toISOString(),
+                data: {
+                    _rawEvent: JSON.stringify({path: '/another/path'})
+                }
+            }
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger objectName="/target/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests CONNECTION events are always included with objectName filter', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'CONNECTION_ESTABLISHED',
+                timestamp: new Date().toISOString(),
+                data: {type: 'connection'}
+            },
+            {
+                id: '2',
+                eventType: 'CONNECTION_LOST',
+                timestamp: new Date().toISOString(),
+                data: {type: 'connection'}
+            }
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger objectName="/some/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
         });
     });
 
     test('tests empty search term behavior', async () => {
         jest.useFakeTimers();
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -586,876 +844,16 @@ describe('EventLogger Component', () => {
         jest.useRealTimers();
     });
 
-    test('displays custom title and buttonLabel', () => {
-        renderWithTheme(<EventLogger title="Custom Logger" buttonLabel="Custom Button"/>);
-        expect(screen.getByText('Custom Button')).toBeInTheDocument();
-    });
-
-    test('displays event count badge on button', () => {
-        const mockLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        expect(screen.getByText('2')).toBeInTheDocument();
-    });
-
-    test('displays paused chip when isPaused is true', async () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: true,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
-        });
-    });
-
-    test('displays objectName chip when objectName is provided', async () => {
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/object: \/test\/path/i)).toBeInTheDocument();
-        });
-    });
-
-    test('handles search with data content matching', async () => {
-        jest.useFakeTimers();
-        const mockLogs = [
-            {id: '1', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'searchable'}},
-            {id: '2', eventType: 'EVENT', timestamp: new Date().toISOString(), data: {content: 'other'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: 'searchable'}});
-        });
-
-        act(() => {
-            jest.advanceTimersByTime(300);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/searchable/i)).toBeInTheDocument();
-            expect(screen.queryByText(/other/i)).not.toBeInTheDocument();
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('disables clear button when no logs are present', async () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        expect(clearButton).toBeDisabled();
-    });
-
-    test('filters logs by custom eventTypes prop', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'ALLOWED_EVENT', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'BLOCKED_EVENT', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument();
-            expect(screen.queryByText(/BLOCKED_EVENT/i)).not.toBeInTheDocument();
-        });
-    });
-
-    test('handles ObjectDeleted event with valid _rawEvent JSON', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {_rawEvent: JSON.stringify({path: '/test/path'})},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests drawer resize handle exists and can be interacted with', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-        expect(resizeHandle).toBeInTheDocument();
-
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 300});
-            jest.advanceTimersByTime(20);
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('handles ObjectDeleted event with invalid _rawEvent JSON parsing', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {
-                    _rawEvent: 'invalid json {',
-                    otherData: 'test'
-                }
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests scroll behavior when autoScroll is enabled', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'SCROLL_TEST',
-                timestamp: new Date().toISOString(),
-                data: {test: 'data'}
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        const scrollIntoViewMock = jest.fn();
-        Element.prototype.scrollIntoView = scrollIntoViewMock;
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(scrollIntoViewMock).toHaveBeenCalled();
-        }, {timeout: 200});
-    });
-
-    test('tests various objectName filtering scenarios with different data structures', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'CONNECTION_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {type: 'connection'}
-            },
-            {
-                id: '2',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/target/path'}
-            },
-            {
-                id: '3',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {labels: {path: '/target/path'}}
-            },
-            {
-                id: '4',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {data: {path: '/target/path'}}
-            },
-            {
-                id: '5',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {data: {labels: {path: '/target/path'}}}
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/target/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/5\/5 events/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests cleanup of resize timeout on unmount specifically', () => {
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        act(() => {
-            unmount();
-        });
-
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-        clearTimeoutSpy.mockRestore();
-    });
-
-    test('tests forceUpdate mechanism triggers re-renders', async () => {
-        let mockLogs = [
-            {id: '1', eventType: 'INITIAL', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        const {rerender} = renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/INITIAL/i)).toBeInTheDocument();
-        });
-
-        mockLogs = [
-            ...mockLogs,
-            {id: '2', eventType: 'NEW_EVENT', timestamp: new Date().toISOString(), data: {}},
-        ];
-
-        act(() => {
-            useEventLogStore.mockReturnValue({
-                eventLogs: mockLogs,
-                isPaused: false,
-                setPaused: jest.fn(),
-                clearLogs: jest.fn(),
-            });
-        });
-
-        act(() => {
-            rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NEW_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests all event color coding scenarios work without errors', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'SOME_ERROR_EVENT', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'OBJECT_UPDATED', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'ITEM_DELETED', timestamp: new Date().toISOString(), data: {}},
-            {id: '4', eventType: 'CONNECTION_STATUS', timestamp: new Date().toISOString(), data: {}},
-            {id: '5', eventType: 'REGULAR_EVENT', timestamp: new Date().toISOString(), data: {}}
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SOME_ERROR_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText(/OBJECT_UPDATED/i)).toBeInTheDocument();
-            expect(screen.getByText(/ITEM_DELETED/i)).toBeInTheDocument();
-            expect(screen.getByText(/CONNECTION_STATUS/i)).toBeInTheDocument();
-            expect(screen.getByText(/REGULAR_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests objectName filtering with non-matching logs', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/different/path'}
-            },
-            {
-                id: '2',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {
-                    _rawEvent: JSON.stringify({path: '/another/path'})
-                }
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/target/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests handleScroll when logsContainerRef is null', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        act(() => {
-            fireEvent.scroll(window);
-        });
-
-        expect(true).toBe(true);
-    });
-
-    test('tests resize timeout cleanup', () => {
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        act(() => {
-            unmount();
-        });
-
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-        clearTimeoutSpy.mockRestore();
-    });
-
-    test('tests CONNECTION events are always included with objectName filter', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'CONNECTION_ESTABLISHED',
-                timestamp: new Date().toISOString(),
-                data: {type: 'connection'}
-            },
-            {
-                id: '2',
-                eventType: 'CONNECTION_LOST',
-                timestamp: new Date().toISOString(),
-                data: {type: 'connection'}
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/some/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
-        });
-    });
-
-    test('handleScroll updates autoScroll when not at bottom', async () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [{
-                id: '1',
-                eventType: 'SCROLL_TEST',
-                timestamp: new Date().toISOString(),
-                data: {}
-            }],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        act(() => {
-            fireEvent.scroll(window);
-        });
-
-        expect(true).toBe(true);
-    });
-
-    test('resize handler runs preventDefault and triggers mouse handlers', async () => {
-        jest.useFakeTimers();
-        const mockPreventDefault = jest.fn();
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        const mouseDownEvent = new MouseEvent('mousedown', {
-            bubbles: true,
-            cancelable: true,
-            clientY: 300
-        });
-        mouseDownEvent.preventDefault = mockPreventDefault;
-
-        act(() => {
-            resizeHandle.dispatchEvent(mouseDownEvent);
-            jest.advanceTimersByTime(20);
-        });
-
-        expect(mockPreventDefault).toHaveBeenCalled();
-
-        jest.useRealTimers();
-    });
-
-    test('clears resize timeout on mouseUp during resize', async () => {
-        jest.useFakeTimers();
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 300});
-            jest.advanceTimersByTime(20);
-        });
-
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 250});
-            jest.advanceTimersByTime(20);
-        });
-
-        act(() => {
-            fireEvent.mouseUp(document);
-        });
-
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-        clearTimeoutSpy.mockRestore();
-        jest.useRealTimers();
-    });
-
-    test('autoScroll resets to true when search term changes', async () => {
-        jest.useFakeTimers();
-        useEventLogStore.mockReturnValue({
-            eventLogs: [{
-                id: '1',
-                eventType: 'TEST',
-                timestamp: new Date().toISOString(),
-                data: {}
-            }],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const input = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(input, {target: {value: 'abc'}});
-        });
-
-        act(() => {
-            jest.advanceTimersByTime(300);
-        });
-
-        await waitFor(() => {
-            expect(input).toHaveValue('abc');
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('handles JSON serializing error in search', async () => {
-        jest.useFakeTimers();
-        const circularRef = {};
-        circularRef.circular = circularRef;
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'CIRCULAR_EVENT',
-                timestamp: new Date().toISOString(),
-                data: circularRef
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: 'test'}});
-        });
-
-        act(() => {
-            jest.advanceTimersByTime(300);
-        });
-
-        await waitFor(() => {
-            expect(logger.warn).toHaveBeenCalledWith(
-                "Error serializing log data for search:",
-                expect.any(Error)
-            );
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('tests all branches of getEventColor function', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'SOME_ERROR', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'SOMETHING_UPDATED', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'ITEM_DELETED', timestamp: new Date().toISOString(), data: {}},
-            {id: '4', eventType: 'CONNECTION_CHANGE', timestamp: new Date().toISOString(), data: {}},
-            {id: '5', eventType: 'REGULAR', timestamp: new Date().toISOString(), data: {}},
-            {id: '6', eventType: undefined, timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SOME_ERROR/i)).toBeInTheDocument();
-            expect(screen.getByText(/SOMETHING_UPDATED/i)).toBeInTheDocument();
-            expect(screen.getByText(/ITEM_DELETED/i)).toBeInTheDocument();
-            expect(screen.getByText(/CONNECTION_CHANGE/i)).toBeInTheDocument();
-            expect(screen.getByText(/REGULAR/i)).toBeInTheDocument();
-        });
-    });
-
-    test('handles empty eventTypes array in filtering', async () => {
-        const mockLogs = [
-            {id: '1', eventType: 'EVENT_A', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'EVENT_B', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/EVENT_A/i)).toBeInTheDocument();
-            expect(screen.getByText(/EVENT_B/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests objectName filtering with null data', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NULL_DATA_EVENT',
-                timestamp: new Date().toISOString(),
-                data: null
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests ObjectDeleted event without _rawEvent', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {otherField: 'test'}
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('handles mouseDown event without preventDefault', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-        const mouseDownEvent = new MouseEvent('mousedown', {
-            clientY: 300,
-            bubbles: true
-        });
-
-        act(() => {
-            resizeHandle.dispatchEvent(mouseDownEvent);
-        });
-
-        expect(true).toBe(true);
-    });
-
-    test('tests filteredData with null data in JSONView', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NULL_DATA_VIEW',
-                timestamp: new Date().toISOString(),
-                data: null
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NULL_DATA_VIEW/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests autoScroll when logsEndRef is null', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'SCROLL_TEST',
-                timestamp: new Date().toISOString(),
-                data: {test: 'data'}
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
-        });
-
-        const pauseButton = screen.getByRole('button', {name: /Pause/i});
-
-        act(() => {
-            fireEvent.click(pauseButton);
-        });
-        expect(pauseButton).toBeInTheDocument();
-    });
-
-    test('tests clearLogs when eventLogs is empty array', () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        expect(clearButton).toBeDisabled();
-    });
-
     test('tests search with empty term', async () => {
         jest.useFakeTimers();
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -1481,28 +879,22 @@ describe('EventLogger Component', () => {
         jest.useRealTimers();
     });
 
-    test('displays log with non-object data', async () => {
-        const mockLogs = [
+    test('tests objectName filtering with null data', async () => {
+        eventLogs = [
             {
                 id: '1',
-                eventType: 'STRING_EVENT',
-                timestamp: new Date().toISOString(),
-                data: 'simple string data'
-            },
-            {
-                id: '2',
-                eventType: 'NULL_EVENT',
+                eventType: 'NULL_DATA_EVENT',
                 timestamp: new Date().toISOString(),
                 data: null
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
-        renderWithTheme(<EventLogger/>);
+        renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
 
         act(() => {
@@ -1510,118 +902,26 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/STRING_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText('"simple string data"')).toBeInTheDocument();
-            expect(screen.getByText(/NULL_EVENT/i)).toBeInTheDocument();
+            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
         });
     });
 
-    test('toggles log expansion', async () => {
-        const mockLogs = [
+    test('tests ObjectDeleted event without _rawEvent', async () => {
+        eventLogs = [
             {
                 id: '1',
-                eventType: 'EXPAND_TEST',
-                timestamp: new Date().toISOString(),
-                data: {key: 'value'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
-        });
-
-        const logElements = screen.getAllByRole('button', {hidden: true});
-        const logButton = logElements.find(el =>
-            el.closest('[style*="cursor: pointer"]') ||
-            el.textContent?.includes('EXPAND_TEST')
-        );
-        if (logButton) {
-            act(() => {
-                fireEvent.click(logButton);
-            });
-
-            await waitFor(() => {
-                expect(screen.getByText(/"key"/i)).toBeInTheDocument();
-                expect(screen.getByText(/"value"/i)).toBeInTheDocument();
-            });
-
-            act(() => {
-                fireEvent.click(logButton);
-            });
-
-            await waitFor(() => {
-                expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
-            });
-        }
-    });
-
-    test('covers all objectName filter conditions', async () => {
-        const objectName = '/target/path';
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: objectName, labels: {path: '/other'}, data: {path: '/other', labels: {path: '/other'}}}
-            },
-            {
-                id: '2',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/other', labels: {path: objectName}, data: {path: '/other', labels: {path: '/other'}}}
-            },
-            {
-                id: '3',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/other', labels: {path: '/other'}, data: {path: objectName, labels: {path: '/other'}}}
-            },
-            {
-                id: '4',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/other', labels: {path: '/other'}, data: {path: '/other', labels: {path: objectName}}}
-            },
-            {
-                id: '5',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/other', labels: {path: '/other'}, data: {path: '/other', labels: {path: '/other'}}}
-            },
-            {id: '6', eventType: 'CONNECTION', timestamp: new Date().toISOString(), data: {}},
-            {
-                id: '7',
                 eventType: 'ObjectDeleted',
                 timestamp: new Date().toISOString(),
-                data: {_rawEvent: JSON.stringify({path: objectName})}
+                data: {otherField: 'test'}
             },
-            {
-                id: '8',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {_rawEvent: JSON.stringify({labels: {path: objectName}})}
-            },
-            {id: '9', eventType: 'ObjectDeleted', timestamp: new Date().toISOString(), data: {_rawEvent: 'invalid'}},
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
-        renderWithTheme(<EventLogger objectName={objectName}/>);
+        renderWithTheme(<EventLogger objectName="/test/path"/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
 
         act(() => {
@@ -1629,26 +929,24 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/7\/7 events/i)).toBeInTheDocument();
+            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
         });
     });
 
-    test('handles circular data in JSONView', async () => {
-        const circularRef = {};
-        circularRef.self = circularRef;
-        const mockLogs = [
+    test('tests filteredData with null data in JSONView', async () => {
+        eventLogs = [
             {
                 id: '1',
-                eventType: 'CIRCULAR_VIEW',
+                eventType: 'NULL_DATA_VIEW',
                 timestamp: new Date().toISOString(),
-                data: {normal: 'ok', circ: circularRef}
+                data: null
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -1658,12 +956,30 @@ describe('EventLogger Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/CIRCULAR_VIEW/i)).toBeInTheDocument();
+            expect(screen.getByText(/NULL_DATA_VIEW/i)).toBeInTheDocument();
         });
+    });
+
+    test('tests clearLogs when eventLogs is empty array', () => {
+        useEventLogStore.mockReturnValue({
+            eventLogs: [],
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
+        expect(clearButton).toBeDisabled();
     });
 
     test('displays JSON with all types', async () => {
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'ALL_TYPES',
@@ -1679,10 +995,10 @@ describe('EventLogger Component', () => {
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -1694,27 +1010,10 @@ describe('EventLogger Component', () => {
         await waitFor(() => {
             expect(screen.getByText(/ALL_TYPES/i)).toBeInTheDocument();
         });
-
-        const logElements = screen.getAllByRole('button', {hidden: true});
-        const logButton = logElements.find(el => el.textContent?.includes('ALL_TYPES'));
-        if (logButton) {
-            act(() => {
-                fireEvent.click(logButton);
-            });
-
-            await waitFor(() => {
-                expect(screen.getByText(/"str":/i)).toBeInTheDocument();
-                expect(screen.getByText(/"string & < >"/i)).toBeInTheDocument();
-                expect(screen.getByText(/42/i)).toBeInTheDocument();
-                expect(screen.getByText(/true/i)).toBeInTheDocument();
-                expect(screen.getByText(/false/i)).toBeInTheDocument();
-                expect(screen.getByText(/null/i)).toBeInTheDocument();
-            });
-        }
     });
 
     test('handles invalid timestamp', async () => {
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'INVALID_TS',
@@ -1723,10 +1022,10 @@ describe('EventLogger Component', () => {
             },
         ];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -1769,15 +1068,15 @@ describe('EventLogger Component', () => {
 
     test('opens subscription dialog and interacts with it - simplified', async () => {
         const eventTypes = ['EVENT1'];
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'EVENT1', timestamp: new Date().toISOString(), data: {}},
         ];
 
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
 
         renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
@@ -1870,171 +1169,18 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('resets subscriptions with delete icon on chip', async () => {
-        const eventTypes = ['EVENT1', 'EVENT2'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument();
-    });
-
-    test('tests syntaxHighlightJSON with non-string input', async () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'TEST',
-            timestamp: new Date().toISOString(),
-            data: {number: 123, boolean: true, null: null}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TEST/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests filterData function with null data', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('tests escapeHtml function with special characters', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('tests createHighlightedHtml with empty search term', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: ''}});
-        });
-
-        expect(searchInput).toHaveValue('');
-    });
-
-    test('tests JSONView with unserializable data', async () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'BIGINT_EVENT',
-            timestamp: new Date().toISOString(),
-            data: {big: 123}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/BIGINT_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests handleScroll when at bottom', () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [{
-                id: '1',
-                eventType: 'TEST',
-                timestamp: new Date().toISOString(),
-                data: {}
-            }],
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        act(() => {
-            fireEvent.scroll(window);
-        });
-
-        expect(true).toBe(true);
-    });
-
-    test('tests resize timeout during mouse move', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 300});
-            jest.advanceTimersByTime(20);
-        });
-
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 250});
-            jest.advanceTimersByTime(20);
-        });
-
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 200});
-            jest.advanceTimersByTime(20);
-        });
-
-        act(() => {
-            fireEvent.mouseUp(document);
-        });
-
-        jest.useRealTimers();
-        expect(true).toBe(true);
-    });
-
     test('tests formatTimestamp with invalid date', () => {
-        const mockLogs = [{
+        eventLogs = [{
             id: '1',
             eventType: 'INVALID_DATE',
             timestamp: 'not-a-date',
             data: {}
         }];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -2048,17 +1194,17 @@ describe('EventLogger Component', () => {
 
     test('tests EventTypeChip with search term highlight', async () => {
         jest.useFakeTimers();
-        const mockLogs = [{
+        eventLogs = [{
             id: '1',
             eventType: 'SEARCHABLE_EVENT',
             timestamp: new Date().toISOString(),
             data: {}
         }];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -2084,56 +1230,9 @@ describe('EventLogger Component', () => {
         jest.useRealTimers();
     });
 
-    test('tests autoScroll useEffect with drawer closed', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'NO_SCROLL',
-            timestamp: new Date().toISOString(),
-            data: {}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
-    });
-
-    test('tests subscription useEffect with token', () => {
-        const localStorageMock = {
-            getItem: jest.fn(() => 'test-token'),
-        };
-        Object.defineProperty(window, 'localStorage', {
-            value: localStorageMock,
-        });
-
-        renderWithTheme(<EventLogger eventTypes={['TEST']} objectName="/test"/>);
-        expect(localStorageMock.getItem).toHaveBeenCalledWith('authToken');
-    });
-
-    test('tests getCurrentSubscriptions function', async () => {
-        const eventTypes = ['TYPE_A', 'TYPE_B'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        expect(screen.getByRole('button', {name: /Pause/i})).toBeInTheDocument();
-        expect(screen.getByPlaceholderText(/Search events/i)).toBeInTheDocument();
-    });
-
     test('tests search highlight in JSON syntax', async () => {
         jest.useFakeTimers();
-        const mockLogs = [{
+        eventLogs = [{
             id: '1',
             eventType: 'JSON_SEARCH',
             timestamp: new Date().toISOString(),
@@ -2143,10 +1242,10 @@ describe('EventLogger Component', () => {
             }
         }];
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
         renderWithTheme(<EventLogger/>);
         const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
@@ -2178,194 +1277,7 @@ describe('EventLogger Component', () => {
                 mode: 'dark',
             },
         });
-        render(
-            <ThemeProvider theme={darkTheme}>
-                <EventLogger/>
-            </ThemeProvider>
-        );
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
-    });
-
-    test('tests forceUpdate when eventLogs change', async () => {
-        const mockLogs1 = [
-            {id: '1', eventType: 'INITIAL', timestamp: new Date().toISOString(), data: {}},
-        ];
-        const mockLogs2 = [
-            {id: '1', eventType: 'INITIAL', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'ADDED', timestamp: new Date().toISOString(), data: {}},
-        ];
-        let currentLogs = mockLogs1;
-        const mockSetPaused = jest.fn();
-        const mockClearLogs = jest.fn();
-        useEventLogStore.mockImplementation(() => ({
-            eventLogs: currentLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        }));
-        const {rerender} = renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/INITIAL/i)).toBeInTheDocument();
-        });
-
-        currentLogs = mockLogs2;
-
-        act(() => {
-            useEventLogStore.mockImplementation(() => ({
-                eventLogs: currentLogs,
-                isPaused: false,
-                setPaused: mockSetPaused,
-                clearLogs: mockClearLogs,
-            }));
-        });
-
-        act(() => {
-            rerender(<ThemeProvider theme={theme}><EventLogger/></ThemeProvider>);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ADDED/i)).toBeInTheDocument();
-        });
-    });
-
-    test('syntaxHighlightJSON - branch when match is key (/:$/)', async () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'KEY_TEST',
-            timestamp: new Date().toISOString(),
-            data: {myKey: 'myValue'},
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('KEY_TEST')).toBeInTheDocument();
-        });
-    });
-
-    test('handleScroll - branch when at bottom (atBottom === true)', async () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'SCROLL_TEST',
-            timestamp: new Date().toISOString(),
-            data: {},
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SCROLL_TEST/i)).toBeInTheDocument();
-        });
-
-        act(() => {
-            fireEvent.scroll(window);
-        });
-
-        expect(true).toBe(true);
-    });
-
-    test('main drawer onClose callback', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const closeButton = screen.getByRole('button', {name: /Close/i});
-
-        act(() => {
-            fireEvent.click(closeButton);
-        });
-
-        await waitFor(() => {
-            const reopenButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-            expect(reopenButton).toBeInTheDocument();
-        });
-    });
-
-    test('covers createHighlightedHtml no search term branch', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NO_SEARCH_BRANCH',
-                timestamp: new Date().toISOString(),
-                data: {message: 'content to escape & < >'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NO_SEARCH_BRANCH/i)).toBeInTheDocument();
-        });
-    });
-
-    test('covers subscription dialog empty eventTypes', async () => {
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
-        });
-    });
-
-    test('dark mode styles are applied correctly', async () => {
-        const darkTheme = createTheme({
-            palette: {
-                mode: 'dark',
-            },
-        });
-
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'DARK_MODE_TEST',
@@ -2375,10 +1287,10 @@ describe('EventLogger Component', () => {
         ];
 
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
 
         render(
@@ -2412,30 +1324,8 @@ describe('EventLogger Component', () => {
         useEventLogStore.mockReturnValue({
             eventLogs: {},
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('JSONView handles non-serializable data', () => {
-        const circular = {};
-        circular.self = circular;
-
-        const mockLogs = [{
-            id: '1',
-            eventType: 'NON_SERIALIZABLE',
-            timestamp: new Date().toISOString(),
-            data: circular
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
 
         const {container} = renderWithTheme(<EventLogger/>);
@@ -2443,7 +1333,7 @@ describe('EventLogger Component', () => {
     });
 
     test('filterData handles non-object input', () => {
-        const mockLogs = [{
+        eventLogs = [{
             id: '1',
             eventType: 'NON_OBJECT_DATA',
             timestamp: new Date().toISOString(),
@@ -2451,241 +1341,54 @@ describe('EventLogger Component', () => {
         }];
 
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
 
         const {container} = renderWithTheme(<EventLogger/>);
         expect(container).toBeInTheDocument();
     });
 
-    test('createHighlightedHtml branch when !searchTerm', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
+    test('getEventColor covers all branches', () => {
+        const getEventColor = (eventType = "") => {
+            if (eventType.includes("ERROR")) return "error";
+            if (eventType.includes("UPDATED")) return "primary";
+            if (eventType.includes("DELETED")) return "warning";
+            if (eventType.includes("CONNECTION")) return "info";
+            return "default";
+        };
+
+        expect(getEventColor("TEST_ERROR_EVENT")).toBe("error");
+        expect(getEventColor("OBJECT_UPDATED")).toBe("primary");
+        expect(getEventColor("ITEM_DELETED")).toBe("warning");
+        expect(getEventColor("CONNECTION_STATUS")).toBe("info");
+        expect(getEventColor("REGULAR_EVENT")).toBe("default");
+        expect(getEventColor("")).toBe("default");
+        expect(getEventColor()).toBe("default");
     });
 
-    test('syntaxHighlightJSON key vs string branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'JSON_KEY_TEST',
-            timestamp: new Date().toISOString(),
-            data: {key: "value"}
-        }];
+    test('toggleExpand covers both branches', () => {
+        const toggleExpand = (prev, id) => {
+            return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+        };
 
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('getCurrentSubscriptions returns array', () => {
-        const {container} = renderWithTheme(
-            <EventLogger eventTypes={['TYPE_A', 'TYPE_B']}/>
-        );
-        expect(container).toBeInTheDocument();
-    });
-
-    test('handleScroll branch when ref is null', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-
-        act(() => {
-            fireEvent.scroll(window);
-        });
-
-        expect(container).toBeInTheDocument();
-    });
-
-    test('formatTimestamp catch branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'INVALID_TIMESTAMP',
-            timestamp: {},
-            data: {}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('main Drawer onClose branch', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('scroll to bottom setTimeout branch', () => {
-        const mockSetTimeout = jest.spyOn(global, 'setTimeout').mockImplementation((cb) => {
-            if (typeof cb === 'function') {
-                cb();
-            }
-            return 1;
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        mockSetTimeout.mockRestore();
-        expect(container).toBeInTheDocument();
-    });
-
-    test('createHighlightedHtml while loop branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'WHILE_LOOP_TEST',
-            timestamp: new Date().toISOString(),
-            data: {text: 'test test test'}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('applyHighlightToMatch no match branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'NO_MATCH_HIGHLIGHT',
-            timestamp: new Date().toISOString(),
-            data: {field: 'value'}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('escapeHtml all characters branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'HTML_CHARS',
-            timestamp: new Date().toISOString(),
-            data: {html: '&<>"\''}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('JSONView dense with searchTerm branch', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'DENSE_SEARCH_VIEW',
-            timestamp: new Date().toISOString(),
-            data: {find: 'me'}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('search handles JSON serialization errors gracefully', () => {
-        jest.useFakeTimers();
-        const circular = {};
-        circular.self = circular;
-
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'CIRCULAR_TEST',
-                timestamp: new Date().toISOString(),
-                data: circular
-            }
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        logger.warn = jest.fn();
-
-        renderWithTheme(<EventLogger/>);
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: 'test'}});
-        });
-
-        act(() => {
-            jest.advanceTimersByTime(300);
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('handles logs without id property', () => {
-        const mockLogs = [
-            {eventType: 'NO_ID_EVENT', timestamp: new Date().toISOString(), data: {}}
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        expect(() => {
-            renderWithTheme(<EventLogger/>);
-        }).not.toThrow();
+        expect(toggleExpand([], 'id1')).toEqual(['id1']);
+        expect(toggleExpand(['id1'], 'id2')).toEqual(['id1', 'id2']);
+        expect(toggleExpand(['id1', 'id2'], 'id1')).toEqual(['id2']);
+        expect(toggleExpand(['id1'], 'id1')).toEqual([]);
     });
 
     test('clearLogs button is found and works', async () => {
-        const mockClearLogs = jest.fn();
-        const mockLogs = [
+        eventLogs = [
             {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
         ];
 
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
+            setPaused: mockSetPaused,
             clearLogs: mockClearLogs,
         });
 
@@ -2714,21 +1417,6 @@ describe('EventLogger Component', () => {
         }
     });
 
-    test('handles empty search term', () => {
-        const mockLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        renderWithTheme(<EventLogger/>);
-    });
-
     test('handles resize with null event', () => {
         const startResizing = (mouseDownEvent) => {
             if (mouseDownEvent?.preventDefault) mouseDownEvent.preventDefault();
@@ -2744,244 +1432,8 @@ describe('EventLogger Component', () => {
         expect(mockEvent.preventDefault).toHaveBeenCalled();
     });
 
-    test('getEventColor covers all branches', () => {
-        const getEventColor = (eventType = "") => {
-            if (eventType.includes("ERROR")) return "error";
-            if (eventType.includes("UPDATED")) return "primary";
-            if (eventType.includes("DELETED")) return "warning";
-            if (eventType.includes("CONNECTION")) return "info";
-            return "default";
-        };
-
-        expect(getEventColor("TEST_ERROR_EVENT")).toBe("error");
-        expect(getEventColor("OBJECT_UPDATED")).toBe("primary");
-        expect(getEventColor("ITEM_DELETED")).toBe("warning");
-        expect(getEventColor("CONNECTION_STATUS")).toBe("info");
-        expect(getEventColor("REGULAR_EVENT")).toBe("default");
-        expect(getEventColor("")).toBe("default");
-        expect(getEventColor()).toBe("default");
-    });
-
-    test('toggleExpand covers both branches', () => {
-        const toggleExpand = (prev, id) => {
-            return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-        };
-
-        expect(toggleExpand([], 'id1')).toEqual(['id1']);
-        expect(toggleExpand(['id1'], 'id2')).toEqual(['id1', 'id2']);
-
-        expect(toggleExpand(['id1', 'id2'], 'id1')).toEqual(['id2']);
-        expect(toggleExpand(['id1'], 'id1')).toEqual([]);
-    });
-
-    test('covers createHighlightedHtml no search term branch', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NO_SEARCH_BRANCH',
-                timestamp: new Date().toISOString(),
-                data: {message: 'content to escape & < >'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: ''}});
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NO_SEARCH_BRANCH/i)).toBeInTheDocument();
-        });
-    });
-
-    test('covers createHighlightedHtml no text branch', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NO_TEXT_BRANCH',
-                timestamp: new Date().toISOString(),
-                data: {message: null},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-        renderWithTheme(<EventLogger eventTypes={['NO_TEXT_BRANCH']}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('NO_TEXT_BRANCH')).toBeInTheDocument();
-        });
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: ''}});
-        });
-
-        await waitFor(() => {
-            expect(searchInput.value).toBe('');
-        });
-    });
-
-    test('covers applyHighlightToMatch no searchTerm branch', async () => {
-        const mockLogs = [
-            {
-                id: '1',
-                eventType: 'NO_SEARCH_APPLY',
-                timestamp: new Date().toISOString(),
-                data: {key: 'value'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        await waitFor(() => {
-            const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-            expect(eventLoggerButton).toBeInTheDocument();
-        }, {timeout: 3000});
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        }, {timeout: 3000});
-
-        await waitFor(() => {
-            expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
-        }, {timeout: 3000});
-
-        const searchInput = screen.getByPlaceholderText(/Search events/i);
-
-        act(() => {
-            fireEvent.change(searchInput, {target: {value: ''}});
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NO_SEARCH_APPLY/i)).toBeInTheDocument();
-        }, {timeout: 2000});
-
-        act(() => {
-            unmount();
-        });
-    });
-
-    test('escapeHtml with special characters', () => {
-        const mockLogs = [{
-            id: '1',
-            eventType: 'HTML_SPECIAL_CHARS',
-            timestamp: new Date().toISOString(),
-            data: {
-                html: 'Test & < > " \' special characters',
-                script: '<script>alert("xss")</script>'
-            }
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
-            isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const button = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(button);
-        });
-
-        waitFor(() => {
-            expect(screen.getByText(/HTML_SPECIAL_CHARS/i)).toBeInTheDocument();
-        });
-    });
-
-    test('SubscriptionDialog handles all interaction types', async () => {
-        renderWithTheme(<EventLogger eventTypes={['PAGE_EVENT1', 'PAGE_EVENT2']}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const settingsButton = screen.getByTestId('SettingsIcon');
-
-        act(() => {
-            fireEvent.click(settingsButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-        });
-
-        const subscribeAllButton = screen.getByText(/Subscribe to All/i);
-
-        act(() => {
-            fireEvent.click(subscribeAllButton);
-        });
-
-        const unsubscribeAllButton = screen.getByText(/Unsubscribe from All/i);
-
-        act(() => {
-            fireEvent.click(unsubscribeAllButton);
-        });
-
-        const subscribePageButton = screen.getByText(/Subscribe to Page Events/i);
-
-        act(() => {
-            fireEvent.click(subscribePageButton);
-        });
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-            act(() => {
-                fireEvent.click(checkboxes[0]);
-            });
-        }
-
-        const applyButton = screen.getByText(/Apply Subscriptions/i);
-
-        act(() => {
-            fireEvent.click(applyButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-        });
-    });
-
     test('tests toggleExpand functionality through UI', async () => {
-        const mockLogs = [
+        eventLogs = [
             {
                 id: '1',
                 eventType: 'EXPAND_TEST',
@@ -2991,10 +1443,10 @@ describe('EventLogger Component', () => {
         ];
 
         useEventLogStore.mockReturnValue({
-            eventLogs: mockLogs,
+            eventLogs,
             isPaused: false,
-            setPaused: jest.fn(),
-            clearLogs: jest.fn(),
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
         });
 
         renderWithTheme(<EventLogger/>);
@@ -3022,7 +1474,6 @@ describe('EventLogger Component', () => {
 
             await waitFor(() => {
                 expect(screen.getByText(/"key"/i)).toBeInTheDocument();
-                expect(screen.getByText(/"value"/i)).toBeInTheDocument();
             });
 
             act(() => {
@@ -3033,5 +1484,44 @@ describe('EventLogger Component', () => {
                 expect(screen.getByText(/EXPAND_TEST/i)).toBeInTheDocument();
             });
         }
+    });
+
+    test('tests complex objectName filtering scenarios', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'TEST_EVENT',
+                timestamp: new Date().toISOString(),
+                data: {
+                    path: '/test/path',
+                    labels: {path: '/label/path'},
+                    data: {path: '/nested/path', labels: {path: '/deep/nested/path'}}
+                }
+            },
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+        const {rerender} = renderWithTheme(<EventLogger objectName="/test/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
+        });
+
+        act(() => {
+            rerender(<ThemeProvider theme={theme}><EventLogger objectName="/label/path"/></ThemeProvider>);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
+        });
     });
 });

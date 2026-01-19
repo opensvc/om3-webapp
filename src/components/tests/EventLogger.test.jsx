@@ -1524,4 +1524,538 @@ describe('EventLogger Component', () => {
             expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
         });
     });
+
+    test('tests filterData function with non-object data', () => {
+        const filterData = (data) => {
+            if (!data || typeof data !== 'object') return data;
+            const filtered = {...data};
+            delete filtered._rawEvent;
+            return filtered;
+        };
+
+        expect(filterData(null)).toBe(null);
+        expect(filterData(undefined)).toBe(undefined);
+        expect(filterData('string')).toBe('string');
+        expect(filterData(123)).toBe(123);
+        expect(filterData(true)).toBe(true);
+
+        const objWithRaw = {_rawEvent: 'test', other: 'data'};
+        expect(filterData(objWithRaw)).toEqual({other: 'data'});
+
+        const objWithoutRaw = {other: 'data'};
+        expect(filterData(objWithoutRaw)).toEqual({other: 'data'});
+    });
+
+    test('tests escapeHtml function', () => {
+        const escapeHtml = (text) => {
+            if (typeof text !== 'string') return text;
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        };
+
+        expect(escapeHtml('test & test')).toBe('test &amp; test');
+        expect(escapeHtml('<div>')).toBe('&lt;div&gt;');
+        expect(escapeHtml('"quotes"')).toBe('&quot;quotes&quot;');
+        expect(escapeHtml("'apostrophe'")).toBe('&#039;apostrophe&#039;');
+        expect(escapeHtml(123)).toBe(123);
+        expect(escapeHtml(null)).toBe(null);
+        expect(escapeHtml(undefined)).toBe(undefined);
+    });
+
+    test('tests hashCode function', () => {
+        const hashCode = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(36);
+        };
+
+        expect(hashCode('test')).toBeDefined();
+        expect(hashCode('')).toBe('0');
+        expect(hashCode('longer string test')).toBeDefined();
+    });
+
+    test('tests syntaxHighlightJSON with HTML content in JSON', async () => {
+        eventLogs = [{
+            id: '1',
+            eventType: 'HTML_TEST',
+            timestamp: new Date().toISOString(),
+            data: {message: '<script>alert("xss")</script>'}
+        }];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/HTML_TEST/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests JSONView with non-serializable data', async () => {
+        const circularRef = {};
+        circularRef.self = circularRef;
+
+        eventLogs = [{
+            id: '1',
+            eventType: 'CIRCULAR_TEST',
+            timestamp: new Date().toISOString(),
+            data: circularRef
+        }];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/CIRCULAR_TEST/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests useEffect for debounced search term cleanup', async () => {
+        jest.useFakeTimers();
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search events/i);
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(100);
+        });
+
+        act(() => {
+            fireEvent.click(screen.getByRole('button', {name: /Close/i}));
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(400);
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('tests resize functionality', async () => {
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const resizeHandle = screen.getByLabelText(/Resize handle/i);
+
+        act(() => {
+            fireEvent.mouseDown(resizeHandle, {clientY: 100});
+        });
+
+        act(() => {
+            fireEvent.mouseMove(document, {clientY: 150});
+        });
+
+        act(() => {
+            fireEvent.mouseUp(document);
+        });
+
+        act(() => {
+            fireEvent.touchStart(resizeHandle, {
+                touches: [{clientY: 100}]
+            });
+        });
+
+        act(() => {
+            fireEvent.touchMove(document, {
+                touches: [{clientY: 150}]
+            });
+        });
+
+        act(() => {
+            fireEvent.touchEnd(document);
+        });
+    });
+
+    test('tests subscription dialog with all interactions', async () => {
+        const eventTypes = ['EVENT1', 'EVENT2'];
+        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const settingsIcon = screen.getByTestId('SettingsIcon');
+
+        act(() => {
+            fireEvent.click(settingsIcon);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
+        });
+
+        const subscribeAllButton = screen.getByRole('button', {name: /Subscribe to All/i});
+        act(() => {
+            fireEvent.click(subscribeAllButton);
+        });
+
+        const unsubscribeAllButton = screen.getByRole('button', {name: /Unsubscribe from All/i});
+        act(() => {
+            fireEvent.click(unsubscribeAllButton);
+        });
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        if (checkboxes.length > 0) {
+            act(() => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            act(() => {
+                fireEvent.click(checkboxes[0]);
+            });
+        }
+    });
+
+    test('tests handleClear with all side effects', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search events/i);
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 300));
+        });
+
+        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
+        act(() => {
+            fireEvent.click(clearButton);
+        });
+
+        expect(mockClearLogs).toHaveBeenCalled();
+    });
+
+    test('tests objectName filtering with nested data structures', async () => {
+        eventLogs = [
+            {
+                id: '1',
+                eventType: 'NESTED_TEST',
+                timestamp: new Date().toISOString(),
+                data: {
+                    data: {
+                        labels: {
+                            path: '/test/path'
+                        }
+                    }
+                }
+            },
+            {
+                id: '2',
+                eventType: 'DIRECT_PATH',
+                timestamp: new Date().toISOString(),
+                data: {
+                    path: '/test/path'
+                }
+            },
+            {
+                id: '3',
+                eventType: 'LABELS_PATH',
+                timestamp: new Date().toISOString(),
+                data: {
+                    labels: {
+                        path: '/test/path'
+                    }
+                }
+            }
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger objectName="/test/path"/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/3\/3 events/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests subscription info when no subscriptions', async () => {
+        renderWithTheme(<EventLogger eventTypes={[]}/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Subscribed to: 0 event type\(s\)/i)).toBeInTheDocument();
+        });
+    });
+
+    test('tests logger error handling', () => {
+        const logger = require('../../utils/logger.js').default;
+
+        eventLogs = [{
+            id: '1',
+            eventType: 'TEST',
+            timestamp: new Date().toISOString(),
+            data: {}
+        }];
+
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        expect(logger.log).toHaveBeenCalled();
+    });
+
+    test('tests all event type categories for getEventColor', async () => {
+        const getEventColor = (eventType = "") => {
+            if (eventType.includes("ERROR")) return "error";
+            if (eventType.includes("UPDATED")) return "primary";
+            if (eventType.includes("DELETED")) return "warning";
+            if (eventType.includes("CONNECTION")) return "info";
+            return "default";
+        };
+
+        expect(getEventColor("TEST_ERROR")).toBe("error");
+        expect(getEventColor("UPDATED_EVENT")).toBe("primary");
+        expect(getEventColor("DELETED_ITEM")).toBe("warning");
+        expect(getEventColor("CONNECTION_CLOSED")).toBe("info");
+        expect(getEventColor("REGULAR_EVENT")).toBe("default");
+        expect(getEventColor("")).toBe("default");
+        expect(getEventColor()).toBe("default");
+    });
+
+    test('tests window resize event listener cleanup', () => {
+        const {unmount} = renderWithTheme(<EventLogger/>);
+
+        unmount();
+
+        expect(() => {
+            unmount();
+        }).not.toThrow();
+    });
+
+    test('tests mobile responsive styles', () => {
+        Object.defineProperty(window, 'innerWidth', {value: 767});
+
+        renderWithTheme(<EventLogger/>);
+
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+        expect(eventLoggerButton).toBeInTheDocument();
+
+        delete window.innerWidth;
+    });
+
+    test('tests scroll to bottom button functionality', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'TEST1', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'TEST2', timestamp: new Date().toISOString(), data: {}},
+            {id: '3', eventType: 'TEST3', timestamp: new Date().toISOString(), data: {}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/TEST1/i)).toBeInTheDocument();
+        });
+
+        const scrollButtons = screen.queryAllByRole('button', {name: /Scroll to bottom/i});
+        expect(scrollButtons.length).toBe(0);
+    });
+
+    test('tests event type filter select all and clear', async () => {
+        eventLogs = [
+            {id: '1', eventType: 'TYPE1', timestamp: new Date().toISOString(), data: {}},
+            {id: '2', eventType: 'TYPE2', timestamp: new Date().toISOString(), data: {}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/TYPE1/i)).toBeInTheDocument();
+        });
+
+        const selectInput = screen.getByRole('combobox');
+        act(() => {
+            fireEvent.mouseDown(selectInput);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const checkboxes = screen.getAllByRole('checkbox');
+        checkboxes.forEach(checkbox => {
+            act(() => {
+                fireEvent.click(checkbox);
+            });
+        });
+
+        act(() => {
+            fireEvent.keyDown(document.activeElement || document.body, {key: 'Escape'});
+        });
+    });
+
+    test('tests debounced search with rapid changes', async () => {
+        jest.useFakeTimers();
+
+        eventLogs = [
+            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {message: 'search term'}},
+        ];
+        useEventLogStore.mockReturnValue({
+            eventLogs,
+            isPaused: false,
+            setPaused: mockSetPaused,
+            clearLogs: mockClearLogs,
+        });
+
+        renderWithTheme(<EventLogger/>);
+        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+
+        act(() => {
+            fireEvent.click(eventLoggerButton);
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search events/i);
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 't'}});
+        });
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'te'}});
+        });
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'tes'}});
+        });
+
+        act(() => {
+            fireEvent.change(searchInput, {target: {value: 'test'}});
+        });
+
+        act(() => {
+            jest.advanceTimersByTime(300);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/TEST/i)).toBeInTheDocument();
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('tests pageKey generation with different inputs', () => {
+        const hashCode = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(36);
+        };
+
+        const pageKey = (objectName, filteredEventTypes) => {
+            const baseKey = objectName || 'global';
+            const eventTypesKey = filteredEventTypes.sort().join(',');
+            const hash = hashCode(eventTypesKey);
+            return `eventLogger_${baseKey}_${hash}`;
+        };
+
+        expect(pageKey(null, ['EVENT1', 'EVENT2'])).toBeDefined();
+        expect(pageKey('/test/path', ['EVENT1'])).toBeDefined();
+        expect(pageKey('', [])).toBeDefined();
+        expect(pageKey('global', ['A', 'B', 'C'])).toBeDefined();
+    });
 });

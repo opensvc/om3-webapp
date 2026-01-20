@@ -20,16 +20,13 @@ import {
     TableRow,
     Paper,
     Autocomplete,
-    Collapse,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import InfoIcon from "@mui/icons-material/Info";
 import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
-import { parseObjectPath } from "../utils/objectUtils";
+import {parseObjectPath} from "../utils/objectUtils";
 
 const useConfig = (decodedObjectName, configNode, setConfigNode) => {
     const initialState = {
@@ -604,7 +601,14 @@ const ManageParamsDialog = ({
         </Dialog>
     );
 };
-const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackbar, expanded, onToggle}) => {
+const ConfigSection = ({
+                           decodedObjectName,
+                           configNode,
+                           setConfigNode,
+                           openSnackbar,
+                           configDialogOpen,
+                           setConfigDialogOpen
+                       }) => {
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
@@ -669,7 +673,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             openSnackbar("Configuration updated successfully");
             if (configNode) {
                 await fetchConfig(configNode);
-                onToggle(true);
+                setConfigDialogOpen(true);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -744,7 +748,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                onToggle(true);
+                setConfigDialogOpen(true);
             }
         }
         setActionLoading(false);
@@ -791,7 +795,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                onToggle(true);
+                setConfigDialogOpen(true);
             }
         }
         setActionLoading(false);
@@ -830,7 +834,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                onToggle(true);
+                setConfigDialogOpen(true);
             }
         }
         setActionLoading(false);
@@ -855,115 +859,109 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     };
 
     return (
-        <Box sx={{ mb: 2, width: "100%" }}>
-            <Box
-                sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    p: 1,
-                    borderRadius: 1,
-                    '&:hover': {
-                        bgcolor: 'action.hover',
-                    }
-                }}
-                onClick={() => onToggle(!expanded)}
+        <Box sx={{mb: 2, width: "100%", display: 'flex', justifyContent: 'flex-end'}}>
+            <Button
+                variant="contained"
+                size="small"
+                onClick={() => setConfigDialogOpen(true)}
             >
-                <Typography variant="h6" fontWeight="medium">
-                    Configuration
-                </Typography>
-                <IconButton size="small">
-                    {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                </IconButton>
-            </Box>
+                View Configuration
+            </Button>
 
-            <Collapse in={expanded}>
-                <Box sx={{ mt: 2 }}>
-                    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2, gap: 1 }}>
-                        <Tooltip title="Upload a new configuration file">
-                            <IconButton
-                                color="primary"
-                                onClick={() => setUpdateConfigDialogOpen(true)}
-                                disabled={actionLoading}
-                                aria-label="Upload new configuration file"
-                                size="small"
-                            >
-                                <UploadFileIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Manage configuration parameters (add, unset, delete)">
-                            <IconButton
-                                color="primary"
-                                onClick={handleOpenManageParamsDialog}
-                                disabled={actionLoading}
-                                aria-label="Manage configuration parameters"
-                                size="small"
-                            >
-                                <EditIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="View available configuration keywords">
-                            <IconButton
-                                color="primary"
-                                onClick={handleOpenKeywordsDialog}
-                                disabled={actionLoading}
-                                aria-label="View configuration keywords"
-                                size="small"
-                            >
-                                <InfoIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                    {configLoading && <CircularProgress size={24} />}
-                    {configError && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {configError}
-                        </Alert>
-                    )}
-                    {!configLoading && !configError && configData === null && (
-                        <Typography color="textSecondary" variant="body2">
-                            No configuration available.
-                        </Typography>
-                    )}
-                    {!configLoading && !configError && configData !== null && (
-                        <Box
-                            sx={{
-                                p: 2,
-                                bgcolor: "grey.200",
-                                borderRadius: 1,
-                                maxWidth: "100%",
-                                overflowX: "auto",
-                                boxSizing: "border-box",
-                                scrollbarWidth: "thin",
-                                "&::-webkit-scrollbar": {
-                                    height: "8px",
-                                },
-                                "&::-webkit-scrollbar-thumb": {
-                                    backgroundColor: "grey.400",
-                                    borderRadius: "4px",
-                                },
-                            }}
-                        >
+            <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="lg" fullWidth>
+                <DialogTitle>Configuration</DialogTitle>
+                <DialogContent>
+                    <Box sx={{mt: 2}}>
+                        <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
+                            <Tooltip title="Upload a new configuration file">
+                                <IconButton
+                                    color="primary"
+                                    onClick={() => setUpdateConfigDialogOpen(true)}
+                                    disabled={actionLoading}
+                                    aria-label="Upload new configuration file"
+                                    size="small"
+                                >
+                                    <UploadFileIcon/>
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Manage configuration parameters (add, unset, delete)">
+                                <IconButton
+                                    color="primary"
+                                    onClick={handleOpenManageParamsDialog}
+                                    disabled={actionLoading}
+                                    aria-label="Manage configuration parameters"
+                                    size="small"
+                                >
+                                    <EditIcon/>
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="View available configuration keywords">
+                                <IconButton
+                                    color="primary"
+                                    onClick={handleOpenKeywordsDialog}
+                                    disabled={actionLoading}
+                                    aria-label="View configuration keywords"
+                                    size="small"
+                                >
+                                    <InfoIcon/>
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
+                        {configLoading && <CircularProgress size={24}/>}
+                        {configError && (
+                            <Alert severity="error" sx={{mb: 2}}>
+                                {configError}
+                            </Alert>
+                        )}
+                        {!configLoading && !configError && configData === null && (
+                            <Typography color="textSecondary" variant="body2">
+                                No configuration available.
+                            </Typography>
+                        )}
+                        {!configLoading && !configError && configData !== null && (
                             <Box
-                                component="pre"
-                                key={configData}
                                 sx={{
-                                    whiteSpace: "pre-wrap",
-                                    fontFamily: "Monospace",
-                                    bgcolor: "inherit",
-                                    p: 1,
-                                    m: 0,
-                                    minWidth: "max-content",
-                                    fontSize: '0.875rem',
+                                    p: 2,
+                                    bgcolor: "grey.200",
+                                    borderRadius: 1,
+                                    maxWidth: "100%",
+                                    overflowX: "auto",
+                                    boxSizing: "border-box",
+                                    scrollbarWidth: "thin",
+                                    "&::-webkit-scrollbar": {
+                                        height: "8px",
+                                    },
+                                    "&::-webkit-scrollbar-thumb": {
+                                        backgroundColor: "grey.400",
+                                        borderRadius: "4px",
+                                    },
                                 }}
                             >
-                                {configData}
+                                <Box
+                                    component="pre"
+                                    key={configData}
+                                    sx={{
+                                        whiteSpace: "pre-wrap",
+                                        fontFamily: "Monospace",
+                                        bgcolor: "inherit",
+                                        p: 1,
+                                        m: 0,
+                                        minWidth: "max-content",
+                                        fontSize: '0.875rem',
+                                    }}
+                                >
+                                    {configData}
+                                </Box>
                             </Box>
-                        </Box>
-                    )}
-                </Box>
-            </Collapse>
+                        )}
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfigDialogOpen(false)}>
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <UpdateConfigDialog
                 open={updateConfigDialogOpen}

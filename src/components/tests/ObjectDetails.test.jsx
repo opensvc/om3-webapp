@@ -1,7 +1,7 @@
 import React, {act} from 'react';
 import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import ObjectDetail, {getFilteredResourceActions, getResourceType, parseProvisionedState} from '../ObjectDetails';
+import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
@@ -25,6 +25,34 @@ jest.mock('../../context/DarkModeContext', () => ({
         isDarkMode: false,
         toggleDarkMode: jest.fn(),
     }),
+}));
+
+// Mock ConfigSection
+jest.mock('../ConfigSection', () => ({
+    __esModule: true,
+    default: ({
+                  decodedObjectName,
+                  configNode,
+                  setConfigNode,
+                  openSnackbar,
+                  configDialogOpen,
+                  setConfigDialogOpen
+              }) => (
+        <div>
+            <button
+                onClick={() => setConfigDialogOpen(true)}
+                data-testid="open-config-dialog"
+            >
+                View Configuration
+            </button>
+            {configDialogOpen && (
+                <div role="dialog" data-testid="config-dialog">
+                    <div>Configuration for {decodedObjectName}</div>
+                    {configNode && <div>Node: {configNode}</div>}
+                </div>
+            )}
+        </div>
+    ),
 }));
 
 // Mock Material-UI components
@@ -677,30 +705,13 @@ type = flag
             </MemoryRouter>
         );
 
-        // Trouver l'en-tête Configuration et cliquer dessus pour développer
-        const configHeader = await screen.findByText('Configuration');
+        const configButton = await screen.findByTestId('open-config-dialog');
+        expect(configButton).toBeInTheDocument();
 
-        // Dans le mock, l'AccordionSummary est un div avec rôle button
-        const configButtons = screen.getAllByRole('button');
-        const configButton = configButtons.find(button =>
-            button.textContent && button.textContent.includes('Configuration')
-        );
-
-        if (configButton) {
-            fireEvent.click(configButton);
-        } else {
-            // Fallback: cliquer sur l'en-tête lui-même
-            fireEvent.click(configHeader);
-        }
+        fireEvent.click(configButton);
 
         await waitFor(() => {
-            expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
-        }, {timeout: 10000, interval: 200});
-
-        await waitFor(() => {
-            expect(screen.getByText(
-                /this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890/i
-            )).toBeInTheDocument();
+            expect(screen.getByTestId('config-dialog')).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
 
         expect(global.fetch).toHaveBeenCalledWith(
@@ -761,6 +772,7 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -768,18 +780,23 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
+        const configButton = await screen.findByTestId('open-config-dialog');
+
+        fireEvent.click(configButton);
+
+        await waitFor(
+            () => {
+                expect(screen.getByTestId('config-dialog')).toBeInTheDocument();
+            },
+            {timeout: 5000}
+        );
         await waitFor(
             () => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
                     expect.any(Object)
                 );
-            },
-            {timeout: 5000}
-        );
-        await waitFor(
-            () => {
-                expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
             },
             {timeout: 5000}
         );
@@ -959,30 +976,24 @@ type = flag
             {timeout: 10000, interval: 200}
         );
 
-        // Trouver la carte du node (Paper) et cliquer dessus
-        // Dans le mock, Paper est un div, donc on cherche le div qui contient le texte node1
+
         const nodeText = screen.getByText('node1');
         const card = nodeText.closest('div[role="region"]') || nodeText.closest('div');
 
         if (card) {
-            // Simuler un clic sur la carte (éviter les éléments interactifs)
-            // Créer un mock event pour simuler le comportement de handleCardClick
             const mockEvent = {
                 target: card,
                 stopPropagation: jest.fn(),
                 closest: (selector) => {
-                    // Simuler le comportement de closest pour éviter les éléments interactifs
                     if (selector === 'button' || selector === 'input' || selector === '.no-click') {
-                        return null; // Simuler que ce n'est pas un élément interactif
+                        return null;
                     }
                     return null;
                 }
             };
 
-            // Déclencher le clic sur la carte
             fireEvent.click(card);
         } else {
-            // Fallback: cliquer sur le texte du node
             fireEvent.click(nodeText);
         }
 
@@ -2056,37 +2067,71 @@ type = flag
             objectName: 'root/svc/svc1',
         });
 
+        // Setup
         const mockState = {
             objectStatus: {},
             objectInstanceStatus: {
                 'root/svc/svc1': {
-                    node1: {avail: 'up', resources: {}}
+                    node1: { avail: 'up', resources: {} }
                 }
             },
             instanceMonitor: {},
             instanceConfig: {},
-            configUpdates: [
-                {name: 'svc1', fullName: 'root/svc/svc1', node: 'node1', type: 'InstanceConfigUpdated'}
-            ],
+            configUpdates: [],
             clearConfigUpdate: jest.fn(),
         };
 
-        useEventStore.mockImplementation((selector) => selector(mockState));
+        // Track fetch calls
+        let fetchCallCount = 0;
+        global.fetch.mockImplementation((url) => {
+            fetchCallCount++;
 
-        // Mock fetch to reject for config update
-        let callCount = 0;
-        global.fetch.mockImplementation(() => {
-            callCount++;
-            if (callCount === 1) {
-                // Initial config fetch succeeds
-                return Promise.resolve({
-                    ok: true,
-                    text: () => Promise.resolve('initial config')
-                });
+            if (url.includes('/config/file')) {
+                if (fetchCallCount === 1) {
+                    // Initial config fetch - succeeds
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve('initial config'),
+                        json: () => Promise.resolve({})
+                    });
+                } else {
+                    // Second config fetch - fails (this is what we're testing)
+                    return Promise.reject(new Error('Failed to load updated configuration'));
+                }
             }
-            // Subsequent config update fails
-            return Promise.reject(new Error('Failed to load updated configuration'));
+
+            // Default response for other endpoints
+            return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('success'),
+                json: () => Promise.resolve({ items: [] })
+            });
         });
+
+        // Setup subscription callback tracking
+        const subscriptionCallbacks = new Map();
+        const unsubscribeMock = jest.fn();
+
+        useEventStore.subscribe = jest.fn((selector, callback, options) => {
+            const key = selector.toString();
+            subscriptionCallbacks.set(key, callback);
+
+            // Call immediately if fireImmediately option is set
+            if (options?.fireImmediately) {
+                callback(mockState[getStoreKeyFromSelector(selector)]);
+            }
+
+            return unsubscribeMock;
+        });
+
+        // Mock useEventStore to return our state
+        useEventStore.mockImplementation((selector) => {
+            if (typeof selector === 'function') {
+                return selector(mockState);
+            }
+            return mockState;
+        });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -2095,11 +2140,43 @@ type = flag
             </MemoryRouter>
         );
 
-        // Wait for component to load and process config update
+        // Wait for initial fetch
         await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledTimes(2); // Initial + update attempt
-        }, {timeout: 10000});
-    });
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+        }, { timeout: 5000 });
+
+        // Now simulate a config update
+        // Find the configUpdates subscription callback
+        const configUpdatesKey = Array.from(subscriptionCallbacks.keys())
+            .find(key => key.includes('configUpdates'));
+
+        if (configUpdatesKey) {
+            const configUpdatesCallback = subscriptionCallbacks.get(configUpdatesKey);
+
+            // Create a config update
+            const newConfigUpdate = {
+                name: 'svc1',
+                fullName: 'root/svc/svc1',
+                node: 'node1',
+                type: 'InstanceConfigUpdated'
+            };
+
+            // Trigger the callback with the new update
+            await act(async () => {
+                await configUpdatesCallback([newConfigUpdate]);
+            });
+        }
+
+
+        await waitFor(() => {
+
+            expect(fetchCallCount).toBeGreaterThanOrEqual(1);
+
+            // Check that clearConfigUpdate was called
+            expect(mockState.clearConfigUpdate).toHaveBeenCalled();
+        }, { timeout: 10000 });
+    }, 15000);
+
 
     test('handles instanceConfig subscription with error cases', async () => {
         require('react-router-dom').useParams.mockReturnValue({

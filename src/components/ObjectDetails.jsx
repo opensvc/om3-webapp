@@ -107,8 +107,8 @@ const ObjectDetail = () => {
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
-    const [configExpanded, setConfigExpanded] = useState(false);
     const [configNode, setConfigNode] = useState(null);
+    const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
     // States for batch & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
@@ -574,7 +574,7 @@ const ObjectDetail = () => {
                                     return;
                                 }
                                 await fetchConfig(matchingUpdate.node);
-                                setConfigExpanded(true);
+                                setConfigDialogOpen(true);
                                 openSnackbar("Configuration updated", "info");
                             } catch (err) {
                                 openSnackbar("Failed to load updated configuration", "error");
@@ -619,7 +619,7 @@ const ObjectDetail = () => {
                     const config = newConfig[decodedObjectName];
                     if (config && configNode) {
                         try {
-                            setConfigExpanded(true);
+                            setConfigDialogOpen(true);
                             openSnackbar("Instance configuration updated", "info");
                         } catch (err) {
                             openSnackbar("Failed to process instance configuration update", "error");
@@ -716,13 +716,8 @@ const ObjectDetail = () => {
                     configNode={configNode}
                     setConfigNode={setConfigNode}
                     openSnackbar={openSnackbar}
-                    handleManageParamsSubmit={() => {
-                    }}
-                    configData={configData}
-                    configLoading={configLoading}
-                    configError={configError}
-                    expanded={configExpanded}
-                    onToggle={() => setConfigExpanded(!configExpanded)}
+                    configDialogOpen={configDialogOpen}
+                    setConfigDialogOpen={setConfigDialogOpen}
                 />
             </Box>
         );
@@ -770,7 +765,7 @@ const ObjectDetail = () => {
                 >
                     {/* Header and Config Section in same line */}
                     <Grid container spacing={2} alignItems="flex-start">
-                        <Grid item xs={12} md={8}>
+                        <Grid item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
                                 globalStatus={objectStatus[decodedObjectName]}
@@ -783,19 +778,14 @@ const ObjectDetail = () => {
                                 objectMenuAnchorRef={objectMenuAnchorRef}
                             />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid item xs={12} md={2}>
                             <ConfigSection
                                 decodedObjectName={decodedObjectName}
                                 configNode={configNode}
                                 setConfigNode={setConfigNode}
                                 openSnackbar={openSnackbar}
-                                handleManageParamsSubmit={() => {
-                                }}
-                                configData={configData}
-                                configLoading={configLoading}
-                                configError={configError}
-                                expanded={configExpanded}
-                                onToggle={() => setConfigExpanded(!configExpanded)}
+                                configDialogOpen={configDialogOpen}
+                                setConfigDialogOpen={setConfigDialogOpen}
                             />
                         </Grid>
                     </Grid>

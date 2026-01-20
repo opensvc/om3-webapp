@@ -83,7 +83,8 @@ const NodeCard = ({
             onMouseLeave={() => setIsHovered(false)}
             onClick={handleCardClick}
         >
-            <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+            <Box sx={{display: "flex", alignItems: "center"}}>
+                {/* Bloc gauche : checkbox + nom */}
                 <Box sx={{display: "flex", alignItems: "center", gap: 1, flexWrap: 'wrap'}}>
                     <Box onClick={(e) => e.stopPropagation()} className="no-click">
                         <Checkbox
@@ -111,8 +112,42 @@ const NodeCard = ({
                         )}
                     </Box>
                 </Box>
-                <Box sx={{display: "flex", alignItems: "center", gap: 2}} className="no-click">
-                    {/* Bouton pour voir les logs de l'instance */}
+
+                {/* Bloc central : freeze / not provisioned / state, juste avant logs+status */}
+                <Box
+                    sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        ml: "auto", // pousse ce bloc + celui de droite à droite
+                    }}
+                    className="no-click"
+                >
+                    {frozen === "frozen" && (
+                        <Tooltip title="frozen">
+                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
+                        </Tooltip>
+                    )}
+                    {isInstanceNotProvisioned && (
+                        <Tooltip title="Not Provisioned">
+                            <PriorityHighIcon
+                                sx={{color: red[500], fontSize: "1.2rem"}}
+                                aria-label={`Instance on node ${node} is not provisioned`}
+                            />
+                        </Tooltip>
+                    )}
+                    {state && <Typography variant="caption">{state}</Typography>}
+                </Box>
+
+                {/* Bloc droite : logs + rond de status + bouton d’actions, fixes */}
+                <Box
+                    sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                    }}
+                    className="no-click"
+                >
                     <Tooltip title="View instance logs">
                         <IconButtonWithRef
                             onClick={(e) => {
@@ -134,20 +169,7 @@ const NodeCard = ({
                             }}
                         />
                     </Tooltip>
-                    {frozen === "frozen" && (
-                        <Tooltip title="frozen">
-                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                        </Tooltip>
-                    )}
-                    {isInstanceNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <PriorityHighIcon
-                                sx={{color: red[500], fontSize: "1.2rem"}}
-                                aria-label={`Instance on node ${node} is not provisioned`}
-                            />
-                        </Tooltip>
-                    )}
-                    {state && <Typography variant="caption">{state}</Typography>}
+
                     <IconButtonWithRef
                         onClick={(e) => {
                             e.stopPropagation();

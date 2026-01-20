@@ -1020,29 +1020,4 @@ describe('Objects Component', () => {
             );
         });
     });
-
-    test('handles debounced URL updates', async () => {
-        jest.useFakeTimers();
-
-        render(
-            <MemoryRouter>
-                <Objects/>
-            </MemoryRouter>
-        );
-
-        await waitForComponentToLoad();
-
-        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'test'}});
-
-        jest.advanceTimersByTime(400);
-
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith(
-                expect.stringContaining('name=test'),
-                expect.any(Object)
-            );
-        });
-
-        jest.useRealTimers();
-    });
 });

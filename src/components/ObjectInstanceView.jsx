@@ -44,7 +44,6 @@ import EventLogger from "../components/EventLogger";
 import LogsViewer from "./LogsViewer";
 import {useTheme} from "@mui/material/styles";
 
-// Constants for dialogs
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
@@ -398,7 +397,6 @@ const ObjectInstanceView = () => {
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const instanceConfig = useEventStore((s) => s.instanceConfig);
 
-    // Retrieve instance data
     const instanceData = objectInstanceStatus?.[decodedObjectName]?.[nodeName] || {};
     const monitorData = instanceMonitor[`${nodeName}:${decodedObjectName}`] || {};
     const configData = instanceConfig[decodedObjectName]?.[nodeName] || {resources: {}};
@@ -412,7 +410,6 @@ const ObjectInstanceView = () => {
     const [actionInProgress, setActionInProgress] = useState(false);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
-    // States for dialogs
     const [pendingAction, setPendingAction] = useState(null);
     const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
     const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
@@ -429,16 +426,13 @@ const ObjectInstanceView = () => {
     const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
     const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
 
-    // States for logs
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.8;
 
-    // State for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
 
-    // Ref for component mount status
     const isMounted = useRef(true);
 
     const instanceEventTypes = useMemo(() => [
@@ -447,18 +441,15 @@ const ObjectInstanceView = () => {
         "InstanceConfigUpdated",
     ], []);
 
-    // Effect to start/stop event reception
     useEffect(() => {
         isMounted.current = true;
 
-        // Start event reception
         const token = localStorage.getItem("authToken");
         if (token) {
             const filters = instanceEventTypes.map(type => {
                 if (["CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT", "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"].includes(type)) {
                     return type;
                 } else {
-                    // Filter events specific to this instance and node
                     return `${type},path=${decodedObjectName},node=${nodeName}`;
                 }
             });
@@ -466,14 +457,12 @@ const ObjectInstanceView = () => {
             startEventReception(token, filters);
         }
 
-        // Simulate initial loading
         const timer = setTimeout(() => {
             if (isMounted.current) {
                 setInitialLoading(false);
             }
         }, 500);
 
-        // Cleanup
         return () => {
             isMounted.current = false;
             closeEventSource();
@@ -493,7 +482,6 @@ const ObjectInstanceView = () => {
         }
     }, []);
 
-    // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         if (isMounted.current) {
             setPendingAction({action, ...(context ? context : {})});
@@ -520,7 +508,6 @@ const ObjectInstanceView = () => {
         }
     }, []);
 
-    // Function to confirm actions
     const handleDialogConfirm = useCallback(async () => {
         if (!pendingAction || !pendingAction.action) {
             console.warn("No valid pendingAction or action provided:", pendingAction);
@@ -547,7 +534,6 @@ const ObjectInstanceView = () => {
             let message = `Executing ${action}...`;
 
             if (pendingAction.rid) {
-                // Action on a resource
                 if (action === "console") {
                     url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(pendingAction.rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greetTimeout)}`;
                     message = `Opening console for resource ${pendingAction.rid}...`;
@@ -556,7 +542,6 @@ const ObjectInstanceView = () => {
                     message = `Executing ${action} on resource ${pendingAction.rid}...`;
                 }
             } else {
-                // Action on the instance
                 url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
                 message = `Executing ${action} on instance...`;
             }
@@ -606,12 +591,10 @@ const ObjectInstanceView = () => {
         }
     }, [nodeName, namespace, kind, name, pendingAction, seats, greetTimeout, openSnackbar]);
 
-    // Handler for instance actions
     const handleInstanceAction = useCallback((action) => {
         openActionDialog(action, {node: nodeName});
     }, [nodeName, openActionDialog]);
 
-    // Handler for resource actions
     const handleResourceAction = useCallback((action, rid = null) => {
         openActionDialog(action, {node: nodeName, rid: rid || currentResourceId});
     }, [nodeName, currentResourceId, openActionDialog]);
@@ -739,13 +722,11 @@ const ObjectInstanceView = () => {
         return '';
     }, [resources, encapResources]);
 
-    // Handler for resource actions
     const handleResourceActionClick = useCallback((rid, event) => {
         setCurrentResourceId(rid);
         setResourceMenuAnchor(event.currentTarget);
     }, []);
 
-    // Function to open logs
     const handleOpenLogs = useCallback(() => {
         setLogsDrawerOpen(true);
     }, []);
@@ -786,22 +767,17 @@ const ObjectInstanceView = () => {
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
 
-    // Function to filter events by node
     const filterEventsByNode = useCallback((events) => {
         return events.filter(event => {
-            // For connection events, always include them
             if (event.eventType?.includes?.("CONNECTION")) return true;
 
-            // For other events, check if the node matches
             const data = event.data || {};
 
-            // Check in various possible fields where node might be stored
             if (data.node === nodeName) return true;
             if (data.labels?.node === nodeName) return true;
             if (data.data?.node === nodeName) return true;
             if (data.data?.labels?.node === nodeName) return true;
 
-            // For InstanceStatusUpdated events, also check in the path
             if (data.path && data.path.includes(nodeName)) return true;
 
             return false;
@@ -812,7 +788,6 @@ const ObjectInstanceView = () => {
     const isFrozen = instanceData.frozen_at && instanceData.frozen_at !== "0001-01-01T00:00:00Z";
     const isInstanceNotProvisioned = instanceData.provisioned !== undefined ? !instanceData.provisioned : false;
 
-    // Display a loader during initial loading
     if (initialLoading) {
         return (
             <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>
@@ -824,7 +799,6 @@ const ObjectInstanceView = () => {
 
     return (
         <Box sx={{p: 3, maxWidth: 1400, margin: '0 auto'}}>
-            {/* Instance Header */}
             <Box sx={{mb: 3}}>
                 <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                     <Box>
@@ -837,21 +811,6 @@ const ObjectInstanceView = () => {
                     </Box>
 
                     <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                        {/* Button to view logs */}
-                        <Tooltip title="View instance logs">
-                            <IconButton
-                                onClick={handleOpenLogs}
-                                color="primary"
-                                aria-label={`View logs for instance ${decodedObjectName}`}
-                            >
-                                <ArticleIcon/>
-                            </IconButton>
-                        </Tooltip>
-
-                        <Tooltip title={instanceStatus}>
-                            <FiberManualRecordIcon sx={{color: getColor(instanceStatus), fontSize: "1.5rem"}}/>
-                        </Tooltip>
-
                         {isFrozen && (
                             <Tooltip title="frozen">
                                 <AcUnitIcon sx={{color: blue[300]}}/>
@@ -870,6 +829,20 @@ const ObjectInstanceView = () => {
                             </Typography>
                         )}
 
+                        <Tooltip title="View instance logs">
+                            <IconButton
+                                onClick={handleOpenLogs}
+                                color="primary"
+                                aria-label={`View logs for instance ${decodedObjectName}`}
+                            >
+                                <ArticleIcon/>
+                            </IconButton>
+                        </Tooltip>
+
+                        <Tooltip title={instanceStatus}>
+                            <FiberManualRecordIcon sx={{color: getColor(instanceStatus), fontSize: "1.5rem"}}/>
+                        </Tooltip>
+
                         <IconButton
                             onClick={(e) => setInstanceMenuAnchor(e.currentTarget)}
                             disabled={actionInProgress}
@@ -882,7 +855,6 @@ const ObjectInstanceView = () => {
 
             {actionInProgress && <LinearProgress sx={{mb: 2}}/>}
 
-            {/* Resources Section */}
             <Box sx={{mb: 3}}>
                 <Typography variant="h6" sx={{mb: 2}}>
                     Resources ({Object.keys(resources).length})
@@ -962,7 +934,6 @@ const ObjectInstanceView = () => {
                 )}
             </Box>
 
-            {/* Instance Actions Menu */}
             <Popper
                 open={Boolean(instanceMenuAnchor)}
                 anchorEl={instanceMenuAnchor}
@@ -987,7 +958,6 @@ const ObjectInstanceView = () => {
                 </ClickAwayListener>
             </Popper>
 
-            {/* Resource Actions Menu */}
             <Popper
                 open={Boolean(resourceMenuAnchor)}
                 anchorEl={resourceMenuAnchor}
@@ -1016,9 +986,6 @@ const ObjectInstanceView = () => {
                 </ClickAwayListener>
             </Popper>
 
-            {/* Confirmation dialogs for actions */}
-
-            {/* Freeze dialog */}
             <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Confirm Freeze</DialogTitle>
                 <DialogContent>
@@ -1044,7 +1011,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Stop dialog */}
             <Dialog open={stopDialogOpen} onClose={() => setStopDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Confirm Stop</DialogTitle>
                 <DialogContent>
@@ -1070,7 +1036,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Unprovision dialog */}
             <Dialog open={unprovisionDialogOpen} onClose={() => setUnprovisionDialogOpen(false)} maxWidth="sm"
                     fullWidth>
                 <DialogTitle>Confirm Unprovision</DialogTitle>
@@ -1112,7 +1077,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Purge dialog */}
             <Dialog open={purgeDialogOpen} onClose={() => setPurgeDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Confirm Purge</DialogTitle>
                 <DialogContent>
@@ -1159,7 +1123,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Console dialog */}
             <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Open Console</DialogTitle>
                 <DialogContent>
@@ -1204,7 +1167,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Console URL dialog */}
             <Dialog
                 open={consoleUrlDialogOpen}
                 onClose={() => setConsoleUrlDialogOpen(false)}
@@ -1254,7 +1216,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Simple confirmation dialog */}
             <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>
                     Confirm {pendingAction?.action ? pendingAction.action.charAt(0).toUpperCase() + pendingAction.action.slice(1) : 'Action'}
@@ -1274,7 +1235,6 @@ const ObjectInstanceView = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* EventLogger for instance events */}
             <EventLogger
                 eventTypes={instanceEventTypes}
                 objectName={decodedObjectName}
@@ -1283,7 +1243,6 @@ const ObjectInstanceView = () => {
                 buttonLabel="Instance Events"
             />
 
-            {/* Drawer for logs */}
             {logsDrawerOpen && (
                 <Drawer
                     anchor="right"
@@ -1344,7 +1303,6 @@ const ObjectInstanceView = () => {
                 </Drawer>
             )}
 
-            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={5000}

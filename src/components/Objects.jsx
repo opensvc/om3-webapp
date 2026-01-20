@@ -45,10 +45,8 @@ import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 
-// Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-// Parse object name
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
     if (parts.length === 3) {
@@ -537,17 +535,35 @@ const Objects = () => {
         });
     }, [filteredObjectNames, sortColumn, sortDirection, objectStatusWithGlobalExpect, getNodeState, allNodes]);
 
+    const isUpdating = useRef(false);
+
     const debouncedUpdateQuery = useMemo(
         () =>
             debounce(() => {
                 if (!isMounted.current) return;
+
+                const currentParams = new URLSearchParams(location.search);
+                const currentGlobalState = currentParams.get("globalState") || "all";
+                const currentNamespace = currentParams.get("namespace") || "all";
+                const currentKind = currentParams.get("kind") || "all";
+                const currentName = currentParams.get("name") || "";
+
+                if (currentGlobalState === selectedGlobalState &&
+                    currentNamespace === selectedNamespace &&
+                    currentKind === selectedKind &&
+                    currentName === searchQuery) {
+                    return;
+                }
+
                 const newQueryParams = new URLSearchParams();
                 if (selectedGlobalState !== "all") newQueryParams.set("globalState", selectedGlobalState);
                 if (selectedNamespace !== "all") newQueryParams.set("namespace", selectedNamespace);
                 if (selectedKind !== "all") newQueryParams.set("kind", selectedKind);
                 if (searchQuery.trim()) newQueryParams.set("name", searchQuery.trim());
+
                 const queryString = newQueryParams.toString();
                 const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
+
                 if (newUrl !== location.pathname + location.search) {
                     navigate(newUrl, {replace: true});
                 }
@@ -556,34 +572,36 @@ const Objects = () => {
     );
 
     useEffect(() => {
-        debouncedUpdateQuery();
-        return () => {
-            if (debouncedUpdateQuery.cancel) {
-                debouncedUpdateQuery.cancel();
-            }
-        };
+        if (!isUpdating.current) {
+            isUpdating.current = true;
+            debouncedUpdateQuery();
+            const timer = setTimeout(() => {
+                isUpdating.current = false;
+            }, 100);
+            return () => clearTimeout(timer);
+        }
     }, [debouncedUpdateQuery]);
 
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         const newNamespace = rawNamespace;
         const newKind = rawKind;
+        const newSearchQuery = rawSearchQuery;
 
-        setSelectedGlobalState(newGlobalState);
-        setSelectedNamespace(newNamespace);
-        setSelectedKind(newKind);
-    }, [rawGlobalState, rawNamespace, rawKind, globalStates]);
-
-    useEffect(() => {
-        setSearchQuery(rawSearchQuery);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        setSelectedGlobalState(prev => prev !== newGlobalState ? newGlobalState : prev);
+        setSelectedNamespace(prev => prev !== newNamespace ? newNamespace : prev);
+        setSelectedKind(prev => prev !== newKind ? newKind : prev);
+        setSearchQuery(prev => prev !== newSearchQuery ? newSearchQuery : prev);
+    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
 
     useEffect(() => {
         return () => {
             isMounted.current = false;
+            if (debouncedUpdateQuery && typeof debouncedUpdateQuery.cancel === 'function') {
+                debouncedUpdateQuery.cancel();
+            }
         };
-    }, []);
+    }, [debouncedUpdateQuery]);
 
     const eventStarted = useRef(false);
     useEffect(() => {
@@ -741,7 +759,6 @@ const Objects = () => {
                 m: 0,
                 overflow: 'hidden'
             }}>
-                {/* Filter controls */}
                 <Box sx={{
                     position: "sticky",
                     top: 0,

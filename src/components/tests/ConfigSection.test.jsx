@@ -1140,4 +1140,1090 @@ size = 10GB
 
         expect(setConfigDialogOpen).toHaveBeenCalledWith(false);
     });
+
+    test('displays no configuration when configNode is missing', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/No node available to fetch configuration/i);
+        }, {timeout: 5000});
+
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('handles parseObjectPath with various input formats', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="cluster"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        // Check that config is being fetched
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalled();
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with missing section for non-DEFAULT keyword', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('fs.size');
+        }, {timeout: 5000});
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('size')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const sectionInput = screen.getByPlaceholderText('Index e.g. 1');
+        await act(async () => {
+            await user.clear(sectionInput);
+        });
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '20GB');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Section index is required for parameter: size', 'error');
+        }, {timeout: 10000});
+    });
+
+    test('handles getUniqueSections with null keywordsData', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: null}),
+                    headers: new Headers(),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {
+            name: /autocomplete-input/i,
+        });
+        const addParamsInput = comboboxes[0];
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('');
+        }, {timeout: 10000});
+    });
+
+    test('handles getExistingSections with null existingParams', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: null}),
+                    headers: new Headers(),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {
+            name: /autocomplete-input/i,
+        });
+        const deleteSectionsInput = comboboxes[2];
+        await waitFor(() => {
+            expect(deleteSectionsInput).toHaveValue('');
+        }, {timeout: 10000});
+    });
+
+    test('handles duplicate keywords in keywords dialog', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () =>
+                        Promise.resolve({
+                            items: [
+                                {
+                                    option: 'nodes',
+                                    section: 'DEFAULT',
+                                    text: 'Nodes to deploy the service',
+                                    converter: 'string',
+                                    scopable: true,
+                                    default: '*',
+                                },
+                                {
+                                    option: 'nodes',
+                                    section: 'DEFAULT',
+                                    text: 'Duplicate nodes entry',
+                                    converter: 'string',
+                                    scopable: false,
+                                    default: 'none',
+                                },
+                            ],
+                        }),
+                    headers: new Headers({'Content-Length': '1024'}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const keywordsButton = getKeywordsButton();
+        await act(async () => {
+            await user.click(keywordsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration Keywords/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const keywordsDialog = getDialogByTitle('Configuration Keywords');
+        expect(keywordsDialog).toBeDefined();
+
+        const withinKeywordsDialog = within(keywordsDialog);
+
+        // Wait for the table to load
+        await waitFor(() => {
+            const table = withinKeywordsDialog.getByRole('table');
+            expect(table).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        // Check that only one row exists (header + one data row)
+        const rows = withinKeywordsDialog.getAllByRole('row');
+        expect(rows).toHaveLength(2); // Header row + 1 data row
+
+        // Check the data row
+        const dataRow = rows[1];
+        const cells = within(dataRow).getAllByRole('cell');
+
+        // First cell should be 'nodes'
+        expect(cells[0]).toHaveTextContent('nodes');
+
+        // Second cell should be the first description (not the duplicate)
+        expect(cells[1]).toHaveTextContent('Nodes to deploy the service');
+
+        // The duplicate description should not be present
+        expect(cells[1]).not.toHaveTextContent('Duplicate nodes entry');
+    });
+
+    test('handles update config with no configNode', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            const headers = options?.headers || {};
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve(''),
+                    headers: new Headers({Authorization: headers.Authorization || ''}),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers({Authorization: headers.Authorization || ''}),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode=""
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const uploadButton = getUploadButton();
+        await act(async () => {
+            await user.click(uploadButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Update Configuration/i)).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const fileInput = document.querySelector('#update-config-file-upload');
+        const testFile = new File(['new config content'], 'config.ini');
+        await act(async () => {
+            await user.upload(fileInput, testFile);
+        });
+
+        const updateButton = screen.getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Updating configuration…', 'info');
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Configuration updated successfully');
+        }, {timeout: 10000});
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config/file`),
+            expect.objectContaining({
+                method: 'PUT',
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer mock-token',
+                    'Content-Type': 'application/octet-stream',
+                }),
+                body: testFile,
+            })
+        );
+
+        await waitFor(() => {
+            expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with decimal index', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size{Enter}');
+        });
+
+        await waitFor(() => {
+            expect(addParamsInput).toHaveValue('fs.size');
+        }, {timeout: 5000});
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('size')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const sectionInput = screen.getByPlaceholderText('Index e.g. 1');
+        await act(async () => {
+            await user.clear(sectionInput);
+            await user.type(sectionInput, '1.5'); // Decimal index
+        });
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '20GB');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Invalid index for size: must be a non-negative integer', 'error');
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters with undefined option', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = jest.fn((url) => {
+            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        items: [
+                            {keyword: 'valid.param', value: 'test'},
+                        ],
+                    }),
+                    headers: new Headers(),
+                });
+            }
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: []}),
+                    headers: new Headers(),
+                });
+            }
+            return originalFetch(url);
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
+        }, {timeout: 10000});
+
+        global.fetch = originalFetch;
+    });
+
+    test('handles fetchConfig with network error', async () => {
+        global.fetch.mockImplementationOnce(() =>
+            Promise.reject(new Error('Network failure'))
+        );
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        expect(screen.getByRole('alert')).toHaveTextContent(/Failed to fetch config: Network failure/i);
+    });
+
+    test('handles fetchKeywords with network error', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.reject(new Error('Network error'));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const keywordsButton = getKeywordsButton();
+        await act(async () => {
+            await user.click(keywordsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration Keywords/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const keywordsDialog = getDialogByTitle('Configuration Keywords');
+        const withinKeywordsDialog = within(keywordsDialog);
+
+        await waitFor(() => {
+            const alert = withinKeywordsDialog.getByRole('alert');
+            expect(alert).toHaveTextContent(/Failed to fetch keywords: Network error/i);
+        }, {timeout: 10000});
+    });
+
+    test('handles fetchExistingParams with network error', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
+                return Promise.reject(new Error('Network error'));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const existingParamsError = alerts.find(alert =>
+                alert.textContent.includes('Failed to fetch existing parameters')
+            );
+            expect(existingParamsError).toBeInTheDocument();
+        }, {timeout: 10000});
+    });
+
+    test('handles manage params dialog state reset on close', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+
+        await act(async () => {
+            await user.type(addParamsInput, 'nodes{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const cancelButton = screen.getByRole('button', {name: /Cancel/i});
+        await act(async () => {
+            await user.click(cancelButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument();
+        }, {timeout: 5000});
+
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        expect(screen.queryByText('nodes')).not.toBeInTheDocument();
+    });
+
+    test('handles add parameters with zero index for indexed parameter', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+        await act(async () => {
+            await user.type(addParamsInput, 'fs.size{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const sectionInput = screen.getByPlaceholderText('Index e.g. 1');
+        await act(async () => {
+            await user.clear(sectionInput);
+            await user.type(sectionInput, '0'); // Index 0
+        });
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, '5GB');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with TListLowercase converter - invalid comma-separated values', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+
+        await act(async () => {
+            await user.type(addParamsInput, 'DEFAULT.roles{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('roles')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, 'admin,,user'); // Empty value in comma-separated list
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid value for roles: must be comma-separated lowercase strings'),
+                'error'
+            );
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with TListLowercase converter - valid comma-separated values', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+
+        await act(async () => {
+            await user.type(addParamsInput, 'DEFAULT.roles{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, 'admin,user,guest'); // Valid comma-separated values
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+        }, {timeout: 10000});
+    });
+
+    test('handles add parameters with TListLowercase converter - no commas', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+
+        await act(async () => {
+            await user.type(addParamsInput, 'DEFAULT.roles{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const valueInput = screen.getByLabelText('Value');
+        await act(async () => {
+            await user.type(valueInput, 'single_role');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success');
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters with network error', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config?unset=')) {
+                return Promise.reject(new Error('Network failure'));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const unsetParamsInput = comboboxes[1];
+
+        await act(async () => {
+            await user.type(unsetParamsInput, 'nodes{Enter}');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith(
+                expect.stringContaining('Error unsetting parameter nodes: Network failure'),
+                'error'
+            );
+        }, {timeout: 10000});
+    });
+
+    test('handles delete sections with network error', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config?delete=')) {
+                return Promise.reject(new Error('Network failure'));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const deleteSectionsInput = comboboxes[2];
+
+        await act(async () => {
+            await user.type(deleteSectionsInput, 'fs#1{Enter}');
+        });
+
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith(
+                expect.stringContaining('Error deleting section fs#1: Network failure'),
+                'error'
+            );
+        }, {timeout: 10000});
+    });
+
+    test('handles remove parameter in manage params dialog', async () => {
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const comboboxes = screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+        const addParamsInput = comboboxes[0];
+
+        await act(async () => {
+            await user.type(addParamsInput, 'DEFAULT.orchestrate{Enter}');
+        });
+
+        const addButton = screen.getByRole('button', {name: /Add Parameter/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('orchestrate')).toBeInTheDocument();
+        }, {timeout: 5000});
+
+        const removeButton = screen.getByRole('button', {name: /Remove parameter/i});
+        await act(async () => {
+            await user.click(removeButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByText('orchestrate')).not.toBeInTheDocument();
+        }, {timeout: 5000});
+    });
+
+// Helper function to find dialog by title
+    function getDialogByTitle(title) {
+        const dialogs = screen.getAllByRole('dialog');
+        return dialogs.find(dialog => {
+            return within(dialog).queryByText(title) !== null;
+        });
+    }
 });

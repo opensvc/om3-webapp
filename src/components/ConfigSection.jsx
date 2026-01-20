@@ -4,9 +4,6 @@ import {
     Typography,
     Tooltip,
     IconButton,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
     CircularProgress,
     Alert,
     Dialog,
@@ -23,8 +20,10 @@ import {
     TableRow,
     Paper,
     Autocomplete,
+    Collapse,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
 import InfoIcon from "@mui/icons-material/Info";
@@ -605,7 +604,7 @@ const ManageParamsDialog = ({
         </Dialog>
     );
 };
-const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackbar}) => {
+const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackbar, expanded, onToggle}) => {
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
@@ -620,7 +619,6 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
         error: existingParamsError,
         fetchExistingParams,
     } = useExistingParams(decodedObjectName);
-    const [configAccordionExpanded, setConfigAccordionExpanded] = useState(false);
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
@@ -629,18 +627,18 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
     const [paramsToUnset, setParamsToUnset] = useState([]);
     const [paramsToDelete, setParamsToDelete] = useState([]);
     const [actionLoading, setActionLoading] = useState(false);
-    const handleConfigAccordionChange = (event, isExpanded) => {
-        setConfigAccordionExpanded(isExpanded);
-    };
+
     const handleOpenKeywordsDialog = () => {
         setKeywordsDialogOpen(true);
         fetchKeywords();
     };
+
     const handleOpenManageParamsDialog = () => {
         setManageParamsDialogOpen(true);
         fetchKeywords();
         fetchExistingParams();
     };
+
     const handleUpdateConfig = async () => {
         if (!newConfigFile) {
             openSnackbar("Configuration file is required.", "error");
@@ -671,7 +669,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             openSnackbar("Configuration updated successfully");
             if (configNode) {
                 await fetchConfig(configNode);
-                setConfigAccordionExpanded(true);
+                onToggle(true);
             }
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
@@ -681,6 +679,7 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             setNewConfigFile(null);
         }
     };
+
     const handleAddParams = async () => {
         if (!paramsToSet.length) {
             openSnackbar("Parameter input is required.", "error");
@@ -745,12 +744,13 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                setConfigAccordionExpanded(true);
+                onToggle(true);
             }
         }
         setActionLoading(false);
         return successCount > 0;
     };
+
     const handleUnsetParams = async () => {
         if (!paramsToUnset.length) return false;
         const token = localStorage.getItem("authToken");
@@ -791,12 +791,13 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                setConfigAccordionExpanded(true);
+                onToggle(true);
             }
         }
         setActionLoading(false);
         return successCount > 0;
     };
+
     const handleDeleteParams = async () => {
         if (!paramsToDelete.length) return false;
         const token = localStorage.getItem("authToken");
@@ -829,12 +830,13 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             if (configNode) {
                 await fetchConfig(configNode);
                 await fetchExistingParams();
-                setConfigAccordionExpanded(true);
+                onToggle(true);
             }
         }
         setActionLoading(false);
         return successCount > 0;
     };
+
     const handleManageParamsSubmit = async () => {
         let anySuccess = false;
         if (paramsToSet.length) anySuccess = await handleAddParams() || anySuccess;
@@ -851,56 +853,43 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
             setManageParamsDialogOpen(false);
         }
     };
+
     return (
-        <Box
-            sx={{
-                mb: 4,
-                p: 2,
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: 1,
-                width: "100%",
-                maxWidth: "1400px",
-            }}
-        >
-            <Accordion
-                expanded={configAccordionExpanded}
-                onChange={handleConfigAccordionChange}
+        <Box sx={{ mb: 2, width: "100%" }}>
+            <Box
                 sx={{
-                    border: "none",
-                    boxShadow: "none",
-                    backgroundColor: "transparent",
-                    "&:before": {display: "none"},
-                    "& .MuiAccordionSummary-root": {
-                        border: "none",
-                        backgroundColor: "transparent",
-                        minHeight: "auto",
-                        "&.Mui-expanded": {minHeight: "auto"},
-                        padding: 0,
-                    },
-                    "& .MuiAccordionDetails-root": {
-                        border: "none",
-                        backgroundColor: "transparent",
-                        padding: 0,
-                    },
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    p: 1,
+                    borderRadius: 1,
+                    '&:hover': {
+                        bgcolor: 'action.hover',
+                    }
                 }}
+                onClick={() => onToggle(!expanded)}
             >
-                <AccordionSummary expandIcon={<ExpandMoreIcon/>} aria-controls="panel-config-content"
-                                  id="panel-config-header">
-                    <Typography variant="h6" fontWeight="medium">
-                        Configuration
-                    </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                    <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
+                <Typography variant="h6" fontWeight="medium">
+                    Configuration
+                </Typography>
+                <IconButton size="small">
+                    {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </IconButton>
+            </Box>
+
+            <Collapse in={expanded}>
+                <Box sx={{ mt: 2 }}>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2, gap: 1 }}>
                         <Tooltip title="Upload a new configuration file">
                             <IconButton
                                 color="primary"
                                 onClick={() => setUpdateConfigDialogOpen(true)}
                                 disabled={actionLoading}
                                 aria-label="Upload new configuration file"
+                                size="small"
                             >
-                                <UploadFileIcon/>
+                                <UploadFileIcon />
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="Manage configuration parameters (add, unset, delete)">
@@ -909,8 +898,9 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                                 onClick={handleOpenManageParamsDialog}
                                 disabled={actionLoading}
                                 aria-label="Manage configuration parameters"
+                                size="small"
                             >
-                                <EditIcon/>
+                                <EditIcon />
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="View available configuration keywords">
@@ -919,19 +909,22 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                                 onClick={handleOpenKeywordsDialog}
                                 disabled={actionLoading}
                                 aria-label="View configuration keywords"
+                                size="small"
                             >
-                                <InfoIcon/>
+                                <InfoIcon />
                             </IconButton>
                         </Tooltip>
                     </Box>
-                    {configLoading && <CircularProgress size={24}/>}
+                    {configLoading && <CircularProgress size={24} />}
                     {configError && (
-                        <Alert severity="error" sx={{mb: 2}}>
+                        <Alert severity="error" sx={{ mb: 2 }}>
                             {configError}
                         </Alert>
                     )}
                     {!configLoading && !configError && configData === null && (
-                        <Typography color="textSecondary">No configuration available.</Typography>
+                        <Typography color="textSecondary" variant="body2">
+                            No configuration available.
+                        </Typography>
                     )}
                     {!configLoading && !configError && configData !== null && (
                         <Box
@@ -962,14 +955,16 @@ const ConfigSection = ({decodedObjectName, configNode, setConfigNode, openSnackb
                                     p: 1,
                                     m: 0,
                                     minWidth: "max-content",
+                                    fontSize: '0.875rem',
                                 }}
                             >
                                 {configData}
                             </Box>
                         </Box>
                     )}
-                </AccordionDetails>
-            </Accordion>
+                </Box>
+            </Collapse>
+
             <UpdateConfigDialog
                 open={updateConfigDialogOpen}
                 onClose={() => setUpdateConfigDialogOpen(false)}

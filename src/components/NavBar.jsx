@@ -147,15 +147,36 @@ const NavBar = () => {
             });
 
             if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
-                if (pathParts[0] === "network" && pathParts.length === 2) {
+                if (pathParts[0] === "nodes" && pathParts.length >= 4 && pathParts[2] === "objects") {
+                    const node = decodeURIComponent(pathParts[1]);
+                    const objectName = decodeURIComponent(pathParts.slice(3).join("/"));
+
+                    breadcrumbItems.push({name: "objects", path: "/objects"});
+                    breadcrumbItems.push({
+                        name: objectName,
+                        path: `/objects/${encodeURIComponent(objectName)}`
+                    });
+                    breadcrumbItems.push({
+                        name: node,
+                        path: null
+                    });
+                }
+                else if (pathParts[0] === "objects" && pathParts.length >= 2) {
+                    const objectName = decodeURIComponent(pathParts.slice(1).join("/"));
+                    breadcrumbItems.push({name: "objects", path: "/objects"});
+                    breadcrumbItems.push({
+                        name: objectName,
+                        path: location.pathname
+                    });
+                }
+                else if (pathParts[0] === "network" && pathParts.length === 2) {
                     breadcrumbItems.push({name: "network", path: "/network"});
                     breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
-                } else if (pathParts[0] === "objects" && pathParts.length === 2) {
-                    breadcrumbItems.push({name: "objects", path: "/objects"});
-                    breadcrumbItems.push({name: pathParts[1], path: `/objects/${pathParts[1]}`});
-                } else if (pathParts[0] === "network" && pathParts.length === 1) {
+                }
+                else if (pathParts[0] === "network" && pathParts.length === 1) {
                     breadcrumbItems.push({name: "network", path: "/network"});
-                } else {
+                }
+                else {
                     pathParts.forEach((part, index) => {
                         const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
                         if (part !== "cluster") {
@@ -231,20 +252,34 @@ const NavBar = () => {
                         <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap"}}>
                             {breadcrumb.map((item, index) => (
                                 <Box key={index} sx={{display: "flex", alignItems: "center"}}>
-                                    <Typography
-                                        component={Link}
-                                        to={item.path}
-                                        sx={{
-                                            color: "inherit",
-                                            textDecoration: "none",
-                                            fontWeight: 500,
-                                            fontSize: "1.1rem",
-                                            "&:hover": {textDecoration: "underline"},
-                                        }}
-                                        aria-label={`Navigate to ${decodeURIComponent(item.name)}`}
-                                    >
-                                        {decodeURIComponent(item.name)}
-                                    </Typography>
+                                    {item.path ? (
+                                        <Typography
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                color: "inherit",
+                                                textDecoration: "none",
+                                                fontWeight: 500,
+                                                fontSize: "1.1rem",
+                                                "&:hover": {textDecoration: "underline"},
+                                            }}
+                                            aria-label={`Navigate to ${item.name}`}
+                                        >
+                                            {item.name}
+                                        </Typography>
+                                    ) : (
+                                        <Typography
+                                            sx={{
+                                                color: "inherit",
+                                                textDecoration: "none",
+                                                fontWeight: 500,
+                                                fontSize: "1.1rem",
+                                                cursor: "default",
+                                            }}
+                                        >
+                                            {item.name}
+                                        </Typography>
+                                    )}
 
                                     {index < breadcrumb.length - 1 && (
                                         <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>

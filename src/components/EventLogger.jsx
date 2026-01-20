@@ -273,7 +273,7 @@ const EventLogger = ({
         return `eventLogger_${baseKey}_${hash}`;
     }, [objectName, filteredEventTypes]);
 
-    const [manualSubscriptions, setManualSubscriptions] = useState([...filteredEventTypes]);
+    const [manualSubscriptions, setManualSubscriptions] = useState([]);
 
     const subscribedEventTypes = useMemo(() => {
         const validSubscriptions = manualSubscriptions.filter(type =>
@@ -293,12 +293,59 @@ const EventLogger = ({
     const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
     useEffect(() => {
+        setManualSubscriptions([...filteredEventTypes]);
+    }, []);
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+
+        if (!drawerOpen) {
+            closeLoggerEventSource();
+            return;
+        }
+
+        if (token && drawerOpen) {
+            const eventsToSubscribe = [...subscribedEventTypes];
+            const connectionEvents = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
+            eventsToSubscribe.push(...connectionEvents);
+
+            const uniqueEvents = [...new Set(eventsToSubscribe)];
+
+            if (uniqueEvents.length > 0) {
+                logger.log("Starting logger reception (drawer opened):", {
+                    pageKey,
+                    subscribedEventTypes,
+                    allEvents: uniqueEvents,
+                    objectName
+                });
+
+                try {
+                    startLoggerReception(token, uniqueEvents, objectName);
+                } catch (error) {
+                    logger.warn("Failed to start logger reception:", error);
+                }
+            } else {
+                logger.log("No events to subscribe to for this page");
+                closeLoggerEventSource();
+            }
+        }
+
+        return () => {
+            if (drawerOpen) {
+                logger.log("Closing logger reception (drawer closing)");
+                closeLoggerEventSource();
+            }
+        };
+    }, [drawerOpen, subscribedEventTypes, objectName, eventTypes, pageKey]);
+
+    useEffect(() => {
         if (searchDebounceRef.current) {
             clearTimeout(searchDebounceRef.current);
         }
         searchDebounceRef.current = setTimeout(() => {
             setDebouncedSearchTerm(searchTerm);
         }, DEBOUNCE_DELAY);
+
         return () => {
             if (searchDebounceRef.current) {
                 clearTimeout(searchDebounceRef.current);
@@ -628,6 +675,7 @@ const EventLogger = ({
         const handleMouseUp = (e) => handleResizeEnd(e);
         const handleTouchEnd = (e) => handleResizeEnd(e);
         const handleTouchCancel = (e) => handleResizeEnd(e);
+
         if (isResizing) {
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('touchmove', handleTouchMove, {passive: false});
@@ -635,16 +683,19 @@ const EventLogger = ({
             document.addEventListener('touchend', handleTouchEnd);
             document.addEventListener('touchcancel', handleTouchCancel);
         }
+
         return () => {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('touchmove', handleTouchMove);
             document.removeEventListener('mouseup', handleMouseUp);
             document.removeEventListener('touchend', handleTouchEnd);
             document.removeEventListener('touchcancel', handleTouchCancel);
+
             if (resizeTimeoutRef.current) {
                 clearTimeout(resizeTimeoutRef.current);
                 resizeTimeoutRef.current = null;
             }
+
             if (searchDebounceRef.current) {
                 clearTimeout(searchDebounceRef.current);
                 searchDebounceRef.current = null;
@@ -696,53 +747,6 @@ const EventLogger = ({
         backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper,
         touchAction: 'none'
     };
-
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            const eventsToSubscribe = [...subscribedEventTypes];
-
-            const connectionEvents = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
-            eventsToSubscribe.push(...connectionEvents);
-
-            const uniqueEvents = [...new Set(eventsToSubscribe)];
-
-            if (uniqueEvents.length > 0) {
-                logger.log("Starting/updating logger reception for page:", {
-                    pageKey,
-                    subscribedEventTypes,
-                    allEvents: uniqueEvents,
-                    objectName
-                });
-
-                try {
-                    startLoggerReception(token, uniqueEvents, objectName);
-                } catch (error) {
-                    logger.warn("Failed to start logger reception:", error);
-                }
-            } else {
-                logger.log("No events to subscribe to for this page");
-                closeLoggerEventSource();
-            }
-        }
-
-        return () => {
-        };
-    }, [subscribedEventTypes, objectName, eventTypes, pageKey]);
-
-    useEffect(() => {
-        const currentSubscriptionsSet = new Set(manualSubscriptions);
-        const pageEventsSet = new Set(filteredEventTypes);
-
-        const areDifferent =
-            manualSubscriptions.length !== filteredEventTypes.length ||
-            !filteredEventTypes.every(event => currentSubscriptionsSet.has(event)) ||
-            !manualSubscriptions.every(event => pageEventsSet.has(event));
-
-        if (areDifferent) {
-            setManualSubscriptions([...filteredEventTypes]);
-        }
-    }, [filteredEventTypes]);
 
     const EventTypeChip = ({eventType, searchTerm}) => {
         const color = getEventColor(eventType);
@@ -831,22 +835,6 @@ const EventLogger = ({
                         }}
                     >
                         {buttonLabel}
-                        {baseFilteredLogs.length > 0 && (
-                            <Chip
-                                label={baseFilteredLogs.length}
-                                size="small"
-                                sx={{
-                                    ml: 1,
-                                    height: 20,
-                                    minWidth: 20,
-                                    backgroundColor: isDarkMode ? '#1976d2' : '#000000',
-                                    color: '#ffffff',
-                                    '& .MuiChip-label': {
-                                        color: '#ffffff'
-                                    }
-                                }}
-                            />
-                        )}
                     </Button>
                 </Tooltip>
             )}

@@ -3,11 +3,8 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {ThemeProvider, createTheme} from '@mui/material/styles';
 import AuthChoice from '../AuthChoice';
-import useAuthInfo from '../../hooks/AuthInfo';
-import {useOidc} from '../../context/OidcAuthContext';
-import oidcConfiguration from '../../config/oidcConfiguration';
 
-// Mock dependencies
+// Mock dependencie
 jest.mock('../../hooks/AuthInfo');
 jest.mock('../../context/OidcAuthContext');
 jest.mock('../../config/oidcConfiguration');
@@ -19,25 +16,40 @@ jest.mock('react-router-dom', () => ({
     useNavigate: () => mockNavigate,
 }));
 
+// Import des mocks
+import useAuthInfo from '../../hooks/AuthInfo';
+import {useOidc} from '../../context/OidcAuthContext';
+import oidcConfiguration from '../../config/oidcConfiguration';
+
 describe('AuthChoice Component', () => {
     const theme = createTheme();
     const mockRecreateUserManager = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
+
+        // Mock console.log et console.error
         jest.spyOn(console, 'log').mockImplementation(() => {
         });
         jest.spyOn(console, 'error').mockImplementation(() => {
         });
+
+        // Initialiser les mocks avec des valeurs par défaut
         useOidc.mockReturnValue({
             userManager: null,
             recreateUserManager: mockRecreateUserManager,
         });
+
         useAuthInfo.mockReturnValue(null);
-        oidcConfiguration.mockReturnValue({issuer: 'mock-issuer', client_id: 'mock-client'});
+
+        oidcConfiguration.mockReturnValue({
+            issuer: 'mock-issuer',
+            client_id: 'mock-client'
+        });
     });
 
     afterEach(() => {
+        // Restaurer les mocks de console
         console.log.mockRestore();
         console.error.mockRestore();
     });
@@ -106,14 +118,17 @@ describe('AuthChoice Component', () => {
         const mockUserManager = {
             signinRedirect: mockSigninRedirect,
         };
+
         useAuthInfo.mockReturnValue({
             openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
+
         useOidc.mockReturnValue({
             userManager: mockUserManager,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         fireEvent.click(screen.getByText('OpenID'));
@@ -123,6 +138,9 @@ describe('AuthChoice Component', () => {
     });
 
     test('clicking OpenID button logs message when userManager is null', () => {
+        jest.spyOn(console, 'info').mockImplementation(() => {
+        });
+
         useAuthInfo.mockReturnValue({
             openid: {issuer: 'https://auth.example.com'},
             methods: [],
@@ -131,11 +149,14 @@ describe('AuthChoice Component', () => {
             userManager: null,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         fireEvent.click(screen.getByText('OpenID'));
 
-        expect(console.log).toHaveBeenCalledWith("handleAuthChoice openid skipped: can't create userManager");
+        expect(console.info).toHaveBeenCalledWith(
+            "handleAuthChoice openid skipped: can't create userManager"
+        );
     });
 
     test('clicking Login button navigates to /auth/login', () => {
@@ -143,6 +164,7 @@ describe('AuthChoice Component', () => {
             openid: null,
             methods: ['basic'],
         });
+
         renderComponent();
 
         fireEvent.click(screen.getByText('Login'));
@@ -155,10 +177,12 @@ describe('AuthChoice Component', () => {
             openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
+
         useOidc.mockReturnValue({
             userManager: null,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         await waitFor(() => {
@@ -181,14 +205,17 @@ describe('AuthChoice Component', () => {
         const mockUserManager = {
             signinRedirect: mockSigninRedirect,
         };
+
         useAuthInfo.mockReturnValue({
             openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
+
         useOidc.mockReturnValue({
             userManager: mockUserManager,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         expect(mockRecreateUserManager).not.toHaveBeenCalled();
@@ -199,10 +226,12 @@ describe('AuthChoice Component', () => {
             openid: null,
             methods: ['basic'],
         });
+
         useOidc.mockReturnValue({
             userManager: null,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         expect(mockRecreateUserManager).not.toHaveBeenCalled();
@@ -213,14 +242,17 @@ describe('AuthChoice Component', () => {
         const mockUserManager = {
             signinRedirect: mockSigninRedirect,
         };
+
         useAuthInfo.mockReturnValue({
             openid: {issuer: 'https://auth.example.com'},
             methods: [],
         });
+
         useOidc.mockReturnValue({
             userManager: mockUserManager,
             recreateUserManager: mockRecreateUserManager,
         });
+
         renderComponent();
 
         fireEvent.click(screen.getByText('OpenID'));

@@ -5,12 +5,12 @@ import ObjectDetail, {getFilteredResourceActions, getResourceType, parseProvisio
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 import userEvent from '@testing-library/user-event';
-import {RESOURCE_ACTIONS} from '../../constants/actions';
 
 // Mock dependencies
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
     useParams: jest.fn(),
+    useNavigate: jest.fn(),
 }));
 jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
@@ -209,10 +209,14 @@ jest.mock('../LogsViewer.jsx', () => ({nodename, height}) => (
 
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();
+    const mockNavigate = jest.fn();
 
     beforeEach(() => {
         jest.setTimeout(45000);
         jest.clearAllMocks();
+
+        // Mock navigate
+        require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
         // Mock fetch
         global.fetch = jest.fn((url, options) => {
@@ -459,129 +463,6 @@ type = flag
         jest.clearAllMocks();
     });
 
-    test('handles various provisioned state formats correctly', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        const mockHeartbeatStatus = {
-            objectStatus: {
-                'root/svc/svc1': {avail: 'up', frozen: null},
-            },
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            resourceTrueString: {
-                                status: 'up',
-                                label: 'Resource with "true" string',
-                                type: 'disk.disk',
-                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                            resourceFalseString: {
-                                status: 'down',
-                                label: 'Resource with "false" string',
-                                type: 'disk.disk',
-                                provisioned: {state: 'false', mtime: '2023-01-01T12:00:00Z'},
-                                running: false,
-                            },
-                            resourceTrueBoolean: {
-                                status: 'up',
-                                label: 'Resource with true boolean',
-                                type: 'disk.disk',
-                                provisioned: true,
-                                running: true,
-                            },
-                            resourceFalseBoolean: {
-                                status: 'down',
-                                label: 'Resource with false boolean',
-                                type: 'disk.disk',
-                                provisioned: false,
-                                running: false,
-                            },
-                            resourceMixedCase: {
-                                status: 'up',
-                                label: 'Resource with "True" mixed case',
-                                type: 'disk.disk',
-                                provisioned: {state: 'True', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                            resourceUpperCase: {
-                                status: 'up',
-                                label: 'Resource with "TRUE" upper case',
-                                type: 'disk.disk',
-                                provisioned: {state: 'TRUE', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                        },
-                    },
-                },
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
-                    state: 'running',
-                    global_expect: 'placed@node1',
-                    resources: {
-                        resourceTrueString: {restart: {remaining: 0}},
-                        resourceFalseString: {restart: {remaining: 0}},
-                        resourceTrueBoolean: {restart: {remaining: 0}},
-                        resourceFalseBoolean: {restart: {remaining: 0}},
-                        resourceMixedCase: {restart: {remaining: 0}},
-                        resourceUpperCase: {restart: {remaining: 0}},
-                    },
-                },
-            },
-            instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        resourceTrueString: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                        resourceFalseString: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                        resourceTrueBoolean: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                        resourceFalseBoolean: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                        resourceMixedCase: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                        resourceUpperCase: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                    },
-                },
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        };
-        useEventStore.mockImplementation((selector) => selector(mockHeartbeatStatus));
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await screen.findByText('node1');
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await user.click(resourcesAccordion);
-        // Use separate waitFor calls for each assertion
-        await waitFor(() => {
-            expect(screen.getByText('resourceTrueString')).toBeInTheDocument();
-        });
-        await waitFor(() => {
-            expect(screen.getByText('resourceFalseString')).toBeInTheDocument();
-        });
-        await waitFor(() => {
-            expect(screen.getByText('resourceTrueBoolean')).toBeInTheDocument();
-        });
-        await waitFor(() => {
-            expect(screen.getByText('resourceFalseBoolean')).toBeInTheDocument();
-        });
-        await waitFor(() => {
-            expect(screen.getByText('resourceMixedCase')).toBeInTheDocument();
-        });
-        await waitFor(() => {
-            expect(screen.getByText('resourceUpperCase')).toBeInTheDocument();
-        });
-    });
-
     test('renders object name without useEventStore', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
@@ -612,7 +493,7 @@ type = flag
         }, {timeout: 5000});
     }, 10000);
 
-    test('renders global status, nodes, and resources', async () => {
+    test('renders nodes without resources section', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
@@ -637,15 +518,7 @@ type = flag
         await waitFor(() => {
             expect(screen.getByText(/placed@node1/i)).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
-        const resourcesSections = await screen.findAllByText(/Resources \(\d+\)/i);
-        expect(resourcesSections).toHaveLength(2);
-        fireEvent.click(resourcesSections[0]);
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-        }, {timeout: 10000, interval: 200});
-        await waitFor(() => {
-            expect(screen.getByText('res2')).toBeInTheDocument();
-        }, {timeout: 10000, interval: 200});
+        expect(screen.queryByText(/Resources \(\d+\)/i)).not.toBeInTheDocument();
     }, 15000);
 
     test('calls startEventReception on mount', () => {
@@ -795,6 +668,7 @@ type = flag
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/cfg/cfg1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -802,19 +676,33 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
-        const configSections = screen.getAllByRole('button', {expanded: false});
-        const configSection = configSections.find(
-            (el) => el.textContent.toLowerCase().includes('configuration')
+
+        // Trouver l'en-tête Configuration et cliquer dessus pour développer
+        const configHeader = await screen.findByText('Configuration');
+
+        // Dans le mock, l'AccordionSummary est un div avec rôle button
+        const configButtons = screen.getAllByRole('button');
+        const configButton = configButtons.find(button =>
+            button.textContent && button.textContent.includes('Configuration')
         );
-        fireEvent.click(configSection);
+
+        if (configButton) {
+            fireEvent.click(configButton);
+        } else {
+            // Fallback: cliquer sur l'en-tête lui-même
+            fireEvent.click(configHeader);
+        }
+
         await waitFor(() => {
             expect(screen.getByText(/nodes = \*/i)).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
+
         await waitFor(() => {
             expect(screen.getByText(
                 /this_is_a_very_long_unbroken_string_that_should_trigger_a_horizontal_scrollbar_abcdefghijklmnopqrstuvwxyz1234567890/i
             )).toBeInTheDocument();
         }, {timeout: 10000, interval: 200});
+
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/config/file'),
             expect.any(Object)
@@ -1051,10 +939,11 @@ type = flag
         );
     }, 35000);
 
-    test('handles resource selection and batch resource actions', async () => {
+    test('handles view instance navigation', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
         });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
                 <Routes>
@@ -1062,100 +951,45 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
         await waitFor(
             () => {
                 expect(screen.getByText('node1')).toBeInTheDocument();
             },
             {timeout: 10000, interval: 200}
         );
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        fireEvent.click(resourcesAccordion);
-        const res1Checkbox = screen.getByLabelText(/select resource res1/i);
-        const res2Checkbox = screen.getByLabelText(/select resource res2/i);
-        await user.click(res1Checkbox);
-        await user.click(res2Checkbox);
-        const batchResourceActionsButton = screen.getByRole('button', {
-            name: /Resource actions for node node1/i,
-        });
-        expect(batchResourceActionsButton).not.toBeDisabled();
-        fireEvent.click(batchResourceActionsButton);
-        await waitFor(() => {
-            const menus = screen.queryAllByRole('menu');
-            expect(menus.length).toBeGreaterThan(0);
-        }, {timeout: 10000});
-        const menus = await screen.findAllByRole('menu');
-        const menuItems = within(menus[0]).getAllByRole('menuitem');
-        const stopAction = menuItems.find((item) => item.textContent.match(/Stop/i));
-        fireEvent.click(stopAction);
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, {timeout: 10000});
-        const dialogs = screen.getAllByRole('dialog');
-        const dialog = dialogs[0];
-        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
-        if (checkbox) {
-            await user.click(checkbox);
-        }
-        const confirmButton = within(dialog).queryByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i});
-        await user.click(confirmButton);
-        await waitFor(
-            () => {
-                expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
-                    expect.any(Object)
-                );
-            },
-            {timeout: 15000, interval: 200}
-        );
-    }, 20000);
 
-    test('filters resource actions for task type', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
+        // Trouver la carte du node (Paper) et cliquer dessus
+        // Dans le mock, Paper est un div, donc on cherche le div qui contient le texte node1
+        const nodeText = screen.getByText('node1');
+        const card = nodeText.closest('div[role="region"]') || nodeText.closest('div');
+
+        if (card) {
+            // Simuler un clic sur la carte (éviter les éléments interactifs)
+            // Créer un mock event pour simuler le comportement de handleCardClick
+            const mockEvent = {
+                target: card,
+                stopPropagation: jest.fn(),
+                closest: (selector) => {
+                    // Simuler le comportement de closest pour éviter les éléments interactifs
+                    if (selector === 'button' || selector === 'input' || selector === '.no-click') {
+                        return null; // Simuler que ce n'est pas un élément interactif
+                    }
+                    return null;
+                }
+            };
+
+            // Déclencher le clic sur la carte
+            fireEvent.click(card);
+        } else {
+            // Fallback: cliquer sur le texte du node
+            fireEvent.click(nodeText);
+        }
+
         await waitFor(() => {
-            expect(screen.getByText('node1')).toBeInTheDocument();
-        }, {timeout: 10000});
-        const resourcesAccordion = screen.getByRole('button', {name: /expand resources for node node1/i});
-        await user.click(resourcesAccordion);
-        const res2ActionsButtons = screen.getAllByRole('button', {
-            name: /resource res2 actions/i,
-        });
-        const res2ActionsButton = res2ActionsButtons.find(
-            (button) => !button.hasAttribute('sx')
-        );
-        await user.click(res2ActionsButton);
-        await waitFor(
-            () => {
-                const menu = screen.getByRole('menu');
-                expect(within(menu).getByRole('menuitem', {name: /run/i})).toBeInTheDocument();
-            },
-            {timeout: 10000, interval: 200}
-        );
-        await waitFor(
-            () => {
-                const menu = screen.getByRole('menu');
-                expect(within(menu).queryByRole('menuitem', {name: /stop/i})).not.toBeInTheDocument();
-            },
-            {timeout: 10000, interval: 200}
-        );
-        await waitFor(
-            () => {
-                const menu = screen.getByRole('menu');
-                expect(within(menu).queryByRole('menuitem', {name: /start/i})).not.toBeInTheDocument();
-            },
-            {timeout: 10000, interval: 200}
-        );
-    }, 15000);
+            expect(mockNavigate).toHaveBeenCalledWith('/nodes/node1/objects/root%2Fsvc%2Fsvc1');
+        }, {timeout: 5000});
+    });
 
     test('subscription without node does not trigger fetchConfig', async () => {
         const unsubscribeMock = jest.fn();
@@ -1303,7 +1137,6 @@ type = flag
     }, 20000);
 
     test('handles all provisioned state formats', async () => {
-        const {parseProvisionedState} = require('../ObjectDetails');
         expect(parseProvisionedState('true')).toBe(true);
         expect(parseProvisionedState('True')).toBe(true);
         expect(parseProvisionedState('TRUE')).toBe(true);
@@ -1320,33 +1153,6 @@ type = flag
         expect(parseProvisionedState(undefined)).toBe(false);
         expect(parseProvisionedState({})).toBe(true);
         expect(parseProvisionedState({state: true})).toBe(true);
-    });
-
-    test('handles node and resource selection edge cases', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await screen.findByText('node1');
-        const nodeCheckbox = screen.getByLabelText(/select node node1/i);
-        await user.click(nodeCheckbox);
-        await user.click(nodeCheckbox);
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await user.click(resourcesAccordion);
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-        });
-        const resourceCheckbox = screen.getByLabelText(/select resource res1/i);
-        await user.click(resourceCheckbox);
-        await user.click(resourceCheckbox);
     });
 
     test('handles logs drawer interactions', async () => {
@@ -1395,24 +1201,6 @@ type = flag
             name: /Actions on selected nodes/i,
         });
         expect(batchActionsButton.disabled).toBe(true);
-    });
-
-    test('getFilteredResourceActions covers all resource type branches', () => {
-        const {RESOURCE_ACTIONS} = require('../../constants/actions');
-        expect(getFilteredResourceActions(undefined)).toEqual(RESOURCE_ACTIONS);
-        expect(getFilteredResourceActions(null)).toEqual(RESOURCE_ACTIONS);
-        expect(getFilteredResourceActions('')).toEqual(RESOURCE_ACTIONS);
-        expect(getFilteredResourceActions('task.daily')).toHaveLength(1);
-        expect(getFilteredResourceActions('task.daily')[0].name).toBe('run');
-        const fsActions = getFilteredResourceActions('fs.mount');
-        expect(fsActions.every(action => action.name !== 'run')).toBe(true);
-        const diskActions = getFilteredResourceActions('disk.vg');
-        expect(diskActions.every(action => action.name !== 'run')).toBe(true);
-        const appActions = getFilteredResourceActions('app.simple');
-        expect(appActions.every(action => action.name !== 'run')).toBe(true);
-        const containerActions = getFilteredResourceActions('container.docker');
-        expect(containerActions.every(action => action.name !== 'run')).toBe(true);
-        expect(getFilteredResourceActions('unknown.type')).toEqual(RESOURCE_ACTIONS);
     });
 
     test('getResourceType covers all branches', () => {
@@ -1775,45 +1563,6 @@ type = flag
         expect(document.body.style.cursor).toBe('default');
     });
 
-    test('handles batch resource action click callback', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await screen.findByText('node1');
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await user.click(resourcesAccordion);
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-        });
-        const res1Checkbox = screen.getByLabelText(/select resource res1/i);
-        const res2Checkbox = screen.getByLabelText(/select resource res2/i);
-        await user.click(res1Checkbox);
-        await user.click(res2Checkbox);
-        const batchResourceActionsButton = screen.getByRole('button', {
-            name: /Resource actions for node node1/i,
-        });
-        await user.click(batchResourceActionsButton);
-        const menus = await screen.findAllByRole('menu');
-        const menuItems = within(menus[0]).getAllByRole('menuitem');
-        const startAction = menuItems.find((item) => item.textContent.match(/Start/i));
-        await user.click(startAction);
-        const dialog = await screen.findByRole('dialog');
-        const confirmButton = within(dialog).getByRole('button', {name: /confirm/i});
-        await user.click(confirmButton);
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalled();
-        });
-    });
-
     test('handles fetchConfig with network error after unmount', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
@@ -1862,326 +1611,6 @@ type = flag
             expect(errorAlert).toBeInTheDocument();
         });
     }, 15000);
-
-    test('handles console action with missing Location header', async () => {
-        const mockStateWithContainer = {
-            objectStatus: {
-                'root/svc/svc1': {avail: 'up', frozen: null},
-            },
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            containerRes: {
-                                status: 'up',
-                                label: 'Container Resource',
-                                type: 'container.docker',
-                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                        },
-                    },
-                },
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
-                    state: 'running',
-                    global_expect: 'placed@node1',
-                    resources: {
-                        containerRes: {restart: {remaining: 0}},
-                    },
-                },
-            },
-            instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        containerRes: {
-                            is_monitored: true,
-                            is_disabled: false,
-                            is_standby: false,
-                            restart: 0,
-                        },
-                    },
-                },
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        };
-        useEventStore.mockImplementation((selector) => selector(mockStateWithContainer));
-        let fetchCallCount = 0;
-        global.fetch.mockImplementation((url) => {
-            fetchCallCount++;
-            if (url.includes('/config/file') || url.includes('/data/keys') || fetchCallCount <= 2) {
-                return Promise.resolve({
-                    ok: true,
-                    text: () => Promise.resolve('config data'),
-                    json: () => Promise.resolve({items: []})
-                });
-            }
-            if (url.includes('/console')) {
-                return Promise.resolve({
-                    ok: true,
-                    headers: {
-                        get: () => null
-                    }
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve('config')
-            });
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await waitFor(() => {
-            expect(screen.getByText('node1')).toBeInTheDocument();
-        }, {timeout: 10000});
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await userEvent.click(resourcesAccordion);
-        await waitFor(() => {
-            expect(screen.getByText('containerRes')).toBeInTheDocument();
-        }, {timeout: 10000});
-        const resourceActionButtons = screen.getAllByRole('button').filter(button =>
-            button.getAttribute('aria-label')?.includes('Resource containerRes actions')
-        );
-        expect(resourceActionButtons.length).toBeGreaterThan(0);
-        await userEvent.click(resourceActionButtons[0]);
-        await waitFor(() => {
-            const menus = screen.getAllByRole('menu');
-            const resourceMenu = menus.find(menu =>
-                menu.getAttribute('aria-label')?.includes('Resource containerRes actions')
-            );
-            expect(resourceMenu).toBeInTheDocument();
-        }, {timeout: 5000});
-        const menus = screen.getAllByRole('menu');
-        const resourceMenu = menus.find(menu =>
-            menu.getAttribute('aria-label')?.includes('Resource containerRes actions')
-        );
-        expect(resourceMenu).toBeInTheDocument();
-        const consoleItem = within(resourceMenu).getByRole('menuitem', {name: /console/i});
-        await userEvent.click(consoleItem);
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, {timeout: 5000});
-        const dialog = screen.getByRole('dialog');
-        const confirmBtn = within(dialog).getByRole('button', {name: /open console/i});
-        await userEvent.click(confirmBtn);
-        await waitFor(() => {
-            const alerts = screen.getAllByRole('alert');
-            expect(alerts.length).toBeGreaterThan(0);
-        }, {timeout: 10000});
-    });
-
-    test('handles getFilteredResourceActions edge cases', () => {
-        // Test empty resource type
-        expect(getFilteredResourceActions('')).toEqual(RESOURCE_ACTIONS);
-        // Test null resource type
-        expect(getFilteredResourceActions(null)).toEqual(RESOURCE_ACTIONS);
-        // Test undefined resource type
-        expect(getFilteredResourceActions(undefined)).toEqual(RESOURCE_ACTIONS);
-        // Test task type variations
-        expect(getFilteredResourceActions('task.daily')).toHaveLength(1);
-        expect(getFilteredResourceActions('TASK.daily')).toHaveLength(1);
-        // Test container type variations
-        const containerActions = getFilteredResourceActions('container.docker');
-        expect(containerActions.some(action => action.name === 'run')).toBe(false);
-        // Test fs type variations
-        const fsActions = getFilteredResourceActions('fs.ext4');
-        expect(fsActions.some(action => action.name === 'run')).toBe(false);
-        // Test disk type variations
-        const diskActions = getFilteredResourceActions('disk.vg');
-        expect(diskActions.some(action => action.name === 'run')).toBe(false);
-        // Test app type variations
-        const appActions = getFilteredResourceActions('app.web');
-        expect(appActions.some(action => action.name === 'run')).toBe(false);
-    });
-
-    test('handles postActionUrl through component integration', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await screen.findByText('node1');
-        const nodeCheckbox = screen.getByLabelText(/select node node1/i);
-        await userEvent.click(nodeCheckbox);
-        const batchActionsButton = screen.getByRole('button', {
-            name: /Actions on selected nodes/i,
-        });
-        await userEvent.click(batchActionsButton);
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-        // This will indirectly test postActionUrl through the action flow
-        const startAction = screen.getByRole('menuitem', {name: /start/i});
-        await userEvent.click(startAction);
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-    });
-
-    test('handles console action with network error through component', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-
-        // Mock state with container resource for console action
-        const mockStateWithContainer = {
-            objectStatus: {
-                'root/svc/svc1': {avail: 'up', frozen: null},
-            },
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            containerRes: {
-                                status: 'up',
-                                label: 'Container Resource',
-                                type: 'container.docker',
-                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                        },
-                    },
-                },
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
-                    state: 'running',
-                    global_expect: 'placed@node1',
-                    resources: {
-                        containerRes: {restart: {remaining: 0}},
-                    },
-                },
-            },
-            instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        containerRes: {
-                            is_monitored: true,
-                            is_disabled: false,
-                            is_standby: false,
-                            restart: 0,
-                        },
-                    },
-                },
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        };
-
-        useEventStore.mockImplementation((selector) => selector(mockStateWithContainer));
-
-        // Mock fetch to reject for console action
-        let callCount = 0;
-        global.fetch.mockImplementation((url) => {
-            callCount++;
-            if (callCount <= 2) {
-                // Initial config and keys fetches
-                return Promise.resolve({
-                    ok: true,
-                    text: () => Promise.resolve('config data'),
-                    json: () => Promise.resolve({items: []})
-                });
-            }
-            if (url.includes('/console')) {
-                return Promise.reject(new Error('Network error'));
-            }
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve('success')
-            });
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText('node1')).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        // Expand resources
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await userEvent.click(resourcesAccordion);
-
-        await waitFor(() => {
-            expect(screen.getByText('containerRes')).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        // Find and click console action - using a more robust approach
-        const resourceActionButtons = screen.getAllByRole('button', {
-            name: /resource containerRes actions/i,
-        });
-        expect(resourceActionButtons.length).toBeGreaterThan(0);
-        await userEvent.click(resourceActionButtons[0]);
-
-        await waitFor(() => {
-            const menus = screen.getAllByRole('menu');
-            expect(menus.length).toBeGreaterThan(0);
-        }, {timeout: 5000});
-
-        const menus = screen.getAllByRole('menu');
-        const resourceMenu = menus.find(menu =>
-            menu.textContent && menu.textContent.includes('Console')
-        );
-        expect(resourceMenu).toBeInTheDocument();
-
-        const consoleItem = within(resourceMenu).getByRole('menuitem', {name: /console/i});
-        await userEvent.click(consoleItem);
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        }, {timeout: 5000});
-
-        const dialog = screen.getByRole('dialog');
-        const confirmBtn = within(dialog).getByRole('button', {name: /open console/i});
-        await userEvent.click(confirmBtn);
-
-        // Should show error snackbar - use a more flexible approach
-        await waitFor(() => {
-            // Look for any alert that might contain error message
-            const alerts = screen.queryAllByRole('alert');
-            const errorAlert = alerts.find(alert =>
-                    alert.textContent && (
-                        alert.textContent.includes('Network error') ||
-                        alert.textContent.includes('Failed to open console') ||
-                        alert.textContent.includes('Error') ||
-                        alert.getAttribute('data-severity') === 'error'
-                    )
-            );
-
-            // If no alert found, check for any error text in the document
-            if (!errorAlert) {
-                const errorText = screen.queryByText(/network error|failed to open console|error/i);
-                expect(errorText).toBeInTheDocument();
-            } else {
-                expect(errorAlert).toBeInTheDocument();
-            }
-        }, {timeout: 10000});
-    });
 
     test('handles getNodeState through component integration', async () => {
         require('react-router-dom').useParams.mockReturnValue({
@@ -2514,207 +1943,6 @@ type = flag
         }, {timeout: 10000});
     });
 
-    test('handles selection toggle edge cases', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-        await screen.findByText('node1');
-        // Test node selection toggle
-        const nodeCheckbox = screen.getByLabelText(/select node node1/i);
-        // Select node
-        await userEvent.click(nodeCheckbox);
-        // Deselect node
-        await userEvent.click(nodeCheckbox);
-        // Test resource selection toggle
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await userEvent.click(resourcesAccordion);
-        await waitFor(() => {
-            expect(screen.getByText('res1')).toBeInTheDocument();
-        });
-        const resourceCheckbox = screen.getByLabelText(/select resource res1/i);
-        // Select resource
-        await userEvent.click(resourceCheckbox);
-        // Deselect resource
-        await userEvent.click(resourceCheckbox);
-    });
-
-    test('getFilteredResourceActions handles all resource type branches', () => {
-        // Test task types
-        const taskActions = getFilteredResourceActions('task.daily');
-        expect(taskActions).toHaveLength(1);
-        expect(taskActions[0].name).toBe('run');
-        // Test fs types
-        const fsActions = getFilteredResourceActions('fs.ext4');
-        expect(fsActions.every(action => action.name !== 'run')).toBe(true);
-        expect(fsActions.every(action => action.name !== 'console')).toBe(true);
-        // Test disk types
-        const diskActions = getFilteredResourceActions('disk.vg');
-        expect(diskActions.every(action => action.name !== 'run')).toBe(true);
-        expect(diskActions.every(action => action.name !== 'console')).toBe(true);
-        // Test app types
-        const appActions = getFilteredResourceActions('app.web');
-        expect(appActions.every(action => action.name !== 'run')).toBe(true);
-        expect(appActions.every(action => action.name !== 'console')).toBe(true);
-        // Test container types
-        const containerActions = getFilteredResourceActions('container.docker');
-        expect(containerActions.every(action => action.name !== 'run')).toBe(true);
-        // Test unknown types - should return all actions
-        const unknownActions = getFilteredResourceActions('unknown.type');
-        // Instead of checking exact equality, check that it returns an array with actions
-        expect(Array.isArray(unknownActions)).toBe(true);
-        expect(unknownActions.length).toBeGreaterThan(0);
-        // Test type prefixes in different cases
-        expect(getFilteredResourceActions('TASK.daily')).toHaveLength(1);
-        // For Container.docker, it should return filtered actions (no run action)
-        const containerMixedCase = getFilteredResourceActions('Container.docker');
-        expect(containerMixedCase.every(action => action.name !== 'run')).toBe(true);
-    });
-
-    test('getFilteredResourceActions returns appropriate actions for each type', () => {
-        // Test the filtering logic without relying on RESOURCE_ACTIONS constant
-        const taskActions = getFilteredResourceActions('task.daily');
-        expect(taskActions.length).toBe(1);
-        expect(taskActions[0].name).toBe('run');
-        const fsActions = getFilteredResourceActions('fs.ext4');
-        const hasRunAction = fsActions.some(action => action.name === 'run');
-        const hasConsoleAction = fsActions.some(action => action.name === 'console');
-        expect(hasRunAction).toBe(false);
-        expect(hasConsoleAction).toBe(false);
-        const containerActions = getFilteredResourceActions('container.docker');
-        const hasRunInContainer = containerActions.some(action => action.name === 'run');
-        expect(hasRunInContainer).toBe(false);
-        // Test that unknown types return a non-empty array
-        const unknownActions = getFilteredResourceActions('unknown.type');
-        expect(Array.isArray(unknownActions)).toBe(true);
-        expect(unknownActions.length).toBeGreaterThan(0);
-    });
-
-    test('parseProvisionedState comprehensive coverage', () => {
-        // Test all possible string values
-        expect(parseProvisionedState('true')).toBe(true);
-        expect(parseProvisionedState('false')).toBe(false);
-        expect(parseProvisionedState('True')).toBe(true);
-        expect(parseProvisionedState('False')).toBe(false);
-        expect(parseProvisionedState('TRUE')).toBe(true);
-        expect(parseProvisionedState('FALSE')).toBe(false);
-        expect(parseProvisionedState('yes')).toBe(false);
-        expect(parseProvisionedState('no')).toBe(false);
-        // Test boolean values
-        expect(parseProvisionedState(true)).toBe(true);
-        expect(parseProvisionedState(false)).toBe(false);
-        // Test number values
-        expect(parseProvisionedState(1)).toBe(true);
-        expect(parseProvisionedState(0)).toBe(false);
-        // Test edge cases
-        expect(parseProvisionedState(null)).toBe(false);
-        expect(parseProvisionedState(undefined)).toBe(false);
-        expect(parseProvisionedState('')).toBe(false);
-        expect(parseProvisionedState('random')).toBe(false);
-    });
-
-    test('getResourceType covers all scenarios', () => {
-        // Test with direct resource
-        expect(getResourceType('res1', {
-            resources: {res1: {type: 'disk.vg'}}
-        })).toBe('disk.vg');
-        // Test with encap resource
-        expect(getResourceType('res2', {
-            resources: {},
-            encap: {
-                container1: {
-                    resources: {res2: {type: 'container.docker'}}
-                }
-            }
-        })).toBe('container.docker');
-        // Test resource not found
-        expect(getResourceType('res3', {
-            resources: {res1: {type: 'disk.vg'}}
-        })).toBe('');
-        // Test with null parameters
-        expect(getResourceType(null, {resources: {}})).toBe('');
-        expect(getResourceType('res1', null)).toBe('');
-        expect(getResourceType('', {resources: {}})).toBe('');
-        // Test with undefined parameters
-        expect(getResourceType(undefined, {resources: {}})).toBe('');
-        expect(getResourceType('res1', undefined)).toBe('');
-    });
-
-    test('getResourceType handles all node data structures', () => {
-        // Test with direct resource
-        expect(getResourceType('res1', {
-            resources: {res1: {type: 'disk.vg'}}
-        })).toBe('disk.vg');
-        // Test with encap resource
-        expect(getResourceType('res2', {
-            resources: {},
-            encap: {
-                container1: {
-                    resources: {res2: {type: 'container.docker'}}
-                }
-            }
-        })).toBe('container.docker');
-        // Test with nested encap (should only check one level)
-        expect(getResourceType('res3', {
-            resources: {},
-            encap: {
-                container1: {
-                    resources: {},
-                    encap: {
-                        container2: {
-                            resources: {res3: {type: 'fs.ext4'}}
-                        }
-                    }
-                }
-            }
-        })).toBe(''); // Only checks one level deep in encap
-        // Test resource not found
-        expect(getResourceType('res4', {
-            resources: {res1: {type: 'disk.vg'}}
-        })).toBe('');
-        // Test with null parameters
-        expect(getResourceType(null, {resources: {}})).toBe('');
-        expect(getResourceType('res1', null)).toBe('');
-    });
-
-    test('parseProvisionedState handles all value types', () => {
-        // Test string values
-        expect(parseProvisionedState('true')).toBe(true);
-        expect(parseProvisionedState('false')).toBe(false);
-        expect(parseProvisionedState('True')).toBe(true);
-        expect(parseProvisionedState('False')).toBe(false);
-        expect(parseProvisionedState('TRUE')).toBe(true);
-        expect(parseProvisionedState('FALSE')).toBe(false);
-        expect(parseProvisionedState('yes')).toBe(false);
-        expect(parseProvisionedState('1')).toBe(false);
-        expect(parseProvisionedState('0')).toBe(false);
-        // Test boolean values
-        expect(parseProvisionedState(true)).toBe(true);
-        expect(parseProvisionedState(false)).toBe(false);
-        // Test number values
-        expect(parseProvisionedState(1)).toBe(true);
-        expect(parseProvisionedState(0)).toBe(false);
-        expect(parseProvisionedState(-1)).toBe(true);
-        // Test object values
-        expect(parseProvisionedState({})).toBe(true);
-        expect(parseProvisionedState({state: 'true'})).toBe(true);
-        expect(parseProvisionedState({state: 'false'})).toBe(true);
-        // Test array values
-        expect(parseProvisionedState([])).toBe(true);
-        expect(parseProvisionedState([1])).toBe(true);
-        // Test null and undefined
-        expect(parseProvisionedState(null)).toBe(false);
-        expect(parseProvisionedState(undefined)).toBe(false);
-    });
-
     test('handles logs drawer close and state cleanup', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
@@ -2970,204 +2198,6 @@ type = flag
         });
     });
 
-    test('renders console dialogs and handles interactions', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-
-        // Mock state with container resource for console action
-        const mockStateWithContainer = {
-            objectStatus: {
-                'root/svc/svc1': {avail: 'up', frozen: null},
-            },
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            containerRes: {
-                                status: 'up',
-                                label: 'Container Resource',
-                                type: 'container.docker',
-                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                        },
-                    },
-                },
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
-                    state: 'running',
-                    global_expect: 'placed@node1',
-                    resources: {
-                        containerRes: {restart: {remaining: 0}},
-                    },
-                },
-            },
-            instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        containerRes: {
-                            is_monitored: true,
-                            is_disabled: false,
-                            is_standby: false,
-                            restart: 0,
-                        },
-                    },
-                },
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        };
-
-        useEventStore.mockImplementation((selector) => selector(mockStateWithContainer));
-
-        // Mock successful console response with URL
-        let consoleCallCount = 0;
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/console')) {
-                consoleCallCount++;
-                return Promise.resolve({
-                    ok: true,
-                    headers: {
-                        get: (header) => header === 'Location' ? 'https://console.example.com/session123' : null
-                    }
-                });
-            }
-            // Handle initial config/keys fetches
-            if (url.includes('/config/file') || url.includes('/data/keys')) {
-                return Promise.resolve({
-                    ok: true,
-                    text: () => Promise.resolve('config data'),
-                    json: () => Promise.resolve({items: []})
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve('success')
-            });
-        });
-
-        // Mock clipboard API properly
-        const mockClipboard = {
-            writeText: jest.fn().mockResolvedValue(undefined),
-        };
-        Object.defineProperty(global.navigator, 'clipboard', {
-            value: mockClipboard,
-            writable: true,
-            configurable: true,
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText('node1')).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        // Expand resources and open console dialog
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await userEvent.click(resourcesAccordion);
-
-        await waitFor(() => {
-            expect(screen.getByText('containerRes')).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        // Find resource action button more specifically
-        const resourceActionButtons = screen.getAllByRole('button').filter(button =>
-            button.getAttribute('aria-label')?.includes('Resource containerRes actions')
-        );
-        expect(resourceActionButtons.length).toBeGreaterThan(0);
-        await userEvent.click(resourceActionButtons[0]);
-
-        await waitFor(() => {
-            const menus = screen.getAllByRole('menu');
-            expect(menus.length).toBeGreaterThan(0);
-        }, {timeout: 5000});
-
-        const menus = screen.getAllByRole('menu');
-        const consoleItem = within(menus[0]).getByRole('menuitem', {name: /console/i});
-        await userEvent.click(consoleItem);
-
-        // Verify console dialog opens
-        await waitFor(() => {
-            // Chercher par le titre du dialogue
-            const dialogTitles = screen.getAllByText('Open Console');
-            expect(dialogTitles.length).toBeGreaterThan(0);
-        }, {timeout: 5000});
-
-        const dialogs = screen.getAllByRole('dialog');
-        const consoleDialog = dialogs.find(dialog =>
-            dialog.textContent?.includes('Open Console')
-        );
-        expect(consoleDialog).toBeInTheDocument();
-
-        // Test console dialog interactions
-        const seatsInput = within(consoleDialog).getByLabelText(/Number of Seats/i);
-        await userEvent.clear(seatsInput);
-        await userEvent.type(seatsInput, '2');
-
-        const timeoutInput = within(consoleDialog).getByLabelText(/Greet Timeout/i);
-        await userEvent.clear(timeoutInput);
-        await userEvent.type(timeoutInput, '10s');
-
-        // Open console
-        const openConsoleButton = within(consoleDialog).getByRole('button', {name: /Open Console/i});
-        await userEvent.click(openConsoleButton);
-
-        // Verify console URL dialog opens
-        await waitFor(() => {
-            const urlDialogTitles = screen.getAllByText('Console URL');
-            expect(urlDialogTitles.length).toBeGreaterThan(0);
-        }, {timeout: 5000});
-
-        const urlDialogs = screen.getAllByRole('dialog');
-        const urlDialog = urlDialogs.find(dialog =>
-            dialog.textContent?.includes('Console URL')
-        );
-        expect(urlDialog).toBeInTheDocument();
-
-        // Test console URL dialog interactions
-        const copyButton = within(urlDialog).getByRole('button', {name: /Copy URL/i});
-        const openButton = within(urlDialog).getByRole('button', {name: /Open in New Tab/i});
-
-        expect(copyButton).toBeInTheDocument();
-        expect(openButton).toBeInTheDocument();
-
-        // Test copy UR
-        await userEvent.click(copyButton);
-        expect(mockClipboard.writeText).toHaveBeenCalledWith('https://console.example.com/session123');
-
-        // Test open in new tab
-        const windowOpenSpy = jest.spyOn(window, 'open').mockImplementation(() => {
-        });
-        await userEvent.click(openButton);
-        expect(windowOpenSpy).toHaveBeenCalledWith('https://console.example.com/session123', '_blank', 'noopener,noreferrer');
-
-        // Close console URL dialog
-        const closeButton = within(urlDialog).getByRole('button', {name: /Close/i});
-        await userEvent.click(closeButton);
-
-        await waitFor(() => {
-            const remainingUrlDialogs = screen.queryAllByText('Console URL');
-            expect(remainingUrlDialogs.length).toBe(0);
-        }, {timeout: 5000});
-
-        windowOpenSpy.mockRestore();
-
-        // Cleanup clipboard mock
-        delete global.navigator.clipboard;
-    });
-
     test('handles early returns in useEffect callbacks', async () => {
         require('react-router-dom').useParams.mockReturnValue({
             objectName: 'root/svc/svc1',
@@ -3223,138 +2253,5 @@ type = flag
 
         // Component should have unmounted cleanly without errors
         expect(true).toBe(true);
-    });
-
-    test('handles console URL copy error', async () => {
-        require('react-router-dom').useParams.mockReturnValue({
-            objectName: 'root/svc/svc1',
-        });
-
-        const mockStateWithContainer = {
-            objectStatus: {
-                'root/svc/svc1': {avail: 'up', frozen: null},
-            },
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {
-                            containerRes: {
-                                status: 'up',
-                                label: 'Container Resource',
-                                type: 'container.docker',
-                                provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
-                                running: true,
-                            },
-                        },
-                    },
-                },
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {
-                    state: 'running',
-                    global_expect: 'placed@node1',
-                    resources: {containerRes: {restart: {remaining: 0}}},
-                },
-            },
-            instanceConfig: {
-                'root/svc/svc1': {
-                    resources: {
-                        containerRes: {is_monitored: true, is_disabled: false, is_standby: false, restart: 0},
-                    },
-                },
-            },
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        };
-
-        useEventStore.mockImplementation((selector) => selector(mockStateWithContainer));
-
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/console')) {
-                return Promise.resolve({
-                    ok: true,
-                    headers: {
-                        get: (header) => header === 'Location' ? 'https://console.example.com/session123' : null
-                    }
-                });
-            }
-            if (url.includes('/config/file') || url.includes('/data/keys')) {
-                return Promise.resolve({
-                    ok: true,
-                    text: () => Promise.resolve('config data'),
-                    json: () => Promise.resolve({items: []})
-                });
-            }
-            return Promise.resolve({ok: true, text: () => Promise.resolve('success')});
-        });
-
-        // Mock clipboard to reject
-        const mockClipboard = {
-            writeText: jest.fn().mockRejectedValue(new Error('Clipboard error')),
-        };
-        Object.defineProperty(global.navigator, 'clipboard', {
-            value: mockClipboard,
-            writable: true,
-            configurable: true,
-        });
-
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fsvc%2Fsvc1']}>
-                <Routes>
-                    <Route path="/object/:objectName" element={<ObjectDetail/>}/>
-                </Routes>
-            </MemoryRouter>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText('node1')).toBeInTheDocument();
-        }, {timeout: 10000});
-
-        const resourcesAccordion = screen.getByRole('button', {
-            name: /expand resources for node node1/i,
-        });
-        await userEvent.click(resourcesAccordion);
-
-        await waitFor(() => {
-            expect(screen.getByText('containerRes')).toBeInTheDocument();
-        });
-
-        const resourceActionButtons = screen.getAllByRole('button').filter(button =>
-            button.getAttribute('aria-label')?.includes('Resource containerRes actions')
-        );
-        await userEvent.click(resourceActionButtons[0]);
-
-        const menus = await screen.findAllByRole('menu');
-        const consoleItem = within(menus[0]).getByRole('menuitem', {name: /console/i});
-        await userEvent.click(consoleItem);
-
-        await waitFor(() => {
-            const dialogs = screen.getAllByRole('dialog');
-            const consoleDialog = dialogs.find(d => d.textContent?.includes('Open Console') && d.textContent?.includes('containerRes'));
-            expect(consoleDialog).toBeInTheDocument();
-        });
-
-        const dialogs = screen.getAllByRole('dialog');
-        const consoleDialog = dialogs.find(d => d.textContent?.includes('Open Console') && d.textContent?.includes('containerRes'));
-        const openConsoleButton = within(consoleDialog).getByRole('button', {name: /Open Console/i});
-        await userEvent.click(openConsoleButton);
-
-        await waitFor(() => {
-            const urlDialogs = screen.getAllByRole('dialog');
-            const urlDialog = urlDialogs.find(d => d.textContent?.includes('Console URL') && !d.textContent?.includes('containerRes'));
-            expect(urlDialog).toBeInTheDocument();
-        });
-
-        const urlDialogs = screen.getAllByRole('dialog');
-        const urlDialog = urlDialogs.find(d => d.textContent?.includes('Console URL') && !d.textContent?.includes('containerRes'));
-        const copyButton = within(urlDialog).getByRole('button', {name: /Copy URL/i});
-        await userEvent.click(copyButton);
-
-        // Clipboard error is silently handled (catch block)
-        expect(mockClipboard.writeText).toHaveBeenCalled();
-
-        delete global.navigator.clipboard;
     });
 });

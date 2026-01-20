@@ -1,5 +1,5 @@
 import React, {useEffect, useCallback, lazy, Suspense} from "react";
-import {Routes, Route, Navigate, useNavigate} from "react-router-dom";
+import {Routes, Route, Navigate, useNavigate, useLocation} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
 import AuthChoice from "./AuthChoice.jsx";
@@ -20,11 +20,13 @@ import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
 import {useDarkMode} from "../context/DarkModeContext";
 import {ThemeProvider, createTheme} from '@mui/material/styles';
+import {prepareForNavigation} from "../eventSourceManager";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
 const ObjectDetails = lazy(() => import("./ObjectDetails"));
+const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
 const ClusterOverview = lazy(() => import("./Cluster"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
@@ -299,7 +301,11 @@ const ProtectedRoute = ({children}) => {
 
 const App = () => {
     logger.info("App init");
-    useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        prepareForNavigation();
+    }, [location]);
 
     useEffect(() => {
         const checkTokenChange = () => {
@@ -332,6 +338,8 @@ const App = () => {
                                     <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
                                     <Route path="/objects/:objectName"
                                            element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                                    <Route path="/nodes/:node/objects/:objectName"
+                                           element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
                                     <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
                                     <Route path="/silent-renew" element={<SilentRenew/>}/>
                                     <Route path="/auth-callback" element={<OidcCallback/>}/>

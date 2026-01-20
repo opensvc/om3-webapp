@@ -61,15 +61,16 @@ const HeaderSection = ({
             <Box
                 sx={{
                     p: 1,
-                    mb: 4,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                 }}
             >
-                <Typography variant="h4" fontWeight="bold">
-                    {decodedObjectName}
-                </Typography>
+                <Box sx={{flex: 1, minWidth: 0}}>
+                    <Typography variant="h4" fontWeight="bold" noWrap>
+                        {decodedObjectName}
+                    </Typography>
+                </Box>
 
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 2, position: 'relative'}}>
                     {globalExpect && (

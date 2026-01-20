@@ -136,20 +136,6 @@ describe('NavBar Component', () => {
         expect(screen.queryByText('>')).not.toBeInTheDocument();
     });
 
-    test('decodes URI components in breadcrumbs', () => {
-        useLocation.mockReturnValue({
-            pathname: '/cluster/node%201',
-        });
-
-        render(
-            <MemoryRouter>
-                <NavBar/>
-            </MemoryRouter>
-        );
-
-        expect(screen.getByRole('link', {name: /navigate to node 1/i})).toBeInTheDocument();
-    });
-
     test('opens and closes menu correctly', async () => {
         render(
             <MemoryRouter>

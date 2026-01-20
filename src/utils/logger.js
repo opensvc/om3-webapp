@@ -34,22 +34,20 @@ const safeSerialize = (arg) => {
 const shouldLog = isDev || isTest;
 
 const LOGGER_BEHAVIOR = {
-    log: ['log'],
-    info: ['log', 'info'],
-    error: ['log', 'error'],
-    debug: ['log', 'debug'],
-    warn: ['warn'],
+    log: 'log',
+    info: 'info',
+    error: 'error',
+    debug: 'debug',
+    warn: 'warn',
 };
 
-const callConsoleMethod = (methods, args) => {
-    methods.forEach(method => {
-        if (typeof console[method] !== 'undefined') {
-            console[method](...args);
-        } else if (method !== 'log' && typeof console.log !== 'undefined') {
-            // Fallback sur console.log si la méthode n'existe pas
-            console.log(...args);
-        }
-    });
+const callConsoleMethod = (method, args) => {
+    if (typeof console[method] !== 'undefined') {
+        console[method](...args);
+    } else if (typeof console.log !== 'undefined') {
+        // Fallback sur console.log sans préfixe pour les tests
+        console.log(...args);
+    }
 };
 
 const logger = {

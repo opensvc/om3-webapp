@@ -26,15 +26,6 @@ export const CONNECTION_EVENTS = {
     CONNECTION_CLOSED: 'CONNECTION_CLOSED',
 };
 
-// Default filters for Cluster Overview (optimized - only essential events)
-export const OVERVIEW_FILTERS = [
-    EVENT_TYPES.NODE_STATUS_UPDATED,
-    EVENT_TYPES.OBJECT_STATUS_UPDATED,
-    EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED,
-    EVENT_TYPES.OBJECT_DELETED,
-    EVENT_TYPES.INSTANCE_STATUS_UPDATED,
-];
-
 // Default filters for all events
 export const DEFAULT_FILTERS = Object.values(EVENT_TYPES);
 
@@ -62,7 +53,7 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 const BATCH_SIZE = 50;
-const FLUSH_DELAY = 500;
+const FLUSH_DELAY = 100;
 
 // Buffer management
 let buffers = {
@@ -232,6 +223,11 @@ const scheduleFlush = () => {
             clearTimeout(flushTimeoutId);
             flushTimeoutId = null;
         }
+        setTimeout(flushBuffers, 0);
+        return;
+    }
+
+    if (eventCount === 1) {
         setTimeout(flushBuffers, 0);
         return;
     }
@@ -479,7 +475,7 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
     return currentEventSource;
 };
 
-const handleAuthError = (token, url, filters) => {
+const handleAuthError = (token, url) => {
     logger.warn('🔐 Authentication error detected');
 
     useEventLogStore.getState().addEventLog(CONNECTION_EVENTS.CONNECTION_ERROR, {
@@ -793,10 +789,6 @@ export const setPageActive = (active) => {
     }
 };
 
-export const cleanupAllEventSources = () => {
-    setPageActive(false);
-    logger.info('🧹 All EventSources cleaned up');
-};
 
 export const forceFlush = () => {
     if (flushTimeoutId) {

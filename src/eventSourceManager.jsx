@@ -129,6 +129,7 @@ const getAndClearBuffers = () => {
 const flushBuffers = () => {
     if (!isPageActive || isFlushing) return;
     isFlushing = true;
+    const start = performance.now();
 
     try {
         const buffersToFlush = getAndClearBuffers();
@@ -209,6 +210,11 @@ const flushBuffers = () => {
         logger.error('Error during buffer flush:', error);
     } finally {
         isFlushing = false;
+        const end = performance.now();
+        const duration = end - start;
+        if (duration > 500) {
+            console.log(`FlushBuffers: ${duration.toFixed(0)}ms`);
+        }
     }
 };
 
@@ -276,16 +282,23 @@ const clearBuffers = () => {
 const addEventListener = (eventSource, eventType, handler) => {
     eventSource.addEventListener(eventType, (event) => {
         if (!isPageActive) return;
+        const start = performance.now();
         try {
             const parsed = JSON.parse(event.data);
             handler(parsed);
         } catch (e) {
             logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
         }
+        const end = performance.now();
+        const duration = end - start;
+        if (duration > 500) {
+            console.log(`EventProcessing-${eventType}: ${duration.toFixed(0)}ms`);
+        }
     });
 };
 
 const updateBuffer = (bufferName, key, value) => {
+    const start = performance.now();
     if (bufferName === 'configUpdated') {
         buffers.configUpdated.add(value);
     } else if (bufferName === 'instanceStatus') {
@@ -321,6 +334,11 @@ const updateBuffer = (bufferName, key, value) => {
         }
     }
     scheduleFlush();
+    const end = performance.now();
+    const duration = end - start;
+    if (duration > 500) {
+        console.log(`UpdateBuffer-${bufferName}: ${duration.toFixed(0)}ms`);
+    }
 };
 
 // Simple cleanup function for testing

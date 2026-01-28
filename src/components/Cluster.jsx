@@ -46,6 +46,22 @@ const ClusterOverview = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
 
+    useEffect(() => {
+        const start = performance.now();
+        console.log('Cluster data updated:', {
+            nodeCount: Object.keys(nodeStatus).length,
+            objectCount: Object.keys(objectStatus).length,
+            heartbeatCount: Object.keys(heartbeatStatus).length
+        });
+        return () => {
+            const end = performance.now();
+            const duration = end - start;
+            if (duration > 500) {
+                console.log(`ClusterComponentRender: ${duration.toFixed(0)}ms`);
+            }
+        };
+    }, [nodeStatus, objectStatus, heartbeatStatus]);
+
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
     const isMounted = useRef(true);
@@ -96,6 +112,7 @@ const ClusterOverview = () => {
     }, []);
 
     const nodeStats = useMemo(() => {
+        const start = performance.now();
         const nodes = Object.values(nodeStatus);
         if (nodes.length === 0) {
             return {count: 0, frozen: 0, unfrozen: 0};
@@ -111,10 +128,17 @@ const ClusterOverview = () => {
             else unfrozen++;
         }
 
-        return {count: nodes.length, frozen, unfrozen};
+        const result = {count: nodes.length, frozen, unfrozen};
+        const end = performance.now();
+        const duration = end - start;
+        if (duration > 500) {
+            console.log(`nodeStats: ${duration.toFixed(0)}ms`);
+        }
+        return result;
     }, [nodeStatus]);
 
     const objectStats = useMemo(() => {
+        const start = performance.now();
         const objectEntries = Object.entries(objectStatus);
         if (objectEntries.length === 0) {
             return {
@@ -179,15 +203,22 @@ const ClusterOverview = () => {
 
         namespaceSubtitle.sort((a, b) => a.namespace.localeCompare(b.namespace));
 
-        return {
+        const result = {
             objectCount: objectEntries.length,
             namespaceCount: namespaces.size,
             statusCount,
             namespaceSubtitle
         };
+        const end = performance.now();
+        const duration = end - start;
+        if (duration > 500) {
+            console.log(`objectStats: ${duration.toFixed(0)}ms`);
+        }
+        return result;
     }, [objectStatus]);
 
     const heartbeatStats = useMemo(() => {
+        const start = performance.now();
         const heartbeatValues = Object.values(heartbeatStatus);
         if (heartbeatValues.length === 0) {
             return {
@@ -228,12 +259,18 @@ const ClusterOverview = () => {
             }
         }
 
-        return {
+        const result = {
             count: heartbeatIds.size,
             beating,
             stale,
             stateCount
         };
+        const end = performance.now();
+        const duration = end - start;
+        if (duration > 500) {
+            console.log(`heartbeatStats: ${duration.toFixed(0)}ms`);
+        }
+        return result;
     }, [heartbeatStatus]);
 
     const handleObjectsClick = useCallback((globalState) => {

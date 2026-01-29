@@ -4,6 +4,9 @@ import {EventSourcePolyfill} from 'event-source-polyfill';
 import {URL_NODE_EVENT} from './config/apiPath.js';
 import logger from './utils/logger.js';
 
+// Detect Safari
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 // Constants for event names
 export const EVENT_TYPES = {
     NODE_STATUS_UPDATED: 'NodeStatusUpdated',
@@ -47,15 +50,22 @@ let isPageActive = true;
 let flushTimeoutId = null;
 let eventCount = 0;
 let isFlushing = false;
+let lastFlushTime = 0;
+
+// Safari-specific optimizations
+const SAFARI_BATCH_SIZE = 150; // Larger batches for Safari
+const SAFARI_FLUSH_DELAY = 100; // Longer delay for Safari to reduce thrashing
+const SAFARI_MIN_FLUSH_INTERVAL = 100; // Longer minimum interval for Safari
 
 // Performance optimizations
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
-const BATCH_SIZE = 50;
-const FLUSH_DELAY = 100;
+const BATCH_SIZE = isSafari ? SAFARI_BATCH_SIZE : 100;
+const FLUSH_DELAY = isSafari ? SAFARI_FLUSH_DELAY : 50;
+const MIN_FLUSH_INTERVAL = isSafari ? SAFARI_MIN_FLUSH_INTERVAL : 50;
 
-// Buffer management
+// Buffer management with pre-allocated structures
 let buffers = {
     objectStatus: {},
     instanceStatus: {},
@@ -68,11 +78,20 @@ let buffers = {
     configUpdated: new Set(),
 };
 
-// Optimized equality check with type checking and shallow comparison
+// Fast shallow equality check
 const isEqual = (a, b) => {
     if (a === b) return true;
     if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-    return JSON.stringify(a) === JSON.stringify(b);
+
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+
+    for (let i = 0; i < keysA.length; i++) {
+        const key = keysA[i];
+        if (a[key] !== b[key]) return false;
+    }
+    return true;
 };
 
 // Optimized create query string - ONLY include valid API events
@@ -101,143 +120,192 @@ export const getCurrentToken = () => {
 
 const getAndClearBuffers = () => {
     const buffersToFlush = {
-        objectStatus: {...buffers.objectStatus},
-        instanceStatus: {...buffers.instanceStatus},
-        nodeStatus: {...buffers.nodeStatus},
-        nodeMonitor: {...buffers.nodeMonitor},
-        nodeStats: {...buffers.nodeStats},
-        heartbeatStatus: {...buffers.heartbeatStatus},
-        instanceMonitor: {...buffers.instanceMonitor},
-        instanceConfig: {...buffers.instanceConfig},
-        configUpdated: new Set(buffers.configUpdated),
+        objectStatus: buffers.objectStatus,
+        instanceStatus: buffers.instanceStatus,
+        nodeStatus: buffers.nodeStatus,
+        nodeMonitor: buffers.nodeMonitor,
+        nodeStats: buffers.nodeStats,
+        heartbeatStatus: buffers.heartbeatStatus,
+        instanceMonitor: buffers.instanceMonitor,
+        instanceConfig: buffers.instanceConfig,
+        configUpdated: buffers.configUpdated,
     };
 
-    buffers.objectStatus = {};
-    buffers.instanceStatus = {};
-    buffers.nodeStatus = {};
-    buffers.nodeMonitor = {};
-    buffers.nodeStats = {};
-    buffers.heartbeatStatus = {};
-    buffers.instanceMonitor = {};
-    buffers.instanceConfig = {};
-    buffers.configUpdated.clear();
+    // Reset buffers with new objects
+    buffers = {
+        objectStatus: {},
+        instanceStatus: {},
+        nodeStatus: {},
+        nodeMonitor: {},
+        nodeStats: {},
+        heartbeatStatus: {},
+        instanceMonitor: {},
+        instanceConfig: {},
+        configUpdated: new Set(),
+    };
 
     return buffersToFlush;
 };
 
-// Optimized flush buffers with batching using individual setters
+// Safari-optimized flush using setTimeout instead of requestAnimationFrame
 const flushBuffers = () => {
     if (!isPageActive || isFlushing) return;
+
+    const now = performance.now();
+    if (now - lastFlushTime < MIN_FLUSH_INTERVAL) {
+        // Too soon, reschedule
+        if (!flushTimeoutId) {
+            flushTimeoutId = setTimeout(flushBuffers, MIN_FLUSH_INTERVAL - (now - lastFlushTime));
+        }
+        return;
+    }
+
     isFlushing = true;
-    const start = performance.now();
+    lastFlushTime = now;
 
     try {
         const buffersToFlush = getAndClearBuffers();
         const store = useEventStore.getState();
-        let updateCount = 0;
 
-        // Node Status updates
-        if (Object.keys(buffersToFlush.nodeStatus).length > 0) {
-            store.setNodeStatuses({...store.nodeStatus, ...buffersToFlush.nodeStatus});
-            updateCount++;
-        }
+        // Count what needs updating
+        const hasNodeStatus = Object.keys(buffersToFlush.nodeStatus).length > 0;
+        const hasObjectStatus = Object.keys(buffersToFlush.objectStatus).length > 0;
+        const hasHeartbeatStatus = Object.keys(buffersToFlush.heartbeatStatus).length > 0;
+        const hasInstanceStatus = Object.keys(buffersToFlush.instanceStatus).length > 0;
+        const hasNodeMonitor = Object.keys(buffersToFlush.nodeMonitor).length > 0;
+        const hasNodeStats = Object.keys(buffersToFlush.nodeStats).length > 0;
+        const hasInstanceMonitor = Object.keys(buffersToFlush.instanceMonitor).length > 0;
+        const hasInstanceConfig = Object.keys(buffersToFlush.instanceConfig).length > 0;
+        const hasConfigUpdated = buffersToFlush.configUpdated.size > 0;
 
-        // Object Status updates
-        if (Object.keys(buffersToFlush.objectStatus).length > 0) {
-            store.setObjectStatuses({...store.objectStatus, ...buffersToFlush.objectStatus});
-            updateCount++;
-        }
-
-        // Heartbeat Status updates
-        if (Object.keys(buffersToFlush.heartbeatStatus).length > 0) {
-            logger.debug('buffer:', buffersToFlush.heartbeatStatus);
-            store.setHeartbeatStatuses({...store.heartbeatStatus, ...buffersToFlush.heartbeatStatus});
-            updateCount++;
-        }
-
-        // Instance Status updates
-        if (Object.keys(buffersToFlush.instanceStatus).length > 0) {
-            const mergedInst = {...store.objectInstanceStatus};
-            for (const obj of Object.keys(buffersToFlush.instanceStatus)) {
-                if (!mergedInst[obj]) {
-                    mergedInst[obj] = {};
+        // Batch state updates - Safari prefers fewer, larger updates
+        if (isSafari) {
+            // For Safari, do all updates in a single microtask
+            Promise.resolve().then(() => {
+                if (hasNodeStatus) {
+                    store.setNodeStatuses({...store.nodeStatus, ...buffersToFlush.nodeStatus});
                 }
-                mergedInst[obj] = {...mergedInst[obj], ...buffersToFlush.instanceStatus[obj]};
+                if (hasObjectStatus) {
+                    store.setObjectStatuses({...store.objectStatus, ...buffersToFlush.objectStatus});
+                }
+                if (hasHeartbeatStatus) {
+                    store.setHeartbeatStatuses({...store.heartbeatStatus, ...buffersToFlush.heartbeatStatus});
+                }
+                if (hasInstanceStatus) {
+                    const mergedInst = {...store.objectInstanceStatus};
+                    for (const obj in buffersToFlush.instanceStatus) {
+                        if (!mergedInst[obj]) {
+                            mergedInst[obj] = {};
+                        }
+                        Object.assign(mergedInst[obj], buffersToFlush.instanceStatus[obj]);
+                    }
+                    store.setInstanceStatuses(mergedInst);
+                }
+                if (hasNodeMonitor) {
+                    store.setNodeMonitors({...store.nodeMonitor, ...buffersToFlush.nodeMonitor});
+                }
+                if (hasNodeStats) {
+                    store.setNodeStats({...store.nodeStats, ...buffersToFlush.nodeStats});
+                }
+                if (hasInstanceMonitor) {
+                    store.setInstanceMonitors({...store.instanceMonitor, ...buffersToFlush.instanceMonitor});
+                }
+                if (hasInstanceConfig) {
+                    for (const path in buffersToFlush.instanceConfig) {
+                        for (const node in buffersToFlush.instanceConfig[path]) {
+                            store.setInstanceConfig(path, node, buffersToFlush.instanceConfig[path][node]);
+                        }
+                    }
+                }
+                if (hasConfigUpdated) {
+                    store.setConfigUpdated([...buffersToFlush.configUpdated]);
+                }
+            });
+        } else {
+            // For other browsers, use immediate updates
+            if (hasNodeStatus) {
+                store.setNodeStatuses({...store.nodeStatus, ...buffersToFlush.nodeStatus});
             }
-            store.setInstanceStatuses(mergedInst);
-            updateCount++;
-        }
-
-        // Node Monitor updates
-        if (Object.keys(buffersToFlush.nodeMonitor).length > 0) {
-            store.setNodeMonitors({...store.nodeMonitor, ...buffersToFlush.nodeMonitor});
-            updateCount++;
-        }
-
-        // Node Stats updates
-        if (Object.keys(buffersToFlush.nodeStats).length > 0) {
-            store.setNodeStats({...store.nodeStats, ...buffersToFlush.nodeStats});
-            updateCount++;
-        }
-
-        // Instance Monitor updates
-        if (Object.keys(buffersToFlush.instanceMonitor).length > 0) {
-            store.setInstanceMonitors({...store.instanceMonitor, ...buffersToFlush.instanceMonitor});
-            updateCount++;
-        }
-
-        // Instance Config updates
-        if (Object.keys(buffersToFlush.instanceConfig).length > 0) {
-            for (const path of Object.keys(buffersToFlush.instanceConfig)) {
-                for (const node of Object.keys(buffersToFlush.instanceConfig[path])) {
-                    store.setInstanceConfig(path, node, buffersToFlush.instanceConfig[path][node]);
+            if (hasObjectStatus) {
+                store.setObjectStatuses({...store.objectStatus, ...buffersToFlush.objectStatus});
+            }
+            if (hasHeartbeatStatus) {
+                store.setHeartbeatStatuses({...store.heartbeatStatus, ...buffersToFlush.heartbeatStatus});
+            }
+            if (hasInstanceStatus) {
+                const mergedInst = {...store.objectInstanceStatus};
+                for (const obj in buffersToFlush.instanceStatus) {
+                    if (!mergedInst[obj]) {
+                        mergedInst[obj] = {};
+                    }
+                    Object.assign(mergedInst[obj], buffersToFlush.instanceStatus[obj]);
+                }
+                store.setInstanceStatuses(mergedInst);
+            }
+            if (hasNodeMonitor) {
+                store.setNodeMonitors({...store.nodeMonitor, ...buffersToFlush.nodeMonitor});
+            }
+            if (hasNodeStats) {
+                store.setNodeStats({...store.nodeStats, ...buffersToFlush.nodeStats});
+            }
+            if (hasInstanceMonitor) {
+                store.setInstanceMonitors({...store.instanceMonitor, ...buffersToFlush.instanceMonitor});
+            }
+            if (hasInstanceConfig) {
+                for (const path in buffersToFlush.instanceConfig) {
+                    for (const node in buffersToFlush.instanceConfig[path]) {
+                        store.setInstanceConfig(path, node, buffersToFlush.instanceConfig[path][node]);
+                    }
                 }
             }
-            updateCount++;
+            if (hasConfigUpdated) {
+                store.setConfigUpdated([...buffersToFlush.configUpdated]);
+            }
         }
 
-        // Config Updated
-        if (buffersToFlush.configUpdated.size > 0) {
-            store.setConfigUpdated([...buffersToFlush.configUpdated]);
-            updateCount++;
-        }
-
-        if (updateCount > 0) {
-            logger.debug(`Flushed buffers with ${eventCount} events`);
+        if (eventCount > 0) {
+            logger.debug(`Flushed ${eventCount} events`);
         }
         eventCount = 0;
     } catch (error) {
         logger.error('Error during buffer flush:', error);
     } finally {
         isFlushing = false;
-        const end = performance.now();
-        const duration = end - start;
-        if (duration > 500) {
-            console.log(`FlushBuffers: ${duration.toFixed(0)}ms`);
-        }
     }
 };
 
-// Schedule flush with setTimeout for non-blocking
+// Safari-optimized scheduling
 const scheduleFlush = () => {
     if (!isPageActive || isFlushing) return;
 
     eventCount++;
 
+    // For large batches, flush immediately
     if (eventCount >= BATCH_SIZE) {
         if (flushTimeoutId) {
             clearTimeout(flushTimeoutId);
             flushTimeoutId = null;
         }
-        setTimeout(flushBuffers, 0);
+        if (isSafari) {
+            setTimeout(flushBuffers, 0);
+        } else {
+            requestAnimationFrame(flushBuffers);
+        }
         return;
     }
 
+    // For first event, flush quickly but not immediately on Safari
     if (eventCount === 1) {
-        setTimeout(flushBuffers, 0);
+        if (!flushTimeoutId) {
+            flushTimeoutId = setTimeout(() => {
+                flushTimeoutId = null;
+                flushBuffers();
+            }, FLUSH_DELAY);
+        }
         return;
     }
 
+    // Otherwise use debouncing
     if (!flushTimeoutId) {
         flushTimeoutId = setTimeout(() => {
             flushTimeoutId = null;
@@ -278,27 +346,21 @@ const clearBuffers = () => {
     isFlushing = false;
 };
 
-// Helper function to add event listener with error handling
+// Optimized event handler with reduced overhead
 const addEventListener = (eventSource, eventType, handler) => {
     eventSource.addEventListener(eventType, (event) => {
         if (!isPageActive) return;
-        const start = performance.now();
         try {
             const parsed = JSON.parse(event.data);
             handler(parsed);
         } catch (e) {
             logger.warn(`⚠️ Invalid JSON in ${eventType} event:`, event.data);
         }
-        const end = performance.now();
-        const duration = end - start;
-        if (duration > 500) {
-            console.log(`EventProcessing-${eventType}: ${duration.toFixed(0)}ms`);
-        }
     });
 };
 
+// Optimized buffer update with fast path
 const updateBuffer = (bufferName, key, value) => {
-    const start = performance.now();
     if (bufferName === 'configUpdated') {
         buffers.configUpdated.add(value);
     } else if (bufferName === 'instanceStatus') {
@@ -310,7 +372,7 @@ const updateBuffer = (bufferName, key, value) => {
         if (!isEqual(current, value)) {
             buffers.instanceStatus[path][node] = value;
         } else {
-            return; // Skip if no change
+            return; // Skip scheduling
         }
     } else if (bufferName === 'instanceConfig') {
         const [path, node] = key.split(':');
@@ -323,22 +385,17 @@ const updateBuffer = (bufferName, key, value) => {
         if (!isEqual(current, value)) {
             buffers.instanceMonitor[key] = value;
         } else {
-            return; // Skip if no change
+            return; // Skip scheduling
         }
     } else {
         const current = useEventStore.getState()[bufferName]?.[key];
         if (!isEqual(current, value)) {
             buffers[bufferName][key] = value;
         } else {
-            return; // Skip if no change
+            return; // Skip scheduling
         }
     }
     scheduleFlush();
-    const end = performance.now();
-    const duration = end - start;
-    if (duration > 500) {
-        console.log(`UpdateBuffer-${bufferName}: ${duration.toFixed(0)}ms`);
-    }
 };
 
 // Simple cleanup function for testing
@@ -424,7 +481,6 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         delete buffers.instanceStatus[objectName];
                         delete buffers.instanceConfig[objectName];
                     } else {
-                        // Fix: Pass the parsed data object directly, not wrapped in {data}
                         logger.warn('⚠️ ObjectDeleted event missing objectName:', data);
                     }
                     break;
@@ -458,7 +514,6 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         }
                         updateBuffer('configUpdated', null, JSON.stringify({name: configName, node: data.node}));
                     } else {
-                        // Fix: Pass the parsed data object directly
                         logger.warn('⚠️ InstanceConfigUpdated event missing name or node:', data);
                     }
                     break;
@@ -807,14 +862,13 @@ export const setPageActive = (active) => {
     }
 };
 
-
 export const forceFlush = () => {
     if (flushTimeoutId) {
         clearTimeout(flushTimeoutId);
         flushTimeoutId = null;
     }
     if (eventCount > 0) {
-        setTimeout(flushBuffers, 0);
+        flushBuffers();
     }
 };
 

@@ -48,6 +48,7 @@ import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
 
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
     if (parts.length === 3) {
@@ -61,13 +62,16 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
+
 const renderTextField = (label) => (params) => (
     <TextField {...params} label={label}/>
 );
+
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
 const selectInstanceMonitor = (state) => state.instanceMonitor;
 const selectRemoveObject = (state) => state.removeObject;
+
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
     return (
         <Box sx={{
@@ -352,6 +356,7 @@ const TableRowComponent = React.memo(({
         prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
     );
 });
+
 const Objects = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -395,55 +400,103 @@ const Objects = () => {
         "MAX_RECONNECTIONS_REACHED",
         "CONNECTION_CLOSED"
     ], []);
+
+    // Optimize objects computation with better caching
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
+
+    // Cache all object names to prevent recalculation
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
-    const namespaces = useMemo(
-        () => Array.from(new Set(allObjectNames.map(extractNamespace))).sort(),
-        [allObjectNames]
-    );
-    const kinds = useMemo(
-        () => Array.from(new Set(allObjectNames.map(extractKind))).sort(),
-        [allObjectNames]
-    );
-    const allNodes = useMemo(
-        () => Array.from(
-            new Set(
-                Object.keys(objectInstanceStatus).flatMap((objectName) =>
-                    Object.keys(objectInstanceStatus[objectName] || {})
-                )
-            )
-        ).sort(),
-        [objectInstanceStatus]
-    );
+
+    // Optimize namespace/kind extraction with single pass
+    const {namespaces, kinds} = useMemo(() => {
+        const nsSet = new Set();
+        const kindSet = new Set();
+
+        for (let i = 0; i < allObjectNames.length; i++) {
+            const name = allObjectNames[i];
+            nsSet.add(extractNamespace(name));
+            kindSet.add(extractKind(name));
+        }
+
+        return {
+            namespaces: Array.from(nsSet).sort(),
+            kinds: Array.from(kindSet).sort()
+        };
+    }, [allObjectNames]);
+
+    // Optimize allNodes computation
+    const allNodes = useMemo(() => {
+        const nodeSet = new Set();
+        const objNames = Object.keys(objectInstanceStatus);
+
+        for (let i = 0; i < objNames.length; i++) {
+            const nodes = Object.keys(objectInstanceStatus[objNames[i]] || {});
+            for (let j = 0; j < nodes.length; j++) {
+                nodeSet.add(nodes[j]);
+            }
+        }
+
+        return Array.from(nodeSet).sort();
+    }, [objectInstanceStatus]);
+
+    // Optimize filtering with early exits
     const filteredObjectNames = useMemo(() => {
-        return allObjectNames.filter((name) => {
-            const status = objects[name];
-            if (!status) return false;
-            const rawAvail = status.avail;
-            const validStatuses = ["up", "down", "warn"];
-            const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
-            const provisioned = status.provisioned;
-            const matchesGlobalState =
-                selectedGlobalState === "all" ||
-                (selectedGlobalState === "unprovisioned"
+        const result = [];
+        const searchLower = searchQuery.toLowerCase();
+        const hasSearch = searchLower.length > 0;
+
+        for (let i = 0; i < allObjectNames.length; i++) {
+            const name = allObjectNames[i];
+
+            // Early exit for search
+            if (hasSearch && !name.toLowerCase().includes(searchLower)) {
+                continue;
+            }
+
+            // Early exit for namespace
+            if (selectedNamespace !== "all" && extractNamespace(name) !== selectedNamespace) {
+                continue;
+            }
+
+            // Early exit for kind
+            if (selectedKind !== "all" && extractKind(name) !== selectedKind) {
+                continue;
+            }
+
+            // Check global state
+            if (selectedGlobalState !== "all") {
+                const status = objects[name];
+                if (!status) continue;
+
+                const rawAvail = status.avail;
+                const validStatuses = ["up", "down", "warn"];
+                const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
+                const provisioned = status.provisioned;
+
+                const matchesGlobalState = selectedGlobalState === "unprovisioned"
                     ? provisioned === "false" || provisioned === false
-                    : avail === selectedGlobalState);
-            return (
-                (selectedNamespace === "all" || extractNamespace(name) === selectedNamespace) &&
-                (selectedKind === "all" || extractKind(name) === selectedKind) &&
-                matchesGlobalState &&
-                name.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        });
+                    : avail === selectedGlobalState;
+
+                if (!matchesGlobalState) continue;
+            }
+
+            result.push(name);
+        }
+
+        return result;
     }, [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, objects]);
+
+    // Optimize sorting with status order lookup
     const sortedObjectNames = useMemo(() => {
-        const statusOrder = { up: 3, warn: 2, down: 1, "n/a": 0 };
+        const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
+        const validStatuses = ["up", "down", "warn"];
+
         return [...filteredObjectNames].sort((a, b) => {
             let diff = 0;
             if (sortColumn === "object") {
@@ -451,25 +504,16 @@ const Objects = () => {
             } else if (sortColumn === "status") {
                 const statusA = objectStatus[a]?.avail || "n/a";
                 const statusB = objectStatus[b]?.avail || "n/a";
-                const validStatuses = ["up", "down", "warn"];
                 const availA = validStatuses.includes(statusA) ? statusA : "n/a";
                 const availB = validStatuses.includes(statusB) ? statusB : "n/a";
-                const orderA = statusOrder[availA] || 0;
-                const orderB = statusOrder[availB] || 0;
-                diff = orderA - orderB;
+                diff = (statusOrder[availA] || 0) - (statusOrder[availB] || 0);
             } else if (allNodes.includes(sortColumn)) {
-
-                const instanceStatusA = objectInstanceStatus[a];
-                const instanceStatusB = objectInstanceStatus[b];
-                const getNodeAvail = (instanceStatus, node) => {
-                    if (!instanceStatus) return "n/a";
-                    return instanceStatus[node]?.avail || "n/a";
+                const getNodeAvail = (objName) => {
+                    return objectInstanceStatus[objName]?.[sortColumn]?.avail || "n/a";
                 };
-                const statusA = getNodeAvail(instanceStatusA, sortColumn);
-                const statusB = getNodeAvail(instanceStatusB, sortColumn);
-                const orderA = statusOrder[statusA] || 0;
-                const orderB = statusOrder[statusB] || 0;
-                diff = orderA - orderB;
+                const statusA = getNodeAvail(a);
+                const statusB = getNodeAvail(b);
+                diff = (statusOrder[statusA] || 0) - (statusOrder[statusB] || 0);
             }
             return sortDirection === "asc" ? diff : -diff;
         });
@@ -480,20 +524,25 @@ const Objects = () => {
             event.target.checked ? [...prev, objectName] : prev.filter((obj) => obj !== objectName)
         );
     }, []);
+
     const handleActionsMenuOpen = useCallback((event) => {
         setActionsMenuAnchor(event.currentTarget);
     }, []);
+
     const handleActionsMenuClose = useCallback(() => {
         setActionsMenuAnchor(null);
     }, []);
+
     const handleRowMenuOpen = useCallback((event, objectName) => {
         setRowMenuAnchor(event.currentTarget);
         setCurrentObject(objectName);
     }, []);
+
     const handleRowMenuClose = useCallback(() => {
         setRowMenuAnchor(null);
         setCurrentObject(null);
     }, []);
+
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
@@ -502,6 +551,7 @@ const Objects = () => {
         },
         [handleRowMenuClose, handleActionsMenuClose]
     );
+
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -559,12 +609,14 @@ const Objects = () => {
         },
         [pendingAction, selectedObjects, objectStatus, removeObject]
     );
+
     const handleObjectClick = useCallback(
         (objectName) => {
             if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
         },
         [objectInstanceStatus, navigate]
     );
+
     const handleSort = useCallback((column) => {
         setSortColumn(prev => {
             if (prev === column) {
@@ -575,12 +627,16 @@ const Objects = () => {
             return column;
         });
     }, []);
+
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
     }, []);
+
     const toggleShowFilters = useCallback(() => {
         setShowFilters(prev => !prev);
     }, []);
+
+    // Optimize URL update with debouncing
     useEffect(() => {
         const timer = setTimeout(() => {
             if (!isMounted.current) return;
@@ -608,6 +664,7 @@ const Objects = () => {
         }, 300);
         return () => clearTimeout(timer);
     }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]);
+
     useEffect(() => {
         const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
         setSelectedGlobalState(prev => prev !== newGlobalState ? newGlobalState : prev);
@@ -615,6 +672,7 @@ const Objects = () => {
         setSelectedKind(prev => prev !== rawKind ? rawKind : prev);
         setSearchQuery(prev => prev !== rawSearchQuery ? rawSearchQuery : prev);
     }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
+
     const eventStarted = useRef(false);
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -632,20 +690,25 @@ const Objects = () => {
             eventStarted.current = false;
         };
     }, []);
+
     useEffect(() => {
         return () => {
             isMounted.current = false;
         };
     }, []);
+
     const handleSelectAll = useCallback((e) => {
         setSelectedObjects(e.target.checked ? filteredObjectNames : []);
     }, [filteredObjectNames]);
+
     const handleSnackbarClose = useCallback(() => {
         setSnackbar(prev => ({...prev, open: false}));
     }, []);
+
     const handleClosePendingAction = useCallback(() => {
         setPendingAction(null);
     }, []);
+
     return (
         <Box sx={{
             height: "100vh",

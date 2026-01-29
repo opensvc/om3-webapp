@@ -1,6 +1,6 @@
 import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {StatCard} from '../StatCard';
+import StatCard from '../StatCard';
 
 describe('StatCard Component', () => {
     const mockOnClick = jest.fn();

@@ -3,7 +3,6 @@ import React, {useEffect, useState, useRef, useMemo, useCallback, memo} from "re
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
 import axios from "axios";
-import useEventStore from "../hooks/useEventStore.js";
 import {
     GridNodes,
     GridObjects,
@@ -15,6 +14,7 @@ import {
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception, DEFAULT_FILTERS} from "../eventSourceManager";
 import EventLogger from "../components/EventLogger";
+import {useNodeStats, useObjectStats, useHeartbeatStats} from "../hooks/useClusterData";
 
 const CLUSTER_EVENT_TYPES = [
     "NodeStatusUpdated",
@@ -32,41 +32,27 @@ const CLUSTER_EVENT_TYPES = [
     "CONNECTION_CLOSED"
 ];
 
-const MemoizedGridNodes = memo(GridNodes);
-const MemoizedGridObjects = memo(GridObjects);
-const MemoizedGridNamespaces = memo(GridNamespaces);
-const MemoizedGridHeartbeats = memo(GridHeartbeats);
-const MemoizedGridPools = memo(GridPools);
-const MemoizedGridNetworks = memo(GridNetworks);
-
 const ClusterOverview = () => {
     const navigate = useNavigate();
+    const isMounted = useRef(true);
 
-    const nodeStatus = useEventStore((state) => state.nodeStatus);
-    const objectStatus = useEventStore((state) => state.objectStatus);
-    const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
-
-    useEffect(() => {
-        const start = performance.now();
-        console.log('Cluster data updated:', {
-            nodeCount: Object.keys(nodeStatus).length,
-            objectCount: Object.keys(objectStatus).length,
-            heartbeatCount: Object.keys(heartbeatStatus).length
-        });
-        return () => {
-            const end = performance.now();
-            const duration = end - start;
-            if (duration > 500) {
-                console.log(`ClusterComponentRender: ${duration.toFixed(0)}ms`);
-            }
-        };
-    }, [nodeStatus, objectStatus, heartbeatStatus]);
+    const nodeStats = useNodeStats();
+    const objectStats = useObjectStats();
+    const heartbeatStats = useHeartbeatStats();
 
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
-    const isMounted = useRef(true);
 
     const handleNavigate = useCallback((path) => () => navigate(path), [navigate]);
+    const handleObjectsClick = useCallback((globalState) => {
+        navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
+    }, [navigate]);
+    const handleHeartbeatsClick = useCallback((status, state) => {
+        const params = new URLSearchParams();
+        if (status) params.append('status', status);
+        if (state) params.append('state', state);
+        navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+    }, [navigate]);
 
     useEffect(() => {
         isMounted.current = true;
@@ -111,178 +97,43 @@ const ClusterOverview = () => {
         };
     }, []);
 
-    const nodeStats = useMemo(() => {
-        const start = performance.now();
-        const nodes = Object.values(nodeStatus);
-        if (nodes.length === 0) {
-            return {count: 0, frozen: 0, unfrozen: 0};
-        }
+    const gridNodesProps = useMemo(() => ({
+        nodeCount: nodeStats.count,
+        frozenCount: nodeStats.frozen,
+        unfrozenCount: nodeStats.unfrozen,
+        onClick: handleNavigate("/nodes")
+    }), [nodeStats.count, nodeStats.frozen, nodeStats.unfrozen, handleNavigate]);
 
-        let frozen = 0;
-        let unfrozen = 0;
+    const gridObjectsProps = useMemo(() => ({
+        objectCount: objectStats.objectCount,
+        statusCount: objectStats.statusCount,
+        onClick: handleObjectsClick
+    }), [objectStats.objectCount, objectStats.statusCount, handleObjectsClick]);
 
-        for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            const isFrozen = node?.frozen_at && node?.frozen_at !== "0001-01-01T00:00:00Z";
-            if (isFrozen) frozen++;
-            else unfrozen++;
-        }
+    const gridHeartbeatsProps = useMemo(() => ({
+        heartbeatCount: heartbeatStats.count,
+        beatingCount: heartbeatStats.beating,
+        nonBeatingCount: heartbeatStats.stale,
+        stateCount: heartbeatStats.stateCount,
+        nodeCount: nodeStats.count,
+        onClick: handleHeartbeatsClick
+    }), [heartbeatStats.count, heartbeatStats.beating, heartbeatStats.stale, heartbeatStats.stateCount, nodeStats.count, handleHeartbeatsClick]);
 
-        const result = {count: nodes.length, frozen, unfrozen};
-        const end = performance.now();
-        const duration = end - start;
-        if (duration > 500) {
-            console.log(`nodeStats: ${duration.toFixed(0)}ms`);
-        }
-        return result;
-    }, [nodeStatus]);
+    const gridNamespacesProps = useMemo(() => ({
+        namespaceCount: objectStats.namespaceCount,
+        namespaceSubtitle: objectStats.namespaceSubtitle,
+        onClick: (url) => navigate(url || "/namespaces")
+    }), [objectStats.namespaceCount, objectStats.namespaceSubtitle, navigate]);
 
-    const objectStats = useMemo(() => {
-        const start = performance.now();
-        const objectEntries = Object.entries(objectStatus);
-        if (objectEntries.length === 0) {
-            return {
-                objectCount: 0,
-                namespaceCount: 0,
-                statusCount: {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0},
-                namespaceSubtitle: []
-            };
-        }
+    const gridPoolsProps = useMemo(() => ({
+        poolCount,
+        onClick: handleNavigate("/storage-pools")
+    }), [poolCount, handleNavigate]);
 
-        const namespaces = new Set();
-        const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
-        const objectsPerNamespace = {};
-        const statusPerNamespace = {};
-
-        const extractNamespace = (objectPath) => {
-            const firstSlash = objectPath.indexOf('/');
-            if (firstSlash === -1) return "root";
-
-            const secondSlash = objectPath.indexOf('/', firstSlash + 1);
-            if (secondSlash === -1) return "root";
-
-            return objectPath.slice(0, firstSlash);
-        };
-
-        for (let i = 0; i < objectEntries.length; i++) {
-            const [objectPath, status] = objectEntries[i];
-            const ns = extractNamespace(objectPath);
-
-            namespaces.add(ns);
-            objectsPerNamespace[ns] = (objectsPerNamespace[ns] || 0) + 1;
-
-            if (!statusPerNamespace[ns]) {
-                statusPerNamespace[ns] = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
-            }
-
-            const s = status?.avail?.toLowerCase() || "n/a";
-            if (s === "up" || s === "down" || s === "warn" || s === "n/a") {
-                statusPerNamespace[ns][s]++;
-                statusCount[s]++;
-            } else {
-                statusPerNamespace[ns]["n/a"]++;
-                statusCount["n/a"]++;
-            }
-
-            // Count unprovisioned objects
-            const provisioned = status?.provisioned;
-            if (provisioned === "false" || provisioned === false) {
-                statusPerNamespace[ns].unprovisioned++;
-                statusCount.unprovisioned++;
-            }
-        }
-
-        const namespaceSubtitle = [];
-        for (const ns in objectsPerNamespace) {
-            namespaceSubtitle.push({
-                namespace: ns,
-                count: objectsPerNamespace[ns],
-                status: statusPerNamespace[ns]
-            });
-        }
-
-        namespaceSubtitle.sort((a, b) => a.namespace.localeCompare(b.namespace));
-
-        const result = {
-            objectCount: objectEntries.length,
-            namespaceCount: namespaces.size,
-            statusCount,
-            namespaceSubtitle
-        };
-        const end = performance.now();
-        const duration = end - start;
-        if (duration > 500) {
-            console.log(`objectStats: ${duration.toFixed(0)}ms`);
-        }
-        return result;
-    }, [objectStatus]);
-
-    const heartbeatStats = useMemo(() => {
-        const start = performance.now();
-        const heartbeatValues = Object.values(heartbeatStatus);
-        if (heartbeatValues.length === 0) {
-            return {
-                count: 0,
-                beating: 0,
-                stale: 0,
-                stateCount: {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0}
-            };
-        }
-
-        const heartbeatIds = new Set();
-        let beating = 0;
-        let stale = 0;
-        const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
-
-        for (let i = 0; i < heartbeatValues.length; i++) {
-            const node = heartbeatValues[i];
-            const streams = node.streams || [];
-
-            for (let j = 0; j < streams.length; j++) {
-                const stream = streams[j];
-                const baseId = stream.id?.split('.')[0];
-                if (baseId) heartbeatIds.add(baseId);
-
-                const peer = Object.values(stream.peers || {})[0];
-                if (peer?.is_beating) {
-                    beating++;
-                } else {
-                    stale++;
-                }
-
-                const state = stream.state || 'unknown';
-                if (stateCount.hasOwnProperty(state)) {
-                    stateCount[state]++;
-                } else {
-                    stateCount.unknown++;
-                }
-            }
-        }
-
-        const result = {
-            count: heartbeatIds.size,
-            beating,
-            stale,
-            stateCount
-        };
-        const end = performance.now();
-        const duration = end - start;
-        if (duration > 500) {
-            console.log(`heartbeatStats: ${duration.toFixed(0)}ms`);
-        }
-        return result;
-    }, [heartbeatStatus]);
-
-    const handleObjectsClick = useCallback((globalState) => {
-        navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
-    }, [navigate]);
-
-    const handleHeartbeatsClick = useCallback((status, state) => {
-        const params = new URLSearchParams();
-        if (status) params.append('status', status);
-        if (state) params.append('state', state);
-        navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
-    }, [navigate]);
+    const gridNetworksProps = useMemo(() => ({
+        networks,
+        onClick: handleNavigate("/network")
+    }), [networks, handleNavigate]);
 
     return (
         <Box sx={{
@@ -315,7 +166,6 @@ const ClusterOverview = () => {
                     gap: 3,
                     alignItems: 'stretch'
                 }}>
-                    {/* Left side - 2x3 grid */}
                     <Box sx={{
                         flex: 2,
                         display: 'grid',
@@ -324,51 +174,24 @@ const ClusterOverview = () => {
                         minHeight: '100%'
                     }}>
                         <Box>
-                            <MemoizedGridNodes
-                                nodeCount={nodeStats.count}
-                                frozenCount={nodeStats.frozen}
-                                unfrozenCount={nodeStats.unfrozen}
-                                onClick={handleNavigate("/nodes")}
-                            />
+                            <GridNodes {...gridNodesProps} />
                         </Box>
                         <Box>
-                            <MemoizedGridObjects
-                                objectCount={objectStats.objectCount}
-                                statusCount={objectStats.statusCount}
-                                onClick={handleObjectsClick}
-                            />
+                            <GridObjects {...gridObjectsProps} />
                         </Box>
                         <Box>
-                            <MemoizedGridHeartbeats
-                                heartbeatCount={heartbeatStats.count}
-                                beatingCount={heartbeatStats.beating}
-                                nonBeatingCount={heartbeatStats.stale}
-                                stateCount={heartbeatStats.stateCount}
-                                nodeCount={nodeStats.count}
-                                onClick={handleHeartbeatsClick}
-                            />
+                            <GridHeartbeats {...gridHeartbeatsProps} />
                         </Box>
                         <Box>
-                            <MemoizedGridPools
-                                poolCount={poolCount}
-                                onClick={handleNavigate("/storage-pools")}
-                            />
+                            <GridPools {...gridPoolsProps} />
                         </Box>
                         <Box>
-                            <MemoizedGridNetworks
-                                networks={networks}
-                                onClick={handleNavigate("/network")}
-                            />
+                            <GridNetworks {...gridNetworksProps} />
                         </Box>
                     </Box>
 
-                    {/* Right side - Namespaces */}
                     <Box sx={{flex: 1}}>
-                        <MemoizedGridNamespaces
-                            namespaceCount={objectStats.namespaceCount}
-                            namespaceSubtitle={objectStats.namespaceSubtitle}
-                            onClick={(url) => navigate(url || "/namespaces")}
-                        />
+                        <GridNamespaces {...gridNamespacesProps} />
                     </Box>
                 </Box>
 

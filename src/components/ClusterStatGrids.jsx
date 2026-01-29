@@ -1,23 +1,33 @@
-import React, {memo, useMemo} from "react";
+import React, {memo, useMemo, useCallback} from "react";
 import {Chip, Box, Tooltip} from "@mui/material";
-import {StatCard} from "./StatCard.jsx";
+import StatCard from "./StatCard.jsx";
 import {prepareForNavigation} from "../eventSourceManager";
 
-export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick}) => (
-    <StatCard
-        title="Nodes"
-        value={nodeCount}
-        subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
-        onClick={onClick}
-    />
-));
+export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick}) => {
+    const handleClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick(), 50);
+    }, [onClick]);
+
+    return (
+        <StatCard
+            title="Nodes"
+            value={nodeCount}
+            subtitle={`Frozen: ${frozenCount} | Unfrozen: ${unfrozenCount}`}
+            onClick={handleClick}
+        />
+    );
+});
 
 export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
-    const handleChipClick = useMemo(() => {
-        return (status) => {
-            prepareForNavigation();
-            setTimeout(() => onClick(status), 50);
-        };
+    const handleChipClick = useCallback((status) => {
+        prepareForNavigation();
+        setTimeout(() => onClick(status), 50);
+    }, [onClick]);
+
+    const handleCardClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick(), 50);
     }, [onClick]);
 
     const subtitle = useMemo(() => {
@@ -45,13 +55,6 @@ export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
         );
     }, [statusCount, handleChipClick]);
 
-    const handleCardClick = useMemo(() => {
-        return () => {
-            prepareForNavigation();
-            setTimeout(() => onClick(), 50);
-        };
-    }, [onClick]);
-
     return (
         <StatCard
             title="Objects"
@@ -70,6 +73,11 @@ const StatusChip = memo(({status, count, onClick}) => {
         unprovisioned: 'red'
     };
 
+    const handleClick = useCallback((e) => {
+        e.stopPropagation();
+        onClick();
+    }, [onClick]);
+
     return (
         <Chip
             label={`${status.charAt(0).toUpperCase() + status.slice(1)} ${count}`}
@@ -79,22 +87,16 @@ const StatusChip = memo(({status, count, onClick}) => {
                 color: 'white',
                 cursor: 'pointer',
             }}
-            onClick={onClick}
+            onClick={handleClick}
         />
     );
 });
 
 export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}) => {
-    const getStatusColor = (status) => {
-        const colors = {
-            up: 'green',
-            warn: 'orange',
-            down: 'red',
-            'n/a': 'grey',
-            unprovisioned: 'red'
-        };
-        return colors[status] || 'grey';
-    };
+    const handleCardClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick('/namespaces'), 50);
+    }, [onClick]);
 
     const subtitle = useMemo(() => {
         return (
@@ -119,13 +121,6 @@ export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}
         );
     }, [namespaceSubtitle, onClick]);
 
-    const handleCardClick = useMemo(() => {
-        return () => {
-            prepareForNavigation();
-            setTimeout(() => onClick('/namespaces'), 50);
-        };
-    }, [onClick]);
-
     return (
         <StatCard
             title="Namespaces"
@@ -138,7 +133,7 @@ export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}
 });
 
 const NamespaceChip = memo(({namespace, status, onClick}) => {
-    const getStatusColor = (stat) => {
+    const getStatusColor = useCallback((stat) => {
         const colors = {
             up: 'green',
             warn: 'orange',
@@ -147,7 +142,15 @@ const NamespaceChip = memo(({namespace, status, onClick}) => {
             unprovisioned: 'red'
         };
         return colors[stat] || 'grey';
-    };
+    }, []);
+
+    const handleStatClick = useCallback((stat, e) => {
+        e.stopPropagation();
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick(`/objects?namespace=${namespace}&globalState=${stat}`);
+        }, 50);
+    }, [namespace, onClick]);
 
     const statusElements = useMemo(() => {
         const elements = [];
@@ -176,13 +179,7 @@ const NamespaceChip = memo(({namespace, status, onClick}) => {
                                 cursor: 'pointer',
                                 zIndex: 1
                             }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                prepareForNavigation();
-                                setTimeout(() => {
-                                    onClick(`/objects?namespace=${namespace}&globalState=${stat}`);
-                                }, 50);
-                            }}
+                            onClick={(e) => handleStatClick(stat, e)}
                             aria-label={`${stat} status for namespace ${namespace}: ${count} objects`}
                         >
                             {count}
@@ -192,25 +189,23 @@ const NamespaceChip = memo(({namespace, status, onClick}) => {
             }
         }
         return elements;
-    }, [namespace, status, onClick]);
+    }, [namespace, status, handleStatClick, getStatusColor]);
 
-    const handleChipClick = useMemo(() => {
-        return (e) => {
-            e.stopPropagation();
-            prepareForNavigation();
-            setTimeout(() => onClick(`/objects?namespace=${namespace}`), 50);
-        };
+    const handleChipClick = useCallback((e) => {
+        e.stopPropagation();
+        prepareForNavigation();
+        setTimeout(() => onClick(`/objects?namespace=${namespace}`), 50);
     }, [namespace, onClick]);
 
     return (
-        <Box key={namespace}
-             sx={{
-                 position: 'relative',
-                 display: 'inline-flex',
-                 flexShrink: 0,
-                 margin: "4px",
-                 alignItems: "center"
-             }}
+        <Box
+            sx={{
+                position: 'relative',
+                display: 'inline-flex',
+                flexShrink: 0,
+                margin: "4px",
+                alignItems: "center"
+            }}
         >
             <Chip
                 label={namespace}
@@ -257,6 +252,16 @@ export const GridHeartbeats = memo(({
 
     const isSingleNode = nodeCount === 1;
 
+    const handleCardClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick(), 50);
+    }, [onClick]);
+
+    const handleStatusClick = useCallback((status, state) => {
+        prepareForNavigation();
+        setTimeout(() => onClick(status, state), 50);
+    }, [onClick]);
+
     const subtitle = useMemo(() => {
         const chips = [];
 
@@ -271,10 +276,7 @@ export const GridHeartbeats = memo(({
                         color: 'white',
                         cursor: 'pointer',
                     }}
-                    onClick={() => {
-                        prepareForNavigation();
-                        setTimeout(() => onClick('beating', null), 50);
-                    }}
+                    onClick={() => handleStatusClick('beating', null)}
                     title="Healthy (Single Node)"
                 />
             );
@@ -290,10 +292,7 @@ export const GridHeartbeats = memo(({
                             color: 'white',
                             cursor: 'pointer',
                         }}
-                        onClick={() => {
-                            prepareForNavigation();
-                            setTimeout(() => onClick('beating', null), 50);
-                        }}
+                        onClick={() => handleStatusClick('beating', null)}
                     />
                 );
             }
@@ -309,10 +308,7 @@ export const GridHeartbeats = memo(({
                             color: 'white',
                             cursor: 'pointer',
                         }}
-                        onClick={() => {
-                            prepareForNavigation();
-                            setTimeout(() => onClick('stale', null), 50);
-                        }}
+                        onClick={() => handleStatusClick('stale', null)}
                     />
                 );
             }
@@ -330,10 +326,7 @@ export const GridHeartbeats = memo(({
                             color: 'white',
                             cursor: 'pointer',
                         }}
-                        onClick={() => {
-                            prepareForNavigation();
-                            setTimeout(() => onClick(null, state), 50);
-                        }}
+                        onClick={() => handleStatusClick(null, state)}
                     />
                 );
             }
@@ -350,14 +343,7 @@ export const GridHeartbeats = memo(({
                 {chips}
             </Box>
         );
-    }, [isSingleNode, heartbeatCount, beatingCount, nonBeatingCount, stateCount, onClick]);
-
-    const handleCardClick = useMemo(() => {
-        return () => {
-            prepareForNavigation();
-            setTimeout(() => onClick(), 50);
-        };
-    }, [onClick]);
+    }, [isSingleNode, heartbeatCount, beatingCount, nonBeatingCount, stateCount, handleStatusClick, stateColors]);
 
     return (
         <StatCard
@@ -370,11 +356,9 @@ export const GridHeartbeats = memo(({
 });
 
 export const GridPools = memo(({poolCount, onClick}) => {
-    const handleClick = useMemo(() => {
-        return () => {
-            prepareForNavigation();
-            setTimeout(() => onClick(), 50);
-        };
+    const handleClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick(), 50);
     }, [onClick]);
 
     return (
@@ -387,6 +371,11 @@ export const GridPools = memo(({poolCount, onClick}) => {
 });
 
 export const GridNetworks = memo(({networks, onClick}) => {
+    const handleCardClick = useCallback(() => {
+        prepareForNavigation();
+        setTimeout(() => onClick(), 50);
+    }, [onClick]);
+
     const subtitle = useMemo(() => {
         return (
             <Box sx={{
@@ -428,13 +417,6 @@ export const GridNetworks = memo(({networks, onClick}) => {
             </Box>
         );
     }, [networks]);
-
-    const handleCardClick = useMemo(() => {
-        return () => {
-            prepareForNavigation();
-            setTimeout(() => onClick(), 50);
-        };
-    }, [onClick]);
 
     return (
         <StatCard

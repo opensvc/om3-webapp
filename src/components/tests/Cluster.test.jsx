@@ -42,14 +42,30 @@ jest.mock('../ClusterStatGrids.jsx', () => {
         </button>
     );
     const GridObjects = ({objectCount, statusCount, onClick}) => (
-        <button aria-label="Objects stat card" onClick={() => onClick && onClick()}>
-            <div data-testid="object-count">{objectCount}</div>
-            <div data-testid="up-count">Up {statusCount?.up ?? 0}</div>
-            <div data-testid="warn-count">Warn {statusCount?.warn ?? 0}</div>
-            <div data-testid="down-count">Down {statusCount?.down ?? 0}</div>
-            <div data-testid="na-count">N/A {statusCount?.["n/a"] ?? 0}</div>
-            <div data-testid="unprovisioned-count">Unprovisioned {statusCount?.unprovisioned ?? 0}</div>
-        </button>
+        <div>
+            <button aria-label="Objects stat card" onClick={() => onClick && onClick()}>
+                <div data-testid="object-count">{objectCount}</div>
+                <div data-testid="up-count">Up {statusCount?.up ?? 0}</div>
+                <div data-testid="warn-count">Warn {statusCount?.warn ?? 0}</div>
+                <div data-testid="down-count">Down {statusCount?.down ?? 0}</div>
+                <div data-testid="na-count">N/A {statusCount?.["n/a"] ?? 0}</div>
+                <div data-testid="unprovisioned-count">Unprovisioned {statusCount?.unprovisioned ?? 0}</div>
+            </button>
+            <button
+                aria-label="Objects up status"
+                onClick={() => onClick && onClick('up')}
+                data-testid="up-status-button"
+            >
+                View Up
+            </button>
+            <button
+                aria-label="Objects warn status"
+                onClick={() => onClick && onClick('warn')}
+                data-testid="warn-status-button"
+            >
+                View Warn
+            </button>
+        </div>
     );
     const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => (
         <button aria-label="Namespaces stat card" onClick={() => onClick && onClick()}>
@@ -71,12 +87,28 @@ jest.mock('../ClusterStatGrids.jsx', () => {
         </button>
     );
     const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, stateCount, onClick}) => (
-        <button aria-label="Heartbeats stat card" onClick={() => onClick && onClick()}>
-            <div data-testid="heartbeat-count">{heartbeatCount}</div>
-            <div data-testid="beating-count">Beating: {beatingCount}</div>
-            <div data-testid="non-beating-count">Non-beating: {nonBeatingCount}</div>
-            <div data-testid="running-count">Running: {stateCount?.running ?? 0}</div>
-        </button>
+        <div>
+            <button aria-label="Heartbeats stat card" onClick={() => onClick && onClick()}>
+                <div data-testid="heartbeat-count">{heartbeatCount}</div>
+                <div data-testid="beating-count">Beating: {beatingCount}</div>
+                <div data-testid="non-beating-count">Non-beating: {nonBeatingCount}</div>
+                <div data-testid="running-count">Running: {stateCount?.running ?? 0}</div>
+            </button>
+            <button
+                aria-label="Heartbeats beating status"
+                onClick={() => onClick && onClick('beating')}
+                data-testid="beating-status-button"
+            >
+                View Beating
+            </button>
+            <button
+                aria-label="Heartbeats running state"
+                onClick={() => onClick && onClick('beating', 'running')}
+                data-testid="running-state-button"
+            >
+                View Running
+            </button>
+        </div>
     );
     const GridPools = ({poolCount, onClick}) => (
         <button aria-label="Pools stat card" onClick={() => onClick && onClick()}>
@@ -254,6 +286,62 @@ describe('ClusterOverview', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/storage-pools');
     });
 
+    test('navigates to objects with globalState parameter', async () => {
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
+        });
+
+        // Click on up status button
+        fireEvent.click(screen.getByTestId('up-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?globalState=up');
+
+        mockNavigate.mockClear();
+
+        // Click on warn status button
+        fireEvent.click(screen.getByTestId('warn-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?globalState=warn');
+    });
+
+    test('navigates to heartbeats with status and state parameters', async () => {
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
+        });
+
+        // Click on beating status button
+        fireEvent.click(screen.getByTestId('beating-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/heartbeats?status=beating');
+
+        mockNavigate.mockClear();
+
+        // Click on running state button
+        fireEvent.click(screen.getByTestId('running-state-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/heartbeats?status=beating&state=running');
+    });
+
     test('handles empty data correctly', async () => {
         useNodeStats.mockReturnValue({
             count: 0,
@@ -326,6 +414,66 @@ describe('ClusterOverview', () => {
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
         });
+    });
+
+    test('handles API error during fetch and component unmount during fetch', async () => {
+        let resolvePromise;
+        const slowPromise = new Promise((resolve) => {
+            resolvePromise = resolve;
+        });
+
+        axios.get.mockReturnValue(slowPromise);
+
+        const {unmount} = render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        // Unmount the component before the promise resolves
+        unmount();
+
+        // Resolve the promise after unmount
+        resolvePromise({data: {items: [{id: 'pool1'}]}});
+
+        await act(async () => {
+            await slowPromise;
+        });
+
+        // Component should handle unmount gracefully without setting state
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    test('handles API error and component unmount during error', async () => {
+        let rejectPromise;
+        const errorPromise = new Promise((resolve, reject) => {
+            rejectPromise = reject;
+        });
+
+        axios.get.mockReturnValue(errorPromise);
+
+        const {unmount} = render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        // Unmount the component before the error is thrown
+        unmount();
+
+        // Reject the promise after unmount
+        rejectPromise(new Error('API Error'));
+
+        await act(async () => {
+            try {
+                await errorPromise;
+            } catch (e) {
+                // Expected error
+            }
+        });
+
+        // Component should handle unmount gracefully without setting state
+        expect(mockNavigate).not.toHaveBeenCalled();
     });
 
     test('handles nodes with missing frozen_at property', async () => {

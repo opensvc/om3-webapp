@@ -499,7 +499,8 @@ describe('eventSourceManager', () => {
             const mockEvent = {data: JSON.stringify({node: 'node1', heartbeat: {status: 'alive'}})};
             heartbeatHandler(mockEvent);
             jest.runAllTimers();
-            expect(console.debug).toHaveBeenCalledWith('buffer:', expect.objectContaining({node1: {status: 'alive'}}));
+            // Le message a changé, vérifiez le nouveau format
+            expect(console.debug).toHaveBeenCalledWith('Flushed 1 events');
             expect(mockStore.setHeartbeatStatuses).toHaveBeenCalledWith(expect.objectContaining({node1: {status: 'alive'}}));
         });
 
@@ -777,10 +778,14 @@ describe('eventSourceManager', () => {
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
                 call => call[0] === 'NodeStatusUpdated'
             )[1];
+
+            // Envoyez suffisamment d'événements pour atteindre le BATCH_SIZE (100 pour non-Safari)
             nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
-            for (let i = 0; i < 50; i++) {
+            for (let i = 0; i < 100; i++) { // 100 événements supplémentaires
                 nodeStatusHandler({data: JSON.stringify({node: `node${i}`, node_status: {status: 'up'}})});
             }
+
+            // Le timeout devrait être effacé car eventCount >= BATCH_SIZE
             expect(clearTimeoutSpy).toHaveBeenCalled();
             clearTimeoutSpy.mockRestore();
         });

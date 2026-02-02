@@ -43,15 +43,23 @@ const ClusterOverview = () => {
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
 
-    const handleNavigate = useCallback((path) => () => navigate(path), [navigate]);
-    const handleObjectsClick = useCallback((globalState) => {
-        navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
+    const handleNavigate = useCallback((path) => () => {
+        setTimeout(() => navigate(path), 50);
     }, [navigate]);
+
+    const handleObjectsClick = useCallback((globalState) => {
+        setTimeout(() => {
+            navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
+        }, 50);
+    }, [navigate]);
+
     const handleHeartbeatsClick = useCallback((status, state) => {
-        const params = new URLSearchParams();
-        if (status) params.append('status', status);
-        if (state) params.append('state', state);
-        navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+        setTimeout(() => {
+            const params = new URLSearchParams();
+            if (status) params.append('status', status);
+            if (state) params.append('state', state);
+            navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
+        }, 50);
     }, [navigate]);
 
     useEffect(() => {

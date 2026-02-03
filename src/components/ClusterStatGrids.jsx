@@ -22,7 +22,13 @@ export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick})
     }, [onClick]);
 
     const subtitle = useMemo(() => (
-        <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+        <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+            width: '100%'
+        }}>
             <span>Frozen: {frozenCount} | Unfrozen: {unfrozenCount}</span>
             <ClickLoader isLoading={isLoading}/>
         </Box>

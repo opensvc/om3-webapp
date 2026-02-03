@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo, useCallback, useRef} from "react";
+import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
@@ -25,6 +25,7 @@ import {
     Tooltip,
     IconButton,
     ClickAwayListener,
+    CircularProgress,
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -274,9 +275,10 @@ const TableRowComponent = React.memo(({
     const handleCheckboxClick = useCallback((e) => {
         e.stopPropagation();
     }, []);
+
     return (
         <TableRow onClick={handleRowClick} sx={{cursor: "pointer"}}>
-            <TableCell>
+            <TableCell sx={{paddingLeft: 2}}>
                 <Checkbox
                     checked={isSelected}
                     onChange={handleCheckboxChange}
@@ -401,19 +403,27 @@ const Objects = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    // Optimize objects computation with better caching
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const deferredSelectedGlobalState = useDeferredValue(selectedGlobalState);
+    const deferredSelectedNamespace = useDeferredValue(selectedNamespace);
+    const deferredSelectedKind = useDeferredValue(selectedKind);
+    const deferredSortColumn = useDeferredValue(sortColumn);
+    const deferredSortDirection = useDeferredValue(sortDirection);
+
+    const [visibleCount, setVisibleCount] = useState(30);
+    const [loading, setLoading] = useState(false);
+    const tableContainerRef = useRef(null);
+
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
         [objectStatus, daemon]
     );
 
-    // Cache all object names to prevent recalculation
     const allObjectNames = useMemo(
         () => Object.keys(objects).filter((key) => key && typeof objects[key] === "object"),
         [objects]
     );
 
-    // Optimize namespace/kind extraction with single pass
     const {namespaces, kinds} = useMemo(() => {
         const nsSet = new Set();
         const kindSet = new Set();
@@ -430,7 +440,6 @@ const Objects = () => {
         };
     }, [allObjectNames]);
 
-    // Optimize allNodes computation
     const allNodes = useMemo(() => {
         const nodeSet = new Set();
         const objNames = Object.keys(objectInstanceStatus);
@@ -445,10 +454,9 @@ const Objects = () => {
         return Array.from(nodeSet).sort();
     }, [objectInstanceStatus]);
 
-    // Optimize filtering with early exits
     const filteredObjectNames = useMemo(() => {
         const result = [];
-        const searchLower = searchQuery.toLowerCase();
+        const searchLower = deferredSearchQuery.toLowerCase();
         const hasSearch = searchLower.length > 0;
 
         for (let i = 0; i < allObjectNames.length; i++) {
@@ -460,17 +468,17 @@ const Objects = () => {
             }
 
             // Early exit for namespace
-            if (selectedNamespace !== "all" && extractNamespace(name) !== selectedNamespace) {
+            if (deferredSelectedNamespace !== "all" && extractNamespace(name) !== deferredSelectedNamespace) {
                 continue;
             }
 
             // Early exit for kind
-            if (selectedKind !== "all" && extractKind(name) !== selectedKind) {
+            if (deferredSelectedKind !== "all" && extractKind(name) !== deferredSelectedKind) {
                 continue;
             }
 
             // Check global state
-            if (selectedGlobalState !== "all") {
+            if (deferredSelectedGlobalState !== "all") {
                 const status = objects[name];
                 if (!status) continue;
 
@@ -479,9 +487,9 @@ const Objects = () => {
                 const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
                 const provisioned = status.provisioned;
 
-                const matchesGlobalState = selectedGlobalState === "unprovisioned"
+                const matchesGlobalState = deferredSelectedGlobalState === "unprovisioned"
                     ? provisioned === "false" || provisioned === false
-                    : avail === selectedGlobalState;
+                    : avail === deferredSelectedGlobalState;
 
                 if (!matchesGlobalState) continue;
             }
@@ -490,34 +498,38 @@ const Objects = () => {
         }
 
         return result;
-    }, [allObjectNames, selectedGlobalState, selectedNamespace, selectedKind, searchQuery, objects]);
+    }, [allObjectNames, deferredSelectedGlobalState, deferredSelectedNamespace,
+        deferredSelectedKind, deferredSearchQuery, objects]);
 
-    // Optimize sorting with status order lookup
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         const validStatuses = ["up", "down", "warn"];
 
         return [...filteredObjectNames].sort((a, b) => {
             let diff = 0;
-            if (sortColumn === "object") {
+            if (deferredSortColumn === "object") {
                 diff = a.localeCompare(b);
-            } else if (sortColumn === "status") {
+            } else if (deferredSortColumn === "status") {
                 const statusA = objectStatus[a]?.avail || "n/a";
                 const statusB = objectStatus[b]?.avail || "n/a";
                 const availA = validStatuses.includes(statusA) ? statusA : "n/a";
                 const availB = validStatuses.includes(statusB) ? statusB : "n/a";
                 diff = (statusOrder[availA] || 0) - (statusOrder[availB] || 0);
-            } else if (allNodes.includes(sortColumn)) {
+            } else if (allNodes.includes(deferredSortColumn)) {
                 const getNodeAvail = (objName) => {
-                    return objectInstanceStatus[objName]?.[sortColumn]?.avail || "n/a";
+                    return objectInstanceStatus[objName]?.[deferredSortColumn]?.avail || "n/a";
                 };
                 const statusA = getNodeAvail(a);
                 const statusB = getNodeAvail(b);
                 diff = (statusOrder[statusA] || 0) - (statusOrder[statusB] || 0);
             }
-            return sortDirection === "asc" ? diff : -diff;
+            return deferredSortDirection === "asc" ? diff : -diff;
         });
-    }, [filteredObjectNames, sortColumn, sortDirection, objectStatus, objectInstanceStatus, allNodes]);
+    }, [filteredObjectNames, deferredSortColumn, deferredSortDirection, objectStatus, objectInstanceStatus, allNodes]);
+
+    const visibleObjectNames = useMemo(() => {
+        return sortedObjectNames.slice(0, visibleCount);
+    }, [sortedObjectNames, visibleCount]);
 
     const handleSelectObject = useCallback((event, objectName) => {
         setSelectedObjects((prev) =>
@@ -626,17 +638,48 @@ const Objects = () => {
             setSortDirection("asc");
             return column;
         });
+        setVisibleCount(30);
     }, []);
 
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
+        setVisibleCount(30);
     }, []);
 
     const toggleShowFilters = useCallback(() => {
         setShowFilters(prev => !prev);
     }, []);
 
-    // Optimize URL update with debouncing
+    const handleScroll = useCallback(() => {
+        if (loading) return;
+
+        const container = tableContainerRef.current;
+        if (!container) return;
+
+        const {scrollTop, scrollHeight, clientHeight} = container;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+        if (scrollPercentage > 0.8 && visibleCount < sortedObjectNames.length) {
+            setLoading(true);
+            setTimeout(() => {
+                setVisibleCount(prev => Math.min(prev + 30, sortedObjectNames.length));
+                setLoading(false);
+            }, 100);
+        }
+    }, [loading, visibleCount, sortedObjectNames.length]);
+
+    useEffect(() => {
+        const container = tableContainerRef.current;
+        if (container) {
+            container.addEventListener('scroll', handleScroll);
+            return () => container.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll]);
+
+    useEffect(() => {
+        setVisibleCount(30);
+    }, [sortedObjectNames]);
+
     useEffect(() => {
         const timer = setTimeout(() => {
             if (!isMounted.current) return;
@@ -853,14 +896,28 @@ const Objects = () => {
                         </ClickAwayListener>
                     </Popper>
                 </Box>
-                <TableContainer sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflow: "auto",
-                    boxShadow: "none",
-                    border: "none",
-                    position: 'relative'
+                <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
+                    flexShrink: 0
                 }}>
+                    <Typography variant="body2" color="textSecondary">
+                        Showing {visibleObjectNames.length} of {sortedObjectNames.length} objects
+                    </Typography>
+                </Box>
+                <TableContainer
+                    ref={tableContainerRef}
+                    sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflow: "auto",
+                        boxShadow: "none",
+                        border: "none",
+                        position: 'relative'
+                    }}
+                >
                     <Table sx={{position: 'relative'}}>
                         <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
                             <TableRow>
@@ -946,7 +1003,7 @@ const Objects = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {sortedObjectNames.map((objectName) => (
+                            {visibleObjectNames.map((objectName) => (
                                 <TableRowComponent
                                     key={objectName}
                                     objectName={objectName}
@@ -963,12 +1020,17 @@ const Objects = () => {
                             ))}
                         </TableBody>
                     </Table>
+                    {loading && (
+                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
+                            <CircularProgress size={24}/>
+                        </Box>
+                    )}
+                    {visibleObjectNames.length === 0 && (
+                        <Typography align="center" color="textSecondary" sx={{mt: 2, p: 3}}>
+                            No objects found matching the current filters.
+                        </Typography>
+                    )}
                 </TableContainer>
-                {filteredObjectNames.length === 0 && (
-                    <Typography align="center" color="textSecondary" sx={{mt: 2}}>
-                        No objects found matching the current filters.
-                    </Typography>
-                )}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={4000}

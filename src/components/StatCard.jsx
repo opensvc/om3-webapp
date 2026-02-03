@@ -1,9 +1,9 @@
-import React from 'react';
-import {Paper, Typography, Box} from "@mui/material";
+import React, {memo} from 'react';
+import {Paper, Typography, Box, CircularProgress} from "@mui/material";
 
-const StatCard = ({title, value, subtitle, onClick, dynamicHeight = false}) => {
+const StatCard = memo(({title, value, subtitle, onClick, dynamicHeight = false, isLoading = false}) => {
     const handleClick = (e) => {
-        if (onClick) onClick(e);
+        if (onClick && !isLoading) onClick(e);
     };
 
     return (
@@ -15,17 +15,32 @@ const StatCard = ({title, value, subtitle, onClick, dynamicHeight = false}) => {
                 minHeight: '240px',
                 display: 'flex',
                 flexDirection: 'column',
-                cursor: onClick ? 'pointer' : 'default',
-                transition: 'box-shadow 0.3s',
-                '&:hover': onClick ? {boxShadow: 6} : {},
+                cursor: onClick && !isLoading ? 'pointer' : 'default',
+                transition: 'box-shadow 0.3s, opacity 0.3s',
+                '&:hover': onClick && !isLoading ? {boxShadow: 6} : {},
                 borderRadius: 2,
-                textAlign: 'center'
+                textAlign: 'center',
+                opacity: isLoading ? 0.7 : 1,
+                position: 'relative'
             }}
             onClick={handleClick}
         >
+            {isLoading && (
+                <Box sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8
+                }}>
+                    <CircularProgress size={24}/>
+                </Box>
+            )}
             <Typography variant="h6" gutterBottom>{title}</Typography>
             <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center'}}>
-                <Typography variant="h3" color="primary">{value}</Typography>
+                {isLoading ? (
+                    <CircularProgress sx={{alignSelf: 'center'}}/>
+                ) : (
+                    <Typography variant="h3" color="primary">{value}</Typography>
+                )}
             </Box>
             {subtitle && (
                 <Box onClick={(e) => e.stopPropagation()}>
@@ -38,6 +53,6 @@ const StatCard = ({title, value, subtitle, onClick, dynamicHeight = false}) => {
             )}
         </Paper>
     );
-};
+});
 
 export default StatCard;

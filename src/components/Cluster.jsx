@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import React, {useEffect, useState, useRef, useMemo, useCallback, memo} from "react";
+import React, {useEffect, useState, useRef, useMemo, useCallback, memo, useDeferredValue} from "react";
 import {useNavigate} from "react-router-dom";
 import {Box, Typography} from "@mui/material";
 import axios from "axios";
@@ -32,35 +32,91 @@ const CLUSTER_EVENT_TYPES = [
     "CONNECTION_CLOSED"
 ];
 
+const InitialLoader = memo(() => (
+    <Box sx={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '400px',
+        width: '100%'
+    }}>
+        <Typography variant="h6" color="textSecondary">
+            Loading cluster data...
+        </Typography>
+    </Box>
+));
+
 const ClusterOverview = () => {
     const navigate = useNavigate();
     const isMounted = useRef(true);
+    const abortControllerRef = useRef(null);
 
     const nodeStats = useNodeStats();
     const objectStats = useObjectStats();
     const heartbeatStats = useHeartbeatStats();
 
+    const deferredNodeStats = useDeferredValue(nodeStats);
+    const deferredObjectStats = useDeferredValue(objectStats);
+    const deferredHeartbeatStats = useDeferredValue(heartbeatStats);
+
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const handleNavigate = useCallback((path) => () => {
-        setTimeout(() => navigate(path), 50);
+        navigate(path);
     }, [navigate]);
 
     const handleObjectsClick = useCallback((globalState) => {
-        setTimeout(() => {
-            navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
-        }, 50);
+        navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
     }, [navigate]);
 
     const handleHeartbeatsClick = useCallback((status, state) => {
-        setTimeout(() => {
-            const params = new URLSearchParams();
-            if (status) params.append('status', status);
-            if (state) params.append('state', state);
-            navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
-        }, 50);
+        const params = new URLSearchParams();
+        if (status) params.append('status', status);
+        if (state) params.append('state', state);
+        navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
     }, [navigate]);
+
+    const fetchClusterData = useCallback(async (token) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+
+        try {
+            const [poolsRes, networksRes] = await Promise.all([
+                axios.get(URL_POOL, {
+                    headers: {Authorization: `Bearer ${token}`},
+                    timeout: 5000,
+                    signal
+                }),
+                axios.get(URL_NETWORK, {
+                    headers: {Authorization: `Bearer ${token}`},
+                    timeout: 5000,
+                    signal
+                })
+            ]);
+
+            if (!isMounted.current) return;
+
+            const poolItems = poolsRes.data?.items || [];
+            const networkItems = networksRes.data?.items || [];
+
+            setPoolCount(poolItems.length);
+            setNetworks(networkItems);
+            setIsLoading(false);
+        } catch (error) {
+            if (!isMounted.current || error.name === 'AbortError') return;
+
+            logger.error('Failed to fetch cluster data:', error.message);
+            setPoolCount(0);
+            setNetworks([]);
+            setIsLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         isMounted.current = true;
@@ -68,70 +124,44 @@ const ClusterOverview = () => {
 
         if (token) {
             startEventReception(token, DEFAULT_FILTERS);
-
-            const fetchData = async () => {
-                try {
-                    const [poolsRes, networksRes] = await Promise.all([
-                        axios.get(URL_POOL, {
-                            headers: {Authorization: `Bearer ${token}`},
-                            timeout: 5000
-                        }),
-                        axios.get(URL_NETWORK, {
-                            headers: {Authorization: `Bearer ${token}`},
-                            timeout: 5000
-                        })
-                    ]);
-
-                    if (!isMounted.current) return;
-
-                    const poolItems = poolsRes.data?.items || [];
-                    const networkItems = networksRes.data?.items || [];
-
-                    setPoolCount(poolItems.length);
-                    setNetworks(networkItems);
-                } catch (error) {
-                    if (!isMounted.current) return;
-                    logger.error('Failed to fetch cluster data:', error.message);
-                    setPoolCount(0);
-                    setNetworks([]);
-                }
-            };
-
-            fetchData();
+            fetchClusterData(token);
         }
 
         return () => {
             isMounted.current = false;
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
         };
-    }, []);
+    }, [fetchClusterData]);
 
     const gridNodesProps = useMemo(() => ({
-        nodeCount: nodeStats.count,
-        frozenCount: nodeStats.frozen,
-        unfrozenCount: nodeStats.unfrozen,
+        nodeCount: deferredNodeStats.count,
+        frozenCount: deferredNodeStats.frozen,
+        unfrozenCount: deferredNodeStats.unfrozen,
         onClick: handleNavigate("/nodes")
-    }), [nodeStats.count, nodeStats.frozen, nodeStats.unfrozen, handleNavigate]);
+    }), [deferredNodeStats.count, deferredNodeStats.frozen, deferredNodeStats.unfrozen, handleNavigate]);
 
     const gridObjectsProps = useMemo(() => ({
-        objectCount: objectStats.objectCount,
-        statusCount: objectStats.statusCount,
+        objectCount: deferredObjectStats.objectCount,
+        statusCount: deferredObjectStats.statusCount,
         onClick: handleObjectsClick
-    }), [objectStats.objectCount, objectStats.statusCount, handleObjectsClick]);
+    }), [deferredObjectStats.objectCount, deferredObjectStats.statusCount, handleObjectsClick]);
 
     const gridHeartbeatsProps = useMemo(() => ({
-        heartbeatCount: heartbeatStats.count,
-        beatingCount: heartbeatStats.beating,
-        nonBeatingCount: heartbeatStats.stale,
-        stateCount: heartbeatStats.stateCount,
-        nodeCount: nodeStats.count,
+        heartbeatCount: deferredHeartbeatStats.count,
+        beatingCount: deferredHeartbeatStats.beating,
+        nonBeatingCount: deferredHeartbeatStats.stale,
+        stateCount: deferredHeartbeatStats.stateCount,
+        nodeCount: deferredNodeStats.count,
         onClick: handleHeartbeatsClick
-    }), [heartbeatStats.count, heartbeatStats.beating, heartbeatStats.stale, heartbeatStats.stateCount, nodeStats.count, handleHeartbeatsClick]);
+    }), [deferredHeartbeatStats, deferredNodeStats.count, handleHeartbeatsClick]);
 
     const gridNamespacesProps = useMemo(() => ({
-        namespaceCount: objectStats.namespaceCount,
-        namespaceSubtitle: objectStats.namespaceSubtitle,
+        namespaceCount: deferredObjectStats.namespaceCount,
+        namespaceSubtitle: deferredObjectStats.namespaceSubtitle,
         onClick: (url) => navigate(url || "/namespaces")
-    }), [objectStats.namespaceCount, objectStats.namespaceSubtitle, navigate]);
+    }), [deferredObjectStats.namespaceCount, deferredObjectStats.namespaceSubtitle, navigate]);
 
     const gridPoolsProps = useMemo(() => ({
         poolCount,
@@ -142,6 +172,23 @@ const ClusterOverview = () => {
         networks,
         onClick: handleNavigate("/network")
     }), [networks, handleNavigate]);
+
+    if (isLoading && (deferredNodeStats.count === 0 && deferredObjectStats.objectCount === 0)) {
+        return (
+            <Box sx={{
+                p: 0,
+                width: '100vw',
+                margin: 0,
+                minHeight: '100vh',
+                bgcolor: 'background.default',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }}>
+                <InitialLoader/>
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{

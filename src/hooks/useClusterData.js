@@ -1,11 +1,22 @@
-import {useMemo} from 'react';
+import {useMemo, useDeferredValue} from 'react';
 import useEventStore from './useEventStore';
+
+const extractNamespace = (objectPath) => {
+    const firstSlash = objectPath.indexOf('/');
+    if (firstSlash === -1) return "root";
+
+    const secondSlash = objectPath.indexOf('/', firstSlash + 1);
+    if (secondSlash === -1) return "root";
+
+    return objectPath.slice(0, firstSlash);
+};
 
 export const useNodeStats = () => {
     const nodeStatus = useEventStore((state) => state.nodeStatus);
+    const deferredNodeStatus = useDeferredValue(nodeStatus);
 
     return useMemo(() => {
-        const nodes = Object.values(nodeStatus);
+        const nodes = Object.values(deferredNodeStatus);
         if (nodes.length === 0) {
             return {count: 0, frozen: 0, unfrozen: 0};
         }
@@ -21,14 +32,15 @@ export const useNodeStats = () => {
         }
 
         return {count: nodes.length, frozen, unfrozen};
-    }, [nodeStatus]);
+    }, [deferredNodeStatus]);
 };
 
 export const useObjectStats = () => {
     const objectStatus = useEventStore((state) => state.objectStatus);
+    const deferredObjectStatus = useDeferredValue(objectStatus);
 
     return useMemo(() => {
-        const objectEntries = Object.entries(objectStatus);
+        const objectEntries = Object.entries(deferredObjectStatus);
         if (objectEntries.length === 0) {
             return {
                 objectCount: 0,
@@ -42,16 +54,6 @@ export const useObjectStats = () => {
         const statusCount = {up: 0, down: 0, warn: 0, "n/a": 0, unprovisioned: 0};
         const objectsPerNamespace = {};
         const statusPerNamespace = {};
-
-        const extractNamespace = (objectPath) => {
-            const firstSlash = objectPath.indexOf('/');
-            if (firstSlash === -1) return "root";
-
-            const secondSlash = objectPath.indexOf('/', firstSlash + 1);
-            if (secondSlash === -1) return "root";
-
-            return objectPath.slice(0, firstSlash);
-        };
 
         for (let i = 0; i < objectEntries.length; i++) {
             const [objectPath, status] = objectEntries[i];
@@ -97,14 +99,15 @@ export const useObjectStats = () => {
             statusCount,
             namespaceSubtitle
         };
-    }, [objectStatus]);
+    }, [deferredObjectStatus]);
 };
 
 export const useHeartbeatStats = () => {
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
+    const deferredHeartbeatStatus = useDeferredValue(heartbeatStatus);
 
     return useMemo(() => {
-        const heartbeatValues = Object.values(heartbeatStatus);
+        const heartbeatValues = Object.values(deferredHeartbeatStatus);
         if (heartbeatValues.length === 0) {
             return {
                 count: 0,
@@ -150,5 +153,5 @@ export const useHeartbeatStats = () => {
             stale,
             stateCount
         };
-    }, [heartbeatStatus]);
+    }, [deferredHeartbeatStatus]);
 };

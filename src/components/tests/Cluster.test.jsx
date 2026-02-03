@@ -226,14 +226,15 @@ describe('ClusterOverview', () => {
         );
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
         expect(mockStartEventReception).toHaveBeenCalledWith(mockToken, expect.any(Array));
-        expect(axios.get).toHaveBeenCalledWith(URL_POOL, {
+
+        expect(axios.get).toHaveBeenCalledWith(URL_POOL, expect.objectContaining({
             headers: {Authorization: `Bearer ${mockToken}`},
             timeout: 5000
-        });
-        expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {
+        }));
+        expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, expect.objectContaining({
             headers: {Authorization: `Bearer ${mockToken}`},
             timeout: 5000
-        });
+        }));
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
@@ -377,6 +378,12 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
+        // Wait for loading to complete
+        await waitFor(() => {
+            expect(screen.getByTestId('node-count')).toBeInTheDocument();
+        });
+
+        // Now check the values
         expect(screen.getByTestId('node-count')).toHaveTextContent('0');
         expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0 | Unfrozen: 0');
         expect(screen.getByTestId('object-count')).toHaveTextContent('0');
@@ -386,9 +393,7 @@ describe('ClusterOverview', () => {
         expect(screen.getByTestId('na-count')).toHaveTextContent('N/A 0');
         expect(screen.getByTestId('namespace-count')).toHaveTextContent('0');
         expect(screen.getByTestId('heartbeat-count')).toHaveTextContent('0');
-        await waitFor(() => {
-            expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
-        });
+        expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
     });
 
     test('does not fetch data if no auth token', async () => {

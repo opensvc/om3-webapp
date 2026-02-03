@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from "react";
+import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {
     Box,
     Table,
@@ -10,15 +10,16 @@ import {
     Typography,
     Autocomplete,
     TextField,
+    CircularProgress,
 } from "@mui/material";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import useEventStore from "../hooks/useEventStore.js";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
+import {useNamespaceData} from "../hooks/useNamespaceData";
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -33,29 +34,135 @@ const getColorByStatus = (status) => {
     }
 };
 
-const extractNamespace = (objectName) => {
-    const parts = objectName.split("/");
-    return parts.length === 3 ? parts[0] : "root";
-};
+const StatusDot = React.memo(({status, count}) => (
+    <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
+        <FiberManualRecordIcon
+            sx={{fontSize: 18, color: getColorByStatus(status)}}
+        />
+        <Typography variant="body1">{count}</Typography>
+    </Box>
+), (prev, next) => prev.status === next.status && prev.count === next.count);
+
+const NamespaceTableRow = React.memo(({
+                                          namespace,
+                                          counts,
+                                          onNamespaceClick,
+                                          onStatusClick
+                                      }) => {
+    const total = useMemo(() =>
+            counts.up + counts.down + counts.warn + counts["n/a"],
+        [counts]
+    );
+
+    const handleRowClick = useCallback(() => {
+        onNamespaceClick(namespace);
+    }, [onNamespaceClick, namespace]);
+
+    const handleStatusClick = useCallback((e, status) => {
+        e.stopPropagation();
+        onStatusClick(namespace, status);
+    }, [onStatusClick, namespace]);
+
+    return (
+        <TableRow
+            hover
+            onClick={handleRowClick}
+            sx={{cursor: "pointer"}}
+        >
+            <TableCell sx={{fontWeight: 500}}>
+                {namespace}
+            </TableCell>
+            {["up", "down", "warn", "n/a"].map((status) => (
+                <TableCell
+                    key={status}
+                    align="center"
+                    onClick={(e) => handleStatusClick(e, status)}
+                    sx={{cursor: "pointer"}}
+                >
+                    <StatusDot status={status} count={counts[status]}/>
+                </TableCell>
+            ))}
+            <TableCell align="center">
+                <Typography variant="body1" fontWeight={600}>
+                    {total}
+                </Typography>
+            </TableCell>
+        </TableRow>
+    );
+}, (prev, next) => {
+    return prev.namespace === next.namespace &&
+        prev.counts.up === next.counts.up &&
+        prev.counts.down === next.counts.down &&
+        prev.counts.warn === next.counts.warn &&
+        prev.counts["n/a"] === next.counts["n/a"];
+});
+
+const SortableTableCell = React.memo(({
+                                          column,
+                                          label,
+                                          currentSortColumn,
+                                          sortDirection,
+                                          onSort,
+                                          align = "left"
+                                      }) => {
+        const handleClick = useCallback(() => {
+            onSort(column);
+        }, [onSort, column]);
+
+        return (
+            <TableCell
+                align={align}
+                onClick={handleClick}
+                sx={{cursor: "pointer"}}
+            >
+                <Box sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: align === "center" ? "center" : "flex-start",
+                    gap: 0.5
+                }}>
+                    <strong>{label}</strong>
+                    {currentSortColumn === column && (
+                        sortDirection === "asc"
+                            ? <KeyboardArrowUpIcon fontSize="small"/>
+                            : <KeyboardArrowDownIcon fontSize="small"/>
+                    )}
+                </Box>
+            </TableCell>
+        );
+    }, (prev, next) =>
+        prev.column === next.column &&
+        prev.currentSortColumn === next.currentSortColumn &&
+        prev.sortDirection === next.sortDirection
+);
 
 const Namespaces = () => {
-    const objectStatus = useEventStore((state) => state.objectStatus);
     const navigate = useNavigate();
     const location = useLocation();
-    const [sortColumn, setSortColumn] = useState("namespace");
-    const [sortDirection, setSortDirection] = useState("asc");
+    const isMounted = useRef(true);
+    const tableContainerRef = useRef(null);
 
-    // Read namespace parameter from URL
     const queryParams = new URLSearchParams(location.search);
     const urlNamespace = queryParams.get("namespace");
-    const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
 
-    const namespaceEventTypes = [
+    const [sortColumn, setSortColumn] = useState("namespace");
+    const [sortDirection, setSortDirection] = useState("asc");
+    const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
+    const [visibleCount, setVisibleCount] = useState(50);
+    const [loading, setLoading] = useState(false);
+
+    const {statusByNamespace, namespaces} = useNamespaceData();
+
+    const deferredSelectedNamespace = useDeferredValue(selectedNamespace);
+    const deferredSortColumn = useDeferredValue(sortColumn);
+    const deferredSortDirection = useDeferredValue(sortDirection);
+
+    const namespaceEventTypes = useMemo(() => [
         'ObjectStatusUpdated',
         'InstanceStatusUpdated',
         'ObjectDeleted',
         'InstanceConfigUpdated'
-    ];
+    ], []);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -65,78 +172,121 @@ const Namespaces = () => {
         return () => {
             closeEventSource();
         };
-    }, []);
+    }, [namespaceEventTypes]);
 
-    // Update filter when URL changes
     useEffect(() => {
         setSelectedNamespace(urlNamespace || "all");
     }, [urlNamespace]);
 
-    const allObjectNames = Object.keys(objectStatus).filter(
-        (key) => key && typeof objectStatus[key] === "object"
-    );
+    const sortedNamespaces = useMemo(() => {
+        const entries = Object.entries(statusByNamespace);
 
-    // Get all unique namespaces
-    const namespaces = useMemo(() => Array.from(
-        new Set(allObjectNames.map(extractNamespace))
-    ).sort(), [allObjectNames]);
+        const filtered = deferredSelectedNamespace === "all"
+            ? entries
+            : entries.filter(([namespace]) => namespace === deferredSelectedNamespace);
 
-    // Memoize statusByNamespace to prevent recreation on every render
-    const statusByNamespace = useMemo(() => {
-        const statusMap = {};
-        allObjectNames.forEach((name) => {
-            const ns = extractNamespace(name);
-            const status = objectStatus[name]?.avail || "n/a";
-
-            if (!statusMap[ns]) {
-                statusMap[ns] = {up: 0, down: 0, warn: 0, "n/a": 0};
-            }
-
-            if (statusMap[ns][status] !== undefined) {
-                statusMap[ns][status]++;
-            } else {
-                statusMap[ns]["n/a"]++;
-            }
-        });
-        return statusMap;
-    }, [allObjectNames, objectStatus]);
-
-    // Filter and sort namespaces
-    const filteredNamespaces = useMemo(() => {
-        const filtered = Object.entries(statusByNamespace).filter(
-            ([namespace]) => selectedNamespace === "all" || namespace === selectedNamespace
-        );
         return filtered.sort((a, b) => {
             const [namespaceA, countsA] = a;
             const [namespaceB, countsB] = b;
             let diff = 0;
-            if (sortColumn === "namespace") {
+
+            if (deferredSortColumn === "namespace") {
                 diff = namespaceA.localeCompare(namespaceB);
-            } else if (sortColumn === "up") {
+            } else if (deferredSortColumn === "up") {
                 diff = countsA.up - countsB.up;
-            } else if (sortColumn === "down") {
+            } else if (deferredSortColumn === "down") {
                 diff = countsA.down - countsB.down;
-            } else if (sortColumn === "warn") {
+            } else if (deferredSortColumn === "warn") {
                 diff = countsA.warn - countsB.warn;
-            } else if (sortColumn === "n/a") {
+            } else if (deferredSortColumn === "n/a") {
                 diff = countsA["n/a"] - countsB["n/a"];
-            } else if (sortColumn === "total") {
+            } else if (deferredSortColumn === "total") {
                 const totalA = countsA.up + countsA.down + countsA.warn + countsA["n/a"];
                 const totalB = countsB.up + countsB.down + countsB.warn + countsB["n/a"];
                 diff = totalA - totalB;
             }
-            return sortDirection === "asc" ? diff : -diff;
-        });
-    }, [statusByNamespace, selectedNamespace, sortColumn, sortDirection]);
 
-    const handleSort = (column) => {
-        if (sortColumn === column) {
-            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-        } else {
-            setSortColumn(column);
+            return deferredSortDirection === "asc" ? diff : -diff;
+        });
+    }, [statusByNamespace, deferredSelectedNamespace, deferredSortColumn, deferredSortDirection]);
+
+    const visibleNamespaces = useMemo(() =>
+            sortedNamespaces.slice(0, visibleCount),
+        [sortedNamespaces, visibleCount]
+    );
+
+    const handleSort = useCallback((column) => {
+        setSortColumn(prev => {
+            if (prev === column) {
+                setSortDirection(dir => dir === "asc" ? "desc" : "asc");
+                return column;
+            }
             setSortDirection("asc");
+            return column;
+        });
+        setVisibleCount(50);
+    }, []);
+
+    const handleNamespaceChange = useCallback((e, val) => {
+        const newNamespace = val || "all";
+        setSelectedNamespace(newNamespace);
+        setVisibleCount(50);
+
+        if (newNamespace === "all") {
+            navigate("/namespaces");
+        } else {
+            navigate(`/namespaces?namespace=${newNamespace}`);
         }
-    };
+    }, [navigate]);
+
+    const handleNamespaceClick = useCallback((namespace) => {
+        navigate(`/objects?namespace=${namespace}`);
+    }, [navigate]);
+
+    const handleStatusClick = useCallback((namespace, status) => {
+        const url = `/objects?namespace=${namespace}&globalState=${status}`;
+        navigate(url);
+    }, [navigate]);
+
+    const handleScroll = useCallback(() => {
+        if (loading) return;
+
+        const container = tableContainerRef.current;
+        if (!container) return;
+
+        const {scrollTop, scrollHeight, clientHeight} = container;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+        if (scrollPercentage > 0.8 && visibleCount < sortedNamespaces.length) {
+            setLoading(true);
+            setTimeout(() => {
+                setVisibleCount(prev => Math.min(prev + 50, sortedNamespaces.length));
+                setLoading(false);
+            }, 100);
+        }
+    }, [loading, visibleCount, sortedNamespaces.length]);
+
+    useEffect(() => {
+        const container = tableContainerRef.current;
+        if (container) {
+            container.addEventListener('scroll', handleScroll);
+            return () => container.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll]);
+
+    useEffect(() => {
+        setVisibleCount(50);
+    }, [sortedNamespaces]);
+
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
+    const renderTextField = useCallback((params) => (
+        <TextField {...params} label="Filter by namespace"/>
+    ), []);
 
     return (
         <Box
@@ -161,130 +311,108 @@ const Namespaces = () => {
                     boxShadow: 3,
                     p: 3,
                     m: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    height: '100vh'
                 }}
             >
-
-
                 {/* Namespace Filter */}
-                <Box sx={{mb: 3}}>
+                <Box sx={{mb: 3, flexShrink: 0}}>
                     <Autocomplete
                         sx={{width: 300}}
                         options={["all", ...namespaces]}
                         value={selectedNamespace}
-                        onChange={(e, val) => {
-                            const newNamespace = val || "all";
-                            setSelectedNamespace(newNamespace);
-                            // Update URL when filter changes
-                            if (newNamespace === "all") {
-                                navigate("/namespaces");
-                            } else {
-                                navigate(`/namespaces?namespace=${newNamespace}`);
-                            }
-                        }}
-                        renderInput={(params) => (
-                            <TextField {...params} label="Filter by namespace"/>
-                        )}
+                        onChange={handleNamespaceChange}
+                        renderInput={renderTextField}
                     />
                 </Box>
 
-                <TableContainer>
+                <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
+                    flexShrink: 0
+                }}>
+                    <Typography variant="body2" color="textSecondary">
+                        Showing {visibleNamespaces.length} of {sortedNamespaces.length} namespaces
+                    </Typography>
+                </Box>
+
+                <TableContainer
+                    ref={tableContainerRef}
+                    sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflow: "auto",
+                        boxShadow: "none",
+                        border: "none"
+                    }}
+                >
                     <Table>
-                        <TableHead>
+                        <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
                             <TableRow>
-                                <TableCell onClick={() => handleSort("namespace")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Namespace</strong>
-                                        {sortColumn === "namespace" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("up")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Up</strong>
-                                        {sortColumn === "up" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("down")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Down</strong>
-                                        {sortColumn === "down" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("warn")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Warn</strong>
-                                        {sortColumn === "warn" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("n/a")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>N/A</strong>
-                                        {sortColumn === "n/a" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("total")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Total</strong>
-                                        {sortColumn === "total" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
+                                <SortableTableCell
+                                    column="namespace"
+                                    label="Namespace"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                />
+                                <SortableTableCell
+                                    column="up"
+                                    label="Up"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    align="center"
+                                />
+                                <SortableTableCell
+                                    column="down"
+                                    label="Down"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    align="center"
+                                />
+                                <SortableTableCell
+                                    column="warn"
+                                    label="Warn"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    align="center"
+                                />
+                                <SortableTableCell
+                                    column="n/a"
+                                    label="N/A"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    align="center"
+                                />
+                                <SortableTableCell
+                                    column="total"
+                                    label="Total"
+                                    currentSortColumn={sortColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    align="center"
+                                />
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredNamespaces.length > 0 ? (
-                                filteredNamespaces.map(([namespace, counts]) => {
-                                    const total = counts.up + counts.down + counts.warn + counts["n/a"];
-                                    return (
-                                        <TableRow
-                                            key={namespace}
-                                            hover
-                                            onClick={() => {
-                                                navigate(`/objects?namespace=${namespace}`);
-                                            }}
-                                            sx={{cursor: "pointer"}}
-                                        >
-                                            <TableCell sx={{fontWeight: 500}}>
-                                                {namespace}
-                                            </TableCell>
-                                            {["up", "down", "warn", "n/a"].map((status) => (
-                                                <TableCell
-                                                    key={status}
-                                                    align="center"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const url = `/objects?namespace=${namespace}&globalState=${status}`;
-                                                        navigate(url);
-                                                    }}
-                                                    sx={{cursor: "pointer"}}
-                                                >
-                                                    <Box display="flex" justifyContent="center" alignItems="center"
-                                                         gap={1}>
-                                                        <FiberManualRecordIcon
-                                                            sx={{fontSize: 18, color: getColorByStatus(status)}}
-                                                        />
-                                                        <Typography variant="body1">{counts[status]}</Typography>
-                                                    </Box>
-                                                </TableCell>
-                                            ))}
-                                            <TableCell align="center">
-                                                <Typography variant="body1" fontWeight={600}>
-                                                    {total}
-                                                </Typography>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })
+                            {visibleNamespaces.length > 0 ? (
+                                visibleNamespaces.map(([namespace, counts]) => (
+                                    <NamespaceTableRow
+                                        key={namespace}
+                                        namespace={namespace}
+                                        counts={counts}
+                                        onNamespaceClick={handleNamespaceClick}
+                                        onStatusClick={handleStatusClick}
+                                    />
+                                ))
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center">
@@ -298,6 +426,11 @@ const Namespaces = () => {
                             )}
                         </TableBody>
                     </Table>
+                    {loading && (
+                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
+                            <CircularProgress size={24}/>
+                        </Box>
+                    )}
                 </TableContainer>
 
                 <EventLogger

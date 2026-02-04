@@ -17,6 +17,10 @@ import {
     IconButton,
     CircularProgress,
     Typography,
+    Grid,
+    Collapse,
+    useMediaQuery,
+    useTheme,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -28,6 +32,7 @@ import WarningIcon from "@mui/icons-material/Warning";
 import HelpIcon from "@mui/icons-material/Help";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
@@ -113,6 +118,8 @@ const Heartbeats = () => {
     const isMounted = useRef(true);
     const eventStarted = useRef(false);
     const tableContainerRef = useRef(null);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
@@ -470,7 +477,7 @@ const Heartbeats = () => {
                     borderColor: "divider",
                     borderRadius: 0,
                     boxShadow: 3,
-                    p: 3,
+                    p: {xs: 1, sm: 2, md: 3},
                     m: 0,
                     overflow: 'hidden',
                 }}
@@ -486,29 +493,28 @@ const Heartbeats = () => {
                 }}>
                     <Box sx={{
                         display: "flex",
+                        flexDirection: {xs: "column", md: "row"},
                         justifyContent: "space-between",
-                        alignItems: "center",
+                        alignItems: {xs: "stretch", md: "center"},
                         gap: 2,
                     }}>
-                        {/* Left section with Show Filters button and filters */}
-                        <Box sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 2,
-                            flexGrow: 1,
-                            overflowX: "auto",
-                            py: 1
-                        }}>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                             <Button
                                 onClick={toggleShowFilters}
                                 sx={{minWidth: 'auto', flexShrink: 0}}
+                                startIcon={<FilterListIcon/>}
                             >
-                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                    Filters
+                                </Box>
+                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                             </Button>
+                        </Box>
 
-                            {showFilters && (
-                                <>
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                        <Collapse in={showFilters} sx={{width: '100%'}}>
+                            <Grid container spacing={2} sx={{mb: 2}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Running</InputLabel>
                                         <Select
                                             value={filterState}
@@ -522,8 +528,10 @@ const Heartbeats = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Beating</InputLabel>
                                         <Select
                                             value={filterBeating}
@@ -535,8 +543,10 @@ const Heartbeats = () => {
                                             <MenuItem value="stale">Stale</MenuItem>
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Node</InputLabel>
                                         <Select
                                             value={filterNode}
@@ -547,8 +557,10 @@ const Heartbeats = () => {
                                             {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by ID</InputLabel>
                                         <Select
                                             value={filterId}
@@ -559,9 +571,9 @@ const Heartbeats = () => {
                                             {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
                                         </Select>
                                     </FormControl>
-                                </>
-                            )}
-                        </Box>
+                                </Grid>
+                            </Grid>
+                        </Collapse>
                     </Box>
                 </Box>
 

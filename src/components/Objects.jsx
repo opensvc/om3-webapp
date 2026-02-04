@@ -26,6 +26,8 @@ import {
     IconButton,
     ClickAwayListener,
     CircularProgress,
+    Grid,
+    Collapse,
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -36,6 +38,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
@@ -65,7 +68,7 @@ const parseObjectName = (objectName) => {
 };
 
 const renderTextField = (label) => (params) => (
-    <TextField {...params} label={label}/>
+    <TextField {...params} label={label} fullWidth/>
 );
 
 const selectObjectStatus = (state) => state.objectStatus;
@@ -391,6 +394,7 @@ const Objects = () => {
     const [sortDirection, setSortDirection] = useState("asc");
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const objectEventTypes = useMemo(() => [
         "ObjectStatusUpdated",
         "InstanceStatusUpdated",
@@ -773,7 +777,7 @@ const Objects = () => {
                 borderColor: "divider",
                 borderRadius: 0,
                 boxShadow: 3,
-                p: 3,
+                p: {xs: 1, sm: 2, md: 3},
                 m: 0,
                 overflow: 'hidden'
             }}>
@@ -787,21 +791,34 @@ const Objects = () => {
                     mb: 2,
                     flexShrink: 0
                 }}>
-                    <Box sx={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2}}>
-                        <Box
-                            sx={{display: "flex", alignItems: "center", gap: 2, flexGrow: 1, overflowX: "auto", py: 1}}>
+                    <Box sx={{
+                        display: "flex",
+                        flexDirection: {xs: "column", md: "row"},
+                        justifyContent: "space-between",
+                        alignItems: {xs: "stretch", md: "center"},
+                        gap: 2
+                    }}>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                             <Button
                                 onClick={toggleShowFilters}
                                 aria-label={showFilters ? "Hide filters" : "Show filters"}
                                 sx={{minWidth: 'auto', flexShrink: 0}}
+                                startIcon={<FilterListIcon/>}
                             >
-                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                    Filters
+                                </Box>
+                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                             </Button>
-                            {showFilters && (
-                                <>
+                        </Box>
+
+                        <Collapse in={showFilters} sx={{width: '100%'}}>
+                            <Grid container spacing={2} sx={{mb: 2}}>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <Autocomplete
                                         key={`global-state-${selectedGlobalState}`}
-                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        fullWidth
+                                        size={isMobile ? "small" : "medium"}
                                         options={globalStates}
                                         value={selectedGlobalState}
                                         onChange={(_event, val) => val && setSelectedGlobalState(val)}
@@ -824,41 +841,54 @@ const Objects = () => {
                                             </li>
                                         )}
                                     />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <Autocomplete
                                         key={`namespace-${selectedNamespace}`}
-                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        fullWidth
+                                        size={isMobile ? "small" : "medium"}
                                         options={["all", ...namespaces]}
                                         value={selectedNamespace}
                                         onChange={(_event, val) => val && setSelectedNamespace(val)}
                                         renderInput={renderTextField("Namespace")}
                                     />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <Autocomplete
                                         key={`kind-${selectedKind}`}
-                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        fullWidth
+                                        size={isMobile ? "small" : "medium"}
                                         options={["all", ...kinds]}
                                         value={selectedKind}
                                         onChange={(_event, val) => val && setSelectedKind(val)}
                                         renderInput={renderTextField("Kind")}
                                     />
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <TextField
                                         label="Name"
                                         value={searchQuery}
                                         onChange={handleSearchChange}
-                                        sx={{minWidth: 200, flexShrink: 0}}
+                                        fullWidth
+                                        size={isMobile ? "small" : "medium"}
                                     />
-                                </>
-                            )}
+                                </Grid>
+                            </Grid>
+                        </Collapse>
+
+                        <Box sx={{display: "flex", justifyContent: {xs: "center", md: "flex-end"}}}>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={handleActionsMenuOpen}
+                                disabled={!selectedObjects.length}
+                                aria-label="Actions on selected objects"
+                                sx={{flexShrink: 0, whiteSpace: 'nowrap'}}
+                                fullWidth={isMobile}
+                            >
+                                Actions ({selectedObjects.length})
+                            </Button>
                         </Box>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleActionsMenuOpen}
-                            disabled={!selectedObjects.length}
-                            aria-label="Actions on selected objects"
-                            sx={{flexShrink: 0}}
-                        >
-                            Actions on selected objects
-                        </Button>
                     </Box>
                     <Popper
                         open={Boolean(actionsMenuAnchor)}

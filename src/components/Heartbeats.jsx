@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from "react";
+import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {
     Box,
@@ -14,6 +14,13 @@ import {
     MenuItem,
     Button,
     Tooltip,
+    IconButton,
+    CircularProgress,
+    Typography,
+    Grid,
+    Collapse,
+    useMediaQuery,
+    useTheme,
 } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -25,13 +32,14 @@ import WarningIcon from "@mui/icons-material/Warning";
 import HelpIcon from "@mui/icons-material/Help";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 
-const getStateIcon = (state) => {
+const StateIcon = React.memo(({state}) => {
     switch (state) {
         case "running":
             return <CheckCircleIcon sx={{color: green[500]}}/>;
@@ -44,9 +52,9 @@ const getStateIcon = (state) => {
         default:
             return <HelpIcon sx={{color: grey[500]}}/>;
     }
-};
+}, (prev, next) => prev.state === next.state);
 
-const getStatusIcon = (isBeating, isSingleNode) => {
+const BeatingIcon = React.memo(({isBeating, isSingleNode}) => {
     if (isSingleNode) {
         return <CheckCircleIcon sx={{color: green[500]}}/>;
     }
@@ -55,7 +63,7 @@ const getStatusIcon = (isBeating, isSingleNode) => {
     ) : (
         <CancelIcon sx={{color: red[500]}}/>
     );
-};
+}, (prev, next) => prev.isBeating === next.isBeating && prev.isSingleNode === next.isSingleNode);
 
 const tableCellStyle = {
     padding: "8px 16px",
@@ -68,13 +76,58 @@ const leftAlignedCellStyle = {
     textAlign: "left",
 };
 
+const HeartbeatRow = React.memo(({row, isSingleNode}) => {
+    return (
+        <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
+            <TableCell sx={tableCellStyle}>
+                <Tooltip title={row.state} arrow>
+                    <span><StateIcon state={row.state}/></span>
+                </Tooltip>
+            </TableCell>
+            <TableCell sx={tableCellStyle}>
+                <Tooltip
+                    title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
+                    arrow
+                >
+                    <span><BeatingIcon isBeating={row.isBeating} isSingleNode={isSingleNode}/></span>
+                </Tooltip>
+            </TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.changedAt}</TableCell>
+            <TableCell sx={leftAlignedCellStyle}>{row.lastBeatingAt}</TableCell>
+        </TableRow>
+    );
+}, (prev, next) => {
+    return (
+        prev.row.id === next.row.id &&
+        prev.row.node === next.row.node &&
+        prev.row.peer === next.row.peer &&
+        prev.row.isBeating === next.row.isBeating &&
+        prev.row.state === next.row.state &&
+        prev.isSingleNode === next.isSingleNode
+    );
+});
+
 const Heartbeats = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const isMounted = useRef(true);
+    const eventStarted = useRef(false);
+    const tableContainerRef = useRef(null);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
     const [sortColumn, setSortColumn] = useState("node");
     const [sortDirection, setSortDirection] = useState("asc");
+    const [showFilters, setShowFilters] = useState(true);
+    const [visibleCount, setVisibleCount] = useState(30);
+    const [loading, setLoading] = useState(false);
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -88,11 +141,16 @@ const Heartbeats = () => {
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
-    // Remove "hb#" prefix from rawId if present
     const [filterId, setFilterId] = useState(
         rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId
     );
-    const [showFilters, setShowFilters] = useState(true);
+
+    const deferredFilterBeating = useDeferredValue(filterBeating);
+    const deferredFilterNode = useDeferredValue(filterNode);
+    const deferredFilterState = useDeferredValue(filterState);
+    const deferredFilterId = useDeferredValue(filterId);
+    const deferredSortColumn = useDeferredValue(sortColumn);
+    const deferredSortDirection = useDeferredValue(sortDirection);
 
     const heartbeatEventTypes = useMemo(() => [
         "DaemonHeartbeatUpdated",
@@ -105,16 +163,38 @@ const Heartbeats = () => {
 
     // Update URL when filters change
     useEffect(() => {
-        const newQueryParams = new URLSearchParams();
-        if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
-        if (filterNode !== "all") newQueryParams.set("node", filterNode);
-        if (filterState !== "all") newQueryParams.set("state", filterState);
-        if (filterId !== "all") newQueryParams.set("id", filterId);
+        const timer = setTimeout(() => {
+            if (!isMounted.current) return;
 
-        navigate(`${location.pathname}${newQueryParams.toString() ? `?${newQueryParams.toString()}` : ""}`, {
-            replace: true,
-        });
-    }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname]);
+            const currentParams = new URLSearchParams(location.search);
+            const currentStatus = currentParams.get("status") || "all";
+            const currentNode = currentParams.get("node") || "all";
+            const currentState = currentParams.get("state") || "all";
+            const currentId = currentParams.get("id") || "all";
+
+            if (currentStatus === filterBeating &&
+                currentNode === filterNode &&
+                currentState === filterState &&
+                currentId === filterId) {
+                return;
+            }
+
+            const newQueryParams = new URLSearchParams();
+            if (filterBeating !== "all") newQueryParams.set("status", filterBeating);
+            if (filterNode !== "all") newQueryParams.set("node", filterNode);
+            if (filterState !== "all") newQueryParams.set("state", filterState);
+            if (filterId !== "all") newQueryParams.set("id", filterId);
+
+            const queryString = newQueryParams.toString();
+            const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
+
+            if (newUrl !== location.pathname + location.search) {
+                navigate(newUrl, {replace: true});
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [filterBeating, filterNode, filterState, filterId, navigate, location.pathname, location.search]);
 
     // Initialize filter states from URL
     useEffect(() => {
@@ -128,17 +208,25 @@ const Heartbeats = () => {
     useEffect(() => {
         setStoppedStreamsCache((prev) => {
             const newCache = {...prev};
-            Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
-                (nodeData.streams || []).forEach((stream) => {
-                    if (!newCache[node]) newCache[node] = {};
+            const entries = Object.entries(heartbeatStatus);
+
+            for (let i = 0; i < entries.length; i++) {
+                const [node, nodeData] = entries[i];
+                const streams = nodeData.streams || [];
+
+                if (!newCache[node]) newCache[node] = {};
+
+                for (let j = 0; j < streams.length; j++) {
+                    const stream = streams[j];
                     if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
                         newCache[node][stream.id] = {
                             ...stream,
                             peers: {...stream.peers},
                         };
                     }
-                });
-            });
+                }
+            }
+
             return newCache;
         });
     }, [heartbeatStatus]);
@@ -146,65 +234,92 @@ const Heartbeats = () => {
     // Start event reception with heartbeat-specific filters
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
+        if (token && !eventStarted.current) {
             startEventReception(token, heartbeatEventTypes);
+            eventStarted.current = true;
         }
-        return () => closeEventSource();
+
+        return () => {
+            closeEventSource();
+            eventStarted.current = false;
+        };
     }, [heartbeatEventTypes]);
 
-    const nodes = [...new Set(Object.keys(heartbeatStatus))].sort();
+    const nodes = useMemo(() => {
+        return [...new Set(Object.keys(heartbeatStatus))].sort();
+    }, [heartbeatStatus]);
+
     const isSingleNode = nodes.length === 1;
 
     const availableStates = useMemo(() => {
         const states = new Set(["all"]);
-        Object.values(heartbeatStatus).forEach((nodeData) => {
-            (nodeData.streams || []).forEach((stream) => {
-                if (stream.state) states.add(stream.state);
-            });
-        });
+        const values = Object.values(heartbeatStatus);
+
+        for (let i = 0; i < values.length; i++) {
+            const streams = values[i].streams || [];
+            for (let j = 0; j < streams.length; j++) {
+                if (streams[j].state) states.add(streams[j].state);
+            }
+        }
+
         return Array.from(states).sort();
     }, [heartbeatStatus]);
 
     const availableIds = useMemo(() => {
         const ids = new Set();
-        Object.values(heartbeatStatus).forEach((nodeData) => {
-            (nodeData.streams || []).forEach((stream) => {
+        const values = Object.values(heartbeatStatus);
+
+        for (let i = 0; i < values.length; i++) {
+            const streams = values[i].streams || [];
+            for (let j = 0; j < streams.length; j++) {
+                const stream = streams[j];
                 if (stream.id && stream.id !== "all") {
-                    // Remove "hb#" prefix from ID
                     const cleanedId = stream.id.replace(/^hb#/, "");
                     ids.add(cleanedId);
                 }
-            });
-        });
+            }
+        }
+
         return Array.from(ids).sort();
     }, [heartbeatStatus]);
 
     const streamRows = useMemo(() => {
         const rows = [];
-        Object.entries(heartbeatStatus).forEach(([node, nodeData]) => {
-            (nodeData.streams || []).forEach((stream) => {
+        const entries = Object.entries(heartbeatStatus);
+
+        for (let i = 0; i < entries.length; i++) {
+            const [node, nodeData] = entries[i];
+            const streams = nodeData.streams || [];
+
+            for (let j = 0; j < streams.length; j++) {
+                const stream = streams[j];
                 const cachedStream = stoppedStreamsCache[node]?.[stream.id] || {};
                 const peers = stream.state === "stopped" && Object.keys(stream.peers || {}).length === 0
                     ? cachedStream.peers || {}
                     : stream.peers || {};
 
-                // Remove "hb#" prefix from stream ID
                 const cleanedId = stream.id.replace(/^hb#/, "");
 
                 if (Object.keys(peers).length === 0 && stream.state === "stopped") {
+                    const cachedPeers = cachedStream.peers || {};
+                    const firstPeerKey = Object.keys(cachedPeers)[0];
+                    const firstPeer = cachedPeers[firstPeerKey];
+
                     rows.push({
                         id: cleanedId,
                         node: node,
                         peer: "N/A",
                         type: stream.type || cachedStream.type || "N/A",
-                        desc: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.desc || "N/A",
+                        desc: firstPeer?.desc || "N/A",
                         isBeating: false,
-                        changedAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.changed_at || "N/A",
-                        lastBeatingAt: cachedStream.peers?.[Object.keys(cachedStream.peers || {})[0]]?.last_beating_at || "N/A",
+                        changedAt: firstPeer?.changed_at || "N/A",
+                        lastBeatingAt: firstPeer?.last_beating_at || "N/A",
                         state: stream.state || "unknown",
                     });
                 } else {
-                    Object.entries(peers).forEach(([peerKey, peerData]) => {
+                    const peerEntries = Object.entries(peers);
+                    for (let k = 0; k < peerEntries.length; k++) {
+                        const [peerKey, peerData] = peerEntries[k];
                         rows.push({
                             id: cleanedId,
                             node,
@@ -216,59 +331,127 @@ const Heartbeats = () => {
                             lastBeatingAt: peerData?.last_beating_at || "N/A",
                             state: stream.state || "unknown",
                         });
-                    });
+                    }
                 }
-            });
-        });
+            }
+        }
+
         return rows;
     }, [heartbeatStatus, stoppedStreamsCache]);
 
     const sortedRows = useMemo(() => {
         const stateOrder = {running: 4, warning: 3, stopped: 2, failed: 1, unknown: 0};
+
         return [...streamRows].sort((a, b) => {
             let diff = 0;
-            if (sortColumn === "state") {
+            if (deferredSortColumn === "state") {
                 diff = stateOrder[a.state] - stateOrder[b.state];
-            } else if (sortColumn === "beating") {
+            } else if (deferredSortColumn === "beating") {
                 diff = Number(a.isBeating) - Number(b.isBeating);
-            } else if (sortColumn === "id") {
+            } else if (deferredSortColumn === "id") {
                 diff = a.id.localeCompare(b.id, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "node") {
+            } else if (deferredSortColumn === "node") {
                 diff = a.node.localeCompare(b.node, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "peer") {
+            } else if (deferredSortColumn === "peer") {
                 diff = a.peer.localeCompare(b.peer, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "type") {
+            } else if (deferredSortColumn === "type") {
                 diff = a.type.localeCompare(b.type, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "desc") {
+            } else if (deferredSortColumn === "desc") {
                 diff = a.desc.localeCompare(b.desc, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "changed_at") {
+            } else if (deferredSortColumn === "changed_at") {
                 diff = a.changedAt.localeCompare(b.changedAt, undefined, {sensitivity: "base"});
-            } else if (sortColumn === "last_beating_at") {
+            } else if (deferredSortColumn === "last_beating_at") {
                 diff = a.lastBeatingAt.localeCompare(b.lastBeatingAt, undefined, {sensitivity: "base"});
             }
-            return sortDirection === "asc" ? diff : -diff;
+            return deferredSortDirection === "asc" ? diff : -diff;
         });
-    }, [streamRows, sortColumn, sortDirection]);
+    }, [streamRows, deferredSortColumn, deferredSortDirection]);
 
-    const filteredRows = sortedRows.filter((row) => {
-        return (
-            (filterBeating === "all" ||
-                (filterBeating === "beating" && row.isBeating === true) ||
-                (filterBeating === "stale" && row.isBeating === false)) &&
-            (filterNode === "all" || row.node === filterNode) &&
-            (filterState === "all" || row.state === filterState) &&
-            (filterId === "all" || row.id === filterId)
-        );
-    });
+    const filteredRows = useMemo(() => {
+        return sortedRows.filter((row) => {
+            return (
+                (deferredFilterBeating === "all" ||
+                    (deferredFilterBeating === "beating" && row.isBeating === true) ||
+                    (deferredFilterBeating === "stale" && row.isBeating === false)) &&
+                (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
+                (deferredFilterState === "all" || row.state === deferredFilterState) &&
+                (deferredFilterId === "all" || row.id === deferredFilterId)
+            );
+        });
+    }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId]);
 
-    const handleSort = (column) => {
-        if (sortColumn === column) {
-            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-        } else {
-            setSortColumn(column);
+    const visibleRows = useMemo(() => {
+        return filteredRows.slice(0, visibleCount);
+    }, [filteredRows, visibleCount]);
+
+    const handleSort = useCallback((column) => {
+        setSortColumn(prev => {
+            if (prev === column) {
+                setSortDirection(dir => dir === "asc" ? "desc" : "asc");
+                return column;
+            }
             setSortDirection("asc");
+            return column;
+        });
+        setVisibleCount(30);
+    }, []);
+
+    const toggleShowFilters = useCallback(() => {
+        setShowFilters(prev => !prev);
+    }, []);
+
+    const handleFilterChange = useCallback((setter) => (event) => {
+        setter(event.target.value);
+        setVisibleCount(30);
+    }, []);
+
+    const handleScroll = useCallback(() => {
+        if (loading) return;
+
+        const container = tableContainerRef.current;
+        if (!container) return;
+
+        const {scrollTop, scrollHeight, clientHeight} = container;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+        if (scrollPercentage > 0.8 && visibleCount < filteredRows.length) {
+            setLoading(true);
+            setTimeout(() => {
+                setVisibleCount(prev => Math.min(prev + 30, filteredRows.length));
+                setLoading(false);
+            }, 100);
         }
-    };
+    }, [loading, visibleCount, filteredRows.length]);
+
+    useEffect(() => {
+        const container = tableContainerRef.current;
+        if (container) {
+            container.addEventListener('scroll', handleScroll);
+            return () => container.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll]);
+
+    useEffect(() => {
+        setVisibleCount(30);
+    }, [filteredRows]);
+
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
+    const columns = [
+        {label: "RUNNING", key: "state", align: "center"},
+        {label: "BEATING", key: "beating", align: "center"},
+        {label: "ID", key: "id", align: "left"},
+        {label: "NODE", key: "node", align: "left"},
+        {label: "PEER", key: "peer", align: "left"},
+        {label: "TYPE", key: "type", align: "left"},
+        {label: "DESC", key: "desc", align: "left"},
+        {label: "CHANGED_AT", key: "changed_at", align: "left"},
+        {label: "LAST_BEATING_AT", key: "last_beating_at", align: "left"}
+    ];
 
     return (
         <Box
@@ -294,7 +477,7 @@ const Heartbeats = () => {
                     borderColor: "divider",
                     borderRadius: 0,
                     boxShadow: 3,
-                    p: 3,
+                    p: {xs: 1, sm: 2, md: 3},
                     m: 0,
                     overflow: 'hidden',
                 }}
@@ -310,32 +493,34 @@ const Heartbeats = () => {
                 }}>
                     <Box sx={{
                         display: "flex",
+                        flexDirection: {xs: "column", md: "row"},
                         justifyContent: "space-between",
-                        alignItems: "center",
+                        alignItems: {xs: "stretch", md: "center"},
                         gap: 2,
                     }}>
-                        {/* Left section with Show Filters button and filters */}
-                        <Box sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 2,
-                            flexGrow: 1,
-                            overflowX: "auto",
-                            py: 1
-                        }}>
+                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                             <Button
-                                onClick={() => setShowFilters(!showFilters)}
+                                onClick={toggleShowFilters}
                                 sx={{minWidth: 'auto', flexShrink: 0}}
+                                startIcon={<FilterListIcon/>}
                             >
-                                {showFilters ? <ExpandLessIcon/> : <>Filters <ExpandMoreIcon/></>}
+                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                    Filters
+                                </Box>
+                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
                             </Button>
+                        </Box>
 
-                            {showFilters && (
-                                <>
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                        <Collapse in={showFilters} sx={{width: '100%'}}>
+                            <Grid container spacing={2} sx={{mb: 2}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Running</InputLabel>
-                                        <Select value={filterState} label="Filter by Running"
-                                                onChange={(e) => setFilterState(e.target.value)}>
+                                        <Select
+                                            value={filterState}
+                                            label="Filter by Running"
+                                            onChange={handleFilterChange(setFilterState)}
+                                        >
                                             <MenuItem value="all">All</MenuItem>
                                             {availableStates.filter(s => s !== "all").map(state => (
                                                 <MenuItem key={state}
@@ -343,48 +528,78 @@ const Heartbeats = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Beating</InputLabel>
-                                        <Select value={filterBeating} label="Filter by Beating"
-                                                onChange={(e) => setFilterBeating(e.target.value)}>
+                                        <Select
+                                            value={filterBeating}
+                                            label="Filter by Beating"
+                                            onChange={handleFilterChange(setFilterBeating)}
+                                        >
                                             <MenuItem value="all">All</MenuItem>
                                             <MenuItem value="beating">Beating</MenuItem>
                                             <MenuItem value="stale">Stale</MenuItem>
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Node</InputLabel>
-                                        <Select value={filterNode} label="Filter by Node"
-                                                onChange={(e) => setFilterNode(e.target.value)}>
+                                        <Select
+                                            value={filterNode}
+                                            label="Filter by Node"
+                                            onChange={handleFilterChange(setFilterNode)}
+                                        >
                                             <MenuItem value="all">All</MenuItem>
                                             {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
                                         </Select>
                                     </FormControl>
+                                </Grid>
 
-                                    <FormControl sx={{minWidth: 200, flexShrink: 0}}>
+                                <Grid item xs={12} sm={6} md={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by ID</InputLabel>
-                                        <Select value={filterId} label="Filter by ID"
-                                                onChange={(e) => setFilterId(e.target.value)}>
+                                        <Select
+                                            value={filterId}
+                                            label="Filter by ID"
+                                            onChange={handleFilterChange(setFilterId)}
+                                        >
                                             <MenuItem value="all">All</MenuItem>
                                             {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
                                         </Select>
                                     </FormControl>
-                                </>
-                            )}
-                        </Box>
+                                </Grid>
+                            </Grid>
+                        </Collapse>
                     </Box>
                 </Box>
 
-                <TableContainer sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflow: "auto",
-                    boxShadow: "none",
-                    border: "none",
-                    position: 'relative',
+                <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
+                    flexShrink: 0
                 }}>
+                    <Typography variant="body2" color="textSecondary">
+                        Showing {visibleRows.length} of {filteredRows.length} heartbeats
+                    </Typography>
+                </Box>
+
+                <TableContainer
+                    ref={tableContainerRef}
+                    sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflow: "auto",
+                        boxShadow: "none",
+                        border: "none",
+                        position: 'relative',
+                    }}
+                >
                     <Table size="small" sx={{position: 'relative'}}>
                         <TableHead sx={{
                             position: "sticky",
@@ -393,25 +608,25 @@ const Heartbeats = () => {
                             backgroundColor: "background.paper"
                         }}>
                             <TableRow>
-                                {["RUNNING", "BEATING", "ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].map(label => (
+                                {columns.map(({label, key, align}) => (
                                     <TableCell
                                         key={label}
                                         sx={{
                                             fontWeight: "bold",
-                                            textAlign: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "left" : "center",
+                                            textAlign: align,
                                             cursor: "pointer",
                                             paddingLeft: 2,
                                             paddingRight: 2,
                                         }}
-                                        onClick={() => handleSort(label.toLowerCase())}
+                                        onClick={() => handleSort(key)}
                                     >
                                         <Box sx={{
                                             display: "flex",
                                             alignItems: "center",
-                                            justifyContent: ["ID", "NODE", "PEER", "TYPE", "DESC", "CHANGED_AT", "LAST_BEATING_AT"].includes(label) ? "flex-start" : "center"
+                                            justifyContent: align === "left" ? "flex-start" : "center"
                                         }}>
                                             {label}
-                                            {sortColumn === label.toLowerCase() &&
+                                            {sortColumn === key &&
                                                 (sortDirection === "asc" ? <KeyboardArrowUpIcon fontSize="small"/> :
                                                     <KeyboardArrowDownIcon fontSize="small"/>)}
                                         </Box>
@@ -420,38 +635,29 @@ const Heartbeats = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredRows.map(row => (
-                                <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
-                                    <TableCell sx={tableCellStyle}>
-                                        <Tooltip title={row.state}
-                                                 arrow><span>{getStateIcon(row.state)}</span></Tooltip>
-                                    </TableCell>
-                                    <TableCell sx={tableCellStyle}>
-                                        <Tooltip
-                                            title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
-                                            arrow>
-                                            <span>{getStatusIcon(row.isBeating, isSingleNode)}</span>
-                                        </Tooltip>
-                                    </TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.changedAt}</TableCell>
-                                    <TableCell sx={leftAlignedCellStyle}>{row.lastBeatingAt}</TableCell>
-                                </TableRow>
+                            {visibleRows.map(row => (
+                                <HeartbeatRow
+                                    key={`${row.node}-${row.id}-${row.peer}`}
+                                    row={row}
+                                    isSingleNode={isSingleNode}
+                                />
                             ))}
                         </TableBody>
                     </Table>
+                    {loading && (
+                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
+                            <CircularProgress size={24}/>
+                        </Box>
+                    )}
+                    {visibleRows.length === 0 && (
+                        <Typography align="center" color="textSecondary" sx={{mt: 2, p: 3}}>
+                            No heartbeats found matching the current filters.
+                        </Typography>
+                    )}
                 </TableContainer>
             </Box>
 
-            <EventLogger
-                eventTypes={heartbeatEventTypes}
-                title="Heartbeat Events Logger"
-                buttonLabel="Heartbeat Events"
-            />
+            {/* <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger" buttonLabel="Heartbeat Events"/> */}
         </Box>
     );
 };

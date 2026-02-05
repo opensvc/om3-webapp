@@ -31,7 +31,30 @@ const COLORS = {
 
 const STYLES = {
     progress: {mt: 1, height: 4},
-    flexBox: {display: "flex", gap: 0.5, alignItems: "center", justifyContent: "center"},
+    flexBox: {
+        display: "flex",
+        gap: 0.5,
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "24px",
+        width: "100%"
+    },
+    iconsContainer: {
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        minWidth: "60px",
+        justifyContent: "center",
+        position: "relative"
+    },
+    fixedIconWrapper: {
+        width: "24px",
+        height: "24px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0
+    }
 };
 
 const formatDate = (dateString) => {
@@ -135,14 +158,34 @@ const NodeRow = ({
             <TableCell align="center">
                 <Box sx={STYLES.flexBox}>
                     {monitor && monitor.state !== "idle" && (
-                        <Typography variant="caption">{monitor.state}</Typography>
+                        <Typography variant="caption" sx={{minWidth: "60px", textAlign: "center"}}>
+                            {monitor.state}
+                        </Typography>
                     )}
-                    {isFrozen && (
-                        <AcUnit sx={{color: COLORS.frozen, ml: 0.5}} aria-label="Frozen indicator"/>
-                    )}
-                    {isDaemonNode && (
-                        <Wifi sx={{color: COLORS.daemon, ml: 0.5}} aria-label="Daemon node indicator"/>
-                    )}
+
+                    <Box sx={STYLES.iconsContainer}>
+                        <Box sx={STYLES.fixedIconWrapper}>
+                            {isDaemonNode ? (
+                                <Wifi
+                                    sx={{color: COLORS.daemon}}
+                                    aria-label="Daemon node indicator"
+                                />
+                            ) : (
+                                <Box sx={{width: 24, height: 24}}/>
+                                )}
+                        </Box>
+
+                        <Box sx={STYLES.fixedIconWrapper}>
+                            {isFrozen ? (
+                                <AcUnit
+                                    sx={{color: COLORS.frozen}}
+                                    aria-label="Frozen indicator"
+                                />
+                            ) : (
+                                <Box sx={{width: 24, height: 24}}/>
+                                )}
+                        </Box>
+                    </Box>
                 </Box>
             </TableCell>
             <TableCell align="center">

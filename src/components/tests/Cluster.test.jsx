@@ -1,12 +1,16 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import axios from 'axios';
 import {toHaveNoViolations} from 'jest-axe';
 import ClusterOverview from '../Cluster.jsx';
-import useEventStore from '../../hooks/useEventStore.js';
 import {URL_POOL, URL_NETWORK} from '../../config/apiPath.js';
 import {startEventReception} from '../../eventSourceManager';
+import {
+    useNodeStats,
+    useObjectStats,
+    useHeartbeatStats
+} from '../../hooks/useClusterData';
 
 expect.extend(toHaveNoViolations);
 
@@ -19,8 +23,12 @@ jest.mock('react-router-dom', () => ({
 // Mock axios module
 jest.mock('axios');
 
-// Mock the event store hook
-jest.mock('../../hooks/useEventStore.js');
+// Mock custom hooks
+jest.mock('../../hooks/useClusterData', () => ({
+    useNodeStats: jest.fn(),
+    useObjectStats: jest.fn(),
+    useHeartbeatStats: jest.fn(),
+}));
 
 // Mock the event source manager
 jest.mock('../../eventSourceManager');
@@ -34,14 +42,30 @@ jest.mock('../ClusterStatGrids.jsx', () => {
         </button>
     );
     const GridObjects = ({objectCount, statusCount, onClick}) => (
-        <button aria-label="Objects stat card" onClick={() => onClick && onClick()}>
-            <div data-testid="object-count">{objectCount}</div>
-            <div data-testid="up-count">Up {statusCount?.up ?? 0}</div>
-            <div data-testid="warn-count">Warn {statusCount?.warn ?? 0}</div>
-            <div data-testid="down-count">Down {statusCount?.down ?? 0}</div>
-            <div data-testid="na-count">N/A {statusCount?.["n/a"] ?? 0}</div>
-            <div data-testid="unprovisioned-count">Unprovisioned {statusCount?.unprovisioned ?? 0}</div>
-        </button>
+        <div>
+            <button aria-label="Objects stat card" onClick={() => onClick && onClick()}>
+                <div data-testid="object-count">{objectCount}</div>
+                <div data-testid="up-count">Up {statusCount?.up ?? 0}</div>
+                <div data-testid="warn-count">Warn {statusCount?.warn ?? 0}</div>
+                <div data-testid="down-count">Down {statusCount?.down ?? 0}</div>
+                <div data-testid="na-count">N/A {statusCount?.["n/a"] ?? 0}</div>
+                <div data-testid="unprovisioned-count">Unprovisioned {statusCount?.unprovisioned ?? 0}</div>
+            </button>
+            <button
+                aria-label="Objects up status"
+                onClick={() => onClick && onClick('up')}
+                data-testid="up-status-button"
+            >
+                View Up
+            </button>
+            <button
+                aria-label="Objects warn status"
+                onClick={() => onClick && onClick('warn')}
+                data-testid="warn-status-button"
+            >
+                View Warn
+            </button>
+        </div>
     );
     const GridNamespaces = ({namespaceCount, namespaceSubtitle, onClick}) => (
         <button aria-label="Namespaces stat card" onClick={() => onClick && onClick()}>
@@ -63,12 +87,28 @@ jest.mock('../ClusterStatGrids.jsx', () => {
         </button>
     );
     const GridHeartbeats = ({heartbeatCount, beatingCount, nonBeatingCount, stateCount, onClick}) => (
-        <button aria-label="Heartbeats stat card" onClick={() => onClick && onClick()}>
-            <div data-testid="heartbeat-count">{heartbeatCount}</div>
-            <div data-testid="beating-count">Beating: {beatingCount}</div>
-            <div data-testid="non-beating-count">Non-beating: {nonBeatingCount}</div>
-            <div data-testid="running-count">Running: {stateCount?.running ?? 0}</div>
-        </button>
+        <div>
+            <button aria-label="Heartbeats stat card" onClick={() => onClick && onClick()}>
+                <div data-testid="heartbeat-count">{heartbeatCount}</div>
+                <div data-testid="beating-count">Beating: {beatingCount}</div>
+                <div data-testid="non-beating-count">Non-beating: {nonBeatingCount}</div>
+                <div data-testid="running-count">Running: {stateCount?.running ?? 0}</div>
+            </button>
+            <button
+                aria-label="Heartbeats beating status"
+                onClick={() => onClick && onClick('beating')}
+                data-testid="beating-status-button"
+            >
+                View Beating
+            </button>
+            <button
+                aria-label="Heartbeats running state"
+                onClick={() => onClick && onClick('beating', 'running')}
+                data-testid="running-state-button"
+            >
+                View Running
+            </button>
+        </div>
     );
     const GridPools = ({poolCount, onClick}) => (
         <button aria-label="Pools stat card" onClick={() => onClick && onClick()}>
@@ -96,40 +136,43 @@ jest.useFakeTimers();
 describe('ClusterOverview', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = jest.fn();
-    const mockNodeStatus = {
-        node1: {frozen_at: '2023-01-01T00:00:00Z'},
-        node2: {frozen_at: '0001-01-01T00:00:00Z'},
-    };
-    const mockObjectStatus = {
-        'ns1/svc/obj1': {avail: 'up', provisioned: true},
-        'ns1/svc/obj2': {avail: 'down', provisioned: true},
-        'root/svc/obj3': {avail: 'warn', provisioned: true},
-        'ns2/svc/obj4': {avail: 'unknown', provisioned: true},
-    };
-    const mockHeartbeatStatus = {
-        node1: {
-            streams: [
-                {id: 'dev1.rx', state: 'running', peers: {peer1: {is_beating: true}}},
-                {id: 'dev1.tx', state: 'running', peers: {peer1: {is_beating: false}}},
-            ],
-        },
-        node2: {
-            streams: [
-                {id: 'dev2.rx', state: 'stopped', peers: {peer1: {is_beating: true}}},
-                {id: 'dev2.tx', state: 'failed', peers: {peer1: {is_beating: false}}},
-            ],
-        },
-    };
     const mockToken = 'mock-token';
 
     beforeEach(() => {
         jest.clearAllMocks();
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: mockNodeStatus,
-            objectStatus: mockObjectStatus,
-            heartbeatStatus: mockHeartbeatStatus,
-        }));
+
+        // Mock custom hooks with default data
+        useNodeStats.mockReturnValue({
+            count: 2,
+            frozen: 1,
+            unfrozen: 1
+        });
+
+        useObjectStats.mockReturnValue({
+            objectCount: 4,
+            statusCount: {
+                up: 1,
+                warn: 1,
+                down: 1,
+                'n/a': 1,
+                unprovisioned: 0
+            },
+            namespaceCount: 3,
+            namespaceSubtitle: [
+                {namespace: 'ns1', count: 2},
+                {namespace: 'root', count: 1},
+                {namespace: 'ns2', count: 1}
+            ]
+        });
+
+        useHeartbeatStats.mockReturnValue({
+            count: 2,
+            beating: 2,
+            stale: 0,
+            stateCount: {running: 2}
+        });
+
         startEventReception.mockImplementation(mockStartEventReception);
         Storage.prototype.getItem = jest.fn(() => mockToken);
         axios.get.mockResolvedValue({
@@ -163,6 +206,7 @@ describe('ClusterOverview', () => {
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 1');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 1');
         expect(screen.getByTestId('down-count')).toHaveTextContent('Down 1');
+        expect(screen.getByTestId('na-count')).toHaveTextContent('N/A 1');
         expect(screen.getByTestId('namespace-count')).toHaveTextContent('3');
         expect(screen.getByTestId('namespace-ns1')).toBeInTheDocument();
         expect(screen.getByTestId('ns1-count')).toHaveTextContent('2');
@@ -182,14 +226,15 @@ describe('ClusterOverview', () => {
         );
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
         expect(mockStartEventReception).toHaveBeenCalledWith(mockToken, expect.any(Array));
-        expect(axios.get).toHaveBeenCalledWith(URL_POOL, {
+
+        expect(axios.get).toHaveBeenCalledWith(URL_POOL, expect.objectContaining({
             headers: {Authorization: `Bearer ${mockToken}`},
             timeout: 5000
-        });
-        expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {
+        }));
+        expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, expect.objectContaining({
             headers: {Authorization: `Bearer ${mockToken}`},
             timeout: 5000
-        });
+        }));
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
@@ -201,34 +246,130 @@ describe('ClusterOverview', () => {
                 <ClusterOverview/>
             </MemoryRouter>
         );
+
         await waitFor(() => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
 
-        jest.runAllTimers();
-
+        // Nodes card
         fireEvent.click(screen.getByRole('button', {name: /Nodes stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
         expect(mockNavigate).toHaveBeenCalledWith('/nodes');
 
+        // Objects card
         fireEvent.click(screen.getByRole('button', {name: /Objects stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
         expect(mockNavigate).toHaveBeenCalledWith('/objects');
 
+        // Namespaces card
         fireEvent.click(screen.getByRole('button', {name: /Namespaces stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
 
+        // Heartbeats card
         fireEvent.click(screen.getByRole('button', {name: /Heartbeats stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
         expect(mockNavigate).toHaveBeenCalledWith('/heartbeats');
 
+        // Pools card
         fireEvent.click(screen.getByRole('button', {name: /Pools stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
         expect(mockNavigate).toHaveBeenCalledWith('/storage-pools');
     });
 
+    test('navigates to objects with globalState parameter', async () => {
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
+        });
+
+        // Click on up status button
+        fireEvent.click(screen.getByTestId('up-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?globalState=up');
+
+        mockNavigate.mockClear();
+
+        // Click on warn status button
+        fireEvent.click(screen.getByTestId('warn-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?globalState=warn');
+    });
+
+    test('navigates to heartbeats with status and state parameters', async () => {
+        render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
+        });
+
+        // Click on beating status button
+        fireEvent.click(screen.getByTestId('beating-status-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/heartbeats?status=beating');
+
+        mockNavigate.mockClear();
+
+        // Click on running state button
+        fireEvent.click(screen.getByTestId('running-state-button'));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/heartbeats?status=beating&state=running');
+    });
+
     test('handles empty data correctly', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
+        useNodeStats.mockReturnValue({
+            count: 0,
+            frozen: 0,
+            unfrozen: 0
+        });
+
+        useObjectStats.mockReturnValue({
+            objectCount: 0,
+            statusCount: {
+                up: 0,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 0,
+            namespaceSubtitle: []
+        });
+
+        useHeartbeatStats.mockReturnValue({
+            count: 0,
+            beating: 0,
+            stale: 0,
+            stateCount: {running: 0}
+        });
+
         axios.get.mockResolvedValue({data: {items: []}});
 
         render(
@@ -237,17 +378,22 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
+        // Wait for loading to complete
+        await waitFor(() => {
+            expect(screen.getByTestId('node-count')).toBeInTheDocument();
+        });
+
+        // Now check the values
         expect(screen.getByTestId('node-count')).toHaveTextContent('0');
         expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0 | Unfrozen: 0');
         expect(screen.getByTestId('object-count')).toHaveTextContent('0');
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 0');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 0');
         expect(screen.getByTestId('down-count')).toHaveTextContent('Down 0');
+        expect(screen.getByTestId('na-count')).toHaveTextContent('N/A 0');
         expect(screen.getByTestId('namespace-count')).toHaveTextContent('0');
         expect(screen.getByTestId('heartbeat-count')).toHaveTextContent('0');
-        await waitFor(() => {
-            expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
-        });
+        expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
     });
 
     test('does not fetch data if no auth token', async () => {
@@ -275,15 +421,73 @@ describe('ClusterOverview', () => {
         });
     });
 
+    test('handles API error during fetch and component unmount during fetch', async () => {
+        let resolvePromise;
+        const slowPromise = new Promise((resolve) => {
+            resolvePromise = resolve;
+        });
+
+        axios.get.mockReturnValue(slowPromise);
+
+        const {unmount} = render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        // Unmount the component before the promise resolves
+        unmount();
+
+        // Resolve the promise after unmount
+        resolvePromise({data: {items: [{id: 'pool1'}]}});
+
+        await act(async () => {
+            await slowPromise;
+        });
+
+        // Component should handle unmount gracefully without setting state
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    test('handles API error and component unmount during error', async () => {
+        let rejectPromise;
+        const errorPromise = new Promise((resolve, reject) => {
+            rejectPromise = reject;
+        });
+
+        axios.get.mockReturnValue(errorPromise);
+
+        const {unmount} = render(
+            <MemoryRouter>
+                <ClusterOverview/>
+            </MemoryRouter>
+        );
+
+        // Unmount the component before the error is thrown
+        unmount();
+
+        // Reject the promise after unmount
+        rejectPromise(new Error('API Error'));
+
+        await act(async () => {
+            try {
+                await errorPromise;
+            } catch (e) {
+                // Expected error
+            }
+        });
+
+        // Component should handle unmount gracefully without setting state
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
     test('handles nodes with missing frozen_at property', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {
-                node1: {frozen_at: '2023-01-01T00:00:00Z'},
-                node2: {}, // frozen_at missing
-            },
-            objectStatus: mockObjectStatus,
-            heartbeatStatus: mockHeartbeatStatus,
-        }));
+        useNodeStats.mockReturnValue({
+            count: 2,
+            frozen: 1,
+            unfrozen: 1
+        });
+
         axios.get.mockResolvedValue({data: {items: []}});
 
         render(
@@ -302,15 +506,19 @@ describe('ClusterOverview', () => {
     });
 
     test('handles objects with missing status or avail property', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: mockNodeStatus,
-            objectStatus: {
-                'ns1/svc/obj1': {avail: 'up', provisioned: true},
-                'ns1/svc/obj2': {}, // avail missing
-                'root/svc/obj3': null, // status missing
+        useObjectStats.mockReturnValue({
+            objectCount: 3,
+            statusCount: {
+                up: 1,
+                warn: 0,
+                down: 0,
+                'n/a': 2,
+                unprovisioned: 0
             },
-            heartbeatStatus: mockHeartbeatStatus,
-        }));
+            namespaceCount: 0,
+            namespaceSubtitle: []
+        });
+
         axios.get.mockResolvedValue({data: {items: []}});
 
         render(
@@ -330,18 +538,13 @@ describe('ClusterOverview', () => {
     });
 
     test('handles heartbeats with unrecognized state', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: mockNodeStatus,
-            objectStatus: mockObjectStatus,
-            heartbeatStatus: {
-                node1: {
-                    streams: [
-                        {id: 'dev1.rx', state: 'paused', peers: {peer1: {is_beating: true}}},
-                        {id: 'dev2.tx', state: 'running', peers: {peer1: {is_beating: false}}},
-                    ],
-                },
-            },
-        }));
+        useHeartbeatStats.mockReturnValue({
+            count: 2,
+            beating: 1,
+            stale: 1,
+            stateCount: {running: 1, unknown: 1}
+        });
+
         axios.get.mockResolvedValue({data: {items: []}});
 
         render(
@@ -396,25 +599,17 @@ describe('ClusterOverview', () => {
     });
 
     test('handles unprovisioned status objects without crashing', async () => {
-        Storage.prototype.getItem = jest.fn(() => 'mock-token');
-
-        axios.get.mockImplementation((url) => {
-            if (url.includes('/object')) {
-                // Simulates an object with provisioned = "false"
-                return Promise.resolve({
-                    data: {
-                        items: [
-                            {
-                                metadata: {namespace: 'ns1'},
-                                status: {provisioned: 'false'},
-                            },
-                        ],
-                    },
-                });
-            }
-
-            // Default mocks for other endpoints
-            return Promise.resolve({data: {items: []}});
+        useObjectStats.mockReturnValue({
+            objectCount: 1,
+            statusCount: {
+                up: 0,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 1
+            },
+            namespaceCount: 1,
+            namespaceSubtitle: [{namespace: 'ns1', count: 1}]
         });
 
         render(
@@ -430,8 +625,6 @@ describe('ClusterOverview', () => {
     });
 
     test('renders correctly when networks is empty', async () => {
-        Storage.prototype.getItem = jest.fn(() => 'mock-token');
-
         axios.get.mockImplementation((url) => {
             if (url.includes('/network')) {
                 return Promise.resolve({data: {items: []}});
@@ -453,20 +646,11 @@ describe('ClusterOverview', () => {
     });
 
     test('handles various frozen_at date formats', async () => {
-        const mockNodeStatus = {
-            node1: {frozen_at: '2023-01-01T00:00:00Z'}, // frozen
-            node2: {frozen_at: '0001-01-01T00:00:00Z'}, // not frozen (default value)
-            node3: {frozen_at: null}, // not frozen
-            node4: {frozen_at: undefined}, // not frozen
-            node5: {frozen_at: 'invalid-date'}, // invalid date
-            node6: {}, // no frozen_at
-        };
-
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: mockNodeStatus,
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
+        useNodeStats.mockReturnValue({
+            count: 6,
+            frozen: 1,
+            unfrozen: 5
+        });
 
         render(
             <MemoryRouter>
@@ -479,24 +663,28 @@ describe('ClusterOverview', () => {
         });
 
         const nodeStatusText = screen.getByTestId('node-status').textContent;
-        expect(nodeStatusText).toMatch(/Frozen: \d+ \| Unfrozen: \d+/);
+        expect(nodeStatusText).toMatch(/Frozen: 1 \| Unfrozen: 5/);
     });
 
     test('handles namespace parsing edge cases', async () => {
-        const mockObjectStatus = {
-            'ns1/svc/obj1': {avail: 'up', provisioned: true},
-            'ns2/svc/obj2': {avail: 'up', provisioned: true},
-            'root/svc/obj3': {avail: 'up', provisioned: true},
-            'ns1/svc/obj4': {avail: 'up', provisioned: true},
-            'invalid-namespace': {avail: 'up', provisioned: true},
-            '': {avail: 'up', provisioned: true},
-        };
-
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: mockObjectStatus,
-            heartbeatStatus: {},
-        }));
+        useObjectStats.mockReturnValue({
+            objectCount: 6,
+            statusCount: {
+                up: 6,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 4,
+            namespaceSubtitle: [
+                {namespace: 'ns1', count: 2},
+                {namespace: 'ns2', count: 1},
+                {namespace: 'root', count: 1},
+                {namespace: 'invalid-namespace', count: 1},
+                {namespace: '', count: 1}
+            ]
+        });
 
         render(
             <MemoryRouter>
@@ -510,26 +698,12 @@ describe('ClusterOverview', () => {
     });
 
     test('handles heartbeat state counting edge cases', async () => {
-        const mockHeartbeatStatus = {
-            node1: {
-                streams: [
-                    {id: 'dev1.rx', state: 'running', peers: {peer1: {is_beating: true}}},
-                    {id: 'dev1.tx', state: 'running', peers: {peer1: {is_beating: true}}},
-                    {id: 'dev2.rx', state: 'stopped', peers: {peer1: {is_beating: false}}},
-                    {id: 'dev2.tx', state: 'failed', peers: {peer1: {is_beating: false}}},
-                    {id: 'dev3.rx', state: 'paused', peers: {peer1: {is_beating: true}}},
-                    {id: 'dev3.tx', state: null, peers: {peer1: {is_beating: true}}},
-                    {id: 'dev4.rx', state: undefined, peers: {peer1: {is_beating: true}}},
-                    {id: 'dev4.tx', peers: {peer1: {is_beating: true}}},
-                ],
-            },
-        };
-
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: mockHeartbeatStatus,
-        }));
+        useHeartbeatStats.mockReturnValue({
+            count: 8,
+            beating: 5,
+            stale: 3,
+            stateCount: {running: 2, stopped: 1, failed: 1, paused: 1, unknown: 3}
+        });
 
         render(
             <MemoryRouter>
@@ -543,12 +717,6 @@ describe('ClusterOverview', () => {
     });
 
     test('handles API errors gracefully for pools', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockImplementation((url) => {
             if (url.includes('/pools')) {
                 return Promise.reject(new Error('Pool API unavailable'));
@@ -568,12 +736,6 @@ describe('ClusterOverview', () => {
     });
 
     test('handles API errors gracefully for networks', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockImplementation((url) => {
             if (url.includes('/networks')) {
                 return Promise.reject(new Error('Network API unavailable'));
@@ -593,11 +755,31 @@ describe('ClusterOverview', () => {
     });
 
     test('handles navigation for stat cards', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {node1: {frozen_at: null}},
-            objectStatus: {'obj1': {avail: 'up', provisioned: true}},
-            heartbeatStatus: {node1: {streams: []}},
-        }));
+        useNodeStats.mockReturnValue({
+            count: 1,
+            frozen: 0,
+            unfrozen: 1
+        });
+
+        useObjectStats.mockReturnValue({
+            objectCount: 1,
+            statusCount: {
+                up: 1,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 1,
+            namespaceSubtitle: []
+        });
+
+        useHeartbeatStats.mockReturnValue({
+            count: 1,
+            beating: 1,
+            stale: 0,
+            stateCount: {running: 1}
+        });
 
         axios.get.mockResolvedValue({
             data: {
@@ -630,17 +812,15 @@ describe('ClusterOverview', () => {
         cards.forEach(({role, expectedRoute}) => {
             const card = screen.getByRole('button', {name: new RegExp(role, 'i')});
             fireEvent.click(card);
+            act(() => {
+                jest.advanceTimersByTime(50);
+            });
             expect(mockNavigate).toHaveBeenCalledWith(expectedRoute);
+            mockNavigate.mockClear();
         });
     });
 
     test('handles various API response formats for pools', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockImplementation((url) => {
             if (url.includes('/pools')) {
                 return Promise.resolve({
@@ -667,12 +847,6 @@ describe('ClusterOverview', () => {
     });
 
     test('handles various API response formats for networks', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockImplementation((url) => {
             if (url.includes('/networks')) {
                 return Promise.resolve({
@@ -698,18 +872,11 @@ describe('ClusterOverview', () => {
         });
     });
 
-    test('handles partial node data in store', async () => {
-        useEventStore.mockImplementation((selector) => {
-            const state = {
-                nodeStatus: {node1: {frozen_at: null}},
-                objectStatus: undefined,
-                heartbeatStatus: {},
-            };
-
-            if (selector.toString().includes('nodeStatus')) {
-                return state.nodeStatus;
-            }
-            return {};
+    test('handles partial node data', async () => {
+        useNodeStats.mockReturnValue({
+            count: 1,
+            frozen: 0,
+            unfrozen: 1
         });
 
         render(
@@ -723,18 +890,18 @@ describe('ClusterOverview', () => {
         });
     });
 
-    test('handles partial object data in store', async () => {
-        useEventStore.mockImplementation((selector) => {
-            const state = {
-                nodeStatus: {},
-                objectStatus: {'obj1': {avail: 'up', provisioned: true}},
-                heartbeatStatus: undefined,
-            };
-
-            if (selector.toString().includes('objectStatus')) {
-                return state.objectStatus;
-            }
-            return {};
+    test('handles partial object data', async () => {
+        useObjectStats.mockReturnValue({
+            objectCount: 1,
+            statusCount: {
+                up: 1,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 1,
+            namespaceSubtitle: []
         });
 
         render(
@@ -748,18 +915,12 @@ describe('ClusterOverview', () => {
         });
     });
 
-    test('handles partial heartbeat data in store', async () => {
-        useEventStore.mockImplementation((selector) => {
-            const state = {
-                nodeStatus: undefined,
-                objectStatus: {},
-                heartbeatStatus: {node1: {streams: []}},
-            };
-
-            if (selector.toString().includes('heartbeatStatus')) {
-                return state.heartbeatStatus;
-            }
-            return {};
+    test('handles partial heartbeat data', async () => {
+        useHeartbeatStats.mockReturnValue({
+            count: 1,
+            beating: 0,
+            stale: 1,
+            stateCount: {running: 0}
         });
 
         render(
@@ -774,12 +935,6 @@ describe('ClusterOverview', () => {
     });
 
     test('handles empty arrays in API responses', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockResolvedValue({
             data: {
                 items: []
@@ -798,12 +953,6 @@ describe('ClusterOverview', () => {
     });
 
     test('handles null values in API responses', async () => {
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: {},
-        }));
-
         axios.get.mockResolvedValue({
             data: {
                 items: null
@@ -822,23 +971,30 @@ describe('ClusterOverview', () => {
     });
 
     test('handles missing properties in store data', async () => {
-        useEventStore.mockImplementation((selector) => {
-            const state = {
-                nodeStatus: undefined,
-                objectStatus: undefined,
-                heartbeatStatus: undefined,
-            };
+        useNodeStats.mockReturnValue({
+            count: 0,
+            frozen: 0,
+            unfrozen: 0
+        });
 
-            if (selector.toString().includes('nodeStatus')) {
-                return state.nodeStatus || {};
-            }
-            if (selector.toString().includes('objectStatus')) {
-                return state.objectStatus || {};
-            }
-            if (selector.toString().includes('heartbeatStatus')) {
-                return state.heartbeatStatus || {};
-            }
-            return {};
+        useObjectStats.mockReturnValue({
+            objectCount: 0,
+            statusCount: {
+                up: 0,
+                warn: 0,
+                down: 0,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 0,
+            namespaceSubtitle: []
+        });
+
+        useHeartbeatStats.mockReturnValue({
+            count: 0,
+            beating: 0,
+            stale: 0,
+            stateCount: {}
         });
 
         render(
@@ -853,23 +1009,12 @@ describe('ClusterOverview', () => {
     });
 
     test('handles heartbeat peers edge cases', async () => {
-        const mockHeartbeatStatus = {
-            node1: {
-                streams: [
-                    {id: 'dev1', state: 'running', peers: null},
-                    {id: 'dev2', state: 'running', peers: {}},
-                    {id: 'dev3', state: 'running'},
-                    {id: 'dev4', state: 'running', peers: {peer1: {is_beating: undefined}}},
-                    {id: 'dev5', state: 'running', peers: {peer1: {is_beating: null}}},
-                ],
-            },
-        };
-
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: {},
-            heartbeatStatus: mockHeartbeatStatus,
-        }));
+        useHeartbeatStats.mockReturnValue({
+            count: 5,
+            beating: 2,
+            stale: 3,
+            stateCount: {running: 5}
+        });
 
         render(
             <MemoryRouter>
@@ -883,18 +1028,23 @@ describe('ClusterOverview', () => {
     });
 
     test('handles object status with special characters in names', async () => {
-        const mockObjectStatus = {
-            'ns-with-dash/svc/obj-with-dash': {avail: 'up', provisioned: true},
-            'ns_with_underscore/svc/obj_with_underscore': {avail: 'down', provisioned: true},
-            'ns.with.dots/svc/obj.with.dots': {avail: 'warn', provisioned: true},
-            'ns/with/slashes/svc/obj': {avail: 'up', provisioned: true},
-        };
-
-        useEventStore.mockImplementation((selector) => selector({
-            nodeStatus: {},
-            objectStatus: mockObjectStatus,
-            heartbeatStatus: {},
-        }));
+        useObjectStats.mockReturnValue({
+            objectCount: 4,
+            statusCount: {
+                up: 2,
+                warn: 1,
+                down: 1,
+                'n/a': 0,
+                unprovisioned: 0
+            },
+            namespaceCount: 4,
+            namespaceSubtitle: [
+                {namespace: 'ns-with-dash', count: 1},
+                {namespace: 'ns_with_underscore', count: 1},
+                {namespace: 'ns.with.dots', count: 1},
+                {namespace: 'ns', count: 1}
+            ]
+        });
 
         render(
             <MemoryRouter>

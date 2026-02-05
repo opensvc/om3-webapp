@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState, useRef, useMemo} from "react";
-import {useParams, useNavigate} from "react-router-dom";
+import {useParams} from "react-router-dom";
 import {
     Alert,
     Box,
@@ -24,7 +24,6 @@ import {
     Checkbox,
     CircularProgress,
     Drawer,
-    Checkbox as MuiCheckbox,
 } from "@mui/material";
 import {
     MoreVert as MoreVertIcon,
@@ -390,7 +389,6 @@ const ObjectInstanceView = () => {
     const {node: nodeName, objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-    const navigate = useNavigate();
     const theme = useTheme();
 
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
@@ -412,6 +410,8 @@ const ObjectInstanceView = () => {
 
     const [pendingAction, setPendingAction] = useState(null);
     const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
+
+
     const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
     const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -440,6 +440,7 @@ const ObjectInstanceView = () => {
         "InstanceMonitorUpdated",
         "InstanceConfigUpdated",
     ], []);
+
 
     useEffect(() => {
         isMounted.current = true;
@@ -531,7 +532,7 @@ const ObjectInstanceView = () => {
 
         try {
             let url;
-            let message = `Executing ${action}...`;
+            let message;
 
             if (pendingAction.rid) {
                 if (action === "console") {
@@ -766,23 +767,6 @@ const ObjectInstanceView = () => {
         }
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
-
-    const filterEventsByNode = useCallback((events) => {
-        return events.filter(event => {
-            if (event.eventType?.includes?.("CONNECTION")) return true;
-
-            const data = event.data || {};
-
-            if (data.node === nodeName) return true;
-            if (data.labels?.node === nodeName) return true;
-            if (data.data?.node === nodeName) return true;
-            if (data.data?.labels?.node === nodeName) return true;
-
-            if (data.path && data.path.includes(nodeName)) return true;
-
-            return false;
-        });
-    }, [nodeName]);
 
     const instanceStatus = instanceData.avail || 'unknown';
     const isFrozen = instanceData.frozen_at && instanceData.frozen_at !== "0001-01-01T00:00:00Z";

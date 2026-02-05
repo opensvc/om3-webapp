@@ -22,6 +22,8 @@ import {useDarkMode} from "../context/DarkModeContext";
 import {ThemeProvider, createTheme} from '@mui/material/styles';
 import {prepareForNavigation} from "../eventSourceManager";
 
+import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
+
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
@@ -92,21 +94,22 @@ const isTokenValid = (token) => {
         logger.debug("No token found in localStorage");
         return false;
     }
-    try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        const now = Date.now() / 1000;
-        const expiration = payload.exp;
-        const isValid = expiration > now;
-        logger.debug(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
-        return isValid;
-    } catch (error) {
-        logger.error("Error while verifying token:", error);
+
+    const payload = decodeTokenFromLogin(token);
+    if (!payload || !payload.exp) {
         return false;
     }
+
+    const now = Date.now() / 1000;
+    const expiration = payload.exp;
+    const isValid = expiration > now;
+    logger.debug(`Token validation: expires_at=${expiration}, now=${now}, valid=${isValid}`);
+    return isValid;
 };
 
 // Component to handle OIDC initialization
 const OidcInitializer = ({children}) => {
+    const location = useLocation();
     const {userManager, recreateUserManager, isInitialized} = useOidc();
     const authDispatch = useAuthDispatch();
     const auth = useAuth();
@@ -218,6 +221,11 @@ const OidcInitializer = ({children}) => {
     // Handle auth check on resume for OIDC
     useEffect(() => {
         const handleCheckAuthOnResume = () => {
+            const authPaths = ['/auth-choice', '/auth/login', '/auth-callback', '/silent-renew'];
+            if (authPaths.includes(location.pathname)) {
+                return;
+            }
+
             try {
                 const authChoice = localStorage.getItem('authChoice');
                 const token = localStorage.getItem('authToken');
@@ -259,24 +267,36 @@ const OidcInitializer = ({children}) => {
         };
 
         const visibilityHandler = () => {
-            if (document.visibilityState === 'visible') handleCheckAuthOnResume();
+            if (document.visibilityState === 'visible') {
+                setTimeout(handleCheckAuthOnResume, 500);
+            }
+        };
+
+        const focusHandler = () => {
+            setTimeout(handleCheckAuthOnResume, 500);
         };
 
         document.addEventListener('visibilitychange', visibilityHandler);
-        window.addEventListener('focus', handleCheckAuthOnResume);
+        window.addEventListener('focus', focusHandler);
 
         return () => {
             document.removeEventListener('visibilitychange', visibilityHandler);
-            window.removeEventListener('focus', handleCheckAuthOnResume);
+            window.removeEventListener('focus', focusHandler);
         };
-    }, [navigate, userManager, onUserRefreshed]);
+    }, [navigate, userManager, onUserRefreshed, location.pathname]);
 
     return children;
 };
 
 const ProtectedRoute = ({children}) => {
+    const location = useLocation();
     const token = localStorage.getItem("authToken");
     const authChoice = localStorage.getItem('authChoice');
+
+    const authPaths = ['/auth-choice', '/auth/login', '/auth-callback', '/silent-renew'];
+    if (authPaths.includes(location.pathname)) {
+        return children;
+    }
 
     // For OIDC, rely on UserManager to handle expiration
     if (authChoice === 'openid') {
@@ -327,7 +347,8 @@ const App = () => {
                             <Suspense fallback={<Loading/>}>
                                 <Routes>
                                     <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                                    <Route path="/cluster" element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                                    <Route path="/cluster"
+                                           element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
                                     <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                     <Route path="/heartbeats" element={<Heartbeats/>}/>
                                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>

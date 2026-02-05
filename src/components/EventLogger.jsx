@@ -18,7 +18,7 @@ import {
     useTheme
 } from "@mui/material";
 import {
-    BugReport,
+    Sensors,
     Close,
     DeleteOutline,
     ExpandMore,
@@ -815,7 +815,7 @@ const EventLogger = ({
                     <Button
                         variant="contained"
                         color="primary.light"
-                        startIcon={<BugReport/>}
+                        startIcon={<Sensors/>}
                         onClick={() => setDrawerOpen(true)}
                         sx={{
                             position: "fixed",

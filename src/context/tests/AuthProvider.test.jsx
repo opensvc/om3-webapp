@@ -24,6 +24,16 @@ jest.mock('../../components/Login', () => ({
 }));
 const {decodeToken, refreshToken} = require('../../components/Login');
 
+// Mock logger
+jest.mock('../../utils/logger.js', () => ({
+    info: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    log: jest.fn(),
+}));
+const logger = require('../../utils/logger.js');
+
 // Mock window.oidcUserManager
 let tokenExpiredCallback = null;
 const mockSigninSilent = jest.fn();
@@ -280,7 +290,7 @@ describe('AuthProvider', () => {
     test('schedules token refresh with valid token', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         refreshToken.mockResolvedValue('new-token');
-        const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
+
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -288,7 +298,8 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
         fireEvent.click(screen.getByTestId('setAccessToken'));
-        expect(consoleInfoSpy).toHaveBeenCalledWith(
+
+        expect(logger.info).toHaveBeenCalledWith(
             'Token refresh scheduled in',
             expect.any(Number),
             'seconds'
@@ -302,12 +313,10 @@ describe('AuthProvider', () => {
             await Promise.resolve();
         });
         expect(refreshToken).toHaveBeenCalled();
-        consoleInfoSpy.mockRestore();
     });
 
     test('does not schedule refresh for expired token', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 10});
-        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -315,12 +324,11 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
         fireEvent.click(screen.getByTestId('setAccessToken'));
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect(logger.warn).toHaveBeenCalledWith(
             'Token already expired or too close to expiration, no refresh scheduled'
         );
         expect(refreshToken).not.toHaveBeenCalled();
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
-        consoleWarnSpy.mockRestore();
     });
 
     test('cleans up timeout on component unmount', () => {
@@ -342,19 +350,16 @@ describe('AuthProvider', () => {
     test('does not initialize BroadcastChannel when undefined', () => {
         const originalBroadcastChannel = global.BroadcastChannel;
         delete global.BroadcastChannel;
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
             </AuthProvider>
         );
-        expect(consoleLogSpy).not.toHaveBeenCalled();
-        consoleLogSpy.mockRestore();
+        expect(logger.info).not.toHaveBeenCalled();
         global.BroadcastChannel = originalBroadcastChannel;
     });
 
     test('does not schedule refresh when no token is provided', () => {
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -362,18 +367,16 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
         fireEvent.click(screen.getByTestId('setAccessTokenNull'));
-        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+        expect(logger.info).not.toHaveBeenCalledWith(
             'Token refresh scheduled in',
             expect.any(Number),
             'seconds'
         );
         expect(refreshToken).not.toHaveBeenCalled();
-        consoleLogSpy.mockRestore();
     });
 
     test('does not schedule refresh when authChoice is openid', () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -382,18 +385,16 @@ describe('AuthProvider', () => {
         );
         fireEvent.click(screen.getByTestId('setAuthChoiceOpenid'));
         fireEvent.click(screen.getByTestId('setAccessToken'));
-        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+        expect(logger.info).not.toHaveBeenCalledWith(
             'Token refresh scheduled in',
             expect.any(Number),
             'seconds'
         );
         expect(refreshToken).not.toHaveBeenCalled();
-        consoleLogSpy.mockRestore();
     });
 
     test('does not schedule refresh when token has no exp field', () => {
         decodeToken.mockReturnValue({});
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -401,20 +402,18 @@ describe('AuthProvider', () => {
             </AuthProvider>
         );
         fireEvent.click(screen.getByTestId('setAccessToken'));
-        expect(consoleLogSpy).not.toHaveBeenCalledWith(
+        expect(logger.info).not.toHaveBeenCalledWith(
             'Token refresh scheduled in',
             expect.any(Number),
             'seconds'
         );
         expect(refreshToken).not.toHaveBeenCalled();
-        consoleLogSpy.mockRestore();
     });
 
     test('handles token refresh errors', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
         refreshToken.mockRejectedValue(new Error('Refresh failed'));
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -434,17 +433,14 @@ describe('AuthProvider', () => {
         });
 
         expect(refreshToken).toHaveBeenCalled();
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Token refresh error:', expect.any(Error));
+        expect(logger.error).toHaveBeenCalledWith('Token refresh error:', expect.any(Error));
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(broadcastChannelInstance._messages).toContainEqual({type: 'logout'});
-        consoleErrorSpy.mockRestore();
-        consoleLogSpy.mockRestore();
     });
 
     test('handles tokenUpdated message from BroadcastChannel', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
-        const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -457,14 +453,12 @@ describe('AuthProvider', () => {
             broadcastChannelInstance.onmessage({data: {type: 'tokenUpdated', data: 'new-token'}});
         });
 
-        expect(consoleInfoSpy).toHaveBeenCalledWith('Token updated from another tab');
+        expect(logger.info).toHaveBeenCalledWith('Token updated from another tab');
         expect(screen.getByTestId('accessToken').textContent).toBe('"new-token"');
         expect(decodeToken).toHaveBeenCalledWith('new-token');
-        consoleInfoSpy.mockRestore();
     });
 
     test('handles logout message from BroadcastChannel', async () => {
-        const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -478,16 +472,15 @@ describe('AuthProvider', () => {
             broadcastChannelInstance.onmessage({data: {type: 'logout'}});
         });
 
-        expect(consoleInfoSpy).toHaveBeenCalledWith('Logout triggered from another tab');
+        expect(logger.info).toHaveBeenCalledWith('Logout triggered from another tab');
         expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         expect(screen.getByTestId('accessToken').textContent).toBe('null');
-        consoleInfoSpy.mockRestore();
     });
 
     test('ignores refresh if token is updated by another tab', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
         refreshToken.mockResolvedValue('new-token');
-        const consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation();
+
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -502,13 +495,11 @@ describe('AuthProvider', () => {
             await Promise.resolve();
         });
 
-        expect(consoleDebugSpy).toHaveBeenCalledWith('Refresh skipped, token already updated by another tab');
+        expect(logger.debug).toHaveBeenCalledWith('Refresh skipped, token already updated by another tab');
         expect(decodeToken).toHaveBeenCalledWith('different-token');
-        consoleDebugSpy.mockRestore();
     });
 
     test('sets up OIDC token refresh when authChoice is openid', async () => {
-        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -521,7 +512,6 @@ describe('AuthProvider', () => {
         await waitFor(() => {
             expect(mockAddAccessTokenExpired).toHaveBeenCalledWith(expect.any(Function));
         });
-        consoleWarnSpy.mockRestore();
     });
 
     test('cleans up OIDC token refresh on unmount', async () => {
@@ -562,8 +552,6 @@ describe('AuthProvider', () => {
     });
 
     test('handleTokenExpired successfully renews token via signinSilent', async () => {
-        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         const mockUser = {
             access_token: 'new-oidc-token',
             expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -590,7 +578,7 @@ describe('AuthProvider', () => {
             tokenExpiredCallback();
         });
 
-        expect(consoleWarnSpy).toHaveBeenCalledWith('OpenID token expired, attempting silent renew...');
+        expect(logger.warn).toHaveBeenCalledWith('OpenID token expired, attempting silent renew...');
         expect(mockSigninSilent).toHaveBeenCalled();
 
         await waitFor(() => {
@@ -602,14 +590,9 @@ describe('AuthProvider', () => {
             type: 'tokenUpdated',
             data: 'new-oidc-token',
         });
-
-        consoleWarnSpy.mockRestore();
-        consoleLogSpy.mockRestore();
     });
 
     test('handleTokenExpired logs out when signinSilent fails', async () => {
-        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
         mockSigninSilent.mockRejectedValue(new Error('Silent renew failed'));
 
         render(
@@ -632,24 +615,20 @@ describe('AuthProvider', () => {
             tokenExpiredCallback();
         });
 
-        expect(consoleWarnSpy).toHaveBeenCalledWith('OpenID token expired, attempting silent renew...');
+        expect(logger.warn).toHaveBeenCalledWith('OpenID token expired, attempting silent renew...');
         expect(mockSigninSilent).toHaveBeenCalled();
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Silent renew failed:', expect.any(Error));
+        expect(logger.error).toHaveBeenCalledWith('Silent renew failed:', expect.any(Error));
 
         await waitFor(() => {
             expect(screen.getByTestId('isAuthenticated').textContent).toBe('false');
         });
 
         expect(broadcastChannelInstance._messages).toContainEqual({type: 'logout'});
-
-        consoleWarnSpy.mockRestore();
-        consoleErrorSpy.mockRestore();
     });
 
     test('successful token refresh broadcasts tokenUpdated message', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 10});
         refreshToken.mockResolvedValue('refreshed-token');
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
         render(
             <AuthProvider>
@@ -670,12 +649,9 @@ describe('AuthProvider', () => {
             type: 'tokenUpdated',
             data: 'refreshed-token',
         });
-
-        consoleLogSpy.mockRestore();
     });
 
     test('handles BroadcastChannel message with undefined event.data', async () => {
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -687,14 +663,11 @@ describe('AuthProvider', () => {
             broadcastChannelInstance.onmessage({data: undefined});
         });
 
-        expect(consoleLogSpy).not.toHaveBeenCalledWith('Token updated from another tab');
-        expect(consoleLogSpy).not.toHaveBeenCalledWith('Logout triggered from another tab');
-
-        consoleLogSpy.mockRestore();
+        expect(logger.info).not.toHaveBeenCalledWith('Token updated from another tab');
+        expect(logger.info).not.toHaveBeenCalledWith('Logout triggered from another tab');
     });
 
     test('handles BroadcastChannel message with null data', async () => {
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
         render(
             <AuthProvider>
                 <TestAuthComponent/>
@@ -706,15 +679,12 @@ describe('AuthProvider', () => {
             broadcastChannelInstance.onmessage({data: null});
         });
 
-        expect(consoleLogSpy).not.toHaveBeenCalledWith('Token updated from another tab');
-        expect(consoleLogSpy).not.toHaveBeenCalledWith('Logout triggered from another tab');
-
-        consoleLogSpy.mockRestore();
+        expect(logger.info).not.toHaveBeenCalledWith('Token updated from another tab');
+        expect(logger.info).not.toHaveBeenCalledWith('Logout triggered from another tab');
     });
 
     test('does not reschedule refresh when tokenUpdated with openid authChoice', async () => {
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 60});
-        const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
 
         render(
             <AuthProvider>
@@ -729,10 +699,8 @@ describe('AuthProvider', () => {
             broadcastChannelInstance.onmessage({data: {type: 'tokenUpdated', data: 'new-token'}});
         });
 
-        expect(consoleInfoSpy).toHaveBeenCalledWith('Token updated from another tab');
-        expect(consoleInfoSpy).not.toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
-
-        consoleInfoSpy.mockRestore();
+        expect(logger.info).toHaveBeenCalledWith('Token updated from another tab');
+        expect(logger.info).not.toHaveBeenCalledWith('Token refresh scheduled in', expect.any(Number), 'seconds');
     });
 
     test('SetAccessToken with null removes token from localStorage', () => {

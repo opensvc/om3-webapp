@@ -174,6 +174,10 @@ const Login = forwardRef((props, ref) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (!username.trim() || !password.trim()) {
+            setErrorMessage(t('Please enter both username and password'));
+            return;
+        }
         if (!loading) handleLogin(username, password);
     };
 

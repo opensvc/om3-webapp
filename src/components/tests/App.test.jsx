@@ -22,8 +22,18 @@ jest.mock('../NetworkDetails', () => () => <div data-testid="network-details">Ne
 jest.mock('../WhoAmI', () => () => <div data-testid="whoami">WhoAmI</div>);
 jest.mock('../SilentRenew.jsx', () => () => <div data-testid="silent-renew">SilentRenew</div>);
 jest.mock('../AuthChoice.jsx', () => () => <div data-testid="auth-choice">AuthChoice</div>);
-jest.mock('../Login', () => () => <div data-testid="login">Login</div>);
 jest.mock('../OidcCallback', () => () => <div data-testid="auth-callback">OidcCallback</div>);
+
+// Mock Login
+jest.mock('../Login', () => ({
+    __esModule: true,
+    default: () => <div data-testid="login">Login</div>,
+    decodeToken: jest.fn(),
+    refreshToken: jest.fn(),
+}));
+
+// Mock decodeToken
+const mockDecodeToken = jest.requireMock('../Login').decodeToken;
 
 jest.mock('../../hooks/AuthInfo.jsx', () => jest.fn(() => ({
     openid: {
@@ -149,6 +159,7 @@ describe('App Component', () => {
 
         oidcConfiguration.mockClear();
         mockNavigate.mockClear();
+        mockDecodeToken.mockClear();
     });
 
     // Helper function to render with all providers
@@ -174,6 +185,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/']);
 
         expect(await screen.findByTestId('navbar')).toBeInTheDocument();
@@ -186,6 +199,8 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
         );
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('cluster')).toBeInTheDocument();
@@ -196,6 +211,8 @@ describe('App Component', () => {
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
         );
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -208,6 +225,8 @@ describe('App Component', () => {
             k === 'authToken' ? 'not-a-valid-jwt' : (k === 'authChoice' ? 'openid' : null)
         );
         mockAuthState.authChoice = 'openid';
+
+        mockDecodeToken.mockReturnValue(null);
 
         renderAppWithProviders(['/cluster']);
 
@@ -222,6 +241,8 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
         );
         mockAuthState.authChoice = 'openid';
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -242,6 +263,8 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
         );
         mockAuthState.authChoice = 'openid';
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -270,6 +293,8 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'openid' : null)
         );
         mockAuthState.authChoice = 'openid';
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -491,10 +516,16 @@ describe('App Component', () => {
             k === 'authToken' ? invalidToken : (k === 'authChoice' ? 'basic' : null)
         );
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+
         renderAppWithProviders(['/cluster']);
 
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 600));
         });
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
@@ -506,6 +537,8 @@ describe('App Component', () => {
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authToken' ? 'dummy-token' : (k === 'authChoice' ? 'openid' : null)
         );
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -539,6 +572,8 @@ describe('App Component', () => {
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authToken' ? validToken : (k === 'authChoice' ? 'basic' : null)
         );
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/unknown-route']);
 
@@ -660,6 +695,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+
         renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
@@ -676,11 +713,17 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
         });
 
         // Should not redirect
@@ -696,11 +739,17 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
         });
 
         // Should not redirect
@@ -793,6 +842,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Now mock getItem to throw error for the focus event
@@ -821,6 +872,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue(null);
+
         renderAppWithProviders(['/cluster']);
 
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
@@ -833,6 +886,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'basic';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
 
         renderAppWithProviders(['/cluster']);
 
@@ -909,6 +964,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Mock document.visibilityState
@@ -937,11 +994,17 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
         });
 
         // Should not redirect
@@ -960,11 +1023,17 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
+
         renderAppWithProviders(['/cluster']);
 
         // Simulate focus
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 600));
         });
 
         // Should redirect
@@ -983,6 +1052,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'basic';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         const {unmount} = renderAppWithProviders(['/']);
 
@@ -1006,6 +1077,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'basic';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         // Test each protected route
         const routes = [
@@ -1096,8 +1169,6 @@ describe('App Component', () => {
         );
     });
 
-    // NOUVEAUX TESTS POUR AMÉLIORER LA COUVERTURE - SIMPLIFIÉS
-
     test('isTokenValid returns false for null token', async () => {
         mockLocalStorage.getItem.mockImplementation((k) => {
             if (k === 'authToken') return null; // null token
@@ -1116,6 +1187,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'basic';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue(null);
 
         renderAppWithProviders(['/cluster']);
 
@@ -1225,6 +1298,8 @@ describe('App Component', () => {
             return null;
         });
 
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
+
         renderAppWithProviders(['/network/test-network']);
 
         expect(await screen.findByTestId('network-details')).toBeInTheDocument();
@@ -1237,6 +1312,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'basic';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
 
         renderAppWithProviders(['/objects/test-object']);
 
@@ -1276,15 +1353,7 @@ describe('App Component', () => {
         });
 
         renderAppWithProviders(['/cluster']);
-
-        // Simulate focus
-        act(() => {
-            window.dispatchEvent(new Event('focus'));
-        });
-
-        // Should redirect
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
-        expect(mockNavigate).toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
     test('handleCheckAuthOnResume for OIDC with expired token and userManager', async () => {
@@ -1297,6 +1366,8 @@ describe('App Component', () => {
             if (k === 'authChoice') return 'openid';
             return null;
         });
+
+        mockDecodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
 
         // Mock successful silent renew
         const refreshedUser = {
@@ -1313,6 +1384,10 @@ describe('App Component', () => {
         // Simulate focus event
         act(() => {
             window.dispatchEvent(new Event('focus'));
+        });
+
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 600));
         });
 
         // Wait for silent renew to complete

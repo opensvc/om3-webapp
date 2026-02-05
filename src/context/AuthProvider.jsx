@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useEffect, useReducer, useRef} from 'react';
-import {decodeToken, refreshToken as doRefreshToken} from '../components/Login';
+import {decodeToken as decodeTokenFromLogin, refreshToken as doRefreshToken} from '../components/Login';
 import {updateEventSourceToken} from '../eventSourceManager';
 import logger from '../utils/logger.js';
 
@@ -67,7 +67,7 @@ export const AuthProvider = ({children}) => {
         if (refreshTimeout.current) clearTimeout(refreshTimeout.current);
         if (!token || auth.authChoice === 'openid') return;
 
-        const payload = decodeToken(token);
+        const payload = decodeTokenFromLogin(token);
         if (!payload?.exp) return;
 
         const expirationTime = payload.exp * 1000;
@@ -75,6 +75,7 @@ export const AuthProvider = ({children}) => {
 
         if (refreshTime > 0) {
             logger.info('Token refresh scheduled in', Math.round(refreshTime / 1000), 'seconds');
+
             refreshTimeout.current = setTimeout(async () => {
                 const latestToken = localStorage.getItem('authToken');
                 if (latestToken && latestToken !== token) {
@@ -145,7 +146,7 @@ export const AuthProvider = ({children}) => {
         channel.current = new BroadcastChannel('auth-channel');
         channel.current.onmessage = (event) => {
             const {type, data} = event.data || {};
-                if (type === 'tokenUpdated') {
+            if (type === 'tokenUpdated') {
                 logger.info('Token updated from another tab');
                 dispatch({type: SetAccessToken, data});
                 if (auth.authChoice !== 'openid') {

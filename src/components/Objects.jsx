@@ -10,7 +10,6 @@ import {
     TableRow,
     Typography,
     Button,
-    Popper,
     Paper,
     MenuItem,
     Checkbox,
@@ -24,10 +23,10 @@ import {
     useTheme,
     Tooltip,
     IconButton,
-    ClickAwayListener,
     CircularProgress,
     Grid,
     Collapse,
+    Menu,
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -50,8 +49,6 @@ import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
-
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
@@ -319,35 +316,6 @@ const TableRowComponent = React.memo(({
                 <IconButton onClick={handleMenuOpen} aria-label={`More actions for object ${objectName}`}>
                     <MoreVertIcon/>
                 </IconButton>
-                <Popper
-                    open={isMenuOpen}
-                    anchorEl={isMenuOpen ? document.activeElement : null}
-                    placement="bottom-end"
-                    disablePortal={isSafari}
-                    sx={{
-                        zIndex: 1300,
-                        "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}
-                    }}
-                >
-                    <ClickAwayListener onClickAway={onRowMenuClose}>
-                        <Paper elevation={3} role="menu">
-                            {filteredActions.map(({name, icon}) => (
-                                <MenuItem
-                                    key={name}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onActionClick(name, true, objectName);
-                                    }}
-                                    sx={{display: "flex", alignItems: "center", gap: 1}}
-                                    aria-label={`${name} action for object ${objectName}`}
-                                >
-                                    <ListItemIcon>{icon}</ListItemIcon>
-                                    {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </MenuItem>
-                            ))}
-                        </Paper>
-                    </ClickAwayListener>
-                </Popper>
             </TableCell>
         </TableRow>
     );
@@ -756,6 +724,17 @@ const Objects = () => {
         setPendingAction(null);
     }, []);
 
+    const filteredRowActions = useMemo(() => {
+        if (!currentObject) return [];
+        const objectData = objectStatus[currentObject];
+        return OBJECT_ACTIONS.filter(
+            ({name}) =>
+                isActionAllowedForSelection(name, [currentObject]) &&
+                (name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
+                (name !== "unfreeze" || objectData?.frozen === "frozen")
+        );
+    }, [currentObject, objectStatus]);
+
     return (
         <Box sx={{
             height: "100vh",
@@ -890,41 +869,85 @@ const Objects = () => {
                             </Button>
                         </Box>
                     </Box>
-                    <Popper
-                        open={Boolean(actionsMenuAnchor)}
-                        anchorEl={actionsMenuAnchor}
-                        placement="bottom-end"
-                        disablePortal={isSafari}
+
+                    {/* Menu for row actions */}
+                    <Menu
+                        open={Boolean(rowMenuAnchor)}
+                        anchorEl={rowMenuAnchor}
+                        onClose={handleRowMenuClose}
+                        onClick={(e) => e.stopPropagation()}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'right',
+                        }}
                         sx={{
-                            zIndex: 1300,
-                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}
+                            "& .MuiPaper-root": {
+                                minWidth: 200,
+                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                            }
                         }}
                     >
-                        <ClickAwayListener onClickAway={handleActionsMenuClose}>
-                            <Paper elevation={3} role="menu">
-                                {OBJECT_ACTIONS.map(({name, icon}) => {
-                                    const isAllowed = isActionAllowedForSelection(name, selectedObjects);
-                                    return (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => handleActionClick(name)}
-                                            disabled={!isAllowed}
-                                            sx={{
-                                                color: isAllowed ? "inherit" : "text.disabled",
-                                                "&.Mui-disabled": {opacity: 0.5}
-                                            }}
-                                            aria-label={`${name} action for selected objects`}
-                                        >
-                                            <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
-                                                {icon}
-                                            </ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    );
-                                })}
-                            </Paper>
-                        </ClickAwayListener>
-                    </Popper>
+                        {filteredRowActions.map(({name, icon}) => (
+                            <MenuItem
+                                key={name}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleActionClick(name, true, currentObject);
+                                }}
+                                sx={{display: "flex", alignItems: "center", gap: 1}}
+                                aria-label={`${name} action for object ${currentObject}`}
+                            >
+                                <ListItemIcon>{icon}</ListItemIcon>
+                                {name.charAt(0).toUpperCase() + name.slice(1)}
+                            </MenuItem>
+                        ))}
+                    </Menu>
+
+                    {/* Menu for global actions */}
+                    <Menu
+                        open={Boolean(actionsMenuAnchor)}
+                        anchorEl={actionsMenuAnchor}
+                        onClose={handleActionsMenuClose}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'right',
+                        }}
+                        sx={{
+                            "& .MuiPaper-root": {
+                                minWidth: 200,
+                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"
+                            }
+                        }}
+                    >
+                        {OBJECT_ACTIONS.map(({name, icon}) => {
+                            const isAllowed = isActionAllowedForSelection(name, selectedObjects);
+                            return (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleActionClick(name)}
+                                    disabled={!isAllowed}
+                                    sx={{
+                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        "&.Mui-disabled": {opacity: 0.5}
+                                    }}
+                                    aria-label={`${name} action for selected objects`}
+                                >
+                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
+                                        {icon}
+                                    </ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            );
+                        })}
+                    </Menu>
                 </Box>
                 <Box sx={{
                     display: 'flex',

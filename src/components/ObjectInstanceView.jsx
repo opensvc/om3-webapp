@@ -410,6 +410,8 @@ const ObjectInstanceView = () => {
 
     const [pendingAction, setPendingAction] = useState(null);
     const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
+
+
     const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
     const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -438,6 +440,7 @@ const ObjectInstanceView = () => {
         "InstanceMonitorUpdated",
         "InstanceConfigUpdated",
     ], []);
+
 
     useEffect(() => {
         isMounted.current = true;

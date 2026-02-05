@@ -249,12 +249,7 @@ const ClusterOverview = () => {
                         <GridNamespaces {...gridNamespacesProps} />
                     </Box>
                 </Box>
-
-                <EventLogger
-                    eventTypes={CLUSTER_EVENT_TYPES}
-                    title="Cluster Events Logger"
-                    buttonLabel="Cluster Events"
-                />
+                {/* <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/> */}
             </Box>
         </Box>
     );

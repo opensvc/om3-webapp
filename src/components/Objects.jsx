@@ -1079,7 +1079,7 @@ const Objects = () => {
                     onClose={handleClosePendingAction}
                 />
             </Box>
-            <EventLogger eventTypes={objectEventTypes} title="Object Events Logger" buttonLabel="Object Events"/>
+            {/* <EventLogger eventTypes={objectEventTypes} title="Object Events Logger" buttonLabel="Object Events"/> */}
         </Box>
     );
 };

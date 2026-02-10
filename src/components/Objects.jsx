@@ -285,7 +285,13 @@ const TableRowComponent = React.memo(({
 
     return (
         <TableRow onClick={handleRowClick} sx={{cursor: "pointer"}}>
-            <TableCell sx={{paddingLeft: 2}}>
+            <TableCell sx={{
+                padding: "16px 0px 16px 16px",
+                minWidth: "60px",
+                width: "60px",
+                maxWidth: "60px",
+                boxSizing: "border-box"
+            }}>
                 <Checkbox
                     checked={isSelected}
                     onChange={handleCheckboxChange}
@@ -293,7 +299,15 @@ const TableRowComponent = React.memo(({
                     aria-label={`Select object ${objectName}`}
                 />
             </TableCell>
-            <TableCell sx={{minWidth: "150px", width: "150px", position: "relative", height: "100%"}}>
+            <TableCell sx={{
+                minWidth: "150px",
+                width: "150px",
+                maxWidth: "150px",
+                position: "relative",
+                height: "100%",
+                padding: "16px 8px",
+                boxSizing: "border-box"
+            }}>
                 <Box sx={{
                     width: "100%",
                     height: "100%",
@@ -309,17 +323,36 @@ const TableRowComponent = React.memo(({
                     <GlobalExpectDisplay globalExpect={objectData.globalExpect}/>
                 </Box>
             </TableCell>
-            <TableCell>
-                <Typography>{objectName}</Typography>
+            <TableCell sx={{
+                minWidth: "200px",
+                width: "auto",
+                padding: "16px 8px",
+                boxSizing: "border-box",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+            }}>
+                <Typography noWrap>{objectName}</Typography>
             </TableCell>
             {isWideScreen &&
                 allNodes.map((node) => (
-                    <TableCell key={node} align="center"
-                               sx={{minWidth: "130px", width: "130px", position: "relative"}}>
+                    <TableCell key={node} align="center" sx={{
+                        minWidth: "130px",
+                        width: "130px",
+                        maxWidth: "130px",
+                        position: "relative",
+                        padding: "16px 8px",
+                        boxSizing: "border-box"
+                    }}>
                         <NodeStatus objectName={objectName} node={node}/>
                     </TableCell>
                 ))}
-            <TableCell>
+            <TableCell sx={{
+                minWidth: "100px",
+                width: "100px",
+                maxWidth: "100px",
+                padding: "16px 8px",
+                boxSizing: "border-box"
+            }}>
                 <IconButton onClick={handleMenuOpen} aria-label={`More actions for object ${objectName}`}>
                     <MoreVertIcon/>
                 </IconButton>
@@ -1148,10 +1181,20 @@ const Objects = () => {
                         position: 'relative'
                     }}
                 >
-                    <Table sx={{position: 'relative'}}>
+                    <Table sx={{
+                        position: 'relative',
+                        tableLayout: 'fixed',
+                        width: '100%'
+                    }}>
                         <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
                             <TableRow>
-                                <TableCell sx={{paddingLeft: 2}}>
+                                <TableCell sx={{
+                                    padding: "16px 0px 16px 16px",
+                                    minWidth: "60px",
+                                    width: "60px",
+                                    maxWidth: "60px",
+                                    boxSizing: "border-box"
+                                }}>
                                     <Checkbox
                                         checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
                                         onChange={handleSelectAll}
@@ -1161,9 +1204,11 @@ const Objects = () => {
                                 <TableCell sx={{
                                     minWidth: "150px",
                                     width: "150px",
+                                    maxWidth: "150px",
                                     position: "relative",
                                     cursor: "pointer",
-                                    paddingLeft: 2
+                                    padding: "16px 8px",
+                                    boxSizing: "border-box"
                                 }} onClick={() => handleSort("status")}>
                                     <Box sx={{
                                         width: "100%",
@@ -1187,8 +1232,13 @@ const Objects = () => {
                                         <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
-                                <TableCell sx={{cursor: "pointer", paddingLeft: 2}}
-                                           onClick={() => handleSort("object")}>
+                                <TableCell sx={{
+                                    cursor: "pointer",
+                                    padding: "16px 8px",
+                                    minWidth: "200px",
+                                    width: "auto",
+                                    boxSizing: "border-box"
+                                }} onClick={() => handleSort("object")}>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
                                         <strong>Object</strong>
                                         {sortColumn === "object" && (sortDirection === "asc" ?
@@ -1200,9 +1250,11 @@ const Objects = () => {
                                     <TableCell key={node} sx={{
                                         minWidth: "130px",
                                         width: "130px",
+                                        maxWidth: "130px",
                                         position: "relative",
                                         cursor: "pointer",
-                                        paddingLeft: 2
+                                        padding: "16px 8px",
+                                        boxSizing: "border-box"
                                     }} onClick={() => handleSort(node)}>
                                         <Box sx={{
                                             width: "100%",
@@ -1227,7 +1279,13 @@ const Objects = () => {
                                         </Box>
                                     </TableCell>
                                 ))}
-                                <TableCell sx={{paddingLeft: 2}}>
+                                <TableCell sx={{
+                                    padding: "16px 8px",
+                                    minWidth: "100px",
+                                    width: "100px",
+                                    maxWidth: "100px",
+                                    boxSizing: "border-box"
+                                }}>
                                     <strong>Actions</strong>
                                 </TableCell>
                             </TableRow>

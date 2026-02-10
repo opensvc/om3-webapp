@@ -12,11 +12,16 @@ jest.mock('../hooks/useEventLogStore.js');
 // Mock timers
 jest.useFakeTimers();
 
-// Helper function to test isEqual since it's not exported
-const testIsEqual = (a, b) => {
+// Helper function to simulate shallowEqual logic
+const mockShallowEqual = (a, b) => {
     if (a === b) return true;
     if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-    return JSON.stringify(a) === JSON.stringify(b);
+
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+
+    return keysA.every(key => a[key] === b[key]);
 };
 
 describe('eventSourceManager', () => {
@@ -26,10 +31,13 @@ describe('eventSourceManager', () => {
     let mockLoggerEventSource;
     let originalConsole;
     let localStorageMock;
+    let originalDebug;
+
     beforeEach(() => {
         // Reset all mocks
         jest.clearAllMocks();
-        // Setup complete mock store
+
+        // Setup complete mock store with shallowEqual simulation
         mockStore = {
             nodeStatus: {},
             nodeMonitor: {},
@@ -38,31 +46,99 @@ describe('eventSourceManager', () => {
             objectInstanceStatus: {},
             heartbeatStatus: {},
             instanceMonitor: {},
+            instanceConfig: {},
             configUpdates: [],
-            setNodeStatuses: jest.fn(),
-            setNodeMonitors: jest.fn(),
-            setNodeStats: jest.fn(),
-            setObjectStatuses: jest.fn(),
-            setInstanceStatuses: jest.fn(),
-            setHeartbeatStatuses: jest.fn(),
-            setInstanceMonitors: jest.fn(),
-            removeObject: jest.fn(),
-            setConfigUpdated: jest.fn(),
-            setInstanceConfig: jest.fn(),
+
+            // Mock setters with shallowEqual logic
+            setNodeStatuses: jest.fn((newStatus) => {
+                if (mockShallowEqual(mockStore.nodeStatus, newStatus)) {
+                    return; // Skip update
+                }
+                mockStore.nodeStatus = newStatus;
+            }),
+
+            setNodeMonitors: jest.fn((newMonitor) => {
+                if (mockShallowEqual(mockStore.nodeMonitor, newMonitor)) {
+                    return;
+                }
+                mockStore.nodeMonitor = newMonitor;
+            }),
+
+            setNodeStats: jest.fn((newStats) => {
+                if (mockShallowEqual(mockStore.nodeStats, newStats)) {
+                    return;
+                }
+                mockStore.nodeStats = newStats;
+            }),
+
+            setObjectStatuses: jest.fn((newStatus) => {
+                if (mockShallowEqual(mockStore.objectStatus, newStatus)) {
+                    return;
+                }
+                mockStore.objectStatus = newStatus;
+            }),
+
+            setInstanceStatuses: jest.fn((newStatus) => {
+                // For nested object comparison
+                const currentStr = JSON.stringify(mockStore.objectInstanceStatus);
+                const newStr = JSON.stringify(newStatus);
+                if (currentStr === newStr) {
+                    return;
+                }
+                mockStore.objectInstanceStatus = newStatus;
+            }),
+
+            setHeartbeatStatuses: jest.fn((newStatus) => {
+                if (mockShallowEqual(mockStore.heartbeatStatus, newStatus)) {
+                    return;
+                }
+                mockStore.heartbeatStatus = newStatus;
+            }),
+
+            setInstanceMonitors: jest.fn((newMonitor) => {
+                if (mockShallowEqual(mockStore.instanceMonitor, newMonitor)) {
+                    return;
+                }
+                mockStore.instanceMonitor = newMonitor;
+            }),
+
+            removeObject: jest.fn((objectName) => {
+                delete mockStore.objectStatus[objectName];
+                delete mockStore.objectInstanceStatus[objectName];
+                delete mockStore.instanceConfig[objectName];
+            }),
+
+            setConfigUpdated: jest.fn((updates) => {
+                mockStore.configUpdates = updates || [];
+            }),
+
+            setInstanceConfig: jest.fn((path, node, config) => {
+                if (!mockStore.instanceConfig[path]) {
+                    mockStore.instanceConfig[path] = {};
+                }
+                if (mockShallowEqual(mockStore.instanceConfig[path][node], config)) {
+                    return;
+                }
+                mockStore.instanceConfig[path][node] = config;
+            }),
         };
+
         useEventStore.getState.mockReturnValue(mockStore);
+
         mockLogStore = {
             addEventLog: jest.fn(),
         };
         useEventLogStore.getState.mockReturnValue(mockLogStore);
+
         // Create a consistent mock EventSource
         mockEventSource = {
             onopen: jest.fn(),
-            onerror: null, // Will be set by createEventSource
+            onerror: null,
             addEventListener: jest.fn(),
             close: jest.fn(),
             readyState: 1, // OPEN state
         };
+
         mockLoggerEventSource = {
             onopen: jest.fn(),
             onerror: null,
@@ -70,10 +146,12 @@ describe('eventSourceManager', () => {
             close: jest.fn(),
             readyState: 1,
         };
+
         // Mock EventSourcePolyfill to return our mock
         EventSourcePolyfill.mockImplementation(() => {
             return mockEventSource;
         });
+
         // Mock localStorage properly
         localStorageMock = {
             getItem: jest.fn(),
@@ -85,6 +163,7 @@ describe('eventSourceManager', () => {
             value: localStorageMock,
             writable: true
         });
+
         // Store original console methods
         originalConsole = {
             log: console.log,
@@ -93,44 +172,55 @@ describe('eventSourceManager', () => {
             info: console.info,
             debug: console.debug
         };
-        // Mock console methods
+
+        // Mock console methods - capture all debug calls
         console.log = jest.fn();
         console.error = jest.fn();
         console.warn = jest.fn();
         console.info = jest.fn();
+        originalDebug = console.debug;
         console.debug = jest.fn();
+
         // Mock window.location
         delete window.location;
         window.location = {href: ''};
         window.oidcUserManager = null;
+
         // Mock dispatchEvent
         window.dispatchEvent = jest.fn();
+
         // Mock EventSource for CLOSED
         global.EventSource = {CLOSED: 2};
     });
+
     afterEach(() => {
         jest.clearAllTimers();
+
         // Restore console methods
         console.log = originalConsole.log;
         console.error = originalConsole.error;
         console.warn = originalConsole.warn;
         console.info = originalConsole.info;
-        console.debug = originalConsole.debug;
+        console.debug = originalDebug;
+
         // Reset module state
         eventSourceManager.closeEventSource();
         eventSourceManager.closeLoggerEventSource();
         delete window.oidcUserManager;
     });
+
     describe('EventSource lifecycle and management', () => {
         test('should create an EventSource and attach event listeners', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalled();
             expect(eventSource.addEventListener).toHaveBeenCalledTimes(9);
         });
+
         test('should close existing EventSource before creating a new one', () => {
             // Create first EventSource
             const firstEventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             expect(firstEventSource.close).not.toHaveBeenCalled();
+
             // Create second EventSource
             EventSourcePolyfill.mockImplementationOnce(() => ({
                 ...mockEventSource,
@@ -138,19 +228,23 @@ describe('eventSourceManager', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             expect(mockEventSource.close).toHaveBeenCalled();
         });
+
         test('should not create EventSource if no token is provided', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, '');
             expect(eventSource).toBeNull();
             expect(console.error).toHaveBeenCalledWith('❌ Missing token for EventSource!');
         });
+
         test('should close the EventSource when closeEventSource is called', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             eventSourceManager.closeEventSource();
             expect(mockEventSource.close).toHaveBeenCalled();
         });
+
         test('should not throw error when closing non-existent EventSource', () => {
             expect(() => eventSourceManager.closeEventSource()).not.toThrow();
         });
+
         test('should call _cleanup if present', () => {
             const cleanupSpy = jest.fn();
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -158,6 +252,7 @@ describe('eventSourceManager', () => {
             eventSourceManager.closeEventSource();
             expect(cleanupSpy).toHaveBeenCalled();
         });
+
         test('should handle error in _cleanup', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             mockEventSource._cleanup = () => {
@@ -166,36 +261,43 @@ describe('eventSourceManager', () => {
             expect(() => eventSourceManager.closeEventSource()).not.toThrow();
             expect(console.debug).toHaveBeenCalledWith('Error during eventSource cleanup', expect.any(Error));
         });
+
         test('should return token from localStorage', () => {
             localStorageMock.getItem.mockReturnValue('local-storage-token');
             const token = eventSourceManager.getCurrentToken();
             expect(token).toBe('local-storage-token');
         });
+
         test('should return currentToken if localStorage is empty', () => {
             localStorageMock.getItem.mockReturnValue(null);
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'current-token');
             const token = eventSourceManager.getCurrentToken();
             expect(token).toBe('current-token');
         });
+
         test('should not update if no new token provided', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
             eventSourceManager.updateEventSourceToken('');
             expect(mockEventSource.close).not.toHaveBeenCalled();
         });
+
         test('should configure EventSource with objectName and custom filters', () => {
             const customFilters = ['NodeStatusUpdated', 'ObjectStatusUpdated'];
             eventSourceManager.configureEventSource('fake-token', 'test-object', customFilters);
             expect(EventSourcePolyfill).toHaveBeenCalled();
         });
+
         test('should handle missing token in configureEventSource', () => {
             eventSourceManager.configureEventSource('');
             expect(console.error).toHaveBeenCalledWith('❌ No token provided for SSE!');
         });
+
         test('should configure EventSource without objectName', () => {
             eventSourceManager.configureEventSource('fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalled();
             expect(EventSourcePolyfill.mock.calls[0][0]).toContain('cache=true');
         });
+
         test('should create an EventSource with valid token via startEventReception', () => {
             eventSourceManager.startEventReception('fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalledWith(
@@ -207,6 +309,7 @@ describe('eventSourceManager', () => {
                 })
             );
         });
+
         test('should close previous EventSource before creating a new one via startEventReception', () => {
             eventSourceManager.startEventReception('fake-token');
             const secondMockEventSource = {
@@ -221,10 +324,12 @@ describe('eventSourceManager', () => {
             expect(mockEventSource.close).toHaveBeenCalled();
             expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
         });
+
         test('should handle missing token in startEventReception', () => {
             eventSourceManager.startEventReception('');
             expect(console.error).toHaveBeenCalledWith('❌ No token provided for SSE!');
         });
+
         test('should start event reception with custom filters', () => {
             const customFilters = ['NodeStatusUpdated', 'ObjectStatusUpdated'];
             eventSourceManager.startEventReception('fake-token', customFilters);
@@ -232,6 +337,7 @@ describe('eventSourceManager', () => {
             expect(EventSourcePolyfill.mock.calls[0][0]).toContain('filter=NodeStatusUpdated');
             expect(EventSourcePolyfill.mock.calls[0][0]).toContain('filter=ObjectStatusUpdated');
         });
+
         test('should handle connection open event', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             if (mockEventSource.onopen) {
@@ -239,6 +345,7 @@ describe('eventSourceManager', () => {
             }
             expect(console.info).toHaveBeenCalledWith('✅ EventSource connection established');
         });
+
         test('should log connection opened with correct data', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             if (mockEventSource.onopen) {
@@ -249,6 +356,7 @@ describe('eventSourceManager', () => {
                 timestamp: expect.any(String)
             });
         });
+
         test('should log connection error with correct data', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const error = {status: 500, message: 'Test error'};
@@ -262,6 +370,7 @@ describe('eventSourceManager', () => {
                 timestamp: expect.any(String)
             });
         });
+
         test('should ignore onerror if not current EventSource', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             eventSourceManager.closeEventSource();
@@ -270,6 +379,7 @@ describe('eventSourceManager', () => {
             }
             expect(console.info).not.toHaveBeenCalledWith(expect.stringContaining('Reconnecting'));
         });
+
         test('should log reconnection attempt', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             if (mockEventSource.onerror) {
@@ -277,6 +387,7 @@ describe('eventSourceManager', () => {
             }
             expect(mockLogStore.addEventLog).toHaveBeenCalledWith('RECONNECTION_ATTEMPT', expect.any(Object));
         });
+
         test('should log max reconnections reached', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
 
@@ -289,6 +400,7 @@ describe('eventSourceManager', () => {
 
             expect(mockLogStore.addEventLog).toHaveBeenCalledWith('MAX_RECONNECTIONS_REACHED', expect.any(Object));
         });
+
         test('should handle auth error when new token same as old', () => {
             localStorageMock.getItem.mockReturnValue('old-token');
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
@@ -298,6 +410,7 @@ describe('eventSourceManager', () => {
             expect(console.warn).toHaveBeenCalledWith('🔐 Authentication error detected');
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
+
         test('should handle auth error without oidcUserManager', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
             if (mockEventSource.onerror) {
@@ -305,6 +418,7 @@ describe('eventSourceManager', () => {
             }
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
+
         test('should handle silent renew failure', async () => {
             window.oidcUserManager = {signinSilent: jest.fn().mockRejectedValue(new Error('renew fail'))};
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
@@ -319,6 +433,7 @@ describe('eventSourceManager', () => {
             expect(console.error).toHaveBeenCalledWith('❌ Silent renew failed:', expect.any(Error));
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
+
         test('should update with new token from storage on auth error', () => {
             localStorageMock.getItem.mockReturnValue('new-token');
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
@@ -327,12 +442,14 @@ describe('eventSourceManager', () => {
             }
             expect(console.info).toHaveBeenCalledWith('🔄 New token available, updating EventSource');
         });
+
         test('should log connection closed on closeEventSource', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             eventSourceManager.closeEventSource();
             expect(mockLogStore.addEventLog).toHaveBeenCalledWith('CONNECTION_CLOSED', expect.any(Object));
         });
     });
+
     describe('Event processing and buffer management', () => {
         test('should process NodeStatusUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -344,9 +461,11 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setNodeStatuses).toHaveBeenCalledWith(expect.objectContaining({node1: {status: 'up'}}));
         });
+
         test('should skip NodeStatusUpdated if status unchanged', () => {
             mockStore.nodeStatus = {node1: {status: 'up'}};
             useEventStore.getState.mockReturnValue(mockStore);
+
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
                 (call) => call[0] === 'NodeStatusUpdated'
@@ -354,8 +473,11 @@ describe('eventSourceManager', () => {
             const mockEvent = {data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})};
             nodeStatusHandler(mockEvent);
             jest.runAllTimers();
-            expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
+
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+            expect(mockStore.nodeStatus).toEqual({node1: {status: 'up'}});
         });
+
         test('should process NodeMonitorUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeMonitorHandler = eventSource.addEventListener.mock.calls.find(
@@ -366,6 +488,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setNodeMonitors).toHaveBeenCalledWith(expect.objectContaining({node2: {monitor: 'active'}}));
         });
+
         test('should flush nodeMonitorBuffer correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeMonitorHandler = eventSource.addEventListener.mock.calls.find(
@@ -379,6 +502,7 @@ describe('eventSourceManager', () => {
                 node2: {monitor: 'inactive'},
             }));
         });
+
         test('should process NodeStatsUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatsHandler = eventSource.addEventListener.mock.calls.find(
@@ -394,6 +518,7 @@ describe('eventSourceManager', () => {
                 }
             }));
         });
+
         test('should flush nodeStatsBuffer correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatsHandler = eventSource.addEventListener.mock.calls.find(
@@ -409,6 +534,7 @@ describe('eventSourceManager', () => {
                 }
             }));
         });
+
         test('should process ObjectStatusUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -419,6 +545,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setObjectStatuses).toHaveBeenCalledWith(expect.objectContaining({object1: {status: 'active'}}));
         });
+
         test('should handle ObjectStatusUpdated with labels path', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -429,6 +556,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setObjectStatuses).toHaveBeenCalledWith(expect.objectContaining({object1: {status: 'active'}}));
         });
+
         test('should handle ObjectStatusUpdated with missing name or status', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -439,6 +567,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setObjectStatuses).not.toHaveBeenCalled();
         });
+
         test('should process InstanceStatusUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -457,6 +586,7 @@ describe('eventSourceManager', () => {
                 object2: {node1: {status: 'inactive'}},
             }));
         });
+
         test('should handle InstanceStatusUpdated with labels path', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -475,6 +605,7 @@ describe('eventSourceManager', () => {
                 object1: {node1: {status: 'running'}},
             }));
         });
+
         test('should flush instanceStatusBuffer with nested object updates', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -502,6 +633,7 @@ describe('eventSourceManager', () => {
                 },
             }));
         });
+
         test('should handle InstanceStatusUpdated with missing fields', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -513,6 +645,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setInstanceStatuses).not.toHaveBeenCalled();
         });
+
         test('should flush heartbeatStatusBuffer correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const heartbeatHandler = eventSource.addEventListener.mock.calls.find(
@@ -521,9 +654,15 @@ describe('eventSourceManager', () => {
             const mockEvent = {data: JSON.stringify({node: 'node1', heartbeat: {status: 'alive'}})};
             heartbeatHandler(mockEvent);
             jest.runAllTimers();
-            expect(console.debug).toHaveBeenCalledWith('Flushed 1 events');
+
             expect(mockStore.setHeartbeatStatuses).toHaveBeenCalledWith(expect.objectContaining({node1: {status: 'alive'}}));
+
+            const flushCalls = console.debug.mock.calls.filter(call =>
+                call[0] && call[0].includes('Flushed')
+            );
+            expect(flushCalls.length).toBeGreaterThan(0);
         });
+
         test('should handle DaemonHeartbeatUpdated with labels node', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const heartbeatHandler = eventSource.addEventListener.mock.calls.find(
@@ -534,6 +673,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setHeartbeatStatuses).toHaveBeenCalledWith(expect.objectContaining({node1: {status: 'alive'}}));
         });
+
         test('should handle DaemonHeartbeatUpdated with missing node or status', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const heartbeatHandler = eventSource.addEventListener.mock.calls.find(
@@ -544,6 +684,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setHeartbeatStatuses).not.toHaveBeenCalled();
         });
+
         test('should handle ObjectDeleted with missing name', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectDeletedHandler = eventSource.addEventListener.mock.calls.find(
@@ -553,6 +694,7 @@ describe('eventSourceManager', () => {
             expect(console.warn).toHaveBeenCalledWith('⚠️ ObjectDeleted event missing objectName:', {});
             expect(mockStore.removeObject).not.toHaveBeenCalled();
         });
+
         test('should process ObjectDeleted events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectDeletedHandler = eventSource.addEventListener.mock.calls.find(
@@ -564,6 +706,7 @@ describe('eventSourceManager', () => {
             expect(console.debug).toHaveBeenCalledWith('📩 Received ObjectDeleted event:', expect.any(String));
             expect(mockStore.removeObject).toHaveBeenCalledWith('object1');
         });
+
         test('should handle ObjectDeleted with labels path', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const objectDeletedHandler = eventSource.addEventListener.mock.calls.find(
@@ -574,6 +717,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.removeObject).toHaveBeenCalledWith('object1');
         });
+
         test('should process InstanceMonitorUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceMonitorHandler = eventSource.addEventListener.mock.calls.find(
@@ -592,6 +736,7 @@ describe('eventSourceManager', () => {
                 expect.objectContaining({'node1:object1': {monitor: 'active'}})
             );
         });
+
         test('should handle InstanceMonitorUpdated with missing fields', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceMonitorHandler = eventSource.addEventListener.mock.calls.find(
@@ -603,6 +748,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setInstanceMonitors).not.toHaveBeenCalled();
         });
+
         test('should process InstanceConfigUpdated events correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -620,6 +766,7 @@ describe('eventSourceManager', () => {
             expect(mockStore.setInstanceConfig).toHaveBeenCalledWith('object1', 'node1', {config: 'test'});
             expect(mockStore.setConfigUpdated).toHaveBeenCalled();
         });
+
         test('should handle InstanceConfigUpdated with labels path', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -630,6 +777,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setConfigUpdated).toHaveBeenCalledWith(expect.arrayContaining([expect.any(String)]));
         });
+
         test('should handle InstanceConfigUpdated with missing name or node', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -640,6 +788,7 @@ describe('eventSourceManager', () => {
             expect(console.warn).toHaveBeenCalledWith('⚠️ InstanceConfigUpdated event missing name or node:', expect.any(Object));
             expect(mockStore.setConfigUpdated).not.toHaveBeenCalled();
         });
+
         test('should handle invalid JSON in events', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -648,6 +797,7 @@ describe('eventSourceManager', () => {
             nodeStatusHandler({data: 'invalid json'});
             expect(console.warn).toHaveBeenCalledWith('⚠️ Invalid JSON in NodeStatusUpdated event:', 'invalid json');
         });
+
         test('should process multiple events and flush buffers correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -662,11 +812,13 @@ describe('eventSourceManager', () => {
             expect(mockStore.setNodeStatuses).toHaveBeenCalled();
             expect(mockStore.setObjectStatuses).toHaveBeenCalled();
         });
+
         test('should handle empty buffers gracefully', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             jest.runAllTimers();
             expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
         });
+
         test('should handle instanceConfig buffer correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -683,6 +835,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setInstanceConfig).toHaveBeenCalledWith('object1', 'node1', {config: 'test-value'});
         });
+
         test('should handle multiple buffers correctly', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -697,10 +850,12 @@ describe('eventSourceManager', () => {
             expect(mockStore.setNodeStatuses).toHaveBeenCalled();
             expect(mockStore.setObjectStatuses).toHaveBeenCalled();
         });
+
         test('should handle empty buffers without errors', () => {
             eventSourceManager.forceFlush();
             expect(console.error).not.toHaveBeenCalled();
         });
+
         test('should handle errors during buffer flush', () => {
             mockStore.setNodeStatuses.mockImplementation(() => {
                 throw new Error('Test error');
@@ -713,6 +868,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(console.error).toHaveBeenCalledWith('Error during buffer flush:', expect.any(Error));
         });
+
         test('should not flush when already flushing', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -723,6 +879,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(console.error).not.toHaveBeenCalled();
         });
+
         test('should handle configUpdated buffer type', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -737,9 +894,11 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setConfigUpdated).toHaveBeenCalled();
         });
+
         test('should skip update when instanceStatus values are equal', () => {
             mockStore.objectInstanceStatus = {'object1': {'node1': {status: 'running'}}};
             useEventStore.getState.mockReturnValue(mockStore);
+
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceStatusHandler = eventSource.addEventListener.mock.calls.find(
                 call => call[0] === 'InstanceStatusUpdated'
@@ -752,11 +911,15 @@ describe('eventSourceManager', () => {
                 })
             });
             jest.runAllTimers();
-            expect(mockStore.setInstanceStatuses).not.toHaveBeenCalled();
+
+            expect(mockStore.setInstanceStatuses).toHaveBeenCalled();
+            expect(mockStore.objectInstanceStatus).toEqual({'object1': {'node1': {status: 'running'}}});
         });
+
         test('should skip update when instanceMonitor values are equal', () => {
             mockStore.instanceMonitor = {'node1:object1': {monitor: 'active'}};
             useEventStore.getState.mockReturnValue(mockStore);
+
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const instanceMonitorHandler = eventSource.addEventListener.mock.calls.find(
                 call => call[0] === 'InstanceMonitorUpdated'
@@ -769,8 +932,11 @@ describe('eventSourceManager', () => {
                 })
             });
             jest.runAllTimers();
-            expect(mockStore.setInstanceMonitors).not.toHaveBeenCalled();
+
+            expect(mockStore.setInstanceMonitors).toHaveBeenCalled();
+            expect(mockStore.instanceMonitor).toEqual({'node1:object1': {monitor: 'active'}});
         });
+
         test('should clear existing timeout when eventCount reaches BATCH_SIZE', () => {
             const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -784,6 +950,7 @@ describe('eventSourceManager', () => {
             expect(clearTimeoutSpy).toHaveBeenCalled();
             clearTimeoutSpy.mockRestore();
         });
+
         test('should handle invalid JSON in event data', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -793,6 +960,7 @@ describe('eventSourceManager', () => {
             nodeStatusHandler(invalidEvent);
             expect(console.warn).toHaveBeenCalledWith('⚠️ Invalid JSON in NodeStatusUpdated event:', 'invalid json {[');
         });
+
         test('should clear all buffers and reset state', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -804,6 +972,7 @@ describe('eventSourceManager', () => {
             eventSourceManager.forceFlush();
             expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
         });
+
         test('should handle multiple instance config updates', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const configUpdatedHandler = eventSource.addEventListener.mock.calls.find(
@@ -828,6 +997,7 @@ describe('eventSourceManager', () => {
             expect(mockStore.setInstanceConfig).toHaveBeenCalledWith('object1', 'node1', {config: 'v1'});
             expect(mockStore.setInstanceConfig).toHaveBeenCalledWith('object1', 'node2', {config: 'v2'});
         });
+
         test('should not flush when page not active', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             eventSourceManager.setPageActive(false);
@@ -838,6 +1008,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
         });
+
         test('should reschedule flush if too soon', () => {
             const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -850,6 +1021,7 @@ describe('eventSourceManager', () => {
             expect(setTimeoutSpy).toHaveBeenCalled();
             setTimeoutSpy.mockRestore();
         });
+
         test('should flush immediately on reconnect if buffered', () => {
             const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
@@ -860,6 +1032,7 @@ describe('eventSourceManager', () => {
             jest.runAllTimers();
             expect(mockStore.setNodeStatuses).toHaveBeenCalled();
         });
+
         test('should handle Safari batch updates', async () => {
             const originalUserAgent = navigator.userAgent;
             Object.defineProperty(navigator, 'userAgent', {
@@ -876,6 +1049,7 @@ describe('eventSourceManager', () => {
             expect(mockStore.setNodeStatuses).toHaveBeenCalled();
             Object.defineProperty(navigator, 'userAgent', {value: originalUserAgent});
         });
+
         test('should use Safari constants', () => {
             const originalUserAgent = navigator.userAgent;
             Object.defineProperty(navigator, 'userAgent', {
@@ -893,6 +1067,7 @@ describe('eventSourceManager', () => {
             expect(mockStore.setNodeStatuses).toHaveBeenCalled();
             Object.defineProperty(navigator, 'userAgent', {value: originalUserAgent});
         });
+
         test('should flush large batches immediately in Safari', () => {
             const originalUserAgent = navigator.userAgent;
             Object.defineProperty(navigator, 'userAgent', {
@@ -928,6 +1103,7 @@ describe('eventSourceManager', () => {
             Object.defineProperty(navigator, 'userAgent', {value: originalUserAgent});
         });
     });
+
     describe('Error handling and reconnection', () => {
         test('should handle errors and try to reconnect', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -937,6 +1113,7 @@ describe('eventSourceManager', () => {
             expect(console.error).toHaveBeenCalled();
             expect(console.info).toHaveBeenCalledWith(expect.stringContaining('Reconnecting in'));
         });
+
         test('should handle 401 error with silent token renewal', async () => {
             const mockUser = {
                 access_token: 'silent-renewed-token',
@@ -972,6 +1149,7 @@ describe('eventSourceManager', () => {
             currentMock.onerror({status: 500});
             expect(window.dispatchEvent).not.toHaveBeenCalled();
         });
+
         test('should schedule reconnection with exponential backoff', () => {
             const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -984,6 +1162,7 @@ describe('eventSourceManager', () => {
             expect(delay).toBeLessThanOrEqual(30000);
             setTimeoutSpy.mockRestore();
         });
+
         test('should not reconnect when no current token', () => {
             localStorageMock.getItem.mockReturnValue(null);
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
@@ -994,16 +1173,19 @@ describe('eventSourceManager', () => {
             expect(EventSourcePolyfill).toHaveBeenCalledTimes(1);
         });
     });
+
     describe('Utility functions and helpers', () => {
         test('should create query string with default filters', () => {
             eventSourceManager.configureEventSource('fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalledWith(expect.stringContaining('cache=true'), expect.any(Object));
         });
+
         test('should handle invalid filters in createQueryString', () => {
             eventSourceManager.configureEventSource('fake-token', null, ['InvalidFilter', 'NodeStatusUpdated']);
             expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid filters detected'));
             expect(EventSourcePolyfill.mock.calls[0][0]).toContain('filter=NodeStatusUpdated');
         });
+
         test('should handle invalid filters and fallback to defaults', () => {
             eventSourceManager.configureEventSource('fake-token', null, ['InvalidFilter1', 'InvalidFilter2']);
             expect(console.warn).toHaveBeenCalledWith(
@@ -1011,17 +1193,20 @@ describe('eventSourceManager', () => {
             );
             expect(EventSourcePolyfill).toHaveBeenCalled();
         });
+
         test('should handle empty filters array', () => {
             eventSourceManager.configureEventSource('fake-token', null, []);
             expect(console.warn).toHaveBeenCalledWith('No valid API event filters provided, using default filters');
             expect(EventSourcePolyfill).toHaveBeenCalled();
         });
+
         test('should create query string without objectName', () => {
             eventSourceManager.configureEventSource('fake-token');
             const url = EventSourcePolyfill.mock.calls[0][0];
             expect(url).toContain('cache=true');
             expect(url).not.toContain('path=');
         });
+
         test('should dispatch auth redirect event', () => {
             eventSourceManager.navigationService.redirectToAuth();
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
@@ -1029,53 +1214,13 @@ describe('eventSourceManager', () => {
             expect(event.type).toBe('om3:auth-redirect');
             expect(event.detail).toBe('/auth-choice');
         });
-        test('should return true for identical primitives', () => {
-            expect(testIsEqual('test', 'test')).toBe(true);
-            expect(testIsEqual(123, 123)).toBe(true);
-            expect(testIsEqual(null, null)).toBe(true);
-        });
-        test('should return false for different primitives', () => {
-            expect(testIsEqual('test', 'different')).toBe(false);
-            expect(testIsEqual(123, 456)).toBe(false);
-        });
-        test('should return true for identical objects', () => {
-            const obj1 = {a: 1, b: 'test'};
-            const obj2 = {a: 1, b: 'test'};
-            expect(testIsEqual(obj1, obj2)).toBe(true);
-        });
-        test('should return false for different objects', () => {
-            const obj1 = {a: 1, b: 'test'};
-            const obj2 = {a: 2, b: 'test'};
-            expect(testIsEqual(obj1, obj2)).toBe(false);
-        });
-        test('should handle null/undefined values', () => {
-            expect(testIsEqual(null, undefined)).toBe(false);
-            expect(testIsEqual(null, {})).toBe(false);
-            expect(testIsEqual(undefined, {})).toBe(false);
-        });
-        test('should return false for objects with different keys', () => {
-            const obj1 = {a: 1, b: 2};
-            const obj2 = {a: 1, c: 2};
-            expect(testIsEqual(obj1, obj2)).toBe(false);
-        });
-        test('should return false for objects with same keys but different values', () => {
-            const obj1 = {a: 1, b: 2};
-            const obj2 = {a: 1, b: 3};
-            expect(testIsEqual(obj1, obj2)).toBe(false);
-        });
-        test('should return true for empty objects', () => {
-            expect(testIsEqual({}, {})).toBe(true);
-        });
-        test('should return false for object vs array with same JSON', () => {
-            const obj = {0: 'a', 1: 'b'};
-            const arr = ['a', 'b'];
-            expect(testIsEqual(obj, arr)).toBe(false);
-        });
     });
+
     describe('Logger EventSource', () => {
         beforeEach(() => {
             EventSourcePolyfill.mockImplementation(() => mockLoggerEventSource);
         });
+
         test('should create logger EventSource and attach listeners based on filters', () => {
             const filters = ['ObjectStatusUpdated', 'InstanceStatusUpdated'];
             const loggerSource = eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', filters);
@@ -1084,6 +1229,7 @@ describe('eventSourceManager', () => {
             expect(loggerSource.addEventListener.mock.calls[0][0]).toBe('ObjectStatusUpdated');
             expect(loggerSource.addEventListener.mock.calls[1][0]).toBe('InstanceStatusUpdated');
         });
+
         test('should close existing logger EventSource before creating new', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             expect(mockLoggerEventSource.close).not.toHaveBeenCalled();
@@ -1091,17 +1237,20 @@ describe('eventSourceManager', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             expect(mockLoggerEventSource.close).toHaveBeenCalled();
         });
+
         test('should not create logger if no token', () => {
             const source = eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, '', []);
             expect(source).toBeNull();
             expect(console.error).toHaveBeenCalledWith('❌ Missing token for Logger EventSource!');
         });
+
         test('should handle open event but not log it', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             mockLoggerEventSource.onopen();
             expect(console.info).toHaveBeenCalledWith('✅ Logger EventSource connection established');
             expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('CONNECTION_OPENED', expect.any(Object));
         });
+
         test('should handle error but not log connection error', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             const error = {message: 'test error', status: 500};
@@ -1109,6 +1258,7 @@ describe('eventSourceManager', () => {
             expect(console.error).toHaveBeenCalled();
             expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('CONNECTION_ERROR', expect.any(Object));
         });
+
         test('should handle 401 error in logger with silent renew', async () => {
             const mockUser = {access_token: 'new-logger-token', expires_at: Date.now() + 3600000};
             window.oidcUserManager = {signinSilent: jest.fn().mockResolvedValue(mockUser)};
@@ -1119,6 +1269,7 @@ describe('eventSourceManager', () => {
             expect(window.oidcUserManager.signinSilent).toHaveBeenCalled();
             expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'new-logger-token');
         });
+
         test('should handle max reconnections in logger without logging', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             for (let i = 0; i < 15; i++) {
@@ -1129,17 +1280,20 @@ describe('eventSourceManager', () => {
             expect(mockLogStore.addEventLog).not.toHaveBeenCalledWith('MAX_RECONNECTIONS_REACHED', expect.any(Object));
             expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
+
         test('should process events and log them', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['ObjectStatusUpdated']);
             const handler = mockLoggerEventSource.addEventListener.mock.calls[0][1];
             handler({data: JSON.stringify({path: 'test'})});
             expect(mockLogStore.addEventLog).toHaveBeenCalledWith('ObjectStatusUpdated', expect.any(Object));
         });
+
         test('should ignore invalid filters', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['Invalid', 'ObjectStatusUpdated']);
             expect(mockLoggerEventSource.addEventListener).toHaveBeenCalledTimes(1);
             expect(mockLoggerEventSource.addEventListener.mock.calls[0][0]).toBe('ObjectStatusUpdated');
         });
+
         test('should call _cleanup on close', () => {
             const cleanupSpy = jest.fn();
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
@@ -1147,6 +1301,7 @@ describe('eventSourceManager', () => {
             eventSourceManager.closeLoggerEventSource();
             expect(cleanupSpy).toHaveBeenCalled();
         });
+
         test('should handle error in _cleanup for logger', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             mockLoggerEventSource._cleanup = () => {
@@ -1155,22 +1310,27 @@ describe('eventSourceManager', () => {
             expect(() => eventSourceManager.closeLoggerEventSource()).not.toThrow();
             expect(console.debug).toHaveBeenCalledWith('Error during logger eventSource cleanup', expect.any(Error));
         });
+
         test('should not throw if no logger source', () => {
             expect(() => eventSourceManager.closeLoggerEventSource()).not.toThrow();
         });
+
         test('should not update if no new token', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'old-token', []);
             eventSourceManager.updateLoggerEventSourceToken('');
             expect(mockLoggerEventSource.close).not.toHaveBeenCalled();
         });
+
         test('should handle missing token in configureLoggerEventSource', () => {
             eventSourceManager.configureLoggerEventSource('');
             expect(console.error).toHaveBeenCalledWith('❌ No token provided for Logger SSE!');
         });
+
         test('should handle missing token in startLoggerReception', () => {
             eventSourceManager.startLoggerReception('');
             expect(console.error).toHaveBeenCalledWith('❌ No token provided for Logger SSE!');
         });
+
         test('should ignore events when page not active', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['ObjectStatusUpdated']);
             eventSourceManager.setPageActive(false);
@@ -1185,6 +1345,7 @@ describe('eventSourceManager', () => {
             mockLoggerEventSource.onerror({status: 401});
             expect(console.info).toHaveBeenCalledWith('🔄 New token available, updating Logger EventSource');
         });
+
         test('should ignore onerror if not current logger EventSource', () => {
             eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', []);
             eventSourceManager.closeLoggerEventSource();

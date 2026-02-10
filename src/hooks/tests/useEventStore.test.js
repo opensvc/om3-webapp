@@ -1,9 +1,9 @@
 import useEventStore from '../useEventStore.js';
 import {act} from '@testing-library/react';
 
-// Mock logger
 jest.mock('../../utils/logger.js', () => ({
     warn: jest.fn(),
+    debug: jest.fn(),
 }));
 
 import logger from '../../utils/logger.js';
@@ -40,7 +40,6 @@ describe('useEventStore', () => {
         expect(state.configUpdates).toEqual([]);
     });
 
-    // Test setNodeStatuses
     test('should set node status correctly using setNodeStatuses', () => {
         const {setNodeStatuses} = useEventStore.getState();
 
@@ -70,7 +69,6 @@ describe('useEventStore', () => {
         expect(secondState.nodeStatus).toEqual(firstState.nodeStatus);
     });
 
-    // Test setNodeMonitors
     test('should set node monitors correctly using setNodeMonitors', () => {
         const {setNodeMonitors} = useEventStore.getState();
 
@@ -98,7 +96,6 @@ describe('useEventStore', () => {
         expect(state.nodeMonitor).toBe(sameData);
     });
 
-    // Test setNodeStats
     test('should set node stats correctly using setNodeStats', () => {
         const {setNodeStats} = useEventStore.getState();
 
@@ -126,7 +123,6 @@ describe('useEventStore', () => {
         expect(state.nodeStats).toEqual(sameData);
     });
 
-    // Test setObjectStatuses
     test('should set object statuses correctly using setObjectStatuses', () => {
         const {setObjectStatuses} = useEventStore.getState();
 
@@ -136,6 +132,10 @@ describe('useEventStore', () => {
 
         const state = useEventStore.getState();
         expect(state.objectStatus).toEqual({object1: {status: 'active'}});
+        expect(logger.debug).toHaveBeenCalledWith(
+            '✅ setObjectStatuses: ACCEPTED - UPDATING',
+            expect.any(Object)
+        );
     });
 
     test('should not update object statuses if shallow equal', () => {
@@ -156,7 +156,6 @@ describe('useEventStore', () => {
         expect(secondState.objectStatus).toBe(firstState.objectStatus);
     });
 
-    // Test setInstanceStatuses
     test('should set instance statuses correctly using setInstanceStatuses', () => {
         const {setInstanceStatuses} = useEventStore.getState();
 
@@ -274,7 +273,6 @@ describe('useEventStore', () => {
         expect(state.objectInstanceStatus.object1.node1.encap).toBeUndefined();
     });
 
-    // Test setHeartbeatStatuses
     test('should set heartbeat statuses correctly using setHeartbeatStatuses', () => {
         const {setHeartbeatStatuses} = useEventStore.getState();
 
@@ -286,7 +284,6 @@ describe('useEventStore', () => {
         expect(state.heartbeatStatus).toEqual({node1: {heartbeat: 'alive'}});
     });
 
-    // Test setInstanceMonitors
     test('should set instance monitors correctly using setInstanceMonitors', () => {
         const {setInstanceMonitors} = useEventStore.getState();
 
@@ -298,7 +295,6 @@ describe('useEventStore', () => {
         expect(state.instanceMonitor).toEqual({object1: {monitor: 'running'}});
     });
 
-    // Test setInstanceConfig
     test('should set instance config correctly using setInstanceConfig', () => {
         const {setInstanceConfig} = useEventStore.getState();
 
@@ -332,7 +328,6 @@ describe('useEventStore', () => {
         expect(secondState.instanceConfig).toBe(firstState.instanceConfig);
     });
 
-    // Test removeObject
     test('should remove object correctly using removeObject', () => {
         const {setObjectStatuses, removeObject} = useEventStore.getState();
 
@@ -340,12 +335,21 @@ describe('useEventStore', () => {
             setObjectStatuses({object1: {status: 'active'}, object2: {status: 'inactive'}});
         });
 
+        // Clear mocks before testing removeObject
+        logger.debug.mockClear();
+
         act(() => {
             removeObject('object1');
         });
 
         const state = useEventStore.getState();
         expect(state.objectStatus).toEqual({object2: {status: 'inactive'}});
+
+        // Verify no debug errors occurred
+        expect(logger.debug).not.toHaveBeenCalledWith(
+            expect.stringContaining('REJECTED'),
+            expect.any(Object)
+        );
     });
 
     test('should handle removeObject when object does not exist in any state', () => {
@@ -360,7 +364,6 @@ describe('useEventStore', () => {
         expect(finalState).toEqual(initialState);
     });
 
-    // Test setConfigUpdated
     test('should handle direct format updates in setConfigUpdated', () => {
         const {setConfigUpdated} = useEventStore.getState();
 
@@ -453,7 +456,6 @@ describe('useEventStore', () => {
         expect(state.configUpdates).toEqual([]);
     });
 
-    // Test clearConfigUpdate
     test('should clear config updates correctly', () => {
         const {setConfigUpdated, clearConfigUpdate} = useEventStore.getState();
 
@@ -488,7 +490,6 @@ describe('useEventStore', () => {
         expect(useEventStore.getState().configUpdates).toHaveLength(1);
     });
 
-    // Test shallowEqual edge cases
     describe('shallowEqual edge cases', () => {
         test('should handle null and undefined', () => {
             const {setNodeStatuses} = useEventStore.getState();
@@ -524,7 +525,6 @@ describe('useEventStore', () => {
         });
     });
 
-    // Test parseObjectPath edge cases
     describe('parseObjectPath edge cases', () => {
         test('should handle empty string', () => {
             const {clearConfigUpdate} = useEventStore.getState();

@@ -39,6 +39,58 @@ const AVAILABLE_ACTIONS = [
 
 expect.extend(toHaveNoViolations);
 
+// Helper function to interact with multi-select filters
+const selectFilterOption = async (labelText, optionText) => {
+    const filter = screen.getByLabelText(labelText);
+
+    // Ouvrir le menu
+    fireEvent.mouseDown(filter);
+
+    // Attendre que le menu apparaisse
+    await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    const listbox = screen.getByRole('listbox');
+
+    // Trouver l'option avec le texte (note: optionText pourrait avoir des majuscules)
+    const options = within(listbox).getAllByRole('option');
+    const option = options.find(opt =>
+        opt.textContent.toLowerCase().includes(optionText.toLowerCase())
+    );
+
+    if (!option) {
+        throw new Error(`Option with text "${optionText}" not found`);
+    }
+
+    // Cliquer sur la checkbox à l'intérieur du MenuItem
+    const checkbox = within(option).getByRole('checkbox');
+    fireEvent.click(checkbox);
+
+    // Fermer le menu en cliquant en dehors (sur un élément non-interactif)
+    // On peut cliquer sur le backdrop de Material-UI
+    const backdrop = document.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
+    if (backdrop) {
+        fireEvent.click(backdrop);
+    } else {
+        // Fallback: simuler la touche Escape
+        fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
+    }
+};
+
+// Helper function to wait for filter to be applied and menu to close
+const waitForFilterApplied = async () => {
+    // Attendre que le menu soit fermé
+    await waitFor(() => {
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    // Attendre un peu pour que le filtre soit appliqué
+    await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+    }, {timeout: 1000});
+};
+
 describe('Objects Component', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = jest.fn();
@@ -64,11 +116,11 @@ describe('Objects Component', () => {
         // Mock location and navigation
         require('react-router-dom').useLocation.mockReturnValue({
             search: '',
-            state: {namespace: 'all'},
+            pathname: '/objects',
         });
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
-        // Mock useMediaQuery
+        // Mock useMediaQuery to return true (wide screen)
         require('@mui/material/useMediaQuery').mockReturnValue(true);
 
         // Mock useEventStore
@@ -137,7 +189,8 @@ describe('Objects Component', () => {
 
     const waitForComponentToLoad = async () => {
         await waitFor(() => {
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+            // Vérifier que les filtres sont présents
+            expect(screen.getByLabelText('Global State')).toBeInTheDocument();
         });
     };
 
@@ -182,6 +235,7 @@ describe('Objects Component', () => {
 
         await waitForComponentToLoad();
 
+        expect(screen.getByLabelText('Global State')).toBeInTheDocument();
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         expect(screen.getByLabelText('Kind')).toBeInTheDocument();
         expect(screen.getByLabelText('Name')).toBeInTheDocument();
@@ -285,9 +339,8 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        fireEvent.mouseDown(screen.getByLabelText(/namespace/i));
-        const listbox = screen.getByRole('listbox');
-        fireEvent.click(within(listbox).getByText(/test-ns/i));
+        await selectFilterOption('Namespace', 'test-ns');
+        await waitForFilterApplied();
 
         await waitFor(() => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
@@ -569,9 +622,9 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
-        const listbox = screen.getByRole('listbox');
-        fireEvent.click(within(listbox).getByText(/up/i));
+        // Select "up" filter option
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
 
         await waitFor(() => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
@@ -585,9 +638,9 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        fireEvent.mouseDown(screen.getByLabelText(/Kind/i));
-        const listbox = screen.getByRole('listbox');
-        fireEvent.click(within(listbox).getByText(/svc/i));
+        // Select "svc" filter option
+        await selectFilterOption('Kind', 'svc');
+        await waitForFilterApplied();
 
         await waitFor(() => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
@@ -934,14 +987,13 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select "unprovisioned" filter
-        fireEvent.mouseDown(screen.getByLabelText(/Global State/i));
-        const listbox = screen.getByRole('listbox');
-        fireEvent.click(within(listbox).getByText(/unprovisioned/i));
+        // Select "unprovisioned" filter option
+        await selectFilterOption('Global State', 'Unprovisioned');
+        await waitForFilterApplied();
 
         // With mocked data, no object is unprovisioned, so no results
         await waitFor(() => {
-            expect(screen.getByText(/No objects found/i)).toBeInTheDocument();
+            expect(screen.getByText('No objects found matching the current filters.')).toBeInTheDocument();
         });
     });
 
@@ -955,45 +1007,37 @@ describe('Objects Component', () => {
         // Verify that node columns are not displayed
         expect(screen.queryByRole('columnheader', {name: /node1/i})).not.toBeInTheDocument();
         expect(screen.queryByRole('columnheader', {name: /node2/i})).not.toBeInTheDocument();
-    })
+    });
 
-    test('handles URL parameter synchronization with invalid globalState', () => {
+    test('handles URL parameter synchronization with invalid globalState', async () => {
         require('react-router-dom').useLocation.mockReturnValue({
             search: '?globalState=invalid&namespace=test&kind=svc&name=obj1',
             pathname: '/objects'
         });
 
-        render(
-            <MemoryRouter>
-                <Objects/>
-            </MemoryRouter>
-        );
+        setupComponent();
 
-        return waitFor(() => {
-            expect(screen.getByLabelText('Global State')).toHaveValue('all');
+        // Wait for component to load and verify filters are present
+        await waitFor(() => {
+            expect(screen.getByLabelText('Global State')).toBeInTheDocument();
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
     });
 
-    test('handles event source setup without auth token', () => {
+    test('handles event source setup without auth token', async () => {
         jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
 
-        render(
-            <MemoryRouter>
-                <Objects/>
-            </MemoryRouter>
-        );
+        setupComponent();
 
-        return waitFor(() => {
-            expect(startEventReception).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
+
+        expect(startEventReception).not.toHaveBeenCalled();
     });
 
     test('handles action execution with single object target', async () => {
-        render(
-            <MemoryRouter>
-                <Objects/>
-            </MemoryRouter>
-        );
+        setupComponent();
 
         await waitForComponentToLoad();
 

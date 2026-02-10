@@ -10,7 +10,6 @@ import {
     TableRow,
     Typography,
     Button,
-    Popper,
     Paper,
     MenuItem,
     Checkbox,
@@ -24,10 +23,17 @@ import {
     useTheme,
     Tooltip,
     IconButton,
-    ClickAwayListener,
     CircularProgress,
     Grid,
     Collapse,
+    Menu,
+    FormControlLabel,
+    FormGroup,
+    FormControl,
+    InputLabel,
+    Select,
+    OutlinedInput,
+    Chip,
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -50,8 +56,6 @@ import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
-
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
@@ -319,35 +323,6 @@ const TableRowComponent = React.memo(({
                 <IconButton onClick={handleMenuOpen} aria-label={`More actions for object ${objectName}`}>
                     <MoreVertIcon/>
                 </IconButton>
-                <Popper
-                    open={isMenuOpen}
-                    anchorEl={isMenuOpen ? document.activeElement : null}
-                    placement="bottom-end"
-                    disablePortal={isSafari}
-                    sx={{
-                        zIndex: 1300,
-                        "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}
-                    }}
-                >
-                    <ClickAwayListener onClickAway={onRowMenuClose}>
-                        <Paper elevation={3} role="menu">
-                            {filteredActions.map(({name, icon}) => (
-                                <MenuItem
-                                    key={name}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onActionClick(name, true, objectName);
-                                    }}
-                                    sx={{display: "flex", alignItems: "center", gap: 1}}
-                                    aria-label={`${name} action for object ${objectName}`}
-                                >
-                                    <ListItemIcon>{icon}</ListItemIcon>
-                                    {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </MenuItem>
-                            ))}
-                        </Paper>
-                    </ClickAwayListener>
-                </Popper>
             </TableCell>
         </TableRow>
     );
@@ -367,11 +342,20 @@ const Objects = () => {
     const navigate = useNavigate();
     const isMounted = useRef(true);
     const queryParams = new URLSearchParams(location.search);
-    const globalStates = useMemo(() => ["all", "up", "down", "warn", "n/a", "unprovisioned"], []);
-    const rawGlobalState = queryParams.get("globalState") || "all";
-    const rawNamespace = queryParams.get("namespace") || "all";
-    const rawKind = queryParams.get("kind") || "all";
+    const globalStates = useMemo(() => ["up", "down", "warn", "n/a", "unprovisioned"], []);
+
+    // Parse multiple values from URL
+    const parseMultipleValues = (param) => {
+        const value = queryParams.get(param);
+        if (!value || value === "all") return [];
+        return value.split(',').filter(Boolean);
+    };
+
+    const rawGlobalStates = parseMultipleValues("globalState");
+    const rawNamespaces = parseMultipleValues("namespace");
+    const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
+
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
     const objectInstanceStatus = useEventStore(selectObjectInstanceStatus);
@@ -381,11 +365,9 @@ const Objects = () => {
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
     const [currentObject, setCurrentObject] = useState(null);
-    const [selectedNamespace, setSelectedNamespace] = useState(rawNamespace);
-    const [selectedKind, setSelectedKind] = useState(rawKind);
-    const [selectedGlobalState, setSelectedGlobalState] = useState(
-        globalStates.includes(rawGlobalState) ? rawGlobalState : "all"
-    );
+    const [selectedNamespaces, setSelectedNamespaces] = useState(rawNamespaces);
+    const [selectedKinds, setSelectedKinds] = useState(rawKinds);
+    const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
@@ -408,15 +390,21 @@ const Objects = () => {
     ], []);
 
     const deferredSearchQuery = useDeferredValue(searchQuery);
-    const deferredSelectedGlobalState = useDeferredValue(selectedGlobalState);
-    const deferredSelectedNamespace = useDeferredValue(selectedNamespace);
-    const deferredSelectedKind = useDeferredValue(selectedKind);
+    const deferredSelectedGlobalStates = useDeferredValue(selectedGlobalStates);
+    const deferredSelectedNamespaces = useDeferredValue(selectedNamespaces);
+    const deferredSelectedKinds = useDeferredValue(selectedKinds);
     const deferredSortColumn = useDeferredValue(sortColumn);
     const deferredSortDirection = useDeferredValue(sortDirection);
 
     const [visibleCount, setVisibleCount] = useState(30);
     const [loading, setLoading] = useState(false);
     const tableContainerRef = useRef(null);
+
+    // Generate unique IDs for form labels
+    const globalStateId = React.useId();
+    const namespaceId = React.useId();
+    const kindId = React.useId();
+    const nameSearchId = React.useId();
 
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
@@ -471,18 +459,18 @@ const Objects = () => {
                 continue;
             }
 
-            // Early exit for namespace
-            if (deferredSelectedNamespace !== "all" && extractNamespace(name) !== deferredSelectedNamespace) {
+            // Check namespace filter (multiple selection)
+            if (deferredSelectedNamespaces.length > 0 && !deferredSelectedNamespaces.includes(extractNamespace(name))) {
                 continue;
             }
 
-            // Early exit for kind
-            if (deferredSelectedKind !== "all" && extractKind(name) !== deferredSelectedKind) {
+            // Check kind filter (multiple selection)
+            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(extractKind(name))) {
                 continue;
             }
 
-            // Check global state
-            if (deferredSelectedGlobalState !== "all") {
+            // Check global state filter (multiple selection)
+            if (deferredSelectedGlobalStates.length > 0) {
                 const status = objects[name];
                 if (!status) continue;
 
@@ -491,19 +479,29 @@ const Objects = () => {
                 const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
                 const provisioned = status.provisioned;
 
-                const matchesGlobalState = deferredSelectedGlobalState === "unprovisioned"
-                    ? provisioned === "false" || provisioned === false
-                    : avail === deferredSelectedGlobalState;
+                let matchesAnyGlobalState = false;
+                for (let j = 0; j < deferredSelectedGlobalStates.length; j++) {
+                    const selectedState = deferredSelectedGlobalStates[j];
+                    if (selectedState === "unprovisioned") {
+                        if (provisioned === "false" || provisioned === false) {
+                            matchesAnyGlobalState = true;
+                            break;
+                        }
+                    } else if (avail === selectedState) {
+                        matchesAnyGlobalState = true;
+                        break;
+                    }
+                }
 
-                if (!matchesGlobalState) continue;
+                if (!matchesAnyGlobalState) continue;
             }
 
             result.push(name);
         }
 
         return result;
-    }, [allObjectNames, deferredSelectedGlobalState, deferredSelectedNamespace,
-        deferredSelectedKind, deferredSearchQuery, objects]);
+    }, [allObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
+        deferredSelectedKinds, deferredSearchQuery, objects]);
 
     const sortedObjectNames = useMemo(() => {
         const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
@@ -654,6 +652,36 @@ const Objects = () => {
         setShowFilters(prev => !prev);
     }, []);
 
+    const handleGlobalStateChange = useCallback((state) => {
+        setSelectedGlobalStates(prev => {
+            if (prev.includes(state)) {
+                return prev.filter(s => s !== state);
+            } else {
+                return [...prev, state];
+            }
+        });
+    }, []);
+
+    const handleNamespaceChange = useCallback((namespace) => {
+        setSelectedNamespaces(prev => {
+            if (prev.includes(namespace)) {
+                return prev.filter(ns => ns !== namespace);
+            } else {
+                return [...prev, namespace];
+            }
+        });
+    }, []);
+
+    const handleKindChange = useCallback((kind) => {
+        setSelectedKinds(prev => {
+            if (prev.includes(kind)) {
+                return prev.filter(k => k !== kind);
+            } else {
+                return [...prev, kind];
+            }
+        });
+    }, []);
+
     const handleScroll = useCallback(() => {
         if (loading) return;
 
@@ -688,21 +716,31 @@ const Objects = () => {
         const timer = setTimeout(() => {
             if (!isMounted.current) return;
             const currentParams = new URLSearchParams(location.search);
-            const currentGlobalState = currentParams.get("globalState") || "all";
-            const currentNamespace = currentParams.get("namespace") || "all";
-            const currentKind = currentParams.get("kind") || "all";
+            const currentGlobalStates = parseMultipleValues("globalState");
+            const currentNamespaces = parseMultipleValues("namespace");
+            const currentKinds = parseMultipleValues("kind");
             const currentName = currentParams.get("name") || "";
-            if (currentGlobalState === selectedGlobalState &&
-                currentNamespace === selectedNamespace &&
-                currentKind === selectedKind &&
+
+            const arraysEqual = (a, b) => {
+                if (a.length !== b.length) return false;
+                const sortedA = [...a].sort();
+                const sortedB = [...b].sort();
+                return sortedA.every((val, idx) => val === sortedB[idx]);
+            };
+
+            if (arraysEqual(currentGlobalStates, selectedGlobalStates) &&
+                arraysEqual(currentNamespaces, selectedNamespaces) &&
+                arraysEqual(currentKinds, selectedKinds) &&
                 currentName === searchQuery) {
                 return;
             }
+
             const newQueryParams = new URLSearchParams();
-            if (selectedGlobalState !== "all") newQueryParams.set("globalState", selectedGlobalState);
-            if (selectedNamespace !== "all") newQueryParams.set("namespace", selectedNamespace);
-            if (selectedKind !== "all") newQueryParams.set("kind", selectedKind);
+            if (selectedGlobalStates.length > 0) newQueryParams.set("globalState", selectedGlobalStates.join(','));
+            if (selectedNamespaces.length > 0) newQueryParams.set("namespace", selectedNamespaces.join(','));
+            if (selectedKinds.length > 0) newQueryParams.set("kind", selectedKinds.join(','));
             if (searchQuery.trim()) newQueryParams.set("name", searchQuery.trim());
+
             const queryString = newQueryParams.toString();
             const newUrl = `${location.pathname}${queryString ? `?${queryString}` : ""}`;
             if (newUrl !== location.pathname + location.search) {
@@ -710,15 +748,14 @@ const Objects = () => {
             }
         }, 300);
         return () => clearTimeout(timer);
-    }, [selectedGlobalState, selectedNamespace, selectedKind, searchQuery, navigate, location.pathname, location.search]);
+    }, [selectedGlobalStates, selectedNamespaces, selectedKinds, searchQuery, navigate, location.pathname, location.search]);
 
     useEffect(() => {
-        const newGlobalState = globalStates.includes(rawGlobalState) ? rawGlobalState : "all";
-        setSelectedGlobalState(prev => prev !== newGlobalState ? newGlobalState : prev);
-        setSelectedNamespace(prev => prev !== rawNamespace ? rawNamespace : prev);
-        setSelectedKind(prev => prev !== rawKind ? rawKind : prev);
-        setSearchQuery(prev => prev !== rawSearchQuery ? rawSearchQuery : prev);
-    }, [rawGlobalState, rawNamespace, rawKind, rawSearchQuery, globalStates]);
+        setSelectedGlobalStates(rawGlobalStates);
+        setSelectedNamespaces(rawNamespaces);
+        setSelectedKinds(rawKinds);
+        setSearchQuery(rawSearchQuery);
+    }, [location.search]);
 
     const eventStarted = useRef(false);
     useEffect(() => {
@@ -755,6 +792,17 @@ const Objects = () => {
     const handleClosePendingAction = useCallback(() => {
         setPendingAction(null);
     }, []);
+
+    const filteredRowActions = useMemo(() => {
+        if (!currentObject) return [];
+        const objectData = objectStatus[currentObject];
+        return OBJECT_ACTIONS.filter(
+            ({name}) =>
+                isActionAllowedForSelection(name, [currentObject]) &&
+                (name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
+                (name !== "unfreeze" || objectData?.frozen === "frozen")
+        );
+    }, [currentObject, objectStatus]);
 
     return (
         <Box sx={{
@@ -815,57 +863,165 @@ const Objects = () => {
                         <Collapse in={showFilters} sx={{width: '100%'}}>
                             <Grid container spacing={2} sx={{mb: 2}}>
                                 <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <Autocomplete
-                                        key={`global-state-${selectedGlobalState}`}
-                                        fullWidth
-                                        size={isMobile ? "small" : "medium"}
-                                        options={globalStates}
-                                        value={selectedGlobalState}
-                                        onChange={(_event, val) => val && setSelectedGlobalState(val)}
-                                        renderInput={renderTextField("Global State")}
-                                        renderOption={(props, option) => (
-                                            <li {...props}>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    {option === "up" &&
-                                                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 18}}/>}
-                                                    {option === "down" &&
-                                                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 18}}/>}
-                                                    {option === "warn" && <FiberManualRecordIcon
-                                                        sx={{color: orange[500], fontSize: 18}}/>}
-                                                    {option === "n/a" &&
-                                                        <FiberManualRecordIcon sx={{color: grey[500], fontSize: 18}}/>}
-                                                    {option === "unprovisioned" &&
-                                                        <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
-                                                    {option === "all" ? "All" : option.charAt(0).toUpperCase() + option.slice(1)}
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+                                        <InputLabel id={globalStateId}>Global State</InputLabel>
+                                        <Select
+                                            labelId={globalStateId}
+                                            multiple
+                                            value={selectedGlobalStates}
+                                            input={<OutlinedInput label="Global State"/>}
+                                            renderValue={(selected) => {
+                                                if (selected.length === 0) return '';
+
+                                                const getStateIcon = (state) => {
+                                                    switch (state) {
+                                                        case "up":
+                                                            return <FiberManualRecordIcon
+                                                                sx={{color: green[500], fontSize: 14, mr: 0.5}}/>;
+                                                        case "down":
+                                                            return <FiberManualRecordIcon
+                                                                sx={{color: red[500], fontSize: 14, mr: 0.5}}/>;
+                                                        case "warn":
+                                                            return <FiberManualRecordIcon
+                                                                sx={{color: orange[500], fontSize: 14, mr: 0.5}}/>;
+                                                        case "n/a":
+                                                            return <FiberManualRecordIcon
+                                                                sx={{color: grey[500], fontSize: 14, mr: 0.5}}/>;
+                                                        case "unprovisioned":
+                                                            return <PriorityHighIcon
+                                                                sx={{color: red[500], fontSize: 14, mr: 0.5}}/>;
+                                                        default:
+                                                            return null;
+                                                    }
+                                                };
+
+                                                return (
+                                                    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+                                                        {selected.map((value) => (
+                                                            <Chip
+                                                                key={value}
+                                                                label={
+                                                                    <Box display="flex" alignItems="center">
+                                                                        {getStateIcon(value)}
+                                                                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                                                                    </Box>
+                                                                }
+                                                                onDelete={() => handleGlobalStateChange(value)}
+                                                                onMouseDown={(event) => {
+                                                                    event.stopPropagation();
+                                                                }}
+                                                                size="small"
+                                                                deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                            />
+                                                        ))}
+                                                    </Box>
+                                                );
+                                            }}
+                                        >
+                                            {globalStates.map((state) => (
+                                                <MenuItem key={state} value={state}>
+                                                    <Checkbox
+                                                        checked={selectedGlobalStates.includes(state)}
+                                                        onChange={() => handleGlobalStateChange(state)}
+                                                    />
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        {state === "up" &&
+                                                            <FiberManualRecordIcon
+                                                                sx={{color: green[500], fontSize: 18}}/>}
+                                                        {state === "down" &&
+                                                            <FiberManualRecordIcon
+                                                                sx={{color: red[500], fontSize: 18}}/>}
+                                                        {state === "warn" && <FiberManualRecordIcon
+                                                            sx={{color: orange[500], fontSize: 18}}/>}
+                                                        {state === "n/a" &&
+                                                            <FiberManualRecordIcon
+                                                                sx={{color: grey[500], fontSize: 18}}/>}
+                                                        {state === "unprovisioned" &&
+                                                            <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
+                                                        {state.charAt(0).toUpperCase() + state.slice(1)}
+                                                    </Box>
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+                                        <InputLabel id={namespaceId}>Namespace</InputLabel>
+                                        <Select
+                                            labelId={namespaceId}
+                                            multiple
+                                            value={selectedNamespaces}
+                                            input={<OutlinedInput label="Namespace"/>}
+                                            renderValue={(selected) => (
+                                                <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+                                                    {selected.map((value) => (
+                                                        <Chip
+                                                            key={value}
+                                                            label={value}
+                                                            onDelete={() => handleNamespaceChange(value)}
+                                                            onMouseDown={(event) => {
+                                                                event.stopPropagation();
+                                                            }}
+                                                            size="small"
+                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                        />
+                                                    ))}
                                                 </Box>
-                                            </li>
-                                        )}
-                                    />
+                                            )}
+                                        >
+                                            {namespaces.map((namespace) => (
+                                                <MenuItem key={namespace} value={namespace}>
+                                                    <Checkbox
+                                                        checked={selectedNamespaces.includes(namespace)}
+                                                        onChange={() => handleNamespaceChange(namespace)}
+                                                    />
+                                                    <ListItemText primary={namespace}/>
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
                                 </Grid>
                                 <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <Autocomplete
-                                        key={`namespace-${selectedNamespace}`}
-                                        fullWidth
-                                        size={isMobile ? "small" : "medium"}
-                                        options={["all", ...namespaces]}
-                                        value={selectedNamespace}
-                                        onChange={(_event, val) => val && setSelectedNamespace(val)}
-                                        renderInput={renderTextField("Namespace")}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <Autocomplete
-                                        key={`kind-${selectedKind}`}
-                                        fullWidth
-                                        size={isMobile ? "small" : "medium"}
-                                        options={["all", ...kinds]}
-                                        value={selectedKind}
-                                        onChange={(_event, val) => val && setSelectedKind(val)}
-                                        renderInput={renderTextField("Kind")}
-                                    />
+                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+                                        <InputLabel id={kindId}>Kind</InputLabel>
+                                        <Select
+                                            labelId={kindId}
+                                            multiple
+                                            value={selectedKinds}
+                                            input={<OutlinedInput label="Kind"/>}
+                                            renderValue={(selected) => (
+                                                <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+                                                    {selected.map((value) => (
+                                                        <Chip
+                                                            key={value}
+                                                            label={value}
+                                                            onDelete={() => handleKindChange(value)}
+                                                            onMouseDown={(event) => {
+                                                                event.stopPropagation();
+                                                            }}
+                                                            size="small"
+                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                        />
+                                                    ))}
+                                                </Box>
+                                            )}
+                                        >
+                                            {kinds.map((kind) => (
+                                                <MenuItem key={kind} value={kind}>
+                                                    <Checkbox
+                                                        checked={selectedKinds.includes(kind)}
+                                                        onChange={() => handleKindChange(kind)}
+                                                    />
+                                                    <ListItemText primary={kind}/>
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
                                 </Grid>
                                 <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <TextField
+                                        id={nameSearchId}
                                         label="Name"
                                         value={searchQuery}
                                         onChange={handleSearchChange}
@@ -890,41 +1046,85 @@ const Objects = () => {
                             </Button>
                         </Box>
                     </Box>
-                    <Popper
-                        open={Boolean(actionsMenuAnchor)}
-                        anchorEl={actionsMenuAnchor}
-                        placement="bottom-end"
-                        disablePortal={isSafari}
+
+                    {/* Menu for row actions */}
+                    <Menu
+                        open={Boolean(rowMenuAnchor)}
+                        anchorEl={rowMenuAnchor}
+                        onClose={handleRowMenuClose}
+                        onClick={(e) => e.stopPropagation()}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'right',
+                        }}
                         sx={{
-                            zIndex: 1300,
-                            "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}
+                            "& .MuiPaper-root": {
+                                minWidth: 200,
+                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
+                            }
                         }}
                     >
-                        <ClickAwayListener onClickAway={handleActionsMenuClose}>
-                            <Paper elevation={3} role="menu">
-                                {OBJECT_ACTIONS.map(({name, icon}) => {
-                                    const isAllowed = isActionAllowedForSelection(name, selectedObjects);
-                                    return (
-                                        <MenuItem
-                                            key={name}
-                                            onClick={() => handleActionClick(name)}
-                                            disabled={!isAllowed}
-                                            sx={{
-                                                color: isAllowed ? "inherit" : "text.disabled",
-                                                "&.Mui-disabled": {opacity: 0.5}
-                                            }}
-                                            aria-label={`${name} action for selected objects`}
-                                        >
-                                            <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
-                                                {icon}
-                                            </ListItemIcon>
-                                            <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                        </MenuItem>
-                                    );
-                                })}
-                            </Paper>
-                        </ClickAwayListener>
-                    </Popper>
+                        {filteredRowActions.map(({name, icon}) => (
+                            <MenuItem
+                                key={name}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleActionClick(name, true, currentObject);
+                                }}
+                                sx={{display: "flex", alignItems: "center", gap: 1}}
+                                aria-label={`${name} action for object ${currentObject}`}
+                            >
+                                <ListItemIcon>{icon}</ListItemIcon>
+                                {name.charAt(0).toUpperCase() + name.slice(1)}
+                            </MenuItem>
+                        ))}
+                    </Menu>
+
+                    {/* Menu for global actions */}
+                    <Menu
+                        open={Boolean(actionsMenuAnchor)}
+                        anchorEl={actionsMenuAnchor}
+                        onClose={handleActionsMenuClose}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'right',
+                        }}
+                        sx={{
+                            "& .MuiPaper-root": {
+                                minWidth: 200,
+                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"
+                            }
+                        }}
+                    >
+                        {OBJECT_ACTIONS.map(({name, icon}) => {
+                            const isAllowed = isActionAllowedForSelection(name, selectedObjects);
+                            return (
+                                <MenuItem
+                                    key={name}
+                                    onClick={() => handleActionClick(name)}
+                                    disabled={!isAllowed}
+                                    sx={{
+                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        "&.Mui-disabled": {opacity: 0.5}
+                                    }}
+                                    aria-label={`${name} action for selected objects`}
+                                >
+                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
+                                        {icon}
+                                    </ListItemIcon>
+                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                </MenuItem>
+                            );
+                        })}
+                    </Menu>
                 </Box>
                 <Box sx={{
                     display: 'flex',

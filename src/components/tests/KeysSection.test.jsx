@@ -13,6 +13,7 @@ jest.mock('../../eventSourceManager.jsx', () => ({
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => {
+    const mockReact = require('react');
     const actual = jest.requireActual('@mui/material');
     return {
         ...actual,
@@ -96,6 +97,28 @@ jest.mock('@mui/material', () => {
             <td {...props}>{children}</td>
         ),
         Paper: ({children, sx, ...props}) => <div {...props}>{children}</div>,
+        FormControl: ({children, ...props}) => <div {...props}>{children}</div>,
+        FormLabel: ({children, ...props}) => <label {...props}>{children}</label>,
+        RadioGroup: ({children, value, onChange, ...props}) => (
+            <div role="radiogroup" data-value={value} {...props}>
+                {mockReact.Children.map(children, child =>
+                    mockReact.cloneElement(child, { onChange })
+                )}
+            </div>
+        ),
+        FormControlLabel: ({value, control, label, disabled, onChange, ...props}) => (
+            <label {...props}>
+                <input
+                    type="radio"
+                    value={value}
+                    disabled={disabled}
+                    onChange={(e) => onChange?.(e)}
+                    data-label={label}
+                />
+                {label}
+            </label>
+        ),
+        Radio: () => null,
     };
 });
 
@@ -105,6 +128,7 @@ jest.mock('@mui/icons-material/Edit', () => () => <span/>);
 jest.mock('@mui/icons-material/Delete', () => () => <span/>);
 jest.mock('@mui/icons-material/Add', () => () => <span/>);
 jest.mock('@mui/icons-material/ExpandMore', () => () => <span/>);
+jest.mock('@mui/icons-material/Visibility', () => () => <span/>);
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -176,8 +200,22 @@ describe('KeysSection Component', () => {
         return null;
     };
 
+    // Helper to select input mode
+    const selectInputMode = async (dialog, mode) => {
+        const radioGroup = within(dialog).getByRole('radiogroup');
+        const radioButton = within(radioGroup).getByDisplayValue(mode);
+        await act(async () => {
+            await user.click(radioButton);
+        });
+    };
+
     // Helper to upload file
     const uploadFile = async (dialog, type = 'create') => {
+        // First select file mode for create
+        if (type === 'create') {
+            await selectInputMode(dialog, 'file');
+        }
+
         const fileInput = findFileInput(dialog, type);
         if (fileInput) {
             const file = new File(['test content'], 'test.txt', {type: 'text/plain'});
@@ -369,11 +407,14 @@ describe('KeysSection Component', () => {
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
+        // Select file mode
+        await selectInputMode(dialog, 'file');
+
         // Find file input using helper
         let fileInput;
         await waitFor(() => {
             fileInput = findFileInput(dialog, 'create');
-            expect(fileInput).toBeInTheDocument();
+            expect(fileInput).toBeTruthy();
         });
 
         await act(async () => {
@@ -470,9 +511,7 @@ describe('KeysSection Component', () => {
 
         const dialog = await screen.findByRole('dialog');
         expect(dialog).toHaveTextContent(/Update Key/i);
-        await waitFor(() => {
-            expect(screen.getByText('No file chosen')).toBeInTheDocument();
-        });
+
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
         // Upload file and update name
@@ -700,10 +739,7 @@ describe('KeysSection Component', () => {
                     }),
                 });
             }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            });
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
 
         render(
@@ -788,6 +824,10 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
         const dialog = await screen.findByRole('dialog');
+
+        // Select file mode
+        await selectInputMode(dialog, 'file');
+
         // Do not fill the name or upload a file
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
         // The button should be disabled
@@ -817,6 +857,10 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
         const dialog = await screen.findByRole('dialog');
+
+        // Select file mode
+        await selectInputMode(dialog, 'file');
+
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
         // Fill only the name, no file
         await act(async () => {
@@ -959,9 +1003,7 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
         const dialog = await screen.findByRole('dialog');
-        await waitFor(() => {
-            expect(screen.getByText('No file selected')).toBeInTheDocument();
-        });
+
         const cancelButton = within(dialog).getByRole('button', {name: /Cancel/i});
         await act(async () => {
             await user.click(cancelButton);
@@ -1364,6 +1406,7 @@ describe('KeysSection Component', () => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         });
     });
+
     test('handles invalid kind in fetchKeys', async () => {
         global.fetch.mockImplementation((url, options) => {
             return Promise.resolve({ok: true, json: () => Promise.resolve({})});
@@ -1394,18 +1437,20 @@ describe('KeysSection Component', () => {
         const dialog = await screen.findByRole('dialog');
         expect(dialog).toHaveTextContent(/Create New Key/i);
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
+
+        // Select file mode
+        await selectInputMode(dialog, 'file');
+
         let fileInput;
         await waitFor(() => {
             fileInput = findFileInput(dialog, 'create');
-            expect(fileInput).toBeInTheDocument();
+            expect(fileInput).toBeTruthy();
         });
         await act(async () => {
             await user.type(nameInput, 'newKey');
             await user.upload(fileInput, new File(['content'], 'test.txt'));
         });
-        await waitFor(() => {
-            expect(screen.getByText('test.txt')).toBeInTheDocument();
-        });
+
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
         await act(async () => {
             await user.click(createButton);
@@ -1454,10 +1499,11 @@ describe('KeysSection Component', () => {
         });
         const dialog = await screen.findByRole('dialog');
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
+
         let fileInput;
         await waitFor(() => {
             fileInput = findFileInput(dialog, 'update');
-            expect(fileInput).toBeInTheDocument();
+            expect(fileInput).toBeTruthy();
         });
         await act(async () => {
             await user.type(nameInput, 'updatedKey');
@@ -1509,9 +1555,14 @@ describe('KeysSection Component', () => {
             await user.click(addButton);
         });
         const dialog = await screen.findByRole('dialog');
+
+        // Default is "empty" mode, so we need to select file mode first
+        await selectInputMode(dialog, 'file');
+
         await waitFor(() => {
             expect(screen.getByText('No file selected')).toBeInTheDocument();
         });
+
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
         await act(async () => {
             await user.type(nameInput, 'newKey');

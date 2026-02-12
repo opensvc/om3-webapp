@@ -35,10 +35,10 @@ jest.mock('../../eventSourceManager');
 
 // Mock ClusterStatGrids named exports using a factory function
 jest.mock('../ClusterStatGrids.jsx', () => {
-    const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
+    const GridNodes = ({nodeCount, frozenCount, onClick}) => (
         <button aria-label="Nodes stat card" onClick={onClick}>
             <div data-testid="node-count">{nodeCount}</div>
-            <div data-testid="node-status">Frozen: {frozenCount} | Unfrozen: {unfrozenCount}</div>
+            <div data-testid="node-status">Frozen: {frozenCount}</div>
         </button>
     );
     const GridObjects = ({objectCount, statusCount, onClick}) => (
@@ -145,8 +145,8 @@ describe('ClusterOverview', () => {
         // Mock custom hooks with default data
         useNodeStats.mockReturnValue({
             count: 2,
-            frozen: 1,
-            unfrozen: 1
+            frozen: 1
+            // unfrozen is no longer used
         });
 
         useObjectStats.mockReturnValue({
@@ -201,7 +201,7 @@ describe('ClusterOverview', () => {
         });
         expect(screen.getByText('Cluster Overview')).toBeInTheDocument();
         expect(screen.getByTestId('node-count')).toHaveTextContent('2');
-        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1 | Unfrozen: 1');
+        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1');
         expect(screen.getByTestId('object-count')).toHaveTextContent('4');
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 1');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 1');
@@ -346,8 +346,7 @@ describe('ClusterOverview', () => {
     test('handles empty data correctly', async () => {
         useNodeStats.mockReturnValue({
             count: 0,
-            frozen: 0,
-            unfrozen: 0
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({
@@ -385,7 +384,7 @@ describe('ClusterOverview', () => {
 
         // Now check the values
         expect(screen.getByTestId('node-count')).toHaveTextContent('0');
-        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0 | Unfrozen: 0');
+        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0');
         expect(screen.getByTestId('object-count')).toHaveTextContent('0');
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 0');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 0');
@@ -484,8 +483,7 @@ describe('ClusterOverview', () => {
     test('handles nodes with missing frozen_at property', async () => {
         useNodeStats.mockReturnValue({
             count: 2,
-            frozen: 1,
-            unfrozen: 1
+            frozen: 1
         });
 
         axios.get.mockResolvedValue({data: {items: []}});
@@ -501,7 +499,7 @@ describe('ClusterOverview', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1 | Unfrozen: 1');
+            expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1');
         });
     });
 
@@ -648,8 +646,7 @@ describe('ClusterOverview', () => {
     test('handles various frozen_at date formats', async () => {
         useNodeStats.mockReturnValue({
             count: 6,
-            frozen: 1,
-            unfrozen: 5
+            frozen: 1
         });
 
         render(
@@ -663,7 +660,7 @@ describe('ClusterOverview', () => {
         });
 
         const nodeStatusText = screen.getByTestId('node-status').textContent;
-        expect(nodeStatusText).toMatch(/Frozen: 1 \| Unfrozen: 5/);
+        expect(nodeStatusText).toMatch(/Frozen: 1/);
     });
 
     test('handles namespace parsing edge cases', async () => {
@@ -757,8 +754,7 @@ describe('ClusterOverview', () => {
     test('handles navigation for stat cards', async () => {
         useNodeStats.mockReturnValue({
             count: 1,
-            frozen: 0,
-            unfrozen: 1
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({
@@ -875,8 +871,7 @@ describe('ClusterOverview', () => {
     test('handles partial node data', async () => {
         useNodeStats.mockReturnValue({
             count: 1,
-            frozen: 0,
-            unfrozen: 1
+            frozen: 0
         });
 
         render(
@@ -973,8 +968,7 @@ describe('ClusterOverview', () => {
     test('handles missing properties in store data', async () => {
         useNodeStats.mockReturnValue({
             count: 0,
-            frozen: 0,
-            unfrozen: 0
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({

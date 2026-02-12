@@ -138,9 +138,8 @@ const ClusterOverview = () => {
     const gridNodesProps = useMemo(() => ({
         nodeCount: deferredNodeStats.count,
         frozenCount: deferredNodeStats.frozen,
-        unfrozenCount: deferredNodeStats.unfrozen,
         onClick: handleNavigate("/nodes")
-    }), [deferredNodeStats.count, deferredNodeStats.frozen, deferredNodeStats.unfrozen, handleNavigate]);
+    }), [deferredNodeStats.count, deferredNodeStats.frozen, handleNavigate]);
 
     const gridObjectsProps = useMemo(() => ({
         objectCount: deferredObjectStats.objectCount,

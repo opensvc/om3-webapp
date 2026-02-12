@@ -26,18 +26,23 @@ describe('ClusterStatGrids', () => {
             <GridNodes
                 nodeCount={5}
                 frozenCount={2}
-                unfrozenCount={3}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Nodes')).toBeInTheDocument();
         expect(screen.getByText('5')).toBeInTheDocument();
-        expect(screen.getByText('Frozen: 2 | Unfrozen: 3')).toBeInTheDocument();
+        expect(screen.getByText('Frozen 2')).toBeInTheDocument();
 
+        // Click on the card
         fireEvent.click(screen.getByText('Nodes'));
         jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
+
+        // Click on the chip
+        fireEvent.click(screen.getByText('Frozen 2'));
+        jest.runAllTimers();
+        expect(mockOnClick).toHaveBeenCalledTimes(2);
     });
 
     test('GridNamespaces renders correctly and handles click', () => {
@@ -206,14 +211,13 @@ describe('ClusterStatGrids', () => {
             <GridNodes
                 nodeCount={0}
                 frozenCount={0}
-                unfrozenCount={0}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Nodes')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getByText('Frozen: 0 | Unfrozen: 0')).toBeInTheDocument();
+        expect(screen.getByText('Frozen 0')).toBeInTheDocument();
     });
 
     test('GridObjects handles zero values', () => {

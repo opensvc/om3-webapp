@@ -9,7 +9,7 @@ const ClickLoader = memo(({isLoading}) => (
     </Box>
 ));
 
-export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick}) => {
+export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleClick = useCallback(() => {
@@ -29,10 +29,21 @@ export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick})
             gap: 1,
             width: '100%'
         }}>
-            <span>Frozen: {frozenCount} | Unfrozen: {unfrozenCount}</span>
+            <Chip
+                label={`Frozen ${frozenCount}`}
+                size="small"
+                sx={{
+                    backgroundColor: 'info.main',
+                    color: 'white',
+                    cursor: isLoading ? 'default' : 'pointer',
+                    opacity: isLoading ? 0.7 : 1,
+                }}
+                onClick={handleClick}
+                disabled={isLoading}
+            />
             <ClickLoader isLoading={isLoading}/>
         </Box>
-    ), [frozenCount, unfrozenCount, isLoading]);
+    ), [frozenCount, isLoading, handleClick]);
 
     return (
         <StatCard

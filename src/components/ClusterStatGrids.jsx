@@ -221,7 +221,7 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
 
     const statusElements = useMemo(() => {
         const elements = [];
-        const statusTypes = ['up', 'warn', 'down', 'n/a', 'unprovisioned'];
+        const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
 
         for (const stat of statusTypes) {
             const count = status[stat] || 0;

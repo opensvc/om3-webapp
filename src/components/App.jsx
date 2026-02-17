@@ -352,7 +352,7 @@ const App = () => {
                                     <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                     <Route path="/heartbeats" element={<Heartbeats/>}/>
                                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                    <Route path="/storage-pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                    <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
                                     <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
                                     <Route path="/network/:networkName"
                                            element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>

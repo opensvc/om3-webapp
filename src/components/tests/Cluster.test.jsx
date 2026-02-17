@@ -284,7 +284,7 @@ describe('ClusterOverview', () => {
         act(() => {
             jest.advanceTimersByTime(50);
         });
-        expect(mockNavigate).toHaveBeenCalledWith('/storage-pools');
+        expect(mockNavigate).toHaveBeenCalledWith('/pools');
     });
 
     test('navigates to objects with globalState parameter', async () => {
@@ -802,7 +802,7 @@ describe('ClusterOverview', () => {
             {role: 'Objects stat card', expectedRoute: '/objects'},
             {role: 'Namespaces stat card', expectedRoute: '/namespaces'},
             {role: 'Heartbeats stat card', expectedRoute: '/heartbeats'},
-            {role: 'Pools stat card', expectedRoute: '/storage-pools'},
+            {role: 'Pools stat card', expectedRoute: '/pools'},
         ];
 
         cards.forEach(({role, expectedRoute}) => {

@@ -41,7 +41,7 @@ const NavBar = () => {
         {path: "/namespaces", name: "Namespaces", icon: <FaList/>},
         {path: "/heartbeats", name: "Heartbeats", icon: <FaHeartbeat/>},
         {path: "/nodes", name: "Nodes", icon: <FaServer/>},
-        {path: "/storage-pools", name: "Pools", icon: <FaDatabase/>},
+        {path: "/pools", name: "Pools", icon: <FaDatabase/>},
         {path: "/network", name: "Networks", icon: <FaNetworkWired/>},
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},

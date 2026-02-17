@@ -164,7 +164,7 @@ const ClusterOverview = () => {
 
     const gridPoolsProps = useMemo(() => ({
         poolCount,
-        onClick: handleNavigate("/storage-pools")
+        onClick: handleNavigate("/pools")
     }), [poolCount, handleNavigate]);
 
     const gridNetworksProps = useMemo(() => ({

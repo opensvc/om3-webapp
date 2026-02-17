@@ -314,9 +314,6 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
     );
 });
 
-// ##############################
-//  GridHeartbeats – Nouvelle version : affichage des IDs sans suffixe .rx/.tx
-// ##############################
 export const GridHeartbeats = memo(({
                                         heartbeatCount,
                                         perHeartbeatStats = {},
@@ -419,7 +416,7 @@ export const GridHeartbeats = memo(({
     );
 });
 
-export const GridPools = memo(({poolCount, onClick}) => {
+export const GridPools = memo(({poolCount, pools, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleClick = useCallback(() => {
@@ -431,10 +428,59 @@ export const GridPools = memo(({poolCount, onClick}) => {
         }, 50);
     }, [onClick]);
 
+    const subtitle = useMemo(() => {
+        if (!pools || pools.length === 0) {
+            return null;
+        }
+
+        return (
+            <Box sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                pt: 1,
+                maxHeight: '400px',
+                overflowY: 'auto',
+                justifyContent: 'flex-start'
+            }}>
+                {pools.map((pool) => {
+                    const usagePercentage = pool.size && pool.used >= 0
+                        ? ((pool.used / pool.size) * 100).toFixed(1)
+                        : "N/A";
+                    const free = pool.size - pool.used;
+                    const freePercent = pool.size ? (free / pool.size) * 100 : 100;
+                    const isLowStorage = freePercent < 10;
+
+                    return (
+                        <Box key={pool.name || Math.random()} sx={{
+                            position: 'relative',
+                            display: 'inline-flex',
+                            flexShrink: 0,
+                            margin: "4px"
+                        }}>
+                            <Chip
+                                label={`${pool.name || "Unnamed"} (${usagePercentage}% used)`}
+                                size="small"
+                                sx={{
+                                    backgroundColor: isLowStorage ? 'red' : 'default',
+                                    color: isLowStorage ? 'white' : 'inherit',
+                                    cursor: 'pointer',
+                                    minWidth: "fit-content",
+                                    px: 1.5
+                                }}
+                            />
+                        </Box>
+                    );
+                })}
+            </Box>
+        );
+    }, [pools]);
+
     return (
         <StatCard
             title="Pools"
             value={poolCount}
+            subtitle={subtitle}
             onClick={handleClick}
             isLoading={isLoading}
         />

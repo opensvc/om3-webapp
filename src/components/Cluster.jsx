@@ -59,6 +59,7 @@ const ClusterOverview = () => {
     const deferredObjectStats = useDeferredValue(objectStats);
     const deferredHeartbeatStats = useDeferredValue(heartbeatStats);
 
+    const [pools, setPools] = useState([]);
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -106,6 +107,7 @@ const ClusterOverview = () => {
             const poolItems = poolsRes.data?.items || [];
             const networkItems = networksRes.data?.items || [];
 
+            setPools(poolItems);
             setPoolCount(poolItems.length);
             setNetworks(networkItems);
             setIsLoading(false);
@@ -113,6 +115,7 @@ const ClusterOverview = () => {
             if (!isMounted.current || error.name === 'AbortError') return;
 
             logger.error('Failed to fetch cluster data:', error.message);
+            setPools([]);
             setPoolCount(0);
             setNetworks([]);
             setIsLoading(false);
@@ -164,8 +167,9 @@ const ClusterOverview = () => {
 
     const gridPoolsProps = useMemo(() => ({
         poolCount,
+        pools,
         onClick: handleNavigate("/pools")
-    }), [poolCount, handleNavigate]);
+    }), [poolCount, pools, handleNavigate]);
 
     const gridNetworksProps = useMemo(() => ({
         networks,

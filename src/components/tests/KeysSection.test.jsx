@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, act, within} from '@testing-library/react';
+import {render, screen, waitFor, act, within, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import KeysSection from '../KeysSection';
 
@@ -28,7 +28,7 @@ jest.mock('@mui/material', () => {
                 aria-expanded={expanded ? 'true' : 'false'}
                 aria-controls="panel-keys-content"
                 id="panel-keys-header"
-                onClick={() => onChange?.({}, !expanded)}
+                onClick={() => onChange?.(!expanded)}
                 {...props}
             >
                 {children}
@@ -53,7 +53,9 @@ jest.mock('@mui/material', () => {
         CircularProgress: () => <div role="progressbar">Loading...</div>,
         Typography: ({children, ...props}) => <span {...props}>{children}</span>,
         Dialog: ({children, open, maxWidth, fullWidth, onClose, ...props}) =>
-            open ? <div role="dialog" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} {...props}>{children}</div> : null,
+            open ? <div role="dialog" onKeyDown={(e) => {
+                if (e.key === 'Escape') onClose();
+            }} {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
         DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
@@ -102,7 +104,7 @@ jest.mock('@mui/material', () => {
         RadioGroup: ({children, value, onChange, ...props}) => (
             <div role="radiogroup" data-value={value} {...props}>
                 {mockReact.Children.map(children, child =>
-                    mockReact.cloneElement(child, { onChange })
+                    mockReact.cloneElement(child, {onChange})
                 )}
             </div>
         ),
@@ -138,6 +140,20 @@ const mockLocalStorage = {
 };
 Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
+const encodeText = (text) => new TextEncoder().encode(text);
+
+const makeMockBlob = (uint8Array) => {
+    const ab = uint8Array.buffer.slice(
+        uint8Array.byteOffset,
+        uint8Array.byteOffset + uint8Array.byteLength,
+    );
+    return {
+        arrayBuffer: () => Promise.resolve(ab),
+        size: uint8Array.byteLength,
+        type: 'application/octet-stream',
+    };
+};
+
 describe('KeysSection Component', () => {
     const user = userEvent.setup();
     const openSnackbar = jest.fn();
@@ -168,6 +184,7 @@ describe('KeysSection Component', () => {
                     status: 200,
                     json: () => Promise.resolve({}),
                     text: () => Promise.resolve(''),
+                    blob: () => Promise.resolve(makeMockBlob(encodeText('hello world'))),
                 });
             }
             return Promise.resolve({
@@ -186,14 +203,11 @@ describe('KeysSection Component', () => {
     // Helper function to find file inputs
     const findFileInput = (dialog, type = 'create') => {
         const inputId = type === 'create' ? 'create-key-file-upload' : 'update-key-file-upload';
-        // Strategy 1: Look for hidden file inputs by their ID
         let fileInput = within(dialog).queryByTestId(inputId);
         if (fileInput) return fileInput;
-        // Strategy 2: Look for file inputs by type
         const allInputs = within(dialog).queryAllByRole('textbox');
         fileInput = allInputs.find(input => input.type === 'file' || input.id === inputId);
         if (fileInput) return fileInput;
-        // Strategy 3: Look for file inputs by their accept attribute
         const fileInputs = within(dialog).queryAllByDisplayValue('');
         fileInput = fileInputs.find(input => input.type === 'file');
         if (fileInput) return fileInput;
@@ -211,7 +225,6 @@ describe('KeysSection Component', () => {
 
     // Helper to upload file
     const uploadFile = async (dialog, type = 'create') => {
-        // First select file mode for create
         if (type === 'create') {
             await selectInputMode(dialog, 'file');
         }
@@ -407,10 +420,8 @@ describe('KeysSection Component', () => {
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
-        // Select file mode
         await selectInputMode(dialog, 'file');
 
-        // Find file input using helper
         let fileInput;
         await waitFor(() => {
             fileInput = findFileInput(dialog, 'create');
@@ -514,7 +525,6 @@ describe('KeysSection Component', () => {
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
-        // Upload file and update name
         await act(async () => {
             await user.clear(nameInput);
             await user.type(nameInput, 'updatedKey');
@@ -538,7 +548,7 @@ describe('KeysSection Component', () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/key') && url.includes('DELETE')) {
                 return new Promise(() => {
-                }); // Never resolves
+                });
             }
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
@@ -825,19 +835,13 @@ describe('KeysSection Component', () => {
         });
         const dialog = await screen.findByRole('dialog');
 
-        // Select file mode
         await selectInputMode(dialog, 'file');
 
-        // Do not fill the name or upload a file
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
-        // The button should be disabled
         expect(createButton).toBeDisabled();
-        // Try to click anyway
         await act(async () => {
             await user.click(createButton);
         });
-        // Verify that openSnackbar was not called with the validation error
-        // because the button is disabled and the click does not trigger handleCreateKey
         expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
     });
 
@@ -858,21 +862,17 @@ describe('KeysSection Component', () => {
         });
         const dialog = await screen.findByRole('dialog');
 
-        // Select file mode
         await selectInputMode(dialog, 'file');
 
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        // Fill only the name, no file
         await act(async () => {
             await user.type(nameInput, 'newKey');
         });
         const createButton = within(dialog).getByRole('button', {name: /Create/i});
-        // The button should still be disabled without a file
         expect(createButton).toBeDisabled();
         await act(async () => {
             await user.click(createButton);
         });
-        // Verify that openSnackbar was not called because the button is disabled
         expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
     });
 
@@ -906,17 +906,14 @@ describe('KeysSection Component', () => {
         });
         const dialog = await screen.findByRole('dialog');
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
-        // Clear the name and do not upload a file
         await act(async () => {
             await user.clear(nameInput);
         });
         const updateButton = within(dialog).getByRole('button', {name: /Update/i});
-        // The button should be disabled
         expect(updateButton).toBeDisabled();
         await act(async () => {
             await user.click(updateButton);
         });
-        // Verify that openSnackbar was not called because the button is disabled
         expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
     });
 
@@ -1059,19 +1056,15 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
         const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        // Click to expand (if not already expanded)
         await act(async () => {
             await user.click(accordionSummary);
         });
         await waitFor(() => {
             expect(screen.getByText('key1')).toBeInTheDocument();
         });
-        // Click again to collapse
         await act(async () => {
             await user.click(accordionSummary);
         });
-        // The content might still be in DOM but hidden, or removed
-        // This test verifies the accordion change handler is called
     });
 
     test('does not fetch keys when no auth token on mount', async () => {
@@ -1079,11 +1072,9 @@ describe('KeysSection Component', () => {
         render(
             <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
         );
-        // Wait for initial render but no fetch should happen
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        // Verify fetch was not called for keys
         expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/data/keys'));
     });
 
@@ -1438,7 +1429,6 @@ describe('KeysSection Component', () => {
         expect(dialog).toHaveTextContent(/Create New Key/i);
         const nameInput = within(dialog).getByPlaceholderText('Key Name');
 
-        // Select file mode
         await selectInputMode(dialog, 'file');
 
         let fileInput;
@@ -1466,7 +1456,8 @@ describe('KeysSection Component', () => {
     test('disables buttons during key update', async () => {
         global.fetch.mockImplementation((url, options) => {
             if (url.includes('/data/key') && options.method === 'PUT') {
-                return new Promise(() => {});
+                return new Promise(() => {
+                });
             }
             if (url.includes('/data/keys')) {
                 return Promise.resolve({
@@ -1523,9 +1514,7 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(fileInput).toBeDisabled();
         });
-        // Check main add button disabled
         expect(screen.getByRole('button', {name: /add new key/i})).toBeDisabled();
-        // Check table edit and delete disabled
         expect(screen.getByRole('button', {name: /Edit key key1/i})).toBeDisabled();
         expect(screen.getByRole('button', {name: /Delete key key1/i})).toBeDisabled();
     }, 20000);
@@ -1556,7 +1545,6 @@ describe('KeysSection Component', () => {
         });
         const dialog = await screen.findByRole('dialog');
 
-        // Default is "empty" mode, so we need to select file mode first
         await selectInputMode(dialog, 'file');
 
         await waitFor(() => {
@@ -1588,8 +1576,8 @@ describe('KeysSection Component', () => {
         await act(async () => {
             await user.click(addButton);
         });
-        await screen.findByRole('dialog');
-        await user.keyboard('{Escape}');
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.keyDown(dialog, {key: 'Escape', code: 'Escape'});
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         });
@@ -1623,10 +1611,319 @@ describe('KeysSection Component', () => {
         await act(async () => {
             await user.click(editButton[0]);
         });
-        await screen.findByRole('dialog');
-        await user.keyboard('{Escape}');
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.keyDown(dialog, {key: 'Escape', code: 'Escape'});
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    test('create dialog resets all fields after successful key creation', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options && options.method === 'POST') {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({items: []})});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+
+        await act(async () => {
+            await user.type(nameInput, 'tempKey');
+        });
+
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        await act(async () => {
+            await user.click(createButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        // Re-open the dialog and verify the name is cleared
+        await act(async () => {
+            await user.click(addButton);
+        });
+        const newDialog = await screen.findByRole('dialog');
+        const resetNameInput = within(newDialog).getByPlaceholderText('Key Name');
+        expect(resetNameInput.value).toBe('');
+    });
+
+    test('handles key content with control characters as binary hex view', async () => {
+        // BEL (0x07) is a control char that causes binary detection
+        const binaryData = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x07, 0x6f]); // "Hell\x07o"
+        const mockBlob = makeMockBlob(binaryData);
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'ctrlkey', node: 'node1', size: binaryData.length}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key ctrlkey/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 10000});
+
+        const dialog = screen.getByRole('dialog');
+
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        }, {timeout: 10000});
+
+        await waitFor(() => {
+            expect(within(dialog).getByText(/Binary \(Hex View\)/i)).toBeInTheDocument();
+        });
+    });
+
+    test('keys table displays all expected column headers', async () => {
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(2\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Name')).toBeInTheDocument();
+            expect(screen.getByText('Node')).toBeInTheDocument();
+            expect(screen.getByText('Size')).toBeInTheDocument();
+            expect(screen.getByText('Actions')).toBeInTheDocument();
+        });
+    });
+
+    test('create key with text mode does not require file validation', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options && options.method === 'POST') {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({items: []})});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+
+        await selectInputMode(dialog, 'text');
+
+        await act(async () => {
+            await user.type(nameInput, 'myTextKey');
+        });
+
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        await act(async () => {
+            await user.click(createButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Creating key myTextKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'myTextKey' created successfully");
+        });
+    });
+
+    test('closes delete dialog with escape key', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 2626}],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
+        await act(async () => {
+            await user.click(deleteButton[0]);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.keyDown(dialog, {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes view dialog with escape key', async () => {
+        const textContent = 'sample text';
+        const mockBlob = makeMockBlob(encodeText(textContent));
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: textContent.length}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key key1/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        // Wait for loading to finish
+        await waitFor(() => {
+            expect(within(screen.getByRole('dialog')).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        const dialog = screen.getByRole('dialog');
+        fireEvent.keyDown(dialog, {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles key update with empty text content', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'PUT') {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({})});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
+        await act(async () => {
+            await user.click(accordionSummary);
+        });
+
+        const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton[0]);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await selectInputMode(dialog, 'text');
+
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Updating key key1…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'key1' updated successfully");
         });
     });
 });

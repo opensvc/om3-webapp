@@ -22,8 +22,6 @@ import {
     TableHead,
     TableRow,
     Paper,
-    ToggleButtonGroup,
-    ToggleButton,
     FormControl,
     FormLabel,
     RadioGroup,

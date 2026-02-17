@@ -71,10 +71,11 @@ const ClusterOverview = () => {
         navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
     }, [navigate]);
 
-    const handleHeartbeatsClick = useCallback((status, state) => {
+    const handleHeartbeatsClick = useCallback((status, state, id) => {
         const params = new URLSearchParams();
         if (status) params.append('status', status);
         if (state) params.append('state', state);
+        if (id) params.append('id', id);
         navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
     }, [navigate]);
 
@@ -149,9 +150,8 @@ const ClusterOverview = () => {
 
     const gridHeartbeatsProps = useMemo(() => ({
         heartbeatCount: deferredHeartbeatStats.count,
-        beatingCount: deferredHeartbeatStats.beating,
-        nonBeatingCount: deferredHeartbeatStats.stale,
-        stateCount: deferredHeartbeatStats.stateCount,
+        runningCount: deferredHeartbeatStats.running,
+        perHeartbeatStats: deferredHeartbeatStats.perHeartbeatStats,
         nodeCount: deferredNodeStats.count,
         onClick: handleHeartbeatsClick
     }), [deferredHeartbeatStats, deferredNodeStats.count, handleHeartbeatsClick]);

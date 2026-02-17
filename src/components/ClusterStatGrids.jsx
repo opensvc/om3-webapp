@@ -314,129 +314,85 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
     );
 });
 
+// ##############################
+//  GridHeartbeats – Nouvelle version : affichage des IDs sans suffixe .rx/.tx
+// ##############################
 export const GridHeartbeats = memo(({
                                         heartbeatCount,
-                                        beatingCount,
-                                        nonBeatingCount,
-                                        stateCount,
+                                        perHeartbeatStats = {},
                                         nodeCount,
                                         onClick
                                     }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [loadingState, setLoadingState] = useState('');
-
-    const stateColors = {
-        running: 'green',
-        stopped: 'orange',
-        failed: 'red',
-        warning: 'orange',
-        unknown: 'grey'
-    };
-
-    const isSingleNode = nodeCount === 1;
+    const [loadingId, setLoadingId] = useState('');
 
     const handleCardClick = useCallback(() => {
-        setIsLoading(true);
+        setLoadingId('card');
         prepareForNavigation();
         setTimeout(() => {
             onClick();
-            setIsLoading(false);
+            setLoadingId('');
         }, 50);
     }, [onClick]);
 
-    const handleStatusClick = useCallback((status, state) => {
-        setLoadingState(status || state);
+    const handleChipClick = useCallback((baseId) => (e) => {
+        e.stopPropagation();
+        if (loadingId) return;
+        setLoadingId(baseId);
         prepareForNavigation();
         setTimeout(() => {
-            onClick(status, state);
-            setLoadingState('');
+            onClick(null, null, baseId);
+            setLoadingId('');
         }, 50);
-    }, [onClick]);
+    }, [onClick, loadingId]);
 
     const subtitle = useMemo(() => {
-        const chips = [];
+        const groups = new Map();
 
-        if (isSingleNode) {
-            chips.push(
-                <Box key="beating" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                    <Chip
-                        label={`Beating ${heartbeatCount}`}
-                        size="small"
-                        sx={{
-                            backgroundColor: 'green',
-                            color: 'white',
-                            cursor: loadingState === 'beating' ? 'default' : 'pointer',
-                            opacity: loadingState === 'beating' ? 0.7 : 1
-                        }}
-                        onClick={() => loadingState !== 'beating' && handleStatusClick('beating', null)}
-                        title="Healthy (Single Node)"
-                        disabled={loadingState === 'beating'}
-                    />
-                    {loadingState === 'beating' && <CircularProgress size={12}/>}
-                </Box>
-            );
-        } else {
-            if (beatingCount > 0) {
-                chips.push(
-                    <Box key="beating" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`Beating ${beatingCount}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: 'green',
-                                color: 'white',
-                                cursor: loadingState === 'beating' ? 'default' : 'pointer',
-                                opacity: loadingState === 'beating' ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== 'beating' && handleStatusClick('beating', null)}
-                            disabled={loadingState === 'beating'}
-                        />
-                        {loadingState === 'beating' && <CircularProgress size={12}/>}
-                    </Box>
-                );
+        for (const [fullId, {running, beating}] of Object.entries(perHeartbeatStats)) {
+            if (running === 0 && beating === 0) continue;
+
+            let baseId = fullId;
+            if (fullId.endsWith('.rx')) {
+                baseId = fullId.slice(0, -3);
+            } else if (fullId.endsWith('.tx')) {
+                baseId = fullId.slice(0, -3);
             }
 
-            if (nonBeatingCount > 0) {
-                chips.push(
-                    <Box key="stale" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`Stale ${nonBeatingCount}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: 'red',
-                                color: 'white',
-                                cursor: loadingState === 'stale' ? 'default' : 'pointer',
-                                opacity: loadingState === 'stale' ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== 'stale' && handleStatusClick('stale', null)}
-                            disabled={loadingState === 'stale'}
-                        />
-                        {loadingState === 'stale' && <CircularProgress size={12}/>}
-                    </Box>
-                );
+            if (!groups.has(baseId)) {
+                groups.set(baseId, {total: 0, healthy: 0});
+            }
+            const group = groups.get(baseId);
+            group.total += 1;
+
+            const isHealthy = running > 0 && beating === running;
+            if (isHealthy) {
+                group.healthy += 1;
             }
         }
 
-        for (const [state, count] of Object.entries(stateCount)) {
-            if (count > 0) {
-                chips.push(
-                    <Box key={state} sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`${state.charAt(0).toUpperCase() + state.slice(1)} ${count}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: stateColors[state] || 'grey',
-                                color: 'white',
-                                cursor: loadingState === state ? 'default' : 'pointer',
-                                opacity: loadingState === state ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== state && handleStatusClick(null, state)}
-                            disabled={loadingState === state}
-                        />
-                        {loadingState === state && <CircularProgress size={12}/>}
-                    </Box>
-                );
-            }
+        const chips = [];
+        for (const [baseId, {total, healthy}] of groups.entries()) {
+
+            const isHealthy = (total === healthy);
+            const isLoading = loadingId === baseId;
+
+            chips.push(
+                <Box key={baseId} sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
+                    <Chip
+                        label={baseId}
+                        size="small"
+                        sx={{
+                            backgroundColor: isHealthy ? 'green' : 'red',
+                            color: 'white',
+                            cursor: isLoading ? 'default' : 'pointer',
+                            opacity: isLoading ? 0.7 : 1,
+                        }}
+                        onClick={handleChipClick(baseId)}
+                        disabled={isLoading}
+                    />
+                    {isLoading && <CircularProgress size={12}/>}
+                </Box>
+            );
         }
 
         return (
@@ -450,7 +406,7 @@ export const GridHeartbeats = memo(({
                 {chips}
             </Box>
         );
-    }, [isSingleNode, heartbeatCount, beatingCount, nonBeatingCount, stateCount, loadingState, handleStatusClick, stateColors]);
+    }, [perHeartbeatStats, loadingId, handleChipClick]);
 
     return (
         <StatCard
@@ -458,7 +414,7 @@ export const GridHeartbeats = memo(({
             value={heartbeatCount}
             subtitle={subtitle}
             onClick={handleCardClick}
-            isLoading={isLoading && !loadingState}
+            isLoading={loadingId === 'card'}
         />
     );
 });

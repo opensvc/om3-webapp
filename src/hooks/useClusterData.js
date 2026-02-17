@@ -111,16 +111,22 @@ export const useHeartbeatStats = () => {
         if (heartbeatValues.length === 0) {
             return {
                 count: 0,
+                running: 0,
                 beating: 0,
                 stale: 0,
-                stateCount: {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0}
+                stateCount: {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0},
+                perHeartbeatStats: {}
             };
         }
 
+        const nodeCount = Object.keys(deferredHeartbeatStatus).length;
         const heartbeatIds = new Set();
+        const baseIds = new Set();
+        let totalRunning = 0;
         let beating = 0;
         let stale = 0;
         const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
+        const perHeartbeatStats = {};
 
         for (let i = 0; i < heartbeatValues.length; i++) {
             const node = heartbeatValues[i];
@@ -128,14 +134,24 @@ export const useHeartbeatStats = () => {
 
             for (let j = 0; j < streams.length; j++) {
                 const stream = streams[j];
-                const baseId = stream.id?.split('.')[0];
-                if (baseId) heartbeatIds.add(baseId);
 
-                const peer = Object.values(stream.peers || {})[0];
-                if (peer?.is_beating) {
-                    beating++;
-                } else {
-                    stale++;
+                let cleanedId = null;
+                if (stream.id) {
+                    cleanedId = stream.id.replace(/^hb#/, '');
+                }
+                if (cleanedId) {
+                    heartbeatIds.add(cleanedId);
+                    let baseId = cleanedId;
+                    if (cleanedId.endsWith('.rx')) {
+                        baseId = cleanedId.slice(0, -3);
+                    } else if (cleanedId.endsWith('.tx')) {
+                        baseId = cleanedId.slice(0, -3);
+                    }
+                    baseIds.add(baseId);
+
+                    if (!perHeartbeatStats[cleanedId]) {
+                        perHeartbeatStats[cleanedId] = {running: 0, beating: 0};
+                    }
                 }
 
                 const state = stream.state || 'unknown';
@@ -144,14 +160,49 @@ export const useHeartbeatStats = () => {
                 } else {
                     stateCount.unknown++;
                 }
+
+                const isRunning = state === 'running';
+
+                const peers = stream.peers || {};
+                const peerCount = Object.keys(peers).length;
+
+                if (isRunning) {
+                    const increment = peerCount > 0 ? peerCount : 1;
+                    totalRunning += increment;
+
+                    if (cleanedId) {
+                        perHeartbeatStats[cleanedId].running += increment;
+                    }
+                }
+
+                let streamHasBeating = false;
+                for (const peerKey in peers) {
+                    if (peers[peerKey]?.is_beating) {
+                        streamHasBeating = true;
+                        if (isRunning && cleanedId) {
+                            perHeartbeatStats[cleanedId].beating++;
+                        }
+                    }
+                }
+
+                // Comptage global beating/stale
+                if (isRunning) {
+                    if (nodeCount <= 1 || streamHasBeating) {
+                        beating++;
+                    } else {
+                        stale++;
+                    }
+                }
             }
         }
 
         return {
-            count: heartbeatIds.size,
+            count: baseIds.size,
+            running: totalRunning,
             beating,
             stale,
-            stateCount
+            stateCount,
+            perHeartbeatStats
         };
     }, [deferredHeartbeatStatus]);
 };

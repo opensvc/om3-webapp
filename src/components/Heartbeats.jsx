@@ -141,9 +141,14 @@ const Heartbeats = () => {
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
-    const [filterId, setFilterId] = useState(
-        rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId
-    );
+    const [filterId, setFilterId] = useState(() => {
+        // Nettoyer l'ID de l'URL : enlever le préfixe hb# et les suffixes .rx/.tx
+        let cleaned = rawId;
+        if (cleaned.startsWith("hb#")) {
+            cleaned = cleaned.replace(/^hb#/, "");
+        }
+        return cleaned.replace(/\.(rx|tx)$/, "");
+    });
 
     const deferredFilterBeating = useDeferredValue(filterBeating);
     const deferredFilterNode = useDeferredValue(filterNode);
@@ -198,10 +203,17 @@ const Heartbeats = () => {
 
     // Initialize filter states from URL
     useEffect(() => {
+        // Nettoyer l'ID de l'URL à chaque changement de l'URL
+        let cleanedId = rawId;
+        if (cleanedId.startsWith("hb#")) {
+            cleanedId = cleanedId.replace(/^hb#/, "");
+        }
+        const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
+
         setFilterBeating(["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all");
         setFilterNode(rawNode);
         setFilterState(rawState);
-        setFilterId(rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId);
+        setFilterId(baseId);
     }, [location.search, rawStatus, rawNode, rawState, rawId]);
 
     // Cache stopped streams with their last known peers
@@ -274,8 +286,10 @@ const Heartbeats = () => {
             for (let j = 0; j < streams.length; j++) {
                 const stream = streams[j];
                 if (stream.id && stream.id !== "all") {
+                    // Enlever le préfixe hb# puis les suffixes .rx/.tx
                     const cleanedId = stream.id.replace(/^hb#/, "");
-                    ids.add(cleanedId);
+                    const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
+                    ids.add(baseId);
                 }
             }
         }
@@ -369,13 +383,15 @@ const Heartbeats = () => {
 
     const filteredRows = useMemo(() => {
         return sortedRows.filter((row) => {
+            // Extraire l'ID de base de la ligne (sans .rx/.tx)
+            const rowBaseId = row.id.replace(/\.(rx|tx)$/, "");
             return (
                 (deferredFilterBeating === "all" ||
                     (deferredFilterBeating === "beating" && row.isBeating === true) ||
                     (deferredFilterBeating === "stale" && row.isBeating === false)) &&
                 (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
                 (deferredFilterState === "all" || row.state === deferredFilterState) &&
-                (deferredFilterId === "all" || row.id === deferredFilterId)
+                (deferredFilterId === "all" || rowBaseId === deferredFilterId)
             );
         });
     }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId]);

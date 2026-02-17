@@ -69,125 +69,137 @@ describe('ClusterStatGrids', () => {
         expect(mockOnClick).toHaveBeenCalled();
     });
 
-    test('GridHeartbeats renders correctly and handles click', () => {
-        const stateCount = {running: 3, stopped: 2, failed: 1, warning: 0, unknown: 2};
+    test('GridHeartbeats renders chips grouped by base ID and applies correct colors', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2},   // healthy
+            '1.tx': {running: 3, beating: 3},   // healthy
+            '2.rx': {running: 1, beating: 1},   // healthy
+            '2.tx': {running: 4, beating: 2},   // unhealthy (beating < running)
+            '3.rx': {running: 0, beating: 0},   // ignored (zero)
+            '3.tx': {running: 0, beating: 0},   // ignored
+            '4.rx': {running: 5, beating: 5},   // healthy
+            '4.tx': {running: 5, beating: 5},   // healthy
+        };
+
         render(
             <GridHeartbeats
-                heartbeatCount={8}
-                beatingCount={4}
-                nonBeatingCount={4}
-                stateCount={stateCount}
+                heartbeatCount={3} // groups: 1, 2, 4 (3 ignored)
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
-        expect(screen.getByText('8')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument(); // heartbeatCount
 
-        const beatingChipLabel = screen.getByText('Beating 4');
-        const staleChipLabel = screen.getByText('Stale 4');
-        expect(beatingChipLabel).toBeInTheDocument();
-        expect(staleChipLabel).toBeInTheDocument();
+        // Find chips by role
+        const chip1 = screen.getByRole('button', {name: '1'});
+        const chip2 = screen.getByRole('button', {name: '2'});
+        const chip4 = screen.getByRole('button', {name: '4'});
 
-        fireEvent.click(beatingChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+        expect(chip1).toBeInTheDocument();
+        expect(chip2).toBeInTheDocument();
+        expect(chip4).toBeInTheDocument();
 
-        fireEvent.click(staleChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('stale', null);
-
-        const runningChipLabel = screen.getByText('Running 3');
-        const stoppedChipLabel = screen.getByText('Stopped 2');
-        const failedChipLabel = screen.getByText('Failed 1');
-        const unknownChipLabel = screen.getByText('Unknown 2');
-
-        fireEvent.click(runningChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'running');
-
-        fireEvent.click(stoppedChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'stopped');
-
-        fireEvent.click(failedChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'failed');
-
-        fireEvent.click(unknownChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'unknown');
-
-        fireEvent.click(screen.getByText('Heartbeats'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalled();
+        // Check colors
+        expect(chip1).toHaveStyle('background-color: green');
+        expect(chip2).toHaveStyle('background-color: red');
+        expect(chip4).toHaveStyle('background-color: green');
     });
 
-    test('GridHeartbeats renders correctly for single node', () => {
-        const stateCount = {running: 3, stopped: 0, failed: 0, warning: 0, unknown: 0};
+    test('GridHeartbeats handles chip click correctly', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2},
+            '1.tx': {running: 3, beating: 3},
+        };
+
         render(
             <GridHeartbeats
-                heartbeatCount={3}
-                beatingCount={3}
-                nonBeatingCount={0}
-                stateCount={stateCount}
-                nodeCount={1}
+                heartbeatCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
                 onClick={mockOnClick}
             />
         );
 
-        expect(screen.getByText('Heartbeats')).toBeInTheDocument();
-        expect(screen.getByText('3')).toBeInTheDocument();
-        const beatingChipLabel = screen.getByText('Beating 3');
-        expect(beatingChipLabel).toBeInTheDocument();
-        expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
-
-        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
-        expect(beatingChip).toHaveAttribute('title', 'Healthy (Single Node)');
-
-        fireEvent.click(beatingChipLabel);
+        const chip = screen.getByRole('button', {name: '1'});
+        fireEvent.click(chip);
         jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+
+        expect(mockOnClick).toHaveBeenCalledWith(null, null, '1');
     });
 
-    test('GridHeartbeats handles state with no count', () => {
-        const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
+    test('GridHeartbeats handles card click correctly', () => {
         render(
             <GridHeartbeats
                 heartbeatCount={0}
-                beatingCount={0}
-                nonBeatingCount={0}
-                stateCount={stateCount}
+                perHeartbeatStats={{}}
+                nodeCount={3}
+                onClick={mockOnClick}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Heartbeats'));
+        jest.runAllTimers();
+
+        expect(mockOnClick).toHaveBeenCalledWith();
+    });
+
+    test('GridHeartbeats does not render chips for groups where all streams have running=0 and beating=0', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 0, beating: 0},
+            '1.tx': {running: 0, beating: 0},
+            '2.rx': {running: 3, beating: 3},
+        };
+
+        render(
+            <GridHeartbeats
+                heartbeatCount={1} // only group 2 counted
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
+                onClick={mockOnClick}
+            />
+        );
+
+        // Group 1 should not appear as a chip
+        expect(screen.queryByRole('button', {name: '1'})).not.toBeInTheDocument();
+        // Group 2 should appear
+        expect(screen.getByRole('button', {name: '2'})).toBeInTheDocument();
+    });
+
+    test('GridHeartbeats renders correctly when perHeartbeatStats is empty', () => {
+        render(
+            <GridHeartbeats
+                heartbeatCount={0}
+                perHeartbeatStats={{}}
+                nodeCount={3}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.queryByText(/Beating \d+/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Running \d+/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    test('GridHeartbeats handles warning state', () => {
-        const stateCount = {running: 1, warning: 2};
+    test('GridHeartbeats handles single node scenario with same health logic (no special treatment)', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2}, // healthy
+            '1.tx': {running: 2, beating: 1}, // unhealthy
+        };
+
         render(
             <GridHeartbeats
-                heartbeatCount={3}
-                beatingCount={1}
-                nonBeatingCount={2}
-                stateCount={stateCount}
+                heartbeatCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={1}
                 onClick={mockOnClick}
             />
         );
 
-        expect(screen.getByText('Heartbeats')).toBeInTheDocument();
-        expect(screen.getByText('3')).toBeInTheDocument();
-        expect(screen.getByText('Warning 2')).toBeInTheDocument();
-
-        fireEvent.click(screen.getByText('Warning 2'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'warning');
+        const chip = screen.getByRole('button', {name: '1'});
+        expect(chip).toHaveStyle('background-color: red');
     });
 
     test('GridPools renders correctly and handles click', () => {
@@ -393,22 +405,5 @@ describe('ClusterStatGrids', () => {
         const statusIndicators = within(chipContainer).getAllByRole('button', {hidden: true});
 
         expect(statusIndicators).toHaveLength(1);
-    });
-
-    test('GridHeartbeats handles card click without parameters', () => {
-        const stateCount = {running: 1};
-        render(
-            <GridHeartbeats
-                heartbeatCount={1}
-                beatingCount={1}
-                nonBeatingCount={0}
-                stateCount={stateCount}
-                onClick={mockOnClick}
-            />
-        );
-
-        fireEvent.click(screen.getByText('Heartbeats'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalled();
     });
 });

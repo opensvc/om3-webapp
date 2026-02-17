@@ -552,3 +552,170 @@ export const GridNetworks = memo(({networks, onClick}) => {
         />
     );
 });
+
+export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
+    const [loadingKind, setLoadingKind] = useState('');
+    const [isCardLoading, setIsCardLoading] = useState(false);
+
+    const handleCardClick = useCallback(() => {
+        setIsCardLoading(true);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick('/kinds');
+            setIsCardLoading(false);
+        }, 50);
+    }, [onClick]);
+
+    const subtitle = useMemo(() => {
+        return (
+            <Box sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                pt: 1,
+                maxHeight: '400px',
+                overflowY: 'auto',
+                justifyContent: 'flex-start'
+            }}>
+                {kindSubtitle.map(({kind, status}) => (
+                    <KindChip
+                        key={kind}
+                        kind={kind}
+                        status={status}
+                        isLoading={loadingKind === kind}
+                        onClick={onClick}
+                        onLoadingChange={setLoadingKind}
+                    />
+                ))}
+            </Box>
+        );
+    }, [kindSubtitle, loadingKind, onClick]);
+
+    return (
+        <StatCard
+            title="Kinds"
+            value={kindCount}
+            subtitle={subtitle}
+            onClick={handleCardClick}
+            dynamicHeight
+            isLoading={isCardLoading}
+        />
+    );
+});
+
+const KindChip = memo(({kind, status, isLoading, onClick, onLoadingChange}) => {
+    const getStatusColor = useCallback((stat) => {
+        const colors = {
+            up: 'green',
+            warn: 'orange',
+            down: 'red',
+            'n/a': 'grey',
+            unprovisioned: 'red'
+        };
+        return colors[stat] || 'grey';
+    }, []);
+
+    const handleStatClick = useCallback((stat, e) => {
+        e.stopPropagation();
+        onLoadingChange(kind);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick(`/objects?kind=${kind}&globalState=${stat === 'unprovisioned' ? 'unprovisioned' : stat}`);
+            onLoadingChange('');
+        }, 50);
+    }, [kind, onClick, onLoadingChange]);
+
+    const statusElements = useMemo(() => {
+        const elements = [];
+        const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
+
+        for (const stat of statusTypes) {
+            const count = status[stat] || 0;
+            if (count > 0) {
+                elements.push(
+                    <Tooltip key={stat}
+                             title={stat === "unprovisioned" ? "Not Provisioned" : stat.charAt(0).toUpperCase() + stat.slice(1)}>
+                        <Box
+                            sx={{
+                                width: 15.5,
+                                height: 15.5,
+                                borderRadius: stat === "unprovisioned" ? '3px' : '50%',
+                                clipPath: stat === "unprovisioned" ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : undefined,
+                                backgroundColor: getStatusColor(stat),
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 7.8,
+                                fontWeight: 'bold',
+                                border: '1px solid white',
+                                cursor: 'pointer',
+                                zIndex: 1,
+                                opacity: isLoading ? 0.5 : 1
+                            }}
+                            onClick={(e) => !isLoading && handleStatClick(stat, e)}
+                            aria-label={`${stat} status for kind ${kind}: ${count} objects`}
+                        >
+                            {count}
+                        </Box>
+                    </Tooltip>
+                );
+            }
+        }
+        return elements;
+    }, [kind, status, isLoading, handleStatClick, getStatusColor]);
+
+    const handleChipClick = useCallback((e) => {
+        e.stopPropagation();
+        if (isLoading) return;
+        onLoadingChange(kind);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick(`/objects?kind=${kind}`);
+            onLoadingChange('');
+        }, 50);
+    }, [kind, isLoading, onClick, onLoadingChange]);
+
+    return (
+        <Box
+            sx={{
+                position: 'relative',
+                display: 'inline-flex',
+                flexShrink: 0,
+                margin: "4px",
+                alignItems: "center",
+                opacity: isLoading ? 0.7 : 1
+            }}
+        >
+            <Chip
+                label={kind}
+                size="small"
+                sx={{
+                    backgroundColor: 'default',
+                    cursor: isLoading ? 'default' : 'pointer',
+                    minWidth: "100px",
+                    px: 2,
+                    height: 24,
+                    pr: 4
+                }}
+                onClick={handleChipClick}
+                disabled={isLoading}
+            />
+            <Box sx={{
+                position: 'absolute',
+                top: -8,
+                right: -4,
+                display: 'flex',
+                gap: 0.5,
+                flexWrap: 'wrap'
+            }}>
+                {statusElements}
+            </Box>
+            {isLoading && (
+                <Box sx={{position: 'absolute', top: -5, right: -5}}>
+                    <CircularProgress size={16}/>
+                </Box>
+            )}
+        </Box>
+    );
+});

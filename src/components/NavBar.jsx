@@ -37,13 +37,14 @@ const NavBar = () => {
     const online = useOnlineStatus();
 
     const navRoutes = [
-        {path: "/cluster", name: "Cluster Overview", icon: <FaHome/>},
+        {path: "/cluster", name: "Cluster", icon: <FaHome/>},
         {path: "/namespaces", name: "Namespaces", icon: <FaList/>},
         {path: "/heartbeats", name: "Heartbeats", icon: <FaHeartbeat/>},
         {path: "/nodes", name: "Nodes", icon: <FaServer/>},
         {path: "/pools", name: "Pools", icon: <FaDatabase/>},
         {path: "/network", name: "Networks", icon: <FaNetworkWired/>},
         {path: "/objects", name: "Objects", icon: <FaCubes/>},
+        {path: "/kinds", name: "Kinds", icon: <FaUser/>},
         {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
     ];
 
@@ -160,23 +161,19 @@ const NavBar = () => {
                         name: node,
                         path: null
                     });
-                }
-                else if (pathParts[0] === "objects" && pathParts.length >= 2) {
+                } else if (pathParts[0] === "objects" && pathParts.length >= 2) {
                     const objectName = decodeURIComponent(pathParts.slice(1).join("/"));
                     breadcrumbItems.push({name: "objects", path: "/objects"});
                     breadcrumbItems.push({
                         name: objectName,
                         path: location.pathname
                     });
-                }
-                else if (pathParts[0] === "network" && pathParts.length === 2) {
+                } else if (pathParts[0] === "network" && pathParts.length === 2) {
                     breadcrumbItems.push({name: "network", path: "/network"});
                     breadcrumbItems.push({name: pathParts[1], path: `/network/${pathParts[1]}`});
-                }
-                else if (pathParts[0] === "network" && pathParts.length === 1) {
+                } else if (pathParts[0] === "network" && pathParts.length === 1) {
                     breadcrumbItems.push({name: "network", path: "/network"});
-                }
-                else {
+                } else {
                     pathParts.forEach((part, index) => {
                         const fullPath = "/" + pathParts.slice(0, index + 1).join("/");
                         if (part !== "cluster") {

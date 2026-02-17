@@ -9,28 +9,14 @@ import {
     GridNamespaces,
     GridHeartbeats,
     GridPools,
-    GridNetworks
-} from "./ClusterStatGrids.jsx";
+    GridNetworks,
+    GridKinds
+} from "../components/ClusterStatGrids.jsx";
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception, DEFAULT_FILTERS} from "../eventSourceManager";
 import EventLogger from "../components/EventLogger";
 import {useNodeStats, useObjectStats, useHeartbeatStats} from "../hooks/useClusterData";
-
-const CLUSTER_EVENT_TYPES = [
-    "NodeStatusUpdated",
-    "NodeMonitorUpdated",
-    "NodeStatsUpdated",
-    "DaemonHeartbeatUpdated",
-    "ObjectStatusUpdated",
-    "InstanceStatusUpdated",
-    "ObjectDeleted",
-    "InstanceMonitorUpdated",
-    "CONNECTION_OPENED",
-    "CONNECTION_ERROR",
-    "RECONNECTION_ATTEMPT",
-    "MAX_RECONNECTIONS_REACHED",
-    "CONNECTION_CLOSED"
-];
+import {useKindData} from "../hooks/useKindData";
 
 const InitialLoader = memo(() => (
     <Box sx={{
@@ -54,6 +40,7 @@ const ClusterOverview = () => {
     const nodeStats = useNodeStats();
     const objectStats = useObjectStats();
     const heartbeatStats = useHeartbeatStats();
+    const {statusByKind, kinds} = useKindData();
 
     const deferredNodeStats = useDeferredValue(nodeStats);
     const deferredObjectStats = useDeferredValue(objectStats);
@@ -165,6 +152,19 @@ const ClusterOverview = () => {
         onClick: (url) => navigate(url || "/namespaces")
     }), [deferredObjectStats.namespaceCount, deferredObjectStats.namespaceSubtitle, navigate]);
 
+    const kindSubtitle = useMemo(() => {
+        return kinds.map(kind => ({
+            kind,
+            status: statusByKind[kind]
+        }));
+    }, [kinds, statusByKind]);
+
+    const gridKindsProps = useMemo(() => ({
+        kindCount: kinds.length,
+        kindSubtitle,
+        onClick: (url) => navigate(url || "/kinds")
+    }), [kinds.length, kindSubtitle, navigate]);
+
     const gridPoolsProps = useMemo(() => ({
         poolCount,
         pools,
@@ -248,8 +248,10 @@ const ClusterOverview = () => {
                         </Box>
                     </Box>
 
-                    <Box sx={{flex: 1}}>
+                    {/* Colonne de droite : Namespaces et Kinds l'un en dessous de l'autre */}
+                    <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
                         <GridNamespaces {...gridNamespacesProps} />
+                        <GridKinds {...gridKindsProps} />
                     </Box>
                 </Box>
                 {/* <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/> */}

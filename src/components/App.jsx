@@ -31,6 +31,7 @@ const ObjectDetails = lazy(() => import("./ObjectDetails"));
 const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
 const ClusterOverview = lazy(() => import("./Cluster"));
 const Namespaces = lazy(() => import("./Namespaces"));
+const Kinds = lazy(() => import("./Kinds"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
@@ -350,6 +351,8 @@ const App = () => {
                                     <Route path="/cluster"
                                            element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
                                     <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                    <Route path="/kinds"
+                                           element={<ProtectedRoute><Kinds/></ProtectedRoute>}/> {/* <-- AJOUT */}
                                     <Route path="/heartbeats" element={<Heartbeats/>}/>
                                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                     <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>

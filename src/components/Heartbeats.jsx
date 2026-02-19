@@ -230,7 +230,7 @@ const Heartbeats = () => {
 
                 for (let j = 0; j < streams.length; j++) {
                     const stream = streams[j];
-                    if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
+                    if (Object.keys(stream.peers || {}).length > 0) {
                         newCache[node][stream.id] = {
                             ...stream,
                             peers: {...stream.peers},

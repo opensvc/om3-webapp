@@ -10,10 +10,8 @@ import {
     TableRow,
     Typography,
     Button,
-    Paper,
     MenuItem,
     Checkbox,
-    Autocomplete,
     TextField,
     Snackbar,
     Alert,
@@ -27,8 +25,6 @@ import {
     Grid,
     Collapse,
     Menu,
-    FormControlLabel,
-    FormGroup,
     FormControl,
     InputLabel,
     Select,
@@ -37,6 +33,7 @@ import {
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import CloseIcon from "@mui/icons-material/Close";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
@@ -1014,7 +1011,8 @@ const Objects = () => {
                                                                     event.stopPropagation();
                                                                 }}
                                                                 size="small"
-                                                                deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                                deleteIcon={<CloseIcon fontSize="small"
+                                                                                       style={{cursor: 'pointer'}}/>}
                                                             />
                                                         ))}
                                                     </Box>
@@ -1067,7 +1065,8 @@ const Objects = () => {
                                                                 event.stopPropagation();
                                                             }}
                                                             size="small"
-                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                            deleteIcon={<CloseIcon fontSize="small"
+                                                                                   style={{cursor: 'pointer'}}/>}
                                                         />
                                                     ))}
                                                 </Box>
@@ -1104,7 +1103,8 @@ const Objects = () => {
                                                                 event.stopPropagation();
                                                             }}
                                                             size="small"
-                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                            deleteIcon={<CloseIcon fontSize="small"
+                                                                                   style={{cursor: 'pointer'}}/>} // Modification ici
                                                         />
                                                     ))}
                                                 </Box>

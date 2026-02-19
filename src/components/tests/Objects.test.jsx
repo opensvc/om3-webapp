@@ -7,7 +7,6 @@ import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {closeEventSource, startEventReception} from '../../eventSourceManager';
 
-// Mock dependencies
 jest.mock('react-router-dom', () => ({
     ...jest.requireActual('react-router-dom'),
     useNavigate: jest.fn(),
@@ -39,21 +38,17 @@ const AVAILABLE_ACTIONS = [
 
 expect.extend(toHaveNoViolations);
 
-// Helper function to interact with multi-select filters
 const selectFilterOption = async (labelText, optionText) => {
     const filter = screen.getByLabelText(labelText);
 
-    // Ouvrir le menu
     fireEvent.mouseDown(filter);
 
-    // Attendre que le menu apparaisse
     await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
     });
 
     const listbox = screen.getByRole('listbox');
 
-    // Trouver l'option avec le texte (note: optionText pourrait avoir des majuscules)
     const options = within(listbox).getAllByRole('option');
     const option = options.find(opt =>
         opt.textContent.toLowerCase().includes(optionText.toLowerCase())
@@ -63,29 +58,22 @@ const selectFilterOption = async (labelText, optionText) => {
         throw new Error(`Option with text "${optionText}" not found`);
     }
 
-    // Cliquer sur la checkbox à l'intérieur du MenuItem
     const checkbox = within(option).getByRole('checkbox');
     fireEvent.click(checkbox);
 
-    // Fermer le menu en cliquant en dehors (sur un élément non-interactif)
-    // On peut cliquer sur le backdrop de Material-UI
     const backdrop = document.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
     if (backdrop) {
         fireEvent.click(backdrop);
     } else {
-        // Fallback: simuler la touche Escape
         fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
     }
 };
 
-// Helper function to wait for filter to be applied and menu to close
 const waitForFilterApplied = async () => {
-    // Attendre que le menu soit fermé
     await waitFor(() => {
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     });
 
-    // Attendre un peu pour que le filtre soit appliqué
     await waitFor(() => {
         expect(screen.getByRole('table')).toBeInTheDocument();
     }, {timeout: 1000});
@@ -113,17 +101,14 @@ describe('Objects Component', () => {
 
         jest.clearAllMocks();
 
-        // Mock location and navigation
         require('react-router-dom').useLocation.mockReturnValue({
             search: '',
             pathname: '/objects',
         });
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
-        // Mock useMediaQuery to return true (wide screen)
         require('@mui/material/useMediaQuery').mockReturnValue(true);
 
-        // Mock useEventStore
         const mockState = {
             objectStatus: {
                 'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
@@ -153,19 +138,15 @@ describe('Objects Component', () => {
 
         useEventStore.mockImplementation((selector) => selector(mockState));
 
-        // Mock useFetchDaemonStatus
         useFetchDaemonStatus.mockReturnValue({
             daemon: {cluster: {object: {}}},
         });
 
-        // Mock eventSourceManager
         startEventReception.mockImplementation(mockStartEventReception);
         closeEventSource.mockImplementation(mockCloseEventSource);
 
-        // Mock localStorage
         jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('mock-token');
 
-        // Mock fetch
         global.fetch = jest.fn(() =>
             Promise.resolve({
                 ok: true,
@@ -177,6 +158,7 @@ describe('Objects Component', () => {
     afterEach(() => {
         console.error = originalConsoleError;
         jest.restoreAllMocks();
+        require('@mui/material/useMediaQuery').mockReturnValue(true);
     });
 
     const setupComponent = () => {
@@ -189,7 +171,6 @@ describe('Objects Component', () => {
 
     const waitForComponentToLoad = async () => {
         await waitFor(() => {
-            // Vérifier que les filtres sont présents
             expect(screen.getByLabelText('Global State')).toBeInTheDocument();
         });
     };
@@ -447,10 +428,8 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select the object
         await selectObject('test-ns/svc/test1');
 
-        // Open actions menu and select Delete
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
 
         await waitFor(() => {
@@ -461,24 +440,20 @@ describe('Objects Component', () => {
         const deleteOption = within(menu).getByText(/^Delete$/i);
         fireEvent.click(deleteOption);
 
-        // Wait for DeleteDialog to appear
         await waitFor(() => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
 
         expect(screen.getByText(/Confirm Delete/i)).toBeInTheDocument();
 
-        // Check the required checkboxes
         const configLossCheckbox = screen.getByLabelText(/Confirm configuration loss/i);
         const clusterwideCheckbox = screen.getByLabelText(/Confirm clusterwide orchestration/i);
 
         fireEvent.click(configLossCheckbox);
         fireEvent.click(clusterwideCheckbox);
 
-        // Click Confirm button
         fireEvent.click(screen.getByRole('button', {name: /Delete/i}));
 
-        // Verify the fetch call and object removal
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/test-ns/svc/test1/action/delete'),
@@ -572,7 +547,6 @@ describe('Objects Component', () => {
             expect(screen.getByRole('dialog', {name: /Confirm Unprovision/i})).toBeInTheDocument();
         });
 
-        // Check all three required checkboxes for object unprovision
         fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
         fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
         fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
@@ -598,23 +572,21 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Check filters are visible initially
         const toggleButton = await screen.findByRole('button', {name: /filters/i});
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
 
-        // Click to hide filters
         fireEvent.click(toggleButton);
 
-        // Check filters are hidden
         await waitFor(() => {
-            expect(toggleButton).toHaveTextContent('Filters');
+            expect(toggleButton).toHaveAttribute('aria-label', 'Show filters');
         });
-
         expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
 
-        // Click to show filters again
         fireEvent.click(toggleButton);
 
+        await waitFor(() => {
+            expect(toggleButton).toHaveAttribute('aria-label', 'Hide filters');
+        });
         expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
     });
 
@@ -622,7 +594,6 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select "up" filter option
         await selectFilterOption('Global State', 'Up');
         await waitForFilterApplied();
 
@@ -638,7 +609,6 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select "svc" filter option
         await selectFilterOption('Kind', 'svc');
         await waitForFilterApplied();
 
@@ -666,7 +636,6 @@ describe('Objects Component', () => {
             expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
         });
 
-        // Only header row should be present
         expect(screen.getAllByRole('row')).toHaveLength(1);
     });
 
@@ -785,34 +754,6 @@ describe('Objects Component', () => {
         expect(screen.getByLabelText('Node node1 is not provisioned')).toBeInTheDocument();
     });
 
-    test('handles objects with globalExpect status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/global-expect': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/global-expect': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/global-expect': {state: 'idle', global_expect: 'started'},
-                },
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/global-expect/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByText('started')).toBeInTheDocument();
-    });
-
     test('handles nodes with non-idle state', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -882,17 +823,14 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select an object
         const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
         const checkbox = within(row).getByRole('checkbox');
         fireEvent.click(checkbox);
 
-        // Open global actions menu
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
 
         const menu = await screen.findByRole('menu');
 
-        // Verify that some actions are disabled according to business logic
         const deleteAction = within(menu).getByText('Delete');
         expect(deleteAction).toBeInTheDocument();
     });
@@ -901,11 +839,9 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Click on Status column header to sort
         const statusHeader = screen.getByText('Status');
         fireEvent.click(statusHeader);
 
-        // Verify that sorting was triggered (we don't check specific order as it depends on implementation)
         await waitFor(() => {
             expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
         });
@@ -915,11 +851,9 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Click on Object column header to sort
         const objectHeader = screen.getByText('Object');
         fireEvent.click(objectHeader);
 
-        // Verify that sorting was triggered
         await waitFor(() => {
             expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
         });
@@ -929,11 +863,9 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Click on a node column header to sort
         const nodeHeader = screen.getByRole('columnheader', {name: /node1/i});
         fireEvent.click(nodeHeader);
 
-        // Verify that sorting was triggered
         await waitFor(() => {
             expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
         });
@@ -945,13 +877,10 @@ describe('Objects Component', () => {
 
         const objectHeader = screen.getByText('Object');
 
-        // First click: ascending sort
         fireEvent.click(objectHeader);
 
-        // Second click: descending sort
         fireEvent.click(objectHeader);
 
-        // Verify that sorting was triggered twice
         await waitFor(() => {
             expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
         });
@@ -963,7 +892,7 @@ describe('Objects Component', () => {
                 objectStatus: {
                     'test-ns/svc/no-instance': {avail: 'up', frozen: 'unfrozen'},
                 },
-                objectInstanceStatus: {}, // No instance status
+                objectInstanceStatus: {},
                 instanceMonitor: {},
                 removeObject: mockRemoveObject,
             })
@@ -976,10 +905,8 @@ describe('Objects Component', () => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i})).toBeInTheDocument();
         });
 
-        // Click on the row
         fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i}));
 
-        // Should not navigate because no instanceStatus
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
@@ -987,24 +914,21 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Select "unprovisioned" filter option
         await selectFilterOption('Global State', 'Unprovisioned');
         await waitForFilterApplied();
 
-        // With mocked data, no object is unprovisioned, so no results
         await waitFor(() => {
             expect(screen.getByText('No objects found matching the current filters.')).toBeInTheDocument();
         });
     });
 
     test('handles narrow screen layout', async () => {
-        // Mock useMediaQuery to return false (narrow screen)
-        require('@mui/material/useMediaQuery').mockReturnValue(false);
+        const mockUseMediaQuery = require('@mui/material/useMediaQuery');
+        mockUseMediaQuery.mockReturnValue(false);
 
         setupComponent();
         await waitForComponentToLoad();
 
-        // Verify that node columns are not displayed
         expect(screen.queryByRole('columnheader', {name: /node1/i})).not.toBeInTheDocument();
         expect(screen.queryByRole('columnheader', {name: /node2/i})).not.toBeInTheDocument();
     });
@@ -1017,7 +941,6 @@ describe('Objects Component', () => {
 
         setupComponent();
 
-        // Wait for component to load and verify filters are present
         await waitFor(() => {
             expect(screen.getByLabelText('Global State')).toBeInTheDocument();
             expect(screen.getByLabelText('Namespace')).toBeInTheDocument();

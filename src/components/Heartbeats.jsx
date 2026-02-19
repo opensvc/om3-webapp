@@ -120,14 +120,17 @@ const Heartbeats = () => {
     const tableContainerRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg")); // Ajout pour la cohérence
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
     const [sortColumn, setSortColumn] = useState("node");
     const [sortDirection, setSortDirection] = useState("asc");
-    const [showFilters, setShowFilters] = useState(true);
     const [visibleCount, setVisibleCount] = useState(30);
     const [loading, setLoading] = useState(false);
+
+    // Initialisation conditionnelle de showFilters
+    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -515,16 +518,19 @@ const Heartbeats = () => {
                         gap: 2,
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            <Button
-                                onClick={toggleShowFilters}
-                                sx={{minWidth: 'auto', flexShrink: 0}}
-                                startIcon={<FilterListIcon/>}
-                            >
-                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                    Filters
-                                </Box>
-                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            </Button>
+                            {/* Bouton de filtre affiché uniquement sur mobile */}
+                            {isMobile && (
+                                <Button
+                                    onClick={toggleShowFilters}
+                                    sx={{minWidth: 'auto', flexShrink: 0}}
+                                    startIcon={<FilterListIcon/>}
+                                >
+                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                        Filters
+                                    </Box>
+                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                                </Button>
+                            )}
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>

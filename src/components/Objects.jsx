@@ -85,12 +85,35 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
         <Box sx={{
             width: "80px",
             height: "24px",
-            position: "relative",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 0.5
         }}>
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", zIndex: 1}}>
+            {/* Not provisioned indicator - left side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: isNotProvisioned ? "visible" : "hidden"
+            }}>
+                {isNotProvisioned && (
+                    <Tooltip title="Not Provisioned">
+                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}} aria-label="Object is not provisioned"/>
+                    </Tooltip>
+                )}
+            </Box>
+
+            {/* Status icon - center */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
                 {avail === "up" && (
                     <Tooltip title="up">
                         <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
@@ -112,27 +135,34 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
                     </Tooltip>
                 )}
             </Box>
-            {isNotProvisioned && (
-                <Box sx={{position: "absolute", left: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is not provisioned"/>
-                    </Tooltip>
-                </Box>
-            )}
-            {frozen === "frozen" && (
-                <Box sx={{position: "absolute", right: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
+
+            {/* Frozen indicator - right side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: frozen === "frozen" ? "visible" : "hidden"
+            }}>
+                {frozen === "frozen" && (
                     <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label="Object is frozen"/>
+                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label="Object is frozen"/>
                     </Tooltip>
-                </Box>
-            )}
+                )}
+            </Box>
         </Box>
     );
 }, (prev, next) => prev.avail === next.avail && prev.isNotProvisioned === next.isNotProvisioned && prev.frozen === next.frozen);
 
 const GlobalExpectDisplay = React.memo(({globalExpect}) => {
     return (
-        <Box sx={{width: "70px", display: "flex", justifyContent: "center"}}>
+        <Box sx={{
+            width: "70px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             {globalExpect && (
                 <Tooltip title={globalExpect}>
                     <Typography variant="caption" sx={{
@@ -141,7 +171,8 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => {
                         maxWidth: "70px",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        whiteSpace: "nowrap",
+                        display: "inline-block"
                     }}>
                         {globalExpect}
                     </Typography>
@@ -156,12 +187,36 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         <Box sx={{
             width: "80px",
             height: "24px",
-            position: "relative",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 0.5
         }}>
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", zIndex: 1}}>
+            {/* Not provisioned indicator - left side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: isNodeNotProvisioned ? "visible" : "hidden"
+            }}>
+                {isNodeNotProvisioned && (
+                    <Tooltip title="Not Provisioned">
+                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}}
+                                          aria-label={`Node ${node} is not provisioned`}/>
+                    </Tooltip>
+                )}
+            </Box>
+
+            {/* Node status icon - center */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
                 {nodeAvail === "up" && (
                     <Tooltip title="up">
                         <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}}
@@ -181,28 +236,34 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                     </Tooltip>
                 )}
             </Box>
-            {isNodeNotProvisioned && (
-                <Box sx={{position: "absolute", left: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
-                                          aria-label={`Node ${node} is not provisioned`}/>
-                    </Tooltip>
-                </Box>
-            )}
-            {nodeFrozen === "frozen" && (
-                <Box sx={{position: "absolute", right: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
+
+            {/* Frozen indicator - right side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: nodeFrozen === "frozen" ? "visible" : "hidden"
+            }}>
+                {nodeFrozen === "frozen" && (
                     <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label={`Node ${node} is frozen`}/>
+                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label={`Node ${node} is frozen`}/>
                     </Tooltip>
-                </Box>
-            )}
+                )}
+            </Box>
         </Box>
     );
 }, (prev, next) => prev.nodeAvail === next.nodeAvail && prev.isNodeNotProvisioned === next.isNodeNotProvisioned && prev.nodeFrozen === next.nodeFrozen && prev.node === next.node);
 
 const NodeStateDisplay = React.memo(({nodeState, node}) => {
     return (
-        <Box sx={{width: "50px", display: "flex", justifyContent: "center"}}>
+        <Box sx={{
+            width: "50px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             {nodeState && (
                 <Tooltip title={nodeState}>
                     <Typography variant="caption" sx={{
@@ -211,7 +272,8 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
                         maxWidth: "50px",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        whiteSpace: "nowrap",
+                        display: "inline-block"
                     }} aria-label={`Node ${node} state: ${nodeState}`}>
                         {nodeState}
                     </Typography>
@@ -241,7 +303,12 @@ const NodeStatus = React.memo(({objectName, node}) => {
             <NodeStateDisplay nodeState={nodeData.state} node={node}/>
         </Box>
     ) : (
-        <Box sx={{width: "130px", display: "flex", justifyContent: "center", alignItems: "center"}}>
+        <Box sx={{
+            width: "130px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             <Typography variant="caption" color="textSecondary">-</Typography>
         </Box>
     );
@@ -404,7 +471,6 @@ const Objects = () => {
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
-    const [showFilters, setShowFilters] = useState(true);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
     const theme = useTheme();
@@ -421,6 +487,8 @@ const Objects = () => {
         "MAX_RECONNECTIONS_REACHED",
         "CONNECTION_CLOSED"
     ], []);
+
+    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const deferredSelectedGlobalStates = useDeferredValue(selectedGlobalStates);
@@ -880,17 +948,20 @@ const Objects = () => {
                         gap: 2
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            <Button
-                                onClick={toggleShowFilters}
-                                aria-label={showFilters ? "Hide filters" : "Show filters"}
-                                sx={{minWidth: 'auto', flexShrink: 0}}
-                                startIcon={<FilterListIcon/>}
-                            >
-                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                    Filters
-                                </Box>
-                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            </Button>
+                            {/* Bouton de filtre affiché uniquement sur mobile */}
+                            {isMobile && (
+                                <Button
+                                    onClick={toggleShowFilters}
+                                    aria-label={showFilters ? "Hide filters" : "Show filters"}
+                                    sx={{minWidth: 'auto', flexShrink: 0}}
+                                    startIcon={<FilterListIcon/>}
+                                >
+                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                        Filters
+                                    </Box>
+                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                                </Button>
+                            )}
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>

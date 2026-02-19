@@ -780,6 +780,18 @@ const Objects = () => {
         });
     }, []);
 
+    const handleGlobalStateSelectChange = (event) => {
+        setSelectedGlobalStates(event.target.value);
+    };
+
+    const handleNamespaceSelectChange = (event) => {
+        setSelectedNamespaces(event.target.value);
+    };
+
+    const handleKindSelectChange = (event) => {
+        setSelectedKinds(event.target.value);
+    };
+
     const handleScroll = useCallback(() => {
         if (loading) return;
 
@@ -969,6 +981,7 @@ const Objects = () => {
                                             labelId={globalStateId}
                                             multiple
                                             value={selectedGlobalStates}
+                                            onChange={handleGlobalStateSelectChange}
                                             input={<OutlinedInput label="Global State"/>}
                                             renderValue={(selected) => {
                                                 if (selected.length === 0) return '';
@@ -1021,10 +1034,7 @@ const Objects = () => {
                                         >
                                             {globalStates.map((state) => (
                                                 <MenuItem key={state} value={state}>
-                                                    <Checkbox
-                                                        checked={selectedGlobalStates.includes(state)}
-                                                        onChange={() => handleGlobalStateChange(state)}
-                                                    />
+                                                    <Checkbox checked={selectedGlobalStates.includes(state)}/>
                                                     <Box display="flex" alignItems="center" gap={1}>
                                                         {state === "up" &&
                                                             <FiberManualRecordIcon
@@ -1053,6 +1063,7 @@ const Objects = () => {
                                             labelId={namespaceId}
                                             multiple
                                             value={selectedNamespaces}
+                                            onChange={handleNamespaceSelectChange}
                                             input={<OutlinedInput label="Namespace"/>}
                                             renderValue={(selected) => (
                                                 <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
@@ -1074,10 +1085,7 @@ const Objects = () => {
                                         >
                                             {namespaces.map((namespace) => (
                                                 <MenuItem key={namespace} value={namespace}>
-                                                    <Checkbox
-                                                        checked={selectedNamespaces.includes(namespace)}
-                                                        onChange={() => handleNamespaceChange(namespace)}
-                                                    />
+                                                    <Checkbox checked={selectedNamespaces.includes(namespace)}/>
                                                     <ListItemText primary={namespace}/>
                                                 </MenuItem>
                                             ))}
@@ -1091,6 +1099,7 @@ const Objects = () => {
                                             labelId={kindId}
                                             multiple
                                             value={selectedKinds}
+                                            onChange={handleKindSelectChange}
                                             input={<OutlinedInput label="Kind"/>}
                                             renderValue={(selected) => (
                                                 <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
@@ -1104,7 +1113,7 @@ const Objects = () => {
                                                             }}
                                                             size="small"
                                                             deleteIcon={<CloseIcon fontSize="small"
-                                                                                   style={{cursor: 'pointer'}}/>} // Modification ici
+                                                                                   style={{cursor: 'pointer'}}/>}
                                                         />
                                                     ))}
                                                 </Box>
@@ -1112,10 +1121,7 @@ const Objects = () => {
                                         >
                                             {kinds.map((kind) => (
                                                 <MenuItem key={kind} value={kind}>
-                                                    <Checkbox
-                                                        checked={selectedKinds.includes(kind)}
-                                                        onChange={() => handleKindChange(kind)}
-                                                    />
+                                                    <Checkbox checked={selectedKinds.includes(kind)}/>
                                                     <ListItemText primary={kind}/>
                                                 </MenuItem>
                                             ))}

@@ -44,24 +44,6 @@ const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
-// Helper function to filter resource actions based on type
-export const getFilteredResourceActions = (resourceType) => {
-    if (!resourceType) {
-        return RESOURCE_ACTIONS;
-    }
-    const typePrefix = resourceType.split('.')[0].toLowerCase();
-    if (typePrefix === 'task') {
-        return RESOURCE_ACTIONS.filter(action => action.name === 'run');
-    }
-    if (['fs', 'disk', 'app'].includes(typePrefix)) {
-        return RESOURCE_ACTIONS.filter(action => action.name !== 'run' && action.name !== 'console');
-    }
-    if (typePrefix === 'container') {
-        return RESOURCE_ACTIONS.filter(action => action.name !== 'run');
-    }
-    return RESOURCE_ACTIONS;
-};
-
 // Helper function to get resource type for a given resource ID
 export const getResourceType = (rid, nodeData) => {
     if (!rid || !nodeData) {

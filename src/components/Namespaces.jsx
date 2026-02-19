@@ -328,18 +328,6 @@ const Namespaces = () => {
                     />
                 </Box>
 
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleNamespaces.length} of {sortedNamespaces.length} namespaces
-                    </Typography>
-                </Box>
-
                 <TableContainer
                     ref={tableContainerRef}
                     sx={{

@@ -330,18 +330,6 @@ const Kinds = () => {
                     />
                 </Box>
 
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleKinds.length} of {sortedKinds.length} kinds
-                    </Typography>
-                </Box>
-
                 <TableContainer
                     ref={tableContainerRef}
                     sx={{

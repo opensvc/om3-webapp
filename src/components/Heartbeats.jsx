@@ -518,7 +518,6 @@ const Heartbeats = () => {
                         gap: 2,
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            {/* Bouton de filtre affiché uniquement sur mobile */}
                             {isMobile && (
                                 <Button
                                     onClick={toggleShowFilters}
@@ -597,18 +596,6 @@ const Heartbeats = () => {
                             </Grid>
                         </Collapse>
                     </Box>
-                </Box>
-
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleRows.length} of {filteredRows.length} heartbeats
-                    </Typography>
                 </Box>
 
                 <TableContainer

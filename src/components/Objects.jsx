@@ -948,7 +948,6 @@ const Objects = () => {
                         gap: 2
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            {/* Bouton de filtre affiché uniquement sur mobile */}
                             {isMobile && (
                                 <Button
                                     onClick={toggleShowFilters}
@@ -1229,17 +1228,6 @@ const Objects = () => {
                             );
                         })}
                     </Menu>
-                </Box>
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleObjectNames.length} of {sortedObjectNames.length} objects
-                    </Typography>
                 </Box>
                 <TableContainer
                     ref={tableContainerRef}

@@ -1084,7 +1084,7 @@ describe('App Component', () => {
         const routes = [
             {path: '/namespaces', testId: 'namespaces'},
             {path: '/nodes', testId: 'nodes'},
-            {path: '/storage-pools', testId: 'pools'},
+            {path: '/pools', testId: 'pools'},
             {path: '/network', testId: 'network'},
             {path: '/objects', testId: 'objects'},
             {path: '/whoami', testId: 'whoami'},

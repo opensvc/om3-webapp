@@ -9,7 +9,7 @@ const ClickLoader = memo(({isLoading}) => (
     </Box>
 ));
 
-export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick}) => {
+export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleClick = useCallback(() => {
@@ -29,10 +29,21 @@ export const GridNodes = memo(({nodeCount, frozenCount, unfrozenCount, onClick})
             gap: 1,
             width: '100%'
         }}>
-            <span>Frozen: {frozenCount} | Unfrozen: {unfrozenCount}</span>
+            <Chip
+                label={`Frozen ${frozenCount}`}
+                size="small"
+                sx={{
+                    backgroundColor: 'info.main',
+                    color: 'white',
+                    cursor: isLoading ? 'default' : 'pointer',
+                    opacity: isLoading ? 0.7 : 1,
+                }}
+                onClick={handleClick}
+                disabled={isLoading}
+            />
             <ClickLoader isLoading={isLoading}/>
         </Box>
-    ), [frozenCount, unfrozenCount, isLoading]);
+    ), [frozenCount, isLoading, handleClick]);
 
     return (
         <StatCard
@@ -210,7 +221,7 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
 
     const statusElements = useMemo(() => {
         const elements = [];
-        const statusTypes = ['up', 'warn', 'down', 'n/a', 'unprovisioned'];
+        const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
 
         for (const stat of statusTypes) {
             const count = status[stat] || 0;
@@ -305,127 +316,80 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
 
 export const GridHeartbeats = memo(({
                                         heartbeatCount,
-                                        beatingCount,
-                                        nonBeatingCount,
-                                        stateCount,
+                                        perHeartbeatStats = {},
                                         nodeCount,
                                         onClick
                                     }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [loadingState, setLoadingState] = useState('');
-
-    const stateColors = {
-        running: 'green',
-        stopped: 'orange',
-        failed: 'red',
-        warning: 'orange',
-        unknown: 'grey'
-    };
-
-    const isSingleNode = nodeCount === 1;
+    const [loadingId, setLoadingId] = useState('');
 
     const handleCardClick = useCallback(() => {
-        setIsLoading(true);
+        setLoadingId('card');
         prepareForNavigation();
         setTimeout(() => {
             onClick();
-            setIsLoading(false);
+            setLoadingId('');
         }, 50);
     }, [onClick]);
 
-    const handleStatusClick = useCallback((status, state) => {
-        setLoadingState(status || state);
+    const handleChipClick = useCallback((baseId) => (e) => {
+        e.stopPropagation();
+        if (loadingId) return;
+        setLoadingId(baseId);
         prepareForNavigation();
         setTimeout(() => {
-            onClick(status, state);
-            setLoadingState('');
+            onClick(null, null, baseId);
+            setLoadingId('');
         }, 50);
-    }, [onClick]);
+    }, [onClick, loadingId]);
 
     const subtitle = useMemo(() => {
-        const chips = [];
+        const groups = new Map();
 
-        if (isSingleNode) {
-            chips.push(
-                <Box key="beating" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                    <Chip
-                        label={`Beating ${heartbeatCount}`}
-                        size="small"
-                        sx={{
-                            backgroundColor: 'green',
-                            color: 'white',
-                            cursor: loadingState === 'beating' ? 'default' : 'pointer',
-                            opacity: loadingState === 'beating' ? 0.7 : 1
-                        }}
-                        onClick={() => loadingState !== 'beating' && handleStatusClick('beating', null)}
-                        title="Healthy (Single Node)"
-                        disabled={loadingState === 'beating'}
-                    />
-                    {loadingState === 'beating' && <CircularProgress size={12}/>}
-                </Box>
-            );
-        } else {
-            if (beatingCount > 0) {
-                chips.push(
-                    <Box key="beating" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`Beating ${beatingCount}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: 'green',
-                                color: 'white',
-                                cursor: loadingState === 'beating' ? 'default' : 'pointer',
-                                opacity: loadingState === 'beating' ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== 'beating' && handleStatusClick('beating', null)}
-                            disabled={loadingState === 'beating'}
-                        />
-                        {loadingState === 'beating' && <CircularProgress size={12}/>}
-                    </Box>
-                );
+        for (const [fullId, {running, beating}] of Object.entries(perHeartbeatStats)) {
+            if (running === 0 && beating === 0) continue;
+
+            let baseId = fullId;
+            if (fullId.endsWith('.rx')) {
+                baseId = fullId.slice(0, -3);
+            } else if (fullId.endsWith('.tx')) {
+                baseId = fullId.slice(0, -3);
             }
 
-            if (nonBeatingCount > 0) {
-                chips.push(
-                    <Box key="stale" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`Stale ${nonBeatingCount}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: 'red',
-                                color: 'white',
-                                cursor: loadingState === 'stale' ? 'default' : 'pointer',
-                                opacity: loadingState === 'stale' ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== 'stale' && handleStatusClick('stale', null)}
-                            disabled={loadingState === 'stale'}
-                        />
-                        {loadingState === 'stale' && <CircularProgress size={12}/>}
-                    </Box>
-                );
+            if (!groups.has(baseId)) {
+                groups.set(baseId, {total: 0, healthy: 0});
+            }
+            const group = groups.get(baseId);
+            group.total += 1;
+
+            const isHealthy = running > 0 && beating === running;
+            if (isHealthy) {
+                group.healthy += 1;
             }
         }
 
-        for (const [state, count] of Object.entries(stateCount)) {
-            if (count > 0) {
-                chips.push(
-                    <Box key={state} sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-                        <Chip
-                            label={`${state.charAt(0).toUpperCase() + state.slice(1)} ${count}`}
-                            size="small"
-                            sx={{
-                                backgroundColor: stateColors[state] || 'grey',
-                                color: 'white',
-                                cursor: loadingState === state ? 'default' : 'pointer',
-                                opacity: loadingState === state ? 0.7 : 1
-                            }}
-                            onClick={() => loadingState !== state && handleStatusClick(null, state)}
-                            disabled={loadingState === state}
-                        />
-                        {loadingState === state && <CircularProgress size={12}/>}
-                    </Box>
-                );
-            }
+        const chips = [];
+        for (const [baseId, {total, healthy}] of groups.entries()) {
+
+            const isHealthy = (total === healthy);
+            const isLoading = loadingId === baseId;
+
+            chips.push(
+                <Box key={baseId} sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
+                    <Chip
+                        label={baseId}
+                        size="small"
+                        sx={{
+                            backgroundColor: isHealthy ? 'green' : 'red',
+                            color: 'white',
+                            cursor: isLoading ? 'default' : 'pointer',
+                            opacity: isLoading ? 0.7 : 1,
+                        }}
+                        onClick={handleChipClick(baseId)}
+                        disabled={isLoading}
+                    />
+                    {isLoading && <CircularProgress size={12}/>}
+                </Box>
+            );
         }
 
         return (
@@ -439,7 +403,7 @@ export const GridHeartbeats = memo(({
                 {chips}
             </Box>
         );
-    }, [isSingleNode, heartbeatCount, beatingCount, nonBeatingCount, stateCount, loadingState, handleStatusClick, stateColors]);
+    }, [perHeartbeatStats, loadingId, handleChipClick]);
 
     return (
         <StatCard
@@ -447,12 +411,12 @@ export const GridHeartbeats = memo(({
             value={heartbeatCount}
             subtitle={subtitle}
             onClick={handleCardClick}
-            isLoading={isLoading && !loadingState}
+            isLoading={loadingId === 'card'}
         />
     );
 });
 
-export const GridPools = memo(({poolCount, onClick}) => {
+export const GridPools = memo(({poolCount, pools, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleClick = useCallback(() => {
@@ -464,10 +428,59 @@ export const GridPools = memo(({poolCount, onClick}) => {
         }, 50);
     }, [onClick]);
 
+    const subtitle = useMemo(() => {
+        if (!pools || pools.length === 0) {
+            return null;
+        }
+
+        return (
+            <Box sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                pt: 1,
+                maxHeight: '400px',
+                overflowY: 'auto',
+                justifyContent: 'flex-start'
+            }}>
+                {pools.map((pool) => {
+                    const usagePercentage = pool.size && pool.used >= 0
+                        ? ((pool.used / pool.size) * 100).toFixed(1)
+                        : "N/A";
+                    const free = pool.size - pool.used;
+                    const freePercent = pool.size ? (free / pool.size) * 100 : 100;
+                    const isLowStorage = freePercent < 10;
+
+                    return (
+                        <Box key={pool.name || Math.random()} sx={{
+                            position: 'relative',
+                            display: 'inline-flex',
+                            flexShrink: 0,
+                            margin: "4px"
+                        }}>
+                            <Chip
+                                label={`${pool.name || "Unnamed"} (${usagePercentage}% used)`}
+                                size="small"
+                                sx={{
+                                    backgroundColor: isLowStorage ? 'red' : 'default',
+                                    color: isLowStorage ? 'white' : 'inherit',
+                                    cursor: 'pointer',
+                                    minWidth: "fit-content",
+                                    px: 1.5
+                                }}
+                            />
+                        </Box>
+                    );
+                })}
+            </Box>
+        );
+    }, [pools]);
+
     return (
         <StatCard
             title="Pools"
             value={poolCount}
+            subtitle={subtitle}
             onClick={handleClick}
             isLoading={isLoading}
         />
@@ -537,5 +550,172 @@ export const GridNetworks = memo(({networks, onClick}) => {
             dynamicHeight
             isLoading={isLoading}
         />
+    );
+});
+
+export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
+    const [loadingKind, setLoadingKind] = useState('');
+    const [isCardLoading, setIsCardLoading] = useState(false);
+
+    const handleCardClick = useCallback(() => {
+        setIsCardLoading(true);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick('/kinds');
+            setIsCardLoading(false);
+        }, 50);
+    }, [onClick]);
+
+    const subtitle = useMemo(() => {
+        return (
+            <Box sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                pt: 1,
+                maxHeight: '400px',
+                overflowY: 'auto',
+                justifyContent: 'flex-start'
+            }}>
+                {kindSubtitle.map(({kind, status}) => (
+                    <KindChip
+                        key={kind}
+                        kind={kind}
+                        status={status}
+                        isLoading={loadingKind === kind}
+                        onClick={onClick}
+                        onLoadingChange={setLoadingKind}
+                    />
+                ))}
+            </Box>
+        );
+    }, [kindSubtitle, loadingKind, onClick]);
+
+    return (
+        <StatCard
+            title="Kinds"
+            value={kindCount}
+            subtitle={subtitle}
+            onClick={handleCardClick}
+            dynamicHeight
+            isLoading={isCardLoading}
+        />
+    );
+});
+
+const KindChip = memo(({kind, status, isLoading, onClick, onLoadingChange}) => {
+    const getStatusColor = useCallback((stat) => {
+        const colors = {
+            up: 'green',
+            warn: 'orange',
+            down: 'red',
+            'n/a': 'grey',
+            unprovisioned: 'red'
+        };
+        return colors[stat] || 'grey';
+    }, []);
+
+    const handleStatClick = useCallback((stat, e) => {
+        e.stopPropagation();
+        onLoadingChange(kind);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick(`/objects?kind=${kind}&globalState=${stat === 'unprovisioned' ? 'unprovisioned' : stat}`);
+            onLoadingChange('');
+        }, 50);
+    }, [kind, onClick, onLoadingChange]);
+
+    const statusElements = useMemo(() => {
+        const elements = [];
+        const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
+
+        for (const stat of statusTypes) {
+            const count = status[stat] || 0;
+            if (count > 0) {
+                elements.push(
+                    <Tooltip key={stat}
+                             title={stat === "unprovisioned" ? "Not Provisioned" : stat.charAt(0).toUpperCase() + stat.slice(1)}>
+                        <Box
+                            sx={{
+                                width: 15.5,
+                                height: 15.5,
+                                borderRadius: stat === "unprovisioned" ? '3px' : '50%',
+                                clipPath: stat === "unprovisioned" ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : undefined,
+                                backgroundColor: getStatusColor(stat),
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 7.8,
+                                fontWeight: 'bold',
+                                border: '1px solid white',
+                                cursor: 'pointer',
+                                zIndex: 1,
+                                opacity: isLoading ? 0.5 : 1
+                            }}
+                            onClick={(e) => !isLoading && handleStatClick(stat, e)}
+                            aria-label={`${stat} status for kind ${kind}: ${count} objects`}
+                        >
+                            {count}
+                        </Box>
+                    </Tooltip>
+                );
+            }
+        }
+        return elements;
+    }, [kind, status, isLoading, handleStatClick, getStatusColor]);
+
+    const handleChipClick = useCallback((e) => {
+        e.stopPropagation();
+        if (isLoading) return;
+        onLoadingChange(kind);
+        prepareForNavigation();
+        setTimeout(() => {
+            onClick(`/objects?kind=${kind}`);
+            onLoadingChange('');
+        }, 50);
+    }, [kind, isLoading, onClick, onLoadingChange]);
+
+    return (
+        <Box
+            sx={{
+                position: 'relative',
+                display: 'inline-flex',
+                flexShrink: 0,
+                margin: "4px",
+                alignItems: "center",
+                opacity: isLoading ? 0.7 : 1
+            }}
+        >
+            <Chip
+                label={kind}
+                size="small"
+                sx={{
+                    backgroundColor: 'default',
+                    cursor: isLoading ? 'default' : 'pointer',
+                    minWidth: "100px",
+                    px: 2,
+                    height: 24,
+                    pr: 4
+                }}
+                onClick={handleChipClick}
+                disabled={isLoading}
+            />
+            <Box sx={{
+                position: 'absolute',
+                top: -8,
+                right: -4,
+                display: 'flex',
+                gap: 0.5,
+                flexWrap: 'wrap'
+            }}>
+                {statusElements}
+            </Box>
+            {isLoading && (
+                <Box sx={{position: 'absolute', top: -5, right: -5}}>
+                    <CircularProgress size={16}/>
+                </Box>
+            )}
+        </Box>
     );
 });

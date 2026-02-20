@@ -19,7 +19,7 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
-import {useNamespaceData} from "../hooks/useNamespaceData";
+import {useKindData} from "../hooks/useKindData";
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -29,6 +29,8 @@ const getColorByStatus = (status) => {
             return red[500];
         case "warn":
             return orange[500];
+        case "unprovisioned":
+            return red[500];
         default:
             return grey[500];
     }
@@ -43,25 +45,25 @@ const StatusDot = React.memo(({status, count}) => (
     </Box>
 ), (prev, next) => prev.status === next.status && prev.count === next.count);
 
-const NamespaceTableRow = React.memo(({
-                                          namespace,
-                                          counts,
-                                          onNamespaceClick,
-                                          onStatusClick
-                                      }) => {
+const KindTableRow = React.memo(({
+                                     kind,
+                                     counts,
+                                     onKindClick,
+                                     onStatusClick
+                                 }) => {
     const total = useMemo(() =>
-            counts.up + counts.down + counts.warn + counts["n/a"],
+            counts.up + counts.down + counts.warn + counts.unprovisioned,
         [counts]
     );
 
     const handleRowClick = useCallback(() => {
-        onNamespaceClick(namespace);
-    }, [onNamespaceClick, namespace]);
+        onKindClick(kind);
+    }, [onKindClick, kind]);
 
     const handleStatusClick = useCallback((e, status) => {
         e.stopPropagation();
-        onStatusClick(namespace, status);
-    }, [onStatusClick, namespace]);
+        onStatusClick(kind, status);
+    }, [onStatusClick, kind]);
 
     return (
         <TableRow
@@ -70,16 +72,16 @@ const NamespaceTableRow = React.memo(({
             sx={{cursor: "pointer"}}
         >
             <TableCell sx={{fontWeight: 500}}>
-                {namespace}
+                {kind}
             </TableCell>
-            {["up", "down", "warn", "n/a"].map((status) => (
+            {["up", "down", "warn", "unprovisioned"].map((status) => (
                 <TableCell
                     key={status}
                     align="center"
                     onClick={(e) => handleStatusClick(e, status)}
                     sx={{cursor: "pointer"}}
                 >
-                    <StatusDot status={status} count={counts[status]}/>
+                    <StatusDot status={status} count={counts[status] || 0}/>
                 </TableCell>
             ))}
             <TableCell align="center">
@@ -90,11 +92,11 @@ const NamespaceTableRow = React.memo(({
         </TableRow>
     );
 }, (prev, next) => {
-    return prev.namespace === next.namespace &&
+    return prev.kind === next.kind &&
         prev.counts.up === next.counts.up &&
         prev.counts.down === next.counts.down &&
         prev.counts.warn === next.counts.warn &&
-        prev.counts["n/a"] === next.counts["n/a"];
+        prev.counts.unprovisioned === next.counts.unprovisioned;
 });
 
 const SortableTableCell = React.memo(({
@@ -136,28 +138,28 @@ const SortableTableCell = React.memo(({
         prev.sortDirection === next.sortDirection
 );
 
-const Namespaces = () => {
+const Kinds = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const isMounted = useRef(true);
     const tableContainerRef = useRef(null);
 
     const queryParams = new URLSearchParams(location.search);
-    const urlNamespace = queryParams.get("namespace");
+    const urlKind = queryParams.get("kind");
 
-    const [sortColumn, setSortColumn] = useState("namespace");
+    const [sortColumn, setSortColumn] = useState("kind");
     const [sortDirection, setSortDirection] = useState("asc");
-    const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
+    const [selectedKind, setSelectedKind] = useState(urlKind || "all");
     const [visibleCount, setVisibleCount] = useState(50);
     const [loading, setLoading] = useState(false);
 
-    const {statusByNamespace, namespaces} = useNamespaceData();
+    const {statusByKind, kinds} = useKindData();
 
-    const deferredSelectedNamespace = useDeferredValue(selectedNamespace);
+    const deferredSelectedKind = useDeferredValue(selectedKind);
     const deferredSortColumn = useDeferredValue(sortColumn);
     const deferredSortDirection = useDeferredValue(sortDirection);
 
-    const namespaceEventTypes = useMemo(() => [
+    const kindEventTypes = useMemo(() => [
         'ObjectStatusUpdated',
         'InstanceStatusUpdated',
         'ObjectDeleted',
@@ -167,52 +169,52 @@ const Namespaces = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            startEventReception(token, namespaceEventTypes);
+            startEventReception(token, kindEventTypes);
         }
         return () => {
             closeEventSource();
         };
-    }, [namespaceEventTypes]);
+    }, [kindEventTypes]);
 
     useEffect(() => {
-        setSelectedNamespace(urlNamespace || "all");
-    }, [urlNamespace]);
+        setSelectedKind(urlKind || "all");
+    }, [urlKind]);
 
-    const sortedNamespaces = useMemo(() => {
-        const entries = Object.entries(statusByNamespace);
+    const sortedKinds = useMemo(() => {
+        const entries = Object.entries(statusByKind);
 
-        const filtered = deferredSelectedNamespace === "all"
+        const filtered = deferredSelectedKind === "all"
             ? entries
-            : entries.filter(([namespace]) => namespace === deferredSelectedNamespace);
+            : entries.filter(([kind]) => kind === deferredSelectedKind);
 
         return filtered.sort((a, b) => {
-            const [namespaceA, countsA] = a;
-            const [namespaceB, countsB] = b;
+            const [kindA, countsA] = a;
+            const [kindB, countsB] = b;
             let diff = 0;
 
-            if (deferredSortColumn === "namespace") {
-                diff = namespaceA.localeCompare(namespaceB);
+            if (deferredSortColumn === "kind") {
+                diff = kindA.localeCompare(kindB);
             } else if (deferredSortColumn === "up") {
                 diff = countsA.up - countsB.up;
             } else if (deferredSortColumn === "down") {
                 diff = countsA.down - countsB.down;
             } else if (deferredSortColumn === "warn") {
                 diff = countsA.warn - countsB.warn;
-            } else if (deferredSortColumn === "n/a") {
-                diff = countsA["n/a"] - countsB["n/a"];
+            } else if (deferredSortColumn === "unprovisioned") {
+                diff = countsA.unprovisioned - countsB.unprovisioned;
             } else if (deferredSortColumn === "total") {
-                const totalA = countsA.up + countsA.down + countsA.warn + countsA["n/a"];
-                const totalB = countsB.up + countsB.down + countsB.warn + countsB["n/a"];
+                const totalA = countsA.up + countsA.down + countsA.warn + countsA.unprovisioned;
+                const totalB = countsB.up + countsB.down + countsB.warn + countsB.unprovisioned;
                 diff = totalA - totalB;
             }
 
             return deferredSortDirection === "asc" ? diff : -diff;
         });
-    }, [statusByNamespace, deferredSelectedNamespace, deferredSortColumn, deferredSortDirection]);
+    }, [statusByKind, deferredSelectedKind, deferredSortColumn, deferredSortDirection]);
 
-    const visibleNamespaces = useMemo(() =>
-            sortedNamespaces.slice(0, visibleCount),
-        [sortedNamespaces, visibleCount]
+    const visibleKinds = useMemo(() =>
+            sortedKinds.slice(0, visibleCount),
+        [sortedKinds, visibleCount]
     );
 
     const handleSort = useCallback((column) => {
@@ -227,24 +229,24 @@ const Namespaces = () => {
         setVisibleCount(50);
     }, []);
 
-    const handleNamespaceChange = useCallback((e, val) => {
-        const newNamespace = val || "all";
-        setSelectedNamespace(newNamespace);
+    const handleKindChange = useCallback((e, val) => {
+        const newKind = val || "all";
+        setSelectedKind(newKind);
         setVisibleCount(50);
 
-        if (newNamespace === "all") {
-            navigate("/namespaces");
+        if (newKind === "all") {
+            navigate("/kinds");
         } else {
-            navigate(`/namespaces?namespace=${newNamespace}`);
+            navigate(`/kinds?kind=${newKind}`);
         }
     }, [navigate]);
 
-    const handleNamespaceClick = useCallback((namespace) => {
-        navigate(`/objects?namespace=${namespace}`);
+    const handleKindClick = useCallback((kind) => {
+        navigate(`/objects?kind=${kind}`);
     }, [navigate]);
 
-    const handleStatusClick = useCallback((namespace, status) => {
-        const url = `/objects?namespace=${namespace}&globalState=${status}`;
+    const handleStatusClick = useCallback((kind, status) => {
+        const url = `/objects?kind=${kind}&globalState=${status === 'unprovisioned' ? 'unprovisioned' : status}`;
         navigate(url);
     }, [navigate]);
 
@@ -257,14 +259,14 @@ const Namespaces = () => {
         const {scrollTop, scrollHeight, clientHeight} = container;
         const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
 
-        if (scrollPercentage > 0.8 && visibleCount < sortedNamespaces.length) {
+        if (scrollPercentage > 0.8 && visibleCount < sortedKinds.length) {
             setLoading(true);
             setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + 50, sortedNamespaces.length));
+                setVisibleCount(prev => Math.min(prev + 50, sortedKinds.length));
                 setLoading(false);
             }, 100);
         }
-    }, [loading, visibleCount, sortedNamespaces.length]);
+    }, [loading, visibleCount, sortedKinds.length]);
 
     useEffect(() => {
         const container = tableContainerRef.current;
@@ -276,7 +278,7 @@ const Namespaces = () => {
 
     useEffect(() => {
         setVisibleCount(50);
-    }, [sortedNamespaces]);
+    }, [sortedKinds]);
 
     useEffect(() => {
         return () => {
@@ -285,7 +287,7 @@ const Namespaces = () => {
     }, []);
 
     const renderTextField = useCallback((params) => (
-        <TextField {...params} label="Filter by namespace"/>
+        <TextField {...params} label="Filter by kind"/>
     ), []);
 
     return (
@@ -317,13 +319,13 @@ const Namespaces = () => {
                     height: '100vh'
                 }}
             >
-                {/* Namespace Filter */}
+                {/* Kind Filter */}
                 <Box sx={{mb: 3, flexShrink: 0}}>
                     <Autocomplete
                         sx={{width: 300}}
-                        options={["all", ...namespaces]}
-                        value={selectedNamespace}
-                        onChange={handleNamespaceChange}
+                        options={["all", ...kinds]}
+                        value={selectedKind}
+                        onChange={handleKindChange}
                         renderInput={renderTextField}
                     />
                 </Box>
@@ -342,8 +344,8 @@ const Namespaces = () => {
                         <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
                             <TableRow>
                                 <SortableTableCell
-                                    column="namespace"
-                                    label="Namespace"
+                                    column="kind"
+                                    label="Kind"
                                     currentSortColumn={sortColumn}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -373,8 +375,8 @@ const Namespaces = () => {
                                     align="center"
                                 />
                                 <SortableTableCell
-                                    column="n/a"
-                                    label="N/A"
+                                    column="unprovisioned"
+                                    label="Unprovisioned"
                                     currentSortColumn={sortColumn}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -391,23 +393,23 @@ const Namespaces = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {visibleNamespaces.length > 0 ? (
-                                visibleNamespaces.map(([namespace, counts]) => (
-                                    <NamespaceTableRow
-                                        key={namespace}
-                                        namespace={namespace}
+                            {visibleKinds.length > 0 ? (
+                                visibleKinds.map(([kind, counts]) => (
+                                    <KindTableRow
+                                        key={kind}
+                                        kind={kind}
                                         counts={counts}
-                                        onNamespaceClick={handleNamespaceClick}
+                                        onKindClick={handleKindClick}
                                         onStatusClick={handleStatusClick}
                                     />
                                 ))
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-namespaces-message">
-                                            {selectedNamespace !== "all"
-                                                ? "No namespaces match the selected filter"
-                                                : "No namespaces available"}
+                                        <Typography data-testid="no-kinds-message">
+                                            {selectedKind !== "all"
+                                                ? "No kinds match the selected filter"
+                                                : "No kinds available"}
                                         </Typography>
                                     </TableCell>
                                 </TableRow>
@@ -421,14 +423,10 @@ const Namespaces = () => {
                     )}
                 </TableContainer>
 
-                <EventLogger
-                    eventTypes={namespaceEventTypes}
-                    title="Namespaces Events Logger"
-                    buttonLabel="Namespace Events"
-                />
+                {/*<EventLogger eventTypes={kindEventTypes} title="Kinds Events Logger" buttonLabel="Kind Events"/>*/}
             </Box>
         </Box>
     );
 };
 
-export default Namespaces;
+export default Kinds;

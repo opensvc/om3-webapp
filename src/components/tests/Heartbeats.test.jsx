@@ -1,7 +1,7 @@
 import React from "react";
-import {render, screen, waitFor, within} from "@testing-library/react";
-import {ThemeProvider, createTheme} from "@mui/material/styles";
-import {MemoryRouter} from "react-router-dom";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import Heartbeats from "../Heartbeats";
 import useEventStore from "../../hooks/useEventStore.js";
@@ -11,6 +11,13 @@ import {
     startLoggerReception,
     closeLoggerEventSource,
 } from "../../eventSourceManager.jsx";
+
+// Mock useNavigate to test URL updates
+const mockNavigate = jest.fn();
+jest.mock("react-router-dom", () => ({
+    ...jest.requireActual("react-router-dom"),
+    useNavigate: () => mockNavigate,
+}));
 
 jest.mock("../../hooks/useEventStore.js", () => ({
     __esModule: true,
@@ -29,15 +36,18 @@ const mockLocalStorage = {
     setItem: jest.fn(),
     removeItem: jest.fn(),
 };
-Object.defineProperty(window, "localStorage", {value: mockLocalStorage});
+Object.defineProperty(window, "localStorage", { value: mockLocalStorage });
 
 const theme = createTheme();
-const renderWithRouter = (ui, {route = "/"} = {}) => {
-    return render(
+
+// Updated renderWithRouter using the wrapper option to preserve context during rerender
+const renderWithRouter = (ui, { route = "/" } = {}) => {
+    const wrapper = ({ children }) => (
         <MemoryRouter initialEntries={[route]}>
-            <ThemeProvider theme={theme}>{ui}</ThemeProvider>
+            <ThemeProvider theme={theme}>{children}</ThemeProvider>
         </MemoryRouter>
     );
+    return render(ui, { wrapper });
 };
 
 describe("Heartbeats Component", () => {
@@ -53,6 +63,7 @@ describe("Heartbeats Component", () => {
         closeEventSource.mockImplementation(mockCloseEventSource);
         startLoggerReception.mockImplementation(mockStartLoggerReception);
         closeLoggerEventSource.mockImplementation(mockCloseLoggerEventSource);
+        mockNavigate.mockClear();
     });
 
     afterEach(() => {
@@ -60,8 +71,8 @@ describe("Heartbeats Component", () => {
     });
 
     test("renders basic structure", () => {
-        useEventStore.mockReturnValue({heartbeatStatus: {}});
-        renderWithRouter(<Heartbeats/>);
+        useEventStore.mockReturnValue({ heartbeatStatus: {} });
+        renderWithRouter(<Heartbeats />);
 
         expect(screen.getByRole("table")).toBeInTheDocument();
 
@@ -150,10 +161,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -176,17 +187,17 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "invalid-state", // Triggers default case
-                        peers: {peer1: {is_beating: true, desc: ":10011 ← peer1"}},
+                        peers: { peer1: { is_beating: true, desc: ":10011 ← peer1" } },
                         type: "unicast",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         const dataRow = rows[1]; // Skip header row
@@ -201,17 +212,17 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "running",
-                        peers: {peer1: {is_beating: false, desc: ":10011 ← peer1"}},
+                        peers: { peer1: { is_beating: false, desc: ":10011 ← peer1" } },
                         type: "unicast",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?status=stale"});
+        renderWithRouter(<Heartbeats />, { route: "/?status=stale" });
 
         const rows = await screen.findAllByRole("row");
         expect(rows.slice(1)).toHaveLength(1);
@@ -240,10 +251,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -270,10 +281,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -285,6 +296,64 @@ describe("Heartbeats Component", () => {
         expect(firstRowCells[4]).toHaveTextContent("N/A");
         expect(firstRowCells[5]).toHaveTextContent("unicast");
         expect(firstRowCells[6]).toHaveTextContent("N/A");
+    });
+
+    // NEW TEST: covers the branch where a stopped stream uses cached peer data
+    test("uses cached data when stream becomes stopped with no peers", async () => {
+        const initialStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: ":10011 ← peer1",
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        const stoppedStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "stopped",
+                        peers: {},
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+
+        // First render with running stream
+        useEventStore.mockImplementation((selector) => selector({ heartbeatStatus: initialStatus }));
+        const { rerender } = renderWithRouter(<Heartbeats />);
+
+        // Wait for initial rows to render
+        let rows = await screen.findAllByRole("row");
+        expect(rows.slice(1)).toHaveLength(1);
+        let cells = within(rows[1]).getAllByRole("cell");
+        expect(cells[4]).toHaveTextContent("peer1");
+
+        // Update to stopped stream with empty peers
+        useEventStore.mockImplementation((selector) => selector({ heartbeatStatus: stoppedStatus }));
+        rerender(<Heartbeats />);
+
+        // Wait for the cache effect to run and the rows to update with cached data
+        await waitFor(() => {
+            const updatedRows = screen.getAllByRole("row");
+            const updatedCells = within(updatedRows[1]).getAllByRole("cell");
+            expect(updatedCells[4]).toHaveTextContent("peer1");
+            expect(updatedCells[6]).toHaveTextContent(":10011 ← peer1");
+        }, { timeout: 2000 });
     });
 
     test("applies filter by beating status from URL", async () => {
@@ -322,10 +391,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?status=beating"});
+        renderWithRouter(<Heartbeats />, { route: "/?status=beating" });
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -334,8 +403,8 @@ describe("Heartbeats Component", () => {
     });
 
     test("initializes with auth token", () => {
-        useEventStore.mockReturnValue({heartbeatStatus: {}});
-        renderWithRouter(<Heartbeats/>);
+        useEventStore.mockReturnValue({ heartbeatStatus: {} });
+        renderWithRouter(<Heartbeats />);
 
         expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
         expect(startEventReception).toHaveBeenCalledWith("valid-token", [
@@ -344,13 +413,13 @@ describe("Heartbeats Component", () => {
             "CONNECTION_ERROR",
             "RECONNECTION_ATTEMPT",
             "MAX_RECONNECTIONS_REACHED",
-            "CONNECTION_CLOSED"
+            "CONNECTION_CLOSED",
         ]);
     });
 
     test("cleans up on unmount", async () => {
-        useEventStore.mockReturnValue({heartbeatStatus: {}});
-        const {unmount} = renderWithRouter(<Heartbeats/>);
+        useEventStore.mockReturnValue({ heartbeatStatus: {} });
+        const { unmount } = renderWithRouter(<Heartbeats />);
         unmount();
         await waitFor(() => {
             expect(mockCloseEventSource).toHaveBeenCalled();
@@ -359,8 +428,8 @@ describe("Heartbeats Component", () => {
 
     test("handles missing auth token", () => {
         mockLocalStorage.getItem.mockReturnValue(null);
-        useEventStore.mockReturnValue({heartbeatStatus: {}});
-        renderWithRouter(<Heartbeats/>);
+        useEventStore.mockReturnValue({ heartbeatStatus: {} });
+        renderWithRouter(<Heartbeats />);
         expect(startEventReception).not.toHaveBeenCalled();
     });
 
@@ -403,10 +472,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -459,10 +528,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?node=node1"});
+        renderWithRouter(<Heartbeats />, { route: "/?node=node1" });
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -506,10 +575,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?state=stopped"});
+        renderWithRouter(<Heartbeats />, { route: "/?state=stopped" });
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -552,10 +621,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?id=1.rx"});
+        renderWithRouter(<Heartbeats />, { route: "/?id=1.rx" });
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -585,10 +654,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?id=hb%231.rx"});
+        renderWithRouter(<Heartbeats />, { route: "/?id=hb%231.rx" });
 
         const rows = await screen.findAllByRole("row");
         const dataRows = rows.slice(1);
@@ -607,13 +676,13 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
         expect(screen.getByRole("table")).toBeInTheDocument();
         const rows = screen.getAllByRole("row");
-        expect(rows).toHaveLength(1);
+        expect(rows).toHaveLength(1); // Only header row
     });
 
     test("handles URL parameter initialization with invalid status", async () => {
@@ -638,10 +707,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>, {route: "/?status=invalid"});
+        renderWithRouter(<Heartbeats />, { route: "/?status=invalid" });
 
         await waitFor(() => {
             expect(screen.getByText("1.rx")).toBeInTheDocument();
@@ -670,10 +739,10 @@ describe("Heartbeats Component", () => {
         };
 
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const rows = await screen.findAllByRole("row");
         expect(rows.slice(1)).toHaveLength(1);
@@ -686,23 +755,23 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "running",
-                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        peers: { peer1: { is_beating: true, desc: "desc1" } },
                         type: "type1",
                     },
                     {
                         id: "hb#2.rx",
                         state: "running",
-                        peers: {peer2: {is_beating: false, desc: "desc2"}},
+                        peers: { peer2: { is_beating: false, desc: "desc2" } },
                         type: "type2",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const beatingHeader = screen.getByText("BEATING");
         await userEvent.click(beatingHeader);
@@ -725,23 +794,23 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#b.rx",
                         state: "running",
-                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        peers: { peer1: { is_beating: true, desc: "desc1" } },
                         type: "type1",
                     },
                     {
                         id: "hb#a.rx",
                         state: "running",
-                        peers: {peer2: {is_beating: true, desc: "desc2"}},
+                        peers: { peer2: { is_beating: true, desc: "desc2" } },
                         type: "type2",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const idHeader = screen.getByText("ID");
         await userEvent.click(idHeader);
@@ -764,23 +833,23 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "running",
-                        peers: {b_peer: {is_beating: true, desc: "desc1"}},
+                        peers: { b_peer: { is_beating: true, desc: "desc1" } },
                         type: "type1",
                     },
                     {
                         id: "hb#2.rx",
                         state: "running",
-                        peers: {a_peer: {is_beating: true, desc: "desc2"}},
+                        peers: { a_peer: { is_beating: true, desc: "desc2" } },
                         type: "type2",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const peerHeader = screen.getByText("PEER");
         await userEvent.click(peerHeader);
@@ -803,23 +872,23 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "running",
-                        peers: {peer1: {is_beating: true, desc: "desc1"}},
+                        peers: { peer1: { is_beating: true, desc: "desc1" } },
                         type: "b_type",
                     },
                     {
                         id: "hb#2.rx",
                         state: "running",
-                        peers: {peer2: {is_beating: true, desc: "desc2"}},
+                        peers: { peer2: { is_beating: true, desc: "desc2" } },
                         type: "a_type",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const typeHeader = screen.getByText("TYPE");
         await userEvent.click(typeHeader);
@@ -842,23 +911,23 @@ describe("Heartbeats Component", () => {
                     {
                         id: "hb#1.rx",
                         state: "running",
-                        peers: {peer1: {is_beating: true, desc: "b_desc"}},
+                        peers: { peer1: { is_beating: true, desc: "b_desc" } },
                         type: "type1",
                     },
                     {
                         id: "hb#2.rx",
                         state: "running",
-                        peers: {peer2: {is_beating: true, desc: "a_desc"}},
+                        peers: { peer2: { is_beating: true, desc: "a_desc" } },
                         type: "type2",
                     },
                 ],
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const descHeader = screen.getByText("DESC");
         await userEvent.click(descHeader);
@@ -886,8 +955,8 @@ describe("Heartbeats Component", () => {
                                 is_beating: true,
                                 desc: "desc1",
                                 changed_at: "2024-02-01",
-                                last_beating_at: "2024-01-01"
-                            }
+                                last_beating_at: "2024-01-01",
+                            },
                         },
                         type: "type1",
                     },
@@ -899,8 +968,8 @@ describe("Heartbeats Component", () => {
                                 is_beating: true,
                                 desc: "desc2",
                                 changed_at: "2024-01-01",
-                                last_beating_at: "2024-01-02"
-                            }
+                                last_beating_at: "2024-01-02",
+                            },
                         },
                         type: "type2",
                     },
@@ -908,10 +977,10 @@ describe("Heartbeats Component", () => {
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const changedHeader = screen.getByText("CHANGED_AT");
         await userEvent.click(changedHeader);
@@ -939,8 +1008,8 @@ describe("Heartbeats Component", () => {
                                 is_beating: true,
                                 desc: "desc1",
                                 changed_at: "2024-01-01",
-                                last_beating_at: "2024-02-01"
-                            }
+                                last_beating_at: "2024-02-01",
+                            },
                         },
                         type: "type1",
                     },
@@ -952,8 +1021,8 @@ describe("Heartbeats Component", () => {
                                 is_beating: true,
                                 desc: "desc2",
                                 changed_at: "2024-01-02",
-                                last_beating_at: "2024-01-01"
-                            }
+                                last_beating_at: "2024-01-01",
+                            },
                         },
                         type: "type2",
                     },
@@ -961,10 +1030,10 @@ describe("Heartbeats Component", () => {
             },
         };
         useEventStore.mockImplementation((selector) =>
-            selector({heartbeatStatus: mockHeartbeatStatus})
+            selector({ heartbeatStatus: mockHeartbeatStatus })
         );
 
-        renderWithRouter(<Heartbeats/>);
+        renderWithRouter(<Heartbeats />);
 
         const lastBeatingHeader = screen.getByText("LAST_BEATING_AT");
         await userEvent.click(lastBeatingHeader);
@@ -978,5 +1047,149 @@ describe("Heartbeats Component", () => {
         rows = screen.getAllByRole("row").slice(1);
         expect(within(rows[0]).getByText("2024-02-01")).toBeInTheDocument();
         expect(within(rows[1]).getByText("2024-01-01")).toBeInTheDocument();
+    });
+
+    test("sorting by different column resets direction to asc", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#b.rx",
+                        state: "running",
+                        peers: { p: { is_beating: true } },
+                        type: "t",
+                    },
+                    {
+                        id: "hb#a.rx",
+                        state: "running",
+                        peers: { p: { is_beating: true } },
+                        type: "t",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({ heartbeatStatus: mockHeartbeatStatus })
+        );
+
+        renderWithRouter(<Heartbeats />);
+
+        // Sort by BEATING twice to get descending
+        const beatingHeader = screen.getByText("BEATING");
+        await userEvent.click(beatingHeader); // asc
+        await userEvent.click(beatingHeader); // desc
+
+        // Now click ID column
+        const idHeader = screen.getByText("ID");
+        await userEvent.click(idHeader);
+
+        // Should be sorted by ID ascending
+        const rows = screen.getAllByRole("row").slice(1);
+        expect(within(rows[0]).getByText("a.rx")).toBeInTheDocument();
+        expect(within(rows[1]).getByText("b.rx")).toBeInTheDocument();
+    });
+
+    test("does not update URL if filter value unchanged", async () => {
+        const mockHeartbeatStatus = {
+            node1: { streams: [{ id: "hb#1.rx", state: "running", peers: {}, type: "t" }] },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({ heartbeatStatus: mockHeartbeatStatus })
+        );
+
+        renderWithRouter(<Heartbeats />, { route: "/?node=node1" });
+
+        // Wait a bit to ensure no navigation is triggered
+        await waitFor(() => {
+            expect(mockNavigate).not.toHaveBeenCalled();
+        }, { timeout: 500 });
+    });
+
+    test("displays message when no heartbeats match filters", async () => {
+        const mockHeartbeatStatus = {
+            node1: {
+                streams: [
+                    {
+                        id: "hb#1.rx",
+                        state: "running",
+                        peers: { peer1: { is_beating: true, desc: "desc" } },
+                        type: "unicast",
+                    },
+                ],
+            },
+        };
+        useEventStore.mockImplementation((selector) =>
+            selector({ heartbeatStatus: mockHeartbeatStatus })
+        );
+
+        renderWithRouter(<Heartbeats />, { route: "/?node=nonexistent" });
+
+        await waitFor(() => {
+            expect(
+                screen.getByText("No heartbeats found matching the current filters.")
+            ).toBeInTheDocument();
+        });
+    });
+
+    test("loads more rows when scrolling near bottom", async () => {
+        // Generate 50 rows
+        const manyStreams = {};
+        for (let i = 1; i <= 50; i++) {
+            manyStreams[`node${i}`] = {
+                streams: [
+                    {
+                        id: `hb#${i}.rx`,
+                        state: "running",
+                        peers: {
+                            peer1: {
+                                is_beating: true,
+                                desc: `desc${i}`,
+                                changed_at: "2025-06-03T04:25:31+00:00",
+                                last_beating_at: "2025-06-03T04:25:31+00:00",
+                            },
+                        },
+                        type: "unicast",
+                    },
+                ],
+            };
+        }
+        useEventStore.mockImplementation((selector) =>
+            selector({ heartbeatStatus: manyStreams })
+        );
+
+        renderWithRouter(<Heartbeats />);
+
+        // Initially shows 30 rows
+        let rows = await screen.findAllByRole("row");
+        expect(rows.slice(1)).toHaveLength(30);
+
+        // Get table container
+        const container = document.querySelector(".MuiTableContainer-root");
+        expect(container).toBeInTheDocument();
+
+        // Mock scroll dimensions
+        Object.defineProperty(container, "scrollHeight", { value: 1000, configurable: true });
+        Object.defineProperty(container, "clientHeight", { value: 200, configurable: true });
+
+        // Scroll to 70% (not enough)
+        container.scrollTop = 700;
+        fireEvent.scroll(container);
+
+        // Should still have 30 rows
+        rows = screen.getAllByRole("row");
+        expect(rows.slice(1)).toHaveLength(30);
+
+        // Scroll to 85% (above threshold)
+        container.scrollTop = 850;
+        fireEvent.scroll(container);
+
+        // Wait for loading and more rows to appear
+        await waitFor(
+            () => {
+                const updatedRows = screen.getAllByRole("row");
+                expect(updatedRows.slice(1).length).toBeGreaterThan(30);
+            },
+            { timeout: 2000 }
+        );
     });
 });

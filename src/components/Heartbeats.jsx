@@ -120,14 +120,17 @@ const Heartbeats = () => {
     const tableContainerRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg")); // Ajout pour la cohérence
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
     const [sortColumn, setSortColumn] = useState("node");
     const [sortDirection, setSortDirection] = useState("asc");
-    const [showFilters, setShowFilters] = useState(true);
     const [visibleCount, setVisibleCount] = useState(30);
     const [loading, setLoading] = useState(false);
+
+    // Initialisation conditionnelle de showFilters
+    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     // Read query parameters
     const queryParams = new URLSearchParams(location.search);
@@ -141,9 +144,14 @@ const Heartbeats = () => {
     );
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
-    const [filterId, setFilterId] = useState(
-        rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId
-    );
+    const [filterId, setFilterId] = useState(() => {
+        // Nettoyer l'ID de l'URL : enlever le préfixe hb# et les suffixes .rx/.tx
+        let cleaned = rawId;
+        if (cleaned.startsWith("hb#")) {
+            cleaned = cleaned.replace(/^hb#/, "");
+        }
+        return cleaned.replace(/\.(rx|tx)$/, "");
+    });
 
     const deferredFilterBeating = useDeferredValue(filterBeating);
     const deferredFilterNode = useDeferredValue(filterNode);
@@ -198,10 +206,17 @@ const Heartbeats = () => {
 
     // Initialize filter states from URL
     useEffect(() => {
+        // Nettoyer l'ID de l'URL à chaque changement de l'URL
+        let cleanedId = rawId;
+        if (cleanedId.startsWith("hb#")) {
+            cleanedId = cleanedId.replace(/^hb#/, "");
+        }
+        const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
+
         setFilterBeating(["all", "beating", "stale"].includes(rawStatus) ? rawStatus : "all");
         setFilterNode(rawNode);
         setFilterState(rawState);
-        setFilterId(rawId.startsWith("hb#") ? rawId.replace(/^hb#/, "") : rawId);
+        setFilterId(baseId);
     }, [location.search, rawStatus, rawNode, rawState, rawId]);
 
     // Cache stopped streams with their last known peers
@@ -218,7 +233,7 @@ const Heartbeats = () => {
 
                 for (let j = 0; j < streams.length; j++) {
                     const stream = streams[j];
-                    if (Object.keys(stream.peers || {}).length > 0 || stream.state === "stopped") {
+                    if (Object.keys(stream.peers || {}).length > 0) {
                         newCache[node][stream.id] = {
                             ...stream,
                             peers: {...stream.peers},
@@ -274,8 +289,10 @@ const Heartbeats = () => {
             for (let j = 0; j < streams.length; j++) {
                 const stream = streams[j];
                 if (stream.id && stream.id !== "all") {
+                    // Enlever le préfixe hb# puis les suffixes .rx/.tx
                     const cleanedId = stream.id.replace(/^hb#/, "");
-                    ids.add(cleanedId);
+                    const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
+                    ids.add(baseId);
                 }
             }
         }
@@ -369,13 +386,15 @@ const Heartbeats = () => {
 
     const filteredRows = useMemo(() => {
         return sortedRows.filter((row) => {
+            // Extraire l'ID de base de la ligne (sans .rx/.tx)
+            const rowBaseId = row.id.replace(/\.(rx|tx)$/, "");
             return (
                 (deferredFilterBeating === "all" ||
                     (deferredFilterBeating === "beating" && row.isBeating === true) ||
                     (deferredFilterBeating === "stale" && row.isBeating === false)) &&
                 (deferredFilterNode === "all" || row.node === deferredFilterNode) &&
                 (deferredFilterState === "all" || row.state === deferredFilterState) &&
-                (deferredFilterId === "all" || row.id === deferredFilterId)
+                (deferredFilterId === "all" || rowBaseId === deferredFilterId)
             );
         });
     }, [sortedRows, deferredFilterBeating, deferredFilterNode, deferredFilterState, deferredFilterId]);
@@ -499,16 +518,18 @@ const Heartbeats = () => {
                         gap: 2,
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            <Button
-                                onClick={toggleShowFilters}
-                                sx={{minWidth: 'auto', flexShrink: 0}}
-                                startIcon={<FilterListIcon/>}
-                            >
-                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                    Filters
-                                </Box>
-                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            </Button>
+                            {isMobile && (
+                                <Button
+                                    onClick={toggleShowFilters}
+                                    sx={{minWidth: 'auto', flexShrink: 0}}
+                                    startIcon={<FilterListIcon/>}
+                                >
+                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                        Filters
+                                    </Box>
+                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                                </Button>
+                            )}
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>
@@ -575,18 +596,6 @@ const Heartbeats = () => {
                             </Grid>
                         </Collapse>
                     </Box>
-                </Box>
-
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleRows.length} of {filteredRows.length} heartbeats
-                    </Typography>
                 </Box>
 
                 <TableContainer

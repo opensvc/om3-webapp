@@ -1,7 +1,15 @@
 import React from 'react';
-import {render, screen, fireEvent, within} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, within, act} from '@testing-library/react';
 import '@testing-library/jest-dom';
-import {GridNodes, GridObjects, GridNamespaces, GridHeartbeats, GridPools, GridNetworks} from '../ClusterStatGrids.jsx';
+import {
+    GridNodes,
+    GridObjects,
+    GridNamespaces,
+    GridHeartbeats,
+    GridPools,
+    GridNetworks,
+    GridKinds,
+} from '../ClusterStatGrids.jsx';
 
 jest.mock('../../eventSourceManager', () => ({
     prepareForNavigation: jest.fn(),
@@ -23,27 +31,31 @@ describe('ClusterStatGrids', () => {
 
     test('GridNodes renders correctly and handles click', () => {
         render(
-            <GridNodes
-                nodeCount={5}
-                frozenCount={2}
-                unfrozenCount={3}
-                onClick={mockOnClick}
-            />
+            <GridNodes nodeCount={5} frozenCount={2} onClick={mockOnClick}/>
         );
-
         expect(screen.getByText('Nodes')).toBeInTheDocument();
         expect(screen.getByText('5')).toBeInTheDocument();
-        expect(screen.getByText('Frozen: 2 | Unfrozen: 3')).toBeInTheDocument();
+        expect(screen.getByText('Frozen 2')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Nodes'));
         jest.runAllTimers();
         expect(mockOnClick).toHaveBeenCalled();
+
+        fireEvent.click(screen.getByText('Frozen 2'));
+        jest.runAllTimers();
+        expect(mockOnClick).toHaveBeenCalledTimes(2);
     });
 
     test('GridNamespaces renders correctly and handles click', () => {
         const mockNamespaceSubtitle = [
-            {namespace: 'ns1', status: {up: 5, warn: 3, down: 2, 'n/a': 1, unprovisioned: 0}},
-            {namespace: 'ns2', status: {up: 3, warn: 1, down: 1, 'n/a': 0, unprovisioned: 2}}
+            {
+                namespace: 'ns1',
+                status: {up: 5, warn: 3, down: 2, 'n/a': 1, unprovisioned: 0},
+            },
+            {
+                namespace: 'ns2',
+                status: {up: 3, warn: 1, down: 1, 'n/a': 0, unprovisioned: 2},
+            },
         ];
 
         render(
@@ -64,134 +76,137 @@ describe('ClusterStatGrids', () => {
         expect(mockOnClick).toHaveBeenCalled();
     });
 
-    test('GridHeartbeats renders correctly and handles click', () => {
-        const stateCount = {running: 3, stopped: 2, failed: 1, warning: 0, unknown: 2};
-        render(
-            <GridHeartbeats
-                heartbeatCount={8}
-                beatingCount={4}
-                nonBeatingCount={4}
-                stateCount={stateCount}
-                onClick={mockOnClick}
-            />
-        );
+    test('GridHeartbeats renders chips grouped by base ID and applies correct colors', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2},
+            '1.tx': {running: 3, beating: 3},
+            '2.rx': {running: 1, beating: 1},
+            '2.tx': {running: 4, beating: 2},
+            '3.rx': {running: 0, beating: 0},
+            '3.tx': {running: 0, beating: 0},
+            '4.rx': {running: 5, beating: 5},
+            '4.tx': {running: 5, beating: 5},
+        };
 
-        expect(screen.getByText('Heartbeats')).toBeInTheDocument();
-        expect(screen.getByText('8')).toBeInTheDocument();
-
-        const beatingChipLabel = screen.getByText('Beating 4');
-        const staleChipLabel = screen.getByText('Stale 4');
-        expect(beatingChipLabel).toBeInTheDocument();
-        expect(staleChipLabel).toBeInTheDocument();
-
-        fireEvent.click(beatingChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
-
-        fireEvent.click(staleChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('stale', null);
-
-        const runningChipLabel = screen.getByText('Running 3');
-        const stoppedChipLabel = screen.getByText('Stopped 2');
-        const failedChipLabel = screen.getByText('Failed 1');
-        const unknownChipLabel = screen.getByText('Unknown 2');
-
-        fireEvent.click(runningChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'running');
-
-        fireEvent.click(stoppedChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'stopped');
-
-        fireEvent.click(failedChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'failed');
-
-        fireEvent.click(unknownChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'unknown');
-
-        fireEvent.click(screen.getByText('Heartbeats'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalled();
-    });
-
-    test('GridHeartbeats renders correctly for single node', () => {
-        const stateCount = {running: 3, stopped: 0, failed: 0, warning: 0, unknown: 0};
         render(
             <GridHeartbeats
                 heartbeatCount={3}
-                beatingCount={3}
-                nonBeatingCount={0}
-                stateCount={stateCount}
-                nodeCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
         expect(screen.getByText('3')).toBeInTheDocument();
-        const beatingChipLabel = screen.getByText('Beating 3');
-        expect(beatingChipLabel).toBeInTheDocument();
-        expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
 
-        const beatingChip = beatingChipLabel.closest('.MuiChip-root');
-        expect(beatingChip).toHaveAttribute('title', 'Healthy (Single Node)');
+        const chip1 = screen.getByRole('button', {name: '1'});
+        const chip2 = screen.getByRole('button', {name: '2'});
+        const chip4 = screen.getByRole('button', {name: '4'});
 
-        fireEvent.click(beatingChipLabel);
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith('beating', null);
+        expect(chip1).toBeInTheDocument();
+        expect(chip2).toBeInTheDocument();
+        expect(chip4).toBeInTheDocument();
+
+        expect(chip1).toHaveStyle('background-color: green');
+        expect(chip2).toHaveStyle('background-color: red');
+        expect(chip4).toHaveStyle('background-color: green');
     });
 
-    test('GridHeartbeats handles state with no count', () => {
-        const stateCount = {running: 0, stopped: 0, failed: 0, warning: 0, unknown: 0};
+    test('GridHeartbeats handles chip click correctly', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2},
+            '1.tx': {running: 3, beating: 3},
+        };
+
+        render(
+            <GridHeartbeats
+                heartbeatCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
+                onClick={mockOnClick}
+            />
+        );
+
+        const chip = screen.getByRole('button', {name: '1'});
+        fireEvent.click(chip);
+        jest.runAllTimers();
+
+        expect(mockOnClick).toHaveBeenCalledWith(null, null, '1');
+    });
+
+    test('GridHeartbeats handles card click correctly', () => {
         render(
             <GridHeartbeats
                 heartbeatCount={0}
-                beatingCount={0}
-                nonBeatingCount={0}
-                stateCount={stateCount}
+                perHeartbeatStats={{}}
+                nodeCount={3}
+                onClick={mockOnClick}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Heartbeats'));
+        jest.runAllTimers();
+
+        expect(mockOnClick).toHaveBeenCalledWith();
+    });
+
+    test('GridHeartbeats does not render chips for groups where all streams have running=0 and beating=0', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 0, beating: 0},
+            '1.tx': {running: 0, beating: 0},
+            '2.rx': {running: 3, beating: 3},
+        };
+
+        render(
+            <GridHeartbeats
+                heartbeatCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={3}
+                onClick={mockOnClick}
+            />
+        );
+
+        expect(screen.queryByRole('button', {name: '1'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '2'})).toBeInTheDocument();
+    });
+
+    test('GridHeartbeats renders correctly when perHeartbeatStats is empty', () => {
+        render(
+            <GridHeartbeats
+                heartbeatCount={0}
+                perHeartbeatStats={{}}
+                nodeCount={3}
                 onClick={mockOnClick}
             />
         );
 
         expect(screen.getByText('Heartbeats')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.queryByText(/Beating \d+/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Stale \d+/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Running \d+/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    test('GridHeartbeats handles warning state', () => {
-        const stateCount = {running: 1, warning: 2};
+    test('GridHeartbeats handles single node scenario with same health logic', () => {
+        const perHeartbeatStats = {
+            '1.rx': {running: 2, beating: 2},
+            '1.tx': {running: 2, beating: 1},
+        };
+
         render(
             <GridHeartbeats
-                heartbeatCount={3}
-                beatingCount={1}
-                nonBeatingCount={2}
-                stateCount={stateCount}
+                heartbeatCount={1}
+                perHeartbeatStats={perHeartbeatStats}
+                nodeCount={1}
                 onClick={mockOnClick}
             />
         );
 
-        expect(screen.getByText('Heartbeats')).toBeInTheDocument();
-        expect(screen.getByText('3')).toBeInTheDocument();
-        expect(screen.getByText('Warning 2')).toBeInTheDocument();
-
-        fireEvent.click(screen.getByText('Warning 2'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalledWith(null, 'warning');
+        const chip = screen.getByRole('button', {name: '1'});
+        expect(chip).toHaveStyle('background-color: red');
     });
 
     test('GridPools renders correctly and handles click', () => {
-        render(
-            <GridPools
-                poolCount={3}
-                onClick={mockOnClick}
-            />
-        );
+        render(<GridPools poolCount={3} onClick={mockOnClick}/>);
 
         expect(screen.getByText('Pools')).toBeInTheDocument();
         expect(screen.getByText('3')).toBeInTheDocument();
@@ -202,18 +217,11 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridNodes handles zero values', () => {
-        render(
-            <GridNodes
-                nodeCount={0}
-                frozenCount={0}
-                unfrozenCount={0}
-                onClick={mockOnClick}
-            />
-        );
+        render(<GridNodes nodeCount={0} frozenCount={0} onClick={mockOnClick}/>);
 
         expect(screen.getByText('Nodes')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getByText('Frozen: 0 | Unfrozen: 0')).toBeInTheDocument();
+        expect(screen.getByText('Frozen 0')).toBeInTheDocument();
     });
 
     test('GridObjects handles zero values', () => {
@@ -246,13 +254,9 @@ describe('ClusterStatGrids', () => {
 
         expect(screen.getByText('Objects')).toBeInTheDocument();
         expect(screen.getByText('8')).toBeInTheDocument();
-        const upChipLabel = screen.getByText('Up 5');
-        const warnChipLabel = screen.getByText('Warn 2');
-        const downChipLabel = screen.getByText('Down 1');
-
-        expect(upChipLabel).toBeInTheDocument();
-        expect(warnChipLabel).toBeInTheDocument();
-        expect(downChipLabel).toBeInTheDocument();
+        expect(screen.getByText('Up 5')).toBeInTheDocument();
+        expect(screen.getByText('Warn 2')).toBeInTheDocument();
+        expect(screen.getByText('Down 1')).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Objects'));
         jest.runAllTimers();
@@ -289,14 +293,11 @@ describe('ClusterStatGrids', () => {
     test('GridNetworks renders correctly with networks and handles click', () => {
         const mockNetworks = [
             {name: 'network1', size: 100, used: 50, free: 50},
-            {name: 'network2', size: 200, used: 182, free: 18}
+            {name: 'network2', size: 200, used: 182, free: 18},
         ];
 
         render(
-            <GridNetworks
-                networks={mockNetworks}
-                onClick={mockOnClick}
-            />
+            <GridNetworks networks={mockNetworks} onClick={mockOnClick}/>
         );
 
         expect(screen.getByText('Networks')).toBeInTheDocument();
@@ -310,27 +311,17 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridNetworks handles empty networks array', () => {
-        render(
-            <GridNetworks
-                networks={[]}
-                onClick={mockOnClick}
-            />
-        );
+        render(<GridNetworks networks={[]} onClick={mockOnClick}/>);
 
         expect(screen.getByText('Networks')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
     });
 
     test('GridNetworks handles network with zero size', () => {
-        const mockNetworks = [
-            {name: 'network1', size: 0, used: 0, free: 0}
-        ];
+        const mockNetworks = [{name: 'network1', size: 0, used: 0, free: 0}];
 
         render(
-            <GridNetworks
-                networks={mockNetworks}
-                onClick={mockOnClick}
-            />
+            <GridNetworks networks={mockNetworks} onClick={mockOnClick}/>
         );
 
         expect(screen.getByText('Networks')).toBeInTheDocument();
@@ -339,15 +330,10 @@ describe('ClusterStatGrids', () => {
     });
 
     test('GridNetworks handles network with no size property', () => {
-        const mockNetworks = [
-            {name: 'network1', used: 10, free: 90}
-        ];
+        const mockNetworks = [{name: 'network1', used: 10, free: 90}];
 
         render(
-            <GridNetworks
-                networks={mockNetworks}
-                onClick={mockOnClick}
-            />
+            <GridNetworks networks={mockNetworks} onClick={mockOnClick}/>
         );
 
         expect(screen.getByText('Networks')).toBeInTheDocument();
@@ -373,7 +359,10 @@ describe('ClusterStatGrids', () => {
 
     test('GridNamespaces handles namespace with only some status types', () => {
         const mockNamespaceSubtitle = [
-            {namespace: 'ns1', status: {up: 5, warn: 0, down: 0, 'n/a': 0, unprovisioned: 0}}
+            {
+                namespace: 'ns1',
+                status: {up: 5, warn: 0, down: 0, 'n/a': 0, unprovisioned: 0},
+            },
         ];
 
         render(
@@ -386,25 +375,158 @@ describe('ClusterStatGrids', () => {
 
         const ns1Chip = screen.getByText('ns1');
         const chipContainer = ns1Chip.closest('.MuiBox-root');
-        const statusIndicators = within(chipContainer).getAllByRole('button', {hidden: true});
+        const statusIndicators = within(chipContainer).getAllByRole('button', {
+            hidden: true,
+        });
 
         expect(statusIndicators).toHaveLength(1);
     });
 
-    test('GridHeartbeats handles card click without parameters', () => {
-        const stateCount = {running: 1};
+
+    test('renders pools with usage percentage and low storage warning', () => {
+        const pools = [
+            {name: 'pool1', size: 100, used: 95},
+            {name: 'pool2', size: 200, used: 100},
+            {name: 'pool3', size: 0, used: 0},
+        ];
+
         render(
-            <GridHeartbeats
-                heartbeatCount={1}
-                beatingCount={1}
-                nonBeatingCount={0}
-                stateCount={stateCount}
+            <GridPools poolCount={3} pools={pools} onClick={mockOnClick}/>
+        );
+
+        expect(screen.getByText('pool1 (95.0% used)')).toBeInTheDocument();
+        expect(screen.getByText('pool2 (50.0% used)')).toBeInTheDocument();
+        expect(screen.getByText('pool3 (N/A% used)')).toBeInTheDocument();
+
+        const pool1Chip = screen.getByText('pool1 (95.0% used)').closest('.MuiChip-root');
+        const pool2Chip = screen.getByText('pool2 (50.0% used)').closest('.MuiChip-root');
+        expect(pool1Chip).toHaveStyle('background-color: red');
+        expect(pool2Chip).not.toHaveStyle('background-color: red');
+    });
+
+    test('handles missing size or used properties gracefully', () => {
+        const pools = [
+            {name: 'pool1', used: 10},
+            {name: 'pool2', size: 100},
+            {name: 'pool3'},
+        ];
+
+        render(
+            <GridPools poolCount={3} pools={pools} onClick={mockOnClick}/>
+        );
+
+        expect(screen.getByText('pool1 (N/A% used)')).toBeInTheDocument();
+        expect(screen.getByText('pool2 (N/A% used)')).toBeInTheDocument();
+        expect(screen.getByText('pool3 (N/A% used)')).toBeInTheDocument();
+    });
+
+    const mockKindSubtitle = [
+        {
+            kind: 'Pod',
+            status: {up: 5, warn: 2, down: 1, unprovisioned: 0},
+        },
+        {
+            kind: 'Service',
+            status: {up: 3, warn: 0, down: 0, unprovisioned: 0},
+        },
+        {
+            kind: 'Node',
+            status: {up: 1, warn: 1, down: 1, unprovisioned: 1},
+        },
+    ];
+
+    test('renders correctly with kind chips and status indicators', () => {
+        render(
+            <GridKinds
+                kindCount={3}
+                kindSubtitle={mockKindSubtitle}
                 onClick={mockOnClick}
             />
         );
 
-        fireEvent.click(screen.getByText('Heartbeats'));
-        jest.runAllTimers();
-        expect(mockOnClick).toHaveBeenCalled();
+        expect(screen.getByText('Kinds')).toBeInTheDocument();
+        // There are two "3" elements: the kindCount and the Service up indicator
+        expect(screen.getAllByText('3')).toHaveLength(2);
+
+        expect(screen.getByText('Pod')).toBeInTheDocument();
+        expect(screen.getByText('Service')).toBeInTheDocument();
+        expect(screen.getByText('Node')).toBeInTheDocument();
+
+        expect(screen.getByLabelText('up status for kind Pod: 5 objects')).toBeInTheDocument();
+        expect(screen.getByLabelText('warn status for kind Pod: 2 objects')).toBeInTheDocument();
+        expect(screen.getByLabelText('down status for kind Pod: 1 objects')).toBeInTheDocument();
+        expect(screen.queryByLabelText('unprovisioned status for kind Pod: 0 objects')).not.toBeInTheDocument();
+
+        expect(screen.getByLabelText('up status for kind Node: 1 objects')).toBeInTheDocument();
+        expect(screen.getByLabelText('warn status for kind Node: 1 objects')).toBeInTheDocument();
+        expect(screen.getByLabelText('down status for kind Node: 1 objects')).toBeInTheDocument();
+        expect(screen.getByLabelText('unprovisioned status for kind Node: 1 objects')).toBeInTheDocument();
+    });
+
+    test('handles click on status indicator', async () => {
+        render(
+            <GridKinds
+                kindCount={3}
+                kindSubtitle={mockKindSubtitle}
+                onClick={mockOnClick}
+            />
+        );
+
+        const upIndicator = screen.getByLabelText('up status for kind Pod: 5 objects');
+        fireEvent.click(upIndicator);
+
+        const podContainer = screen.getByText('Pod').closest('.MuiBox-root');
+        expect(within(podContainer).getByRole('progressbar')).toBeInTheDocument();
+
+        jest.advanceTimersByTime(50);
+        await act(async () => {
+        });
+
+        expect(mockOnClick).toHaveBeenCalledWith('/objects?kind=Pod&globalState=up');
+    });
+
+    test('handles click on unprovisioned indicator', async () => {
+        render(
+            <GridKinds
+                kindCount={3}
+                kindSubtitle={mockKindSubtitle}
+                onClick={mockOnClick}
+            />
+        );
+
+        const unprovisionedIndicator = screen.getByLabelText('unprovisioned status for kind Node: 1 objects');
+        fireEvent.click(unprovisionedIndicator);
+
+        jest.advanceTimersByTime(50);
+        await act(async () => {
+        });
+
+        expect(mockOnClick).toHaveBeenCalledWith('/objects?kind=Node&globalState=unprovisioned');
+    });
+
+    test('prevents chip click when already loading another kind', async () => {
+        render(
+            <GridKinds
+                kindCount={3}
+                kindSubtitle={mockKindSubtitle}
+                onClick={mockOnClick}
+            />
+        );
+
+        const podChip = screen.getByText('Pod').closest('.MuiChip-root');
+        const serviceChip = screen.getByText('Service').closest('.MuiChip-root');
+
+        fireEvent.click(podChip);
+        fireEvent.click(serviceChip);
+
+        jest.advanceTimersByTime(50);
+        await act(async () => {
+        });
+
+        // Both clicks should go through because loading state is per-kind
+        expect(mockOnClick).toHaveBeenCalledTimes(2);
+        expect(mockOnClick).toHaveBeenCalledWith('/objects?kind=Pod');
+        expect(mockOnClick).toHaveBeenCalledWith('/objects?kind=Service');
     });
 });
+

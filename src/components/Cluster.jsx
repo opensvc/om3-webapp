@@ -9,28 +9,14 @@ import {
     GridNamespaces,
     GridHeartbeats,
     GridPools,
-    GridNetworks
-} from "./ClusterStatGrids.jsx";
+    GridNetworks,
+    GridKinds
+} from "../components/ClusterStatGrids.jsx";
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception, DEFAULT_FILTERS} from "../eventSourceManager";
 import EventLogger from "../components/EventLogger";
 import {useNodeStats, useObjectStats, useHeartbeatStats} from "../hooks/useClusterData";
-
-const CLUSTER_EVENT_TYPES = [
-    "NodeStatusUpdated",
-    "NodeMonitorUpdated",
-    "NodeStatsUpdated",
-    "DaemonHeartbeatUpdated",
-    "ObjectStatusUpdated",
-    "InstanceStatusUpdated",
-    "ObjectDeleted",
-    "InstanceMonitorUpdated",
-    "CONNECTION_OPENED",
-    "CONNECTION_ERROR",
-    "RECONNECTION_ATTEMPT",
-    "MAX_RECONNECTIONS_REACHED",
-    "CONNECTION_CLOSED"
-];
+import {useKindData} from "../hooks/useKindData";
 
 const InitialLoader = memo(() => (
     <Box sx={{
@@ -54,11 +40,13 @@ const ClusterOverview = () => {
     const nodeStats = useNodeStats();
     const objectStats = useObjectStats();
     const heartbeatStats = useHeartbeatStats();
+    const {statusByKind, kinds} = useKindData();
 
     const deferredNodeStats = useDeferredValue(nodeStats);
     const deferredObjectStats = useDeferredValue(objectStats);
     const deferredHeartbeatStats = useDeferredValue(heartbeatStats);
 
+    const [pools, setPools] = useState([]);
     const [poolCount, setPoolCount] = useState(0);
     const [networks, setNetworks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -71,10 +59,11 @@ const ClusterOverview = () => {
         navigate(globalState ? `/objects?globalState=${globalState}` : '/objects');
     }, [navigate]);
 
-    const handleHeartbeatsClick = useCallback((status, state) => {
+    const handleHeartbeatsClick = useCallback((status, state, id) => {
         const params = new URLSearchParams();
         if (status) params.append('status', status);
         if (state) params.append('state', state);
+        if (id) params.append('id', id);
         navigate(`/heartbeats${params.toString() ? `?${params.toString()}` : ''}`);
     }, [navigate]);
 
@@ -105,6 +94,7 @@ const ClusterOverview = () => {
             const poolItems = poolsRes.data?.items || [];
             const networkItems = networksRes.data?.items || [];
 
+            setPools(poolItems);
             setPoolCount(poolItems.length);
             setNetworks(networkItems);
             setIsLoading(false);
@@ -112,6 +102,7 @@ const ClusterOverview = () => {
             if (!isMounted.current || error.name === 'AbortError') return;
 
             logger.error('Failed to fetch cluster data:', error.message);
+            setPools([]);
             setPoolCount(0);
             setNetworks([]);
             setIsLoading(false);
@@ -138,9 +129,8 @@ const ClusterOverview = () => {
     const gridNodesProps = useMemo(() => ({
         nodeCount: deferredNodeStats.count,
         frozenCount: deferredNodeStats.frozen,
-        unfrozenCount: deferredNodeStats.unfrozen,
         onClick: handleNavigate("/nodes")
-    }), [deferredNodeStats.count, deferredNodeStats.frozen, deferredNodeStats.unfrozen, handleNavigate]);
+    }), [deferredNodeStats.count, deferredNodeStats.frozen, handleNavigate]);
 
     const gridObjectsProps = useMemo(() => ({
         objectCount: deferredObjectStats.objectCount,
@@ -150,9 +140,8 @@ const ClusterOverview = () => {
 
     const gridHeartbeatsProps = useMemo(() => ({
         heartbeatCount: deferredHeartbeatStats.count,
-        beatingCount: deferredHeartbeatStats.beating,
-        nonBeatingCount: deferredHeartbeatStats.stale,
-        stateCount: deferredHeartbeatStats.stateCount,
+        runningCount: deferredHeartbeatStats.running,
+        perHeartbeatStats: deferredHeartbeatStats.perHeartbeatStats,
         nodeCount: deferredNodeStats.count,
         onClick: handleHeartbeatsClick
     }), [deferredHeartbeatStats, deferredNodeStats.count, handleHeartbeatsClick]);
@@ -163,10 +152,24 @@ const ClusterOverview = () => {
         onClick: (url) => navigate(url || "/namespaces")
     }), [deferredObjectStats.namespaceCount, deferredObjectStats.namespaceSubtitle, navigate]);
 
+    const kindSubtitle = useMemo(() => {
+        return kinds.map(kind => ({
+            kind,
+            status: statusByKind[kind]
+        }));
+    }, [kinds, statusByKind]);
+
+    const gridKindsProps = useMemo(() => ({
+        kindCount: kinds.length,
+        kindSubtitle,
+        onClick: (url) => navigate(url || "/kinds")
+    }), [kinds.length, kindSubtitle, navigate]);
+
     const gridPoolsProps = useMemo(() => ({
         poolCount,
-        onClick: handleNavigate("/storage-pools")
-    }), [poolCount, handleNavigate]);
+        pools,
+        onClick: handleNavigate("/pools")
+    }), [poolCount, pools, handleNavigate]);
 
     const gridNetworksProps = useMemo(() => ({
         networks,
@@ -245,8 +248,10 @@ const ClusterOverview = () => {
                         </Box>
                     </Box>
 
-                    <Box sx={{flex: 1}}>
+                    {/* Colonne de droite : Namespaces et Kinds l'un en dessous de l'autre */}
+                    <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
                         <GridNamespaces {...gridNamespacesProps} />
+                        <GridKinds {...gridKindsProps} />
                     </Box>
                 </Box>
                 {/* <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/> */}

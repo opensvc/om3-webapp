@@ -30,15 +30,19 @@ jest.mock('../../hooks/useClusterData', () => ({
     useHeartbeatStats: jest.fn(),
 }));
 
+jest.mock('../../hooks/useKindData', () => ({
+    useKindData: jest.fn(),
+}));
+
 // Mock the event source manager
 jest.mock('../../eventSourceManager');
 
 // Mock ClusterStatGrids named exports using a factory function
 jest.mock('../ClusterStatGrids.jsx', () => {
-    const GridNodes = ({nodeCount, frozenCount, unfrozenCount, onClick}) => (
+    const GridNodes = ({nodeCount, frozenCount, onClick}) => (
         <button aria-label="Nodes stat card" onClick={onClick}>
             <div data-testid="node-count">{nodeCount}</div>
-            <div data-testid="node-status">Frozen: {frozenCount} | Unfrozen: {unfrozenCount}</div>
+            <div data-testid="node-status">Frozen: {frozenCount}</div>
         </button>
     );
     const GridObjects = ({objectCount, statusCount, onClick}) => (
@@ -120,6 +124,16 @@ jest.mock('../ClusterStatGrids.jsx', () => {
             <div data-testid="network-count">{networks?.length ?? 0}</div>
         </button>
     );
+    const GridKinds = ({kindCount, kindSubtitle, onClick}) => (
+        <button aria-label="Kinds stat card" onClick={() => onClick && onClick()}>
+            <div data-testid="kind-count">{kindCount}</div>
+            <div>
+                {kindSubtitle?.map(({kind}) => (
+                    <div key={kind} data-testid={`kind-${kind}`}>{kind}</div>
+                ))}
+            </div>
+        </button>
+    );
     return {
         GridNodes,
         GridObjects,
@@ -127,6 +141,7 @@ jest.mock('../ClusterStatGrids.jsx', () => {
         GridHeartbeats,
         GridPools,
         GridNetworks,
+        GridKinds,
     };
 });
 
@@ -137,16 +152,15 @@ describe('ClusterOverview', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = jest.fn();
     const mockToken = 'mock-token';
+    const {useKindData} = require('../../hooks/useKindData');
 
     beforeEach(() => {
         jest.clearAllMocks();
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
 
-        // Mock custom hooks with default data
         useNodeStats.mockReturnValue({
             count: 2,
-            frozen: 1,
-            unfrozen: 1
+            frozen: 1
         });
 
         useObjectStats.mockReturnValue({
@@ -171,6 +185,11 @@ describe('ClusterOverview', () => {
             beating: 2,
             stale: 0,
             stateCount: {running: 2}
+        });
+
+        useKindData.mockReturnValue({
+            statusByKind: {},
+            kinds: []
         });
 
         startEventReception.mockImplementation(mockStartEventReception);
@@ -201,7 +220,7 @@ describe('ClusterOverview', () => {
         });
         expect(screen.getByText('Cluster Overview')).toBeInTheDocument();
         expect(screen.getByTestId('node-count')).toHaveTextContent('2');
-        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1 | Unfrozen: 1');
+        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1');
         expect(screen.getByTestId('object-count')).toHaveTextContent('4');
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 1');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 1');
@@ -216,6 +235,8 @@ describe('ClusterOverview', () => {
         expect(screen.getByTestId('ns2-count')).toHaveTextContent('1');
         expect(screen.getByTestId('heartbeat-count')).toHaveTextContent('2');
         expect(screen.getByRole('button', {name: /Pools stat card/i})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Kinds stat card/i})).toBeInTheDocument();
+        expect(screen.getByTestId('kind-count')).toHaveTextContent('0');
     });
 
     test('fetches data on mount with auth token', async () => {
@@ -251,40 +272,41 @@ describe('ClusterOverview', () => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
 
-        // Nodes card
         fireEvent.click(screen.getByRole('button', {name: /Nodes stat card/i}));
         act(() => {
             jest.advanceTimersByTime(50);
         });
         expect(mockNavigate).toHaveBeenCalledWith('/nodes');
 
-        // Objects card
         fireEvent.click(screen.getByRole('button', {name: /Objects stat card/i}));
         act(() => {
             jest.advanceTimersByTime(50);
         });
         expect(mockNavigate).toHaveBeenCalledWith('/objects');
 
-        // Namespaces card
         fireEvent.click(screen.getByRole('button', {name: /Namespaces stat card/i}));
         act(() => {
             jest.advanceTimersByTime(50);
         });
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
 
-        // Heartbeats card
         fireEvent.click(screen.getByRole('button', {name: /Heartbeats stat card/i}));
         act(() => {
             jest.advanceTimersByTime(50);
         });
         expect(mockNavigate).toHaveBeenCalledWith('/heartbeats');
 
-        // Pools card
         fireEvent.click(screen.getByRole('button', {name: /Pools stat card/i}));
         act(() => {
             jest.advanceTimersByTime(50);
         });
-        expect(mockNavigate).toHaveBeenCalledWith('/storage-pools');
+        expect(mockNavigate).toHaveBeenCalledWith('/pools');
+
+        fireEvent.click(screen.getByRole('button', {name: /Kinds stat card/i}));
+        act(() => {
+            jest.advanceTimersByTime(50);
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/kinds');
     });
 
     test('navigates to objects with globalState parameter', async () => {
@@ -298,7 +320,6 @@ describe('ClusterOverview', () => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
 
-        // Click on up status button
         fireEvent.click(screen.getByTestId('up-status-button'));
         act(() => {
             jest.advanceTimersByTime(50);
@@ -307,7 +328,6 @@ describe('ClusterOverview', () => {
 
         mockNavigate.mockClear();
 
-        // Click on warn status button
         fireEvent.click(screen.getByTestId('warn-status-button'));
         act(() => {
             jest.advanceTimersByTime(50);
@@ -326,7 +346,6 @@ describe('ClusterOverview', () => {
             expect(screen.getByTestId('pool-count')).toHaveTextContent('2');
         });
 
-        // Click on beating status button
         fireEvent.click(screen.getByTestId('beating-status-button'));
         act(() => {
             jest.advanceTimersByTime(50);
@@ -335,7 +354,6 @@ describe('ClusterOverview', () => {
 
         mockNavigate.mockClear();
 
-        // Click on running state button
         fireEvent.click(screen.getByTestId('running-state-button'));
         act(() => {
             jest.advanceTimersByTime(50);
@@ -346,8 +364,7 @@ describe('ClusterOverview', () => {
     test('handles empty data correctly', async () => {
         useNodeStats.mockReturnValue({
             count: 0,
-            frozen: 0,
-            unfrozen: 0
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({
@@ -370,6 +387,11 @@ describe('ClusterOverview', () => {
             stateCount: {running: 0}
         });
 
+        useKindData.mockReturnValue({
+            statusByKind: {},
+            kinds: []
+        });
+
         axios.get.mockResolvedValue({data: {items: []}});
 
         render(
@@ -378,14 +400,12 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        // Wait for loading to complete
         await waitFor(() => {
             expect(screen.getByTestId('node-count')).toBeInTheDocument();
         });
 
-        // Now check the values
         expect(screen.getByTestId('node-count')).toHaveTextContent('0');
-        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0 | Unfrozen: 0');
+        expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 0');
         expect(screen.getByTestId('object-count')).toHaveTextContent('0');
         expect(screen.getByTestId('up-count')).toHaveTextContent('Up 0');
         expect(screen.getByTestId('warn-count')).toHaveTextContent('Warn 0');
@@ -394,6 +414,7 @@ describe('ClusterOverview', () => {
         expect(screen.getByTestId('namespace-count')).toHaveTextContent('0');
         expect(screen.getByTestId('heartbeat-count')).toHaveTextContent('0');
         expect(screen.getByTestId('pool-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('kind-count')).toHaveTextContent('0');
     });
 
     test('does not fetch data if no auth token', async () => {
@@ -435,17 +456,14 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        // Unmount the component before the promise resolves
         unmount();
 
-        // Resolve the promise after unmount
         resolvePromise({data: {items: [{id: 'pool1'}]}});
 
         await act(async () => {
             await slowPromise;
         });
 
-        // Component should handle unmount gracefully without setting state
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
@@ -463,29 +481,24 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        // Unmount the component before the error is thrown
         unmount();
 
-        // Reject the promise after unmount
         rejectPromise(new Error('API Error'));
 
         await act(async () => {
             try {
                 await errorPromise;
             } catch (e) {
-                // Expected error
             }
         });
 
-        // Component should handle unmount gracefully without setting state
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
     test('handles nodes with missing frozen_at property', async () => {
         useNodeStats.mockReturnValue({
             count: 2,
-            frozen: 1,
-            unfrozen: 1
+            frozen: 1
         });
 
         axios.get.mockResolvedValue({data: {items: []}});
@@ -501,7 +514,7 @@ describe('ClusterOverview', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1 | Unfrozen: 1');
+            expect(screen.getByTestId('node-status')).toHaveTextContent('Frozen: 1');
         });
     });
 
@@ -583,7 +596,7 @@ describe('ClusterOverview', () => {
                 return Promise.resolve({data: {items: [{id: 'pool1'}]}});
             }
             if (url === URL_NETWORK) {
-                return Promise.resolve({data: {items: null}}); // invalid
+                return Promise.resolve({data: {items: null}});
             }
         });
 
@@ -618,7 +631,6 @@ describe('ClusterOverview', () => {
             </MemoryRouter>
         );
 
-        // Wait for the component to finish processing
         await waitFor(() => {
             expect(screen.getByText(/cluster overview/i)).toBeInTheDocument();
         });
@@ -639,7 +651,6 @@ describe('ClusterOverview', () => {
         );
 
         await waitFor(() => {
-            // Check that GridNetworks is not rendered or is empty
             const networksSection = screen.queryByTestId('grid-networks');
             expect(networksSection).toBeNull();
         });
@@ -648,8 +659,7 @@ describe('ClusterOverview', () => {
     test('handles various frozen_at date formats', async () => {
         useNodeStats.mockReturnValue({
             count: 6,
-            frozen: 1,
-            unfrozen: 5
+            frozen: 1
         });
 
         render(
@@ -663,7 +673,7 @@ describe('ClusterOverview', () => {
         });
 
         const nodeStatusText = screen.getByTestId('node-status').textContent;
-        expect(nodeStatusText).toMatch(/Frozen: 1 \| Unfrozen: 5/);
+        expect(nodeStatusText).toMatch(/Frozen: 1/);
     });
 
     test('handles namespace parsing edge cases', async () => {
@@ -757,8 +767,7 @@ describe('ClusterOverview', () => {
     test('handles navigation for stat cards', async () => {
         useNodeStats.mockReturnValue({
             count: 1,
-            frozen: 0,
-            unfrozen: 1
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({
@@ -800,13 +809,12 @@ describe('ClusterOverview', () => {
             expect(screen.getByTestId('pool-count')).toBeInTheDocument();
         });
 
-        // Test navigation for each card
         const cards = [
             {role: 'Nodes stat card', expectedRoute: '/nodes'},
             {role: 'Objects stat card', expectedRoute: '/objects'},
             {role: 'Namespaces stat card', expectedRoute: '/namespaces'},
             {role: 'Heartbeats stat card', expectedRoute: '/heartbeats'},
-            {role: 'Pools stat card', expectedRoute: '/storage-pools'},
+            {role: 'Pools stat card', expectedRoute: '/pools'},
         ];
 
         cards.forEach(({role, expectedRoute}) => {
@@ -875,8 +883,7 @@ describe('ClusterOverview', () => {
     test('handles partial node data', async () => {
         useNodeStats.mockReturnValue({
             count: 1,
-            frozen: 0,
-            unfrozen: 1
+            frozen: 0
         });
 
         render(
@@ -973,8 +980,7 @@ describe('ClusterOverview', () => {
     test('handles missing properties in store data', async () => {
         useNodeStats.mockReturnValue({
             count: 0,
-            frozen: 0,
-            unfrozen: 0
+            frozen: 0
         });
 
         useObjectStats.mockReturnValue({

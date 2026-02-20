@@ -10,10 +10,8 @@ import {
     TableRow,
     Typography,
     Button,
-    Paper,
     MenuItem,
     Checkbox,
-    Autocomplete,
     TextField,
     Snackbar,
     Alert,
@@ -27,8 +25,6 @@ import {
     Grid,
     Collapse,
     Menu,
-    FormControlLabel,
-    FormGroup,
     FormControl,
     InputLabel,
     Select,
@@ -37,6 +33,7 @@ import {
 } from "@mui/material";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import CloseIcon from "@mui/icons-material/Close";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
@@ -85,12 +82,35 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
         <Box sx={{
             width: "80px",
             height: "24px",
-            position: "relative",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 0.5
         }}>
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", zIndex: 1}}>
+            {/* Not provisioned indicator - left side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: isNotProvisioned ? "visible" : "hidden"
+            }}>
+                {isNotProvisioned && (
+                    <Tooltip title="Not Provisioned">
+                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}} aria-label="Object is not provisioned"/>
+                    </Tooltip>
+                )}
+            </Box>
+
+            {/* Status icon - center */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
                 {avail === "up" && (
                     <Tooltip title="up">
                         <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
@@ -112,27 +132,34 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
                     </Tooltip>
                 )}
             </Box>
-            {isNotProvisioned && (
-                <Box sx={{position: "absolute", left: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is not provisioned"/>
-                    </Tooltip>
-                </Box>
-            )}
-            {frozen === "frozen" && (
-                <Box sx={{position: "absolute", right: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
+
+            {/* Frozen indicator - right side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: frozen === "frozen" ? "visible" : "hidden"
+            }}>
+                {frozen === "frozen" && (
                     <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label="Object is frozen"/>
+                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label="Object is frozen"/>
                     </Tooltip>
-                </Box>
-            )}
+                )}
+            </Box>
         </Box>
     );
 }, (prev, next) => prev.avail === next.avail && prev.isNotProvisioned === next.isNotProvisioned && prev.frozen === next.frozen);
 
 const GlobalExpectDisplay = React.memo(({globalExpect}) => {
     return (
-        <Box sx={{width: "70px", display: "flex", justifyContent: "center"}}>
+        <Box sx={{
+            width: "70px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             {globalExpect && (
                 <Tooltip title={globalExpect}>
                     <Typography variant="caption" sx={{
@@ -141,7 +168,8 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => {
                         maxWidth: "70px",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        whiteSpace: "nowrap",
+                        display: "inline-block"
                     }}>
                         {globalExpect}
                     </Typography>
@@ -156,12 +184,36 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
         <Box sx={{
             width: "80px",
             height: "24px",
-            position: "relative",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 0.5
         }}>
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", zIndex: 1}}>
+            {/* Not provisioned indicator - left side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: isNodeNotProvisioned ? "visible" : "hidden"
+            }}>
+                {isNodeNotProvisioned && (
+                    <Tooltip title="Not Provisioned">
+                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}}
+                                          aria-label={`Node ${node} is not provisioned`}/>
+                    </Tooltip>
+                )}
+            </Box>
+
+            {/* Node status icon - center */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
                 {nodeAvail === "up" && (
                     <Tooltip title="up">
                         <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}}
@@ -181,28 +233,34 @@ const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen
                     </Tooltip>
                 )}
             </Box>
-            {isNodeNotProvisioned && (
-                <Box sx={{position: "absolute", left: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 24}}
-                                          aria-label={`Node ${node} is not provisioned`}/>
-                    </Tooltip>
-                </Box>
-            )}
-            {nodeFrozen === "frozen" && (
-                <Box sx={{position: "absolute", right: "0px", top: "50%", transform: "translateY(-50%)", zIndex: 2}}>
+
+            {/* Frozen indicator - right side */}
+            <Box sx={{
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                visibility: nodeFrozen === "frozen" ? "visible" : "hidden"
+            }}>
+                {nodeFrozen === "frozen" && (
                     <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 24}} aria-label={`Node ${node} is frozen`}/>
+                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label={`Node ${node} is frozen`}/>
                     </Tooltip>
-                </Box>
-            )}
+                )}
+            </Box>
         </Box>
     );
 }, (prev, next) => prev.nodeAvail === next.nodeAvail && prev.isNodeNotProvisioned === next.isNodeNotProvisioned && prev.nodeFrozen === next.nodeFrozen && prev.node === next.node);
 
 const NodeStateDisplay = React.memo(({nodeState, node}) => {
     return (
-        <Box sx={{width: "50px", display: "flex", justifyContent: "center"}}>
+        <Box sx={{
+            width: "50px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             {nodeState && (
                 <Tooltip title={nodeState}>
                     <Typography variant="caption" sx={{
@@ -211,7 +269,8 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
                         maxWidth: "50px",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        whiteSpace: "nowrap",
+                        display: "inline-block"
                     }} aria-label={`Node ${node} state: ${nodeState}`}>
                         {nodeState}
                     </Typography>
@@ -241,7 +300,12 @@ const NodeStatus = React.memo(({objectName, node}) => {
             <NodeStateDisplay nodeState={nodeData.state} node={node}/>
         </Box>
     ) : (
-        <Box sx={{width: "130px", display: "flex", justifyContent: "center", alignItems: "center"}}>
+        <Box sx={{
+            width: "130px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center"
+        }}>
             <Typography variant="caption" color="textSecondary">-</Typography>
         </Box>
     );
@@ -285,7 +349,13 @@ const TableRowComponent = React.memo(({
 
     return (
         <TableRow onClick={handleRowClick} sx={{cursor: "pointer"}}>
-            <TableCell sx={{paddingLeft: 2}}>
+            <TableCell sx={{
+                padding: "16px 0px 16px 16px",
+                minWidth: "60px",
+                width: "60px",
+                maxWidth: "60px",
+                boxSizing: "border-box"
+            }}>
                 <Checkbox
                     checked={isSelected}
                     onChange={handleCheckboxChange}
@@ -293,7 +363,15 @@ const TableRowComponent = React.memo(({
                     aria-label={`Select object ${objectName}`}
                 />
             </TableCell>
-            <TableCell sx={{minWidth: "150px", width: "150px", position: "relative", height: "100%"}}>
+            <TableCell sx={{
+                minWidth: "150px",
+                width: "150px",
+                maxWidth: "150px",
+                position: "relative",
+                height: "100%",
+                padding: "16px 8px",
+                boxSizing: "border-box"
+            }}>
                 <Box sx={{
                     width: "100%",
                     height: "100%",
@@ -309,17 +387,36 @@ const TableRowComponent = React.memo(({
                     <GlobalExpectDisplay globalExpect={objectData.globalExpect}/>
                 </Box>
             </TableCell>
-            <TableCell>
-                <Typography>{objectName}</Typography>
+            <TableCell sx={{
+                minWidth: "200px",
+                width: "auto",
+                padding: "16px 8px",
+                boxSizing: "border-box",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+            }}>
+                <Typography noWrap>{objectName}</Typography>
             </TableCell>
             {isWideScreen &&
                 allNodes.map((node) => (
-                    <TableCell key={node} align="center"
-                               sx={{minWidth: "130px", width: "130px", position: "relative"}}>
+                    <TableCell key={node} align="center" sx={{
+                        minWidth: "130px",
+                        width: "130px",
+                        maxWidth: "130px",
+                        position: "relative",
+                        padding: "16px 8px",
+                        boxSizing: "border-box"
+                    }}>
                         <NodeStatus objectName={objectName} node={node}/>
                     </TableCell>
                 ))}
-            <TableCell>
+            <TableCell sx={{
+                minWidth: "100px",
+                width: "100px",
+                maxWidth: "100px",
+                padding: "16px 8px",
+                boxSizing: "border-box"
+            }}>
                 <IconButton onClick={handleMenuOpen} aria-label={`More actions for object ${objectName}`}>
                     <MoreVertIcon/>
                 </IconButton>
@@ -371,7 +468,6 @@ const Objects = () => {
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
-    const [showFilters, setShowFilters] = useState(true);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
     const theme = useTheme();
@@ -388,6 +484,8 @@ const Objects = () => {
         "MAX_RECONNECTIONS_REACHED",
         "CONNECTION_CLOSED"
     ], []);
+
+    const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const deferredSelectedGlobalStates = useDeferredValue(selectedGlobalStates);
@@ -682,6 +780,18 @@ const Objects = () => {
         });
     }, []);
 
+    const handleGlobalStateSelectChange = (event) => {
+        setSelectedGlobalStates(event.target.value);
+    };
+
+    const handleNamespaceSelectChange = (event) => {
+        setSelectedNamespaces(event.target.value);
+    };
+
+    const handleKindSelectChange = (event) => {
+        setSelectedKinds(event.target.value);
+    };
+
     const handleScroll = useCallback(() => {
         if (loading) return;
 
@@ -847,17 +957,19 @@ const Objects = () => {
                         gap: 2
                     }}>
                         <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            <Button
-                                onClick={toggleShowFilters}
-                                aria-label={showFilters ? "Hide filters" : "Show filters"}
-                                sx={{minWidth: 'auto', flexShrink: 0}}
-                                startIcon={<FilterListIcon/>}
-                            >
-                                <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                    Filters
-                                </Box>
-                                {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            </Button>
+                            {isMobile && (
+                                <Button
+                                    onClick={toggleShowFilters}
+                                    aria-label={showFilters ? "Hide filters" : "Show filters"}
+                                    sx={{minWidth: 'auto', flexShrink: 0}}
+                                    startIcon={<FilterListIcon/>}
+                                >
+                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
+                                        Filters
+                                    </Box>
+                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                                </Button>
+                            )}
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>
@@ -869,6 +981,7 @@ const Objects = () => {
                                             labelId={globalStateId}
                                             multiple
                                             value={selectedGlobalStates}
+                                            onChange={handleGlobalStateSelectChange}
                                             input={<OutlinedInput label="Global State"/>}
                                             renderValue={(selected) => {
                                                 if (selected.length === 0) return '';
@@ -911,7 +1024,8 @@ const Objects = () => {
                                                                     event.stopPropagation();
                                                                 }}
                                                                 size="small"
-                                                                deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                                deleteIcon={<CloseIcon fontSize="small"
+                                                                                       style={{cursor: 'pointer'}}/>}
                                                             />
                                                         ))}
                                                     </Box>
@@ -920,10 +1034,7 @@ const Objects = () => {
                                         >
                                             {globalStates.map((state) => (
                                                 <MenuItem key={state} value={state}>
-                                                    <Checkbox
-                                                        checked={selectedGlobalStates.includes(state)}
-                                                        onChange={() => handleGlobalStateChange(state)}
-                                                    />
+                                                    <Checkbox checked={selectedGlobalStates.includes(state)}/>
                                                     <Box display="flex" alignItems="center" gap={1}>
                                                         {state === "up" &&
                                                             <FiberManualRecordIcon
@@ -952,6 +1063,7 @@ const Objects = () => {
                                             labelId={namespaceId}
                                             multiple
                                             value={selectedNamespaces}
+                                            onChange={handleNamespaceSelectChange}
                                             input={<OutlinedInput label="Namespace"/>}
                                             renderValue={(selected) => (
                                                 <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
@@ -964,7 +1076,8 @@ const Objects = () => {
                                                                 event.stopPropagation();
                                                             }}
                                                             size="small"
-                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                            deleteIcon={<CloseIcon fontSize="small"
+                                                                                   style={{cursor: 'pointer'}}/>}
                                                         />
                                                     ))}
                                                 </Box>
@@ -972,10 +1085,7 @@ const Objects = () => {
                                         >
                                             {namespaces.map((namespace) => (
                                                 <MenuItem key={namespace} value={namespace}>
-                                                    <Checkbox
-                                                        checked={selectedNamespaces.includes(namespace)}
-                                                        onChange={() => handleNamespaceChange(namespace)}
-                                                    />
+                                                    <Checkbox checked={selectedNamespaces.includes(namespace)}/>
                                                     <ListItemText primary={namespace}/>
                                                 </MenuItem>
                                             ))}
@@ -989,6 +1099,7 @@ const Objects = () => {
                                             labelId={kindId}
                                             multiple
                                             value={selectedKinds}
+                                            onChange={handleKindSelectChange}
                                             input={<OutlinedInput label="Kind"/>}
                                             renderValue={(selected) => (
                                                 <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
@@ -1001,7 +1112,8 @@ const Objects = () => {
                                                                 event.stopPropagation();
                                                             }}
                                                             size="small"
-                                                            deleteIcon={<span style={{cursor: 'pointer'}}>×</span>}
+                                                            deleteIcon={<CloseIcon fontSize="small"
+                                                                                   style={{cursor: 'pointer'}}/>}
                                                         />
                                                     ))}
                                                 </Box>
@@ -1009,10 +1121,7 @@ const Objects = () => {
                                         >
                                             {kinds.map((kind) => (
                                                 <MenuItem key={kind} value={kind}>
-                                                    <Checkbox
-                                                        checked={selectedKinds.includes(kind)}
-                                                        onChange={() => handleKindChange(kind)}
-                                                    />
+                                                    <Checkbox checked={selectedKinds.includes(kind)}/>
                                                     <ListItemText primary={kind}/>
                                                 </MenuItem>
                                             ))}
@@ -1126,17 +1235,6 @@ const Objects = () => {
                         })}
                     </Menu>
                 </Box>
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Typography variant="body2" color="textSecondary">
-                        Showing {visibleObjectNames.length} of {sortedObjectNames.length} objects
-                    </Typography>
-                </Box>
                 <TableContainer
                     ref={tableContainerRef}
                     sx={{
@@ -1148,10 +1246,20 @@ const Objects = () => {
                         position: 'relative'
                     }}
                 >
-                    <Table sx={{position: 'relative'}}>
+                    <Table sx={{
+                        position: 'relative',
+                        tableLayout: 'fixed',
+                        width: '100%'
+                    }}>
                         <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
                             <TableRow>
-                                <TableCell sx={{paddingLeft: 2}}>
+                                <TableCell sx={{
+                                    padding: "16px 0px 16px 16px",
+                                    minWidth: "60px",
+                                    width: "60px",
+                                    maxWidth: "60px",
+                                    boxSizing: "border-box"
+                                }}>
                                     <Checkbox
                                         checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
                                         onChange={handleSelectAll}
@@ -1161,9 +1269,11 @@ const Objects = () => {
                                 <TableCell sx={{
                                     minWidth: "150px",
                                     width: "150px",
+                                    maxWidth: "150px",
                                     position: "relative",
                                     cursor: "pointer",
-                                    paddingLeft: 2
+                                    padding: "16px 8px",
+                                    boxSizing: "border-box"
                                 }} onClick={() => handleSort("status")}>
                                     <Box sx={{
                                         width: "100%",
@@ -1187,8 +1297,13 @@ const Objects = () => {
                                         <Box sx={{width: "70px"}}></Box>
                                     </Box>
                                 </TableCell>
-                                <TableCell sx={{cursor: "pointer", paddingLeft: 2}}
-                                           onClick={() => handleSort("object")}>
+                                <TableCell sx={{
+                                    cursor: "pointer",
+                                    padding: "16px 8px",
+                                    minWidth: "200px",
+                                    width: "auto",
+                                    boxSizing: "border-box"
+                                }} onClick={() => handleSort("object")}>
                                     <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
                                         <strong>Object</strong>
                                         {sortColumn === "object" && (sortDirection === "asc" ?
@@ -1200,9 +1315,11 @@ const Objects = () => {
                                     <TableCell key={node} sx={{
                                         minWidth: "130px",
                                         width: "130px",
+                                        maxWidth: "130px",
                                         position: "relative",
                                         cursor: "pointer",
-                                        paddingLeft: 2
+                                        padding: "16px 8px",
+                                        boxSizing: "border-box"
                                     }} onClick={() => handleSort(node)}>
                                         <Box sx={{
                                             width: "100%",
@@ -1227,7 +1344,13 @@ const Objects = () => {
                                         </Box>
                                     </TableCell>
                                 ))}
-                                <TableCell sx={{paddingLeft: 2}}>
+                                <TableCell sx={{
+                                    padding: "16px 8px",
+                                    minWidth: "100px",
+                                    width: "100px",
+                                    maxWidth: "100px",
+                                    boxSizing: "border-box"
+                                }}>
                                     <strong>Actions</strong>
                                 </TableCell>
                             </TableRow>

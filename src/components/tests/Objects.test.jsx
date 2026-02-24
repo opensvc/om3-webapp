@@ -987,4 +987,46 @@ describe('Objects Component', () => {
             );
         });
     });
+
+    test('handles scroll loading more objects', async () => {
+        // Create many objects to trigger infinite scroll
+        const manyObjects = {};
+        const manyInstanceStatus = {};
+        for (let i = 0; i < 50; i++) {
+            const name = `test-ns/svc/obj${i}`;
+            manyObjects[name] = {avail: i % 2 === 0 ? 'up' : 'down', frozen: 'unfrozen'};
+            manyInstanceStatus[name] = {
+                node1: {avail: i % 2 === 0 ? 'up' : 'down', frozen_at: '0001-01-01T00:00:00Z'}
+            };
+        }
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: manyObjects,
+                objectInstanceStatus: manyInstanceStatus,
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        // Initially only 30 visible (default visibleCount)
+        const rows = screen.getAllByRole('row').slice(1); // exclude header
+        expect(rows.length).toBe(30);
+
+        // Simulate scroll to bottom
+        const tableContainer = document.querySelector('.MuiTableContainer-root');
+        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
+        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
+        Object.defineProperty(tableContainer, 'scrollTop', {value: 500}); // 50% scrolled (should trigger at >80%)
+
+        fireEvent.scroll(tableContainer);
+
+        // Wait for loading and more rows
+        await waitFor(() => {
+            const newRows = screen.getAllByRole('row').slice(1);
+            expect(newRows.length).toBeGreaterThan(30);
+        });
+    });
 });

@@ -17,28 +17,6 @@ jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
     return {
         ...actual,
-        Accordion: ({children, expanded, onChange, ...props}) => (
-            <div className={expanded ? 'expanded' : ''} {...props}>
-                {children}
-            </div>
-        ),
-        AccordionSummary: ({children, id, onChange, expanded, ...props}) => (
-            <div
-                role="button"
-                aria-expanded={expanded ? 'true' : 'false'}
-                aria-controls="panel-keys-content"
-                id="panel-keys-header"
-                onClick={() => onChange?.(!expanded)}
-                {...props}
-            >
-                {children}
-            </div>
-        ),
-        AccordionDetails: ({children, ...props}) => (
-            <div role="region" aria-labelledby="panel-keys-header" {...props}>
-                {children}
-            </div>
-        ),
         Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
             <button
                 onClick={onClick}
@@ -52,8 +30,8 @@ jest.mock('@mui/material', () => {
         ),
         CircularProgress: () => <div role="progressbar">Loading...</div>,
         Typography: ({children, ...props}) => <span {...props}>{children}</span>,
-        Dialog: ({children, open, maxWidth, fullWidth, onClose, ...props}) =>
-            open ? <div role="dialog" onKeyDown={(e) => {
+        Dialog: ({children, open, maxWidth, fullWidth, fullScreen, onClose, ...props}) =>
+            open ? <div role="dialog" data-fullscreen={fullScreen ? 'true' : 'false'} onKeyDown={(e) => {
                 if (e.key === 'Escape') onClose();
             }} {...props}>{children}</div> : null,
         DialogTitle: ({children, ...props}) => <div {...props}>{children}</div>,
@@ -129,7 +107,8 @@ jest.mock('@mui/icons-material/UploadFile', () => () => <span/>);
 jest.mock('@mui/icons-material/Edit', () => () => <span/>);
 jest.mock('@mui/icons-material/Delete', () => () => <span/>);
 jest.mock('@mui/icons-material/Add', () => () => <span/>);
-jest.mock('@mui/icons-material/ExpandMore', () => () => <span/>);
+jest.mock('@mui/icons-material/Fullscreen', () => () => <span/>);
+jest.mock('@mui/icons-material/FullscreenExit', () => () => <span/>);
 jest.mock('@mui/icons-material/Visibility', () => () => <span/>);
 
 // Mock localStorage
@@ -256,11 +235,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         });
@@ -277,53 +251,19 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
-        const keysAccordionDetails = screen.getByRole('region', {name: /Object Keys/i});
-
         await waitFor(() => {
-            expect(within(keysAccordionDetails).getByText('key1')).toBeInTheDocument();
+            expect(screen.getByText('key1')).toBeInTheDocument();
         });
 
-        await waitFor(() => {
-            expect(within(keysAccordionDetails).getByText('key2')).toBeInTheDocument();
-        });
+        expect(screen.getByText('key2')).toBeInTheDocument();
+        expect(screen.getByText('2626 bytes')).toBeInTheDocument();
+        expect(screen.getByText('6946 bytes')).toBeInTheDocument();
 
-        await waitFor(() => {
-            expect(within(keysAccordionDetails).getByText('2626 bytes')).toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(within(keysAccordionDetails).getByText('6946 bytes')).toBeInTheDocument();
-        });
-
-        const node1Elements = within(keysAccordionDetails).getAllByText('node1');
+        const node1Elements = screen.getAllByText('node1');
         expect(node1Elements).toHaveLength(2);
         node1Elements.forEach((element) => {
             expect(element).toBeInTheDocument();
             expect(element.tagName.toLowerCase()).toBe('td');
-        });
-    });
-
-    test('expands keys accordion', async () => {
-        render(
-            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
-        );
-
-        await waitFor(() => {
-            expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
-        }, {timeout: 15000});
-
-        const keysAccordion = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(keysAccordion);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('key1')).toBeInTheDocument();
         });
     });
 
@@ -337,11 +277,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const keysAccordion = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(keysAccordion);
-        });
-
         await waitFor(() => {
             expect(screen.getByText(/Failed to fetch keys/i)).toBeInTheDocument();
         });
@@ -353,14 +288,6 @@ describe('KeysSection Component', () => {
         render(
             <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
         );
-        await waitFor(() => {
-            expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
-        }, {timeout: 15000});
-
-        const keysAccordion = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(keysAccordion);
-        });
 
         await waitFor(() => {
             expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -397,15 +324,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('button', {name: /add new key/i})).toBeInTheDocument();
-        });
 
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
@@ -473,11 +391,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -509,11 +422,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
@@ -573,11 +481,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
@@ -640,11 +543,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         });
@@ -676,11 +574,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -709,11 +602,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
@@ -760,11 +648,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -808,11 +691,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         });
@@ -825,10 +703,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -842,7 +716,7 @@ describe('KeysSection Component', () => {
         await act(async () => {
             await user.click(createButton);
         });
-        expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
+        expect(openSnackbar).not.toHaveBeenCalled();
     });
 
     test('prevents key creation with name but without file', async () => {
@@ -852,10 +726,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -873,7 +743,7 @@ describe('KeysSection Component', () => {
         await act(async () => {
             await user.click(createButton);
         });
-        expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
+        expect(openSnackbar).not.toHaveBeenCalled();
     });
 
     test('prevents key update without name and file', async () => {
@@ -888,6 +758,12 @@ describe('KeysSection Component', () => {
                     }),
                 });
             }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    blob: () => Promise.resolve(makeMockBlob(encodeText('dummy content'))),
+                });
+            }
             return Promise.resolve({ok: true, json: () => Promise.resolve({})});
         });
         render(
@@ -896,10 +772,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -914,7 +786,7 @@ describe('KeysSection Component', () => {
         await act(async () => {
             await user.click(updateButton);
         });
-        expect(openSnackbar).not.toHaveBeenCalledWith('Key name and file are required.', 'error');
+        expect(openSnackbar).not.toHaveBeenCalled();
     });
 
     test('handles sec object type', async () => {
@@ -937,10 +809,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         await waitFor(() => {
             expect(screen.getByText('secret1')).toBeInTheDocument();
         });
@@ -966,10 +834,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -991,10 +855,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1030,10 +890,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1045,25 +901,6 @@ describe('KeysSection Component', () => {
         });
         await waitFor(() => {
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        });
-    });
-
-    test('handles accordion collapse', async () => {
-        render(
-            <KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>
-        );
-        await waitFor(() => {
-            expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
-        }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-        await waitFor(() => {
-            expect(screen.getByText('key1')).toBeInTheDocument();
-        });
-        await act(async () => {
-            await user.click(accordionSummary);
         });
     });
 
@@ -1086,10 +923,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const keysAccordion = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(keysAccordion);
-        });
         await waitFor(() => {
             expect(screen.getByText(/Failed to fetch keys: 500/i)).toBeInTheDocument();
         });
@@ -1118,10 +951,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -1162,10 +991,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -1202,10 +1027,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1247,10 +1068,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1296,10 +1113,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1346,10 +1159,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1389,10 +1198,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         });
@@ -1417,10 +1222,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(2\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1480,10 +1281,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1535,10 +1332,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1568,10 +1361,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(0\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
             await user.click(addButton);
@@ -1603,10 +1392,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((content) => /Object Keys \(1\)/i.test(content))).toBeInTheDocument();
         }, {timeout: 15000});
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1634,11 +1419,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
@@ -1696,11 +1476,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const viewButton = await screen.findByRole('button', {name: /View key ctrlkey/i});
         await act(async () => {
             await user.click(viewButton);
@@ -1728,17 +1503,10 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((c) => /Object Keys \(2\)/i.test(c))).toBeInTheDocument();
         }, {timeout: 15000});
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Name')).toBeInTheDocument();
-            expect(screen.getByText('Node')).toBeInTheDocument();
-            expect(screen.getByText('Size')).toBeInTheDocument();
-            expect(screen.getByText('Actions')).toBeInTheDocument();
-        });
+        expect(screen.getByText('Name')).toBeInTheDocument();
+        expect(screen.getByText('Node')).toBeInTheDocument();
+        expect(screen.getByText('Size')).toBeInTheDocument();
+        expect(screen.getByText('Actions')).toBeInTheDocument();
     });
 
     test('create key with text mode does not require file validation', async () => {
@@ -1757,11 +1525,6 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
         }, {timeout: 15000});
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
 
         const addButton = screen.getByRole('button', {name: /add new key/i});
         await act(async () => {
@@ -1809,11 +1572,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
         });
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const deleteButton = await screen.findAllByRole('button', {name: /Delete key key1/i});
         await act(async () => {
             await user.click(deleteButton[0]);
@@ -1850,11 +1608,6 @@ describe('KeysSection Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
-        });
-
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
         });
 
         const viewButton = await screen.findByRole('button', {name: /View key key1/i});
@@ -1901,11 +1654,6 @@ describe('KeysSection Component', () => {
             expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
         });
 
-        const accordionSummary = screen.getByRole('button', {name: /Object Keys/i});
-        await act(async () => {
-            await user.click(accordionSummary);
-        });
-
         const editButton = await screen.findAllByRole('button', {name: /Edit key key1/i});
         await act(async () => {
             await user.click(editButton[0]);
@@ -1925,5 +1673,221 @@ describe('KeysSection Component', () => {
         await waitFor(() => {
             expect(openSnackbar).toHaveBeenCalledWith("Key 'key1' updated successfully");
         });
+    });
+
+    test('creates key with empty content mode', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options.method === 'POST') {
+                return Promise.resolve({ok: true});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+        await act(async () => {
+            await user.type(nameInput, 'emptyKey');
+        });
+
+        await selectInputMode(dialog, 'empty');
+
+        const createButton = within(dialog).getByRole('button', {name: /Create/i});
+        expect(createButton).not.toBeDisabled();
+
+        await act(async () => {
+            await user.click(createButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Creating key emptyKey…', 'info');
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'emptyKey' created successfully");
+        });
+    });
+
+    test('shows snackbar when opening update dialog for binary key', async () => {
+        const binaryData = new Uint8Array([0x00, 0x01, 0x02]);
+        const mockBlob = makeMockBlob(binaryData);
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'binaryKey', node: 'node1', size: 3}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key binaryKey/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith(
+                "Key is binary – please use file upload to update.",
+                "info"
+            );
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const radioGroup = within(dialog).getByRole('radiogroup');
+        expect(radioGroup).toHaveAttribute('data-value', 'file');
+    });
+
+    test('handles error when fetching key content for update', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: false, status: 500});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        expect(openSnackbar).toHaveBeenCalledWith('Failed to fetch key content: 500', 'error');
+
+        const fileRadio = within(dialog).getByDisplayValue('file');
+        expect(fileRadio).toBeInTheDocument();
+    });
+
+    test('closes view dialog with Close button', async () => {
+        const textContent = 'sample text';
+        const mockBlob = makeMockBlob(encodeText(textContent));
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: textContent.length}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key key1/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(screen.getByRole('dialog')).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        const closeButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Close/i});
+        await act(async () => {
+            await user.click(closeButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles view key with missing auth token', async () => {
+        mockLocalStorage.getItem.mockReturnValue(null);
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        });
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        mockLocalStorage.getItem.mockReturnValue('mock-token');
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key key1/i});
+
+        mockLocalStorage.getItem.mockReturnValue(null);
+
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 });

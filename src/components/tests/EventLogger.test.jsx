@@ -1169,7 +1169,7 @@ describe('EventLogger Component', () => {
         });
     });
 
-    test('tests formatTimestamp with invalid date', () => {
+    test('tests formatTimestamp with invalid date', async () => {
         eventLogs = [{
             id: '1',
             eventType: 'INVALID_DATE',
@@ -1189,7 +1189,9 @@ describe('EventLogger Component', () => {
             fireEvent.click(eventLoggerButton);
         });
 
-        expect(screen.getByText(/INVALID_DATE/i)).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByText(/INVALID_DATE/i)).toBeInTheDocument();
+        });
     });
 
     test('tests EventTypeChip with search term highlight', async () => {

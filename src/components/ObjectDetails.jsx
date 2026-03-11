@@ -1149,7 +1149,7 @@ const ObjectDetail = () => {
                 </Drawer>
             )}
 
-            {/* <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName} title={`Events - ${decodedObjectName}`} buttonLabel="Object Events"/> */}
+            <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName} title={`Events - ${decodedObjectName}`} buttonLabel="Object Events"/>
         </Box>
     );
 };

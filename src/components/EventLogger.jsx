@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState, useDeferredValue} from "react";
 import {
     Box,
     Button,
@@ -15,14 +15,14 @@ import {
     TextField,
     Tooltip,
     Typography,
-    useTheme
+    useTheme,
+    CircularProgress
 } from "@mui/material";
 import {
     Sensors,
     Close,
     DeleteOutline,
     ExpandMore,
-    KeyboardArrowUp,
     Pause,
     PlayArrow,
     Settings
@@ -51,7 +51,7 @@ const ALL_EVENT_TYPES = [
     'InstanceConfigUpdated'
 ];
 
-const DEBOUNCE_DELAY = process.env.NODE_ENV === 'test' ? 0 : 300;
+const DEBOUNCE_DELAY = 300;
 
 const hashCode = (str) => {
     let hash = 0;
@@ -62,29 +62,6 @@ const hashCode = (str) => {
     }
     return Math.abs(hash).toString(36);
 };
-
-const EventTypeItem = ({
-                           eventType,
-                           checked,
-                           onChange,
-                           eventCount
-                       }) => (
-    <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
-        <Checkbox
-            checked={checked}
-            onChange={onChange}
-            size="small"
-        />
-        <Box sx={{flex: 1}}>
-            <Typography variant="body2">
-                {eventType}
-            </Typography>
-            <Typography variant="caption">
-                {eventCount} events received
-            </Typography>
-        </Box>
-    </Box>
-);
 
 const SubscriptionDialog = ({
                                 open,
@@ -120,6 +97,16 @@ const SubscriptionDialog = ({
         setTempSubscribedEventTypes([]);
     };
 
+    const EventTypeItem = ({eventType, checked, onChange, eventCount}) => (
+        <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
+            <Checkbox checked={checked} onChange={onChange} size="small"/>
+            <Box sx={{flex: 1}}>
+                <Typography variant="body2">{eventType}</Typography>
+                <Typography variant="caption">{eventCount} events received</Typography>
+            </Box>
+        </Box>
+    );
+
     const renderEventTypeList = (eventTypes, isPageEvents = false) => (
         <Box sx={{mb: 3}}>
             <Typography
@@ -129,7 +116,6 @@ const SubscriptionDialog = ({
             >
                 {isPageEvents ? 'Page Events' : 'Additional Events'} ({eventTypes.length})
             </Typography>
-
             {eventTypes.sort().map(eventType => (
                 <EventTypeItem
                     key={String(eventType)}
@@ -158,9 +144,7 @@ const SubscriptionDialog = ({
                     width: 500,
                     maxWidth: '90vw',
                     p: 2,
-                    backgroundColor: isDarkMode
-                        ? theme.palette.background.paper
-                        : '#ffffff'
+                    backgroundColor: isDarkMode ? theme.palette.background.paper : '#ffffff'
                 }
             }}
         >
@@ -175,24 +159,14 @@ const SubscriptionDialog = ({
 
             <Divider sx={{mb: 2}}/>
 
-            <Typography
-                variant="body2"
-                color={isDarkMode ? '#cccccc' : 'text.secondary'}
-                sx={{mb: 2}}
-            >
+            <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mb: 2}}>
                 Select which event types you want to SUBSCRIBE to (future events only):
             </Typography>
 
-            {/* ACTION BUTTONS */}
             <Box sx={{mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={handleSubscribeAll}
-                >
+                <Button size="small" variant="outlined" onClick={handleSubscribeAll}>
                     Subscribe to All
                 </Button>
-
                 <Button
                     size="small"
                     variant="outlined"
@@ -201,23 +175,14 @@ const SubscriptionDialog = ({
                 >
                     Subscribe to Page Events
                 </Button>
-
-                <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={handleUnsubscribeAll}
-                >
+                <Button size="small" variant="outlined" color="error" onClick={handleUnsubscribeAll}>
                     Unsubscribe from All
                 </Button>
             </Box>
 
-            {/* EVENT LIST */}
             <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
                 {filteredEventTypes.length > 0 && renderEventTypeList(filteredEventTypes, true)}
-
                 {otherEventTypes.length > 0 && renderEventTypeList(otherEventTypes, false)}
-
                 {tempSubscribedEventTypes.length === 0 && (
                     <Typography sx={{textAlign: 'center', py: 4}}>
                         No event types selected. You won't receive any events.
@@ -225,7 +190,6 @@ const SubscriptionDialog = ({
                 )}
             </Box>
 
-            {/* APPLY */}
             <Box sx={{mt: 'auto', pt: 2}}>
                 <Button
                     fullWidth
@@ -243,125 +207,35 @@ const SubscriptionDialog = ({
     );
 };
 
-const EventLogger = ({
-                         eventTypes = [],
-                         objectName = null,
-                         title = "Event Logger",
-                         buttonLabel = "Events"
-                     }) => {
-    const theme = useTheme();
-    const isDarkMode = theme.palette.mode === 'dark';
-
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-    const [eventTypeFilter, setEventTypeFilter] = useState([]);
-    const [autoScroll, setAutoScroll] = useState(true);
-    const [drawerHeight, setDrawerHeight] = useState(320);
-    const [expandedLogIds, setExpandedLogIds] = useState([]);
-    const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
-    const [isResizing, setIsResizing] = useState(false);
-
-    const filteredEventTypes = useMemo(() => {
-        return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
-    }, [eventTypes]);
-
-    const pageKey = useMemo(() => {
-        const baseKey = objectName || 'global';
-        const eventTypesKey = filteredEventTypes.sort().join(',');
-        const hash = hashCode(eventTypesKey);
-        return `eventLogger_${baseKey}_${hash}`;
-    }, [objectName, filteredEventTypes]);
-
-    const [manualSubscriptions, setManualSubscriptions] = useState([]);
-
-    const subscribedEventTypes = useMemo(() => {
-        const validSubscriptions = manualSubscriptions.filter(type =>
-            ALL_EVENT_TYPES.includes(type)
-        );
-        return [...new Set(validSubscriptions)];
-    }, [manualSubscriptions]);
-
-    const logsEndRef = useRef(null);
-    const logsContainerRef = useRef(null);
-    const resizeTimeoutRef = useRef(null);
-    const searchDebounceRef = useRef(null);
-    const startYRef = useRef(0);
-    const startHeightRef = useRef(0);
-    const isDraggingRef = useRef(false);
-
-    const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
-
-    useEffect(() => {
-        setManualSubscriptions([...filteredEventTypes]);
-    }, []);
-
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-
-        if (!drawerOpen) {
-            closeLoggerEventSource();
-            return;
+const SimpleJSONView = ({data}) => {
+    const jsonString = useMemo(() => {
+        try {
+            return JSON.stringify(data, null, 0);
+        } catch {
+            return String(data);
         }
+    }, [data]);
+    return (
+        <pre style={{
+            fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+            fontSize: "0.80rem",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            margin: 0,
+            lineHeight: 1.2,
+            opacity: 0.9,
+            maxHeight: 160,
+            overflow: "hidden",
+            backgroundColor: 'transparent',
+            color: 'inherit'
+        }}>
+            {jsonString}
+        </pre>
+    );
+};
 
-        if (token && drawerOpen) {
-            const eventsToSubscribe = [...subscribedEventTypes];
-            const connectionEvents = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
-            eventsToSubscribe.push(...connectionEvents);
-
-            const uniqueEvents = [...new Set(eventsToSubscribe)];
-
-            if (uniqueEvents.length > 0) {
-                logger.log("Starting logger reception (drawer opened):", {
-                    pageKey,
-                    subscribedEventTypes,
-                    allEvents: uniqueEvents,
-                    objectName
-                });
-
-                try {
-                    startLoggerReception(token, uniqueEvents, objectName);
-                } catch (error) {
-                    logger.warn("Failed to start logger reception:", error);
-                }
-            } else {
-                logger.log("No events to subscribe to for this page");
-                closeLoggerEventSource();
-            }
-        }
-
-        return () => {
-            if (drawerOpen) {
-                logger.log("Closing logger reception (drawer closing)");
-                closeLoggerEventSource();
-            }
-        };
-    }, [drawerOpen, subscribedEventTypes, objectName, eventTypes, pageKey]);
-
-    useEffect(() => {
-        if (searchDebounceRef.current) {
-            clearTimeout(searchDebounceRef.current);
-        }
-        searchDebounceRef.current = setTimeout(() => {
-            setDebouncedSearchTerm(searchTerm);
-        }, DEBOUNCE_DELAY);
-
-        return () => {
-            if (searchDebounceRef.current) {
-                clearTimeout(searchDebounceRef.current);
-                searchDebounceRef.current = null;
-            }
-        };
-    }, [searchTerm]);
-
-    const filterData = useCallback((data) => {
-        if (!data || typeof data !== 'object') return data;
-        const filtered = {...data};
-        delete filtered._rawEvent;
-        return filtered;
-    }, []);
-
-    const escapeHtml = useCallback((text) => {
+const FullJSONView = ({data, isDarkMode, theme}) => {
+    const escapeHtml = (text) => {
         if (typeof text !== 'string') return text;
         return text
             .replace(/&/g, '&amp;')
@@ -369,32 +243,18 @@ const EventLogger = ({
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
-    }, []);
+    };
 
-    const toggleExpand = useCallback((id) => {
-        setExpandedLogIds(prev =>
-            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-        );
-    }, []);
-
-    const syntaxHighlightJSON = (json, dense = false, searchTerm = '') => {
+    const syntaxHighlightJSON = (json) => {
         if (typeof json !== 'string') {
             try {
-                json = JSON.stringify(json, null, dense ? 0 : 2);
+                json = JSON.stringify(json, null, 2);
             } catch {
                 json = String(json);
             }
         }
-
         const escapedJson = escapeHtml(json);
-        const highlightedJson = searchTerm ?
-            escapedJson.replace(
-                new RegExp(`(${escapeHtml(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                '<span class="search-highlight">$1</span>'
-            ) :
-            escapedJson;
-
-        return highlightedJson.replace(
+        return escapedJson.replace(
             /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
             (match) => {
                 let cls = 'json-number';
@@ -409,79 +269,234 @@ const EventLogger = ({
                 } else if (/null/.test(match)) {
                     cls = 'json-null';
                 }
-                if (match.includes('search-highlight')) {
-                    return match;
-                }
                 return `<span class="${cls}">${match}</span>`;
             }
         );
     };
 
-    const JSONView = ({data, dense = false, searchTerm = ''}) => {
-        const filteredData = useMemo(() => filterData(data), [data]);
-        const jsonString = useMemo(() => {
-            try {
-                return dense ? JSON.stringify(filteredData) : JSON.stringify(filteredData, null, 2);
-            } catch {
-                return String(filteredData);
-            }
-        }, [filteredData, dense]);
-        const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString, dense, searchTerm), [jsonString, dense, searchTerm]);
+    const jsonString = useMemo(() => {
+        try {
+            return JSON.stringify(data, null, 2);
+        } catch {
+            return String(data);
+        }
+    }, [data]);
+    const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString), [jsonString]);
+
+    return (
+        <pre
+            style={{
+                fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                fontSize: "0.78rem",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                margin: 0,
+                lineHeight: 1.4,
+                backgroundColor: 'transparent',
+                color: isDarkMode ? '#ffffff' : theme.palette.text.primary
+            }}
+            dangerouslySetInnerHTML={{__html: coloredJSON}}
+        />
+    );
+};
+
+const LogRow = React.memo(({
+                               log,
+                               isOpen,
+                               onToggle,
+                               isDarkMode,
+                               theme,
+                               searchTerm
+                           }) => {
+    const formatTimestamp = (ts) => {
+        try {
+            return new Date(ts).toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                fractionalSecondDigits: 3
+            });
+        } catch {
+            return "INVALID_DATE";
+        }
+    };
+
+    const getEventColor = (eventType = "") => {
+        if (eventType.includes("ERROR")) return "error";
+        if (eventType.includes("UPDATED")) return "primary";
+        if (eventType.includes("DELETED")) return "warning";
+        if (eventType.includes("CONNECTION")) return "info";
+        return "default";
+    };
+
+    const EventTypeChip = ({eventType}) => {
+        const color = getEventColor(eventType);
         return (
-            <pre
-                style={{
-                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                    fontSize: dense ? "0.80rem" : "0.78rem",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    margin: 0,
-                    lineHeight: dense ? 1.2 : 1.4,
-                    opacity: dense ? 0.9 : 1,
-                    maxHeight: dense ? 160 : 'none',
-                    overflow: dense ? 'hidden' : 'visible',
-                    backgroundColor: 'transparent',
-                    color: isDarkMode ? '#ffffff' : theme.palette.text.primary
+            <Chip
+                label={eventType}
+                size="small"
+                color={color === "default" ? "default" : color}
+                sx={{
+                    fontWeight: '600',
+                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                    color: isDarkMode ? '#ffffff' : undefined,
+                    ...(searchTerm && eventType.toLowerCase().includes(searchTerm.toLowerCase()) && {
+                        borderWidth: 2,
+                        borderStyle: 'solid',
+                        borderColor: '#ffeb3b'
+                    })
                 }}
-                dangerouslySetInnerHTML={{__html: coloredJSON}}
             />
         );
     };
 
-    const jsonStyles = {
-        '& .json-key': {
-            color: isDarkMode ? '#90caf9' : theme.palette.primary.main,
-            fontWeight: '600'
-        },
-        '& .json-string': {
-            color: isDarkMode ? '#a5d6a7' : theme.palette.success.dark
-        },
-        '& .json-number': {
-            color: isDarkMode ? '#80cbc4' : theme.palette.info.main,
-            fontWeight: '500'
-        },
-        '& .json-boolean': {
-            color: isDarkMode ? '#ffcc80' : theme.palette.warning.dark,
-            fontWeight: '600'
-        },
-        '& .json-null': {
-            color: isDarkMode ? theme.palette.grey[400] : theme.palette.grey[500],
-            fontWeight: '600'
+    return (
+        <Box
+            onClick={onToggle}
+            sx={{
+                cursor: "pointer",
+                borderBottom: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
+                mb: 1,
+                borderRadius: 1,
+                "&:hover": {
+                    bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.palette.action.hover
+                },
+                bgcolor: isOpen
+                    ? isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.palette.action.selected
+                    : "transparent",
+                transition: "background-color 0.2s ease",
+                touchAction: 'manipulation',
+                p: 1
+            }}
+        >
+            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                <EventTypeChip eventType={log.eventType}/>
+                <Typography variant="caption" color={isDarkMode ? '#cccccc' : 'textSecondary'}>
+                    {formatTimestamp(log.timestamp)}
+                </Typography>
+                <ExpandMore sx={{
+                    marginLeft: "auto",
+                    transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "0.2s",
+                    color: isDarkMode ? '#ffffff' : theme.palette.text.secondary
+                }}/>
+            </Box>
+            {!isOpen && (
+                <Box sx={{
+                    maxHeight: 160,
+                    overflow: "hidden",
+                    backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
+                    borderRadius: 1,
+                    mt: 1,
+                    p: 1
+                }}>
+                    <SimpleJSONView data={log.data}/>
+                </Box>
+            )}
+            {isOpen && (
+                <Box sx={{
+                    borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
+                    backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
+                    borderRadius: 1,
+                    mt: 1,
+                    p: 1
+                }}>
+                    <FullJSONView data={log.data} isDarkMode={isDarkMode} theme={theme}/>
+                </Box>
+            )}
+        </Box>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.log === nextProps.log &&
+        prevProps.isOpen === nextProps.isOpen &&
+        prevProps.searchTerm === nextProps.searchTerm &&
+        prevProps.isDarkMode === nextProps.isDarkMode;
+});
+
+const EventDrawerContent = ({
+                                eventTypes,
+                                objectName,
+                                isDarkMode,
+                                theme,
+                                onClose,
+                                title
+                            }) => {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [eventTypeFilter, setEventTypeFilter] = useState([]);
+    const [expandedLogIds, setExpandedLogIds] = useState([]);
+    const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
+    const [manualSubscriptions, setManualSubscriptions] = useState([]);
+    const [visibleCount, setVisibleCount] = useState(20);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const logsContainerRef = useRef(null);
+    const searchDebounceRef = useRef(null);
+
+    const deferredSearchTerm = useDeferredValue(searchTerm);
+    const deferredEventTypeFilter = useDeferredValue(eventTypeFilter);
+
+    const filteredEventTypes = useMemo(() => {
+        return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
+    }, [eventTypes]);
+
+    const pageKey = useMemo(() => {
+        const baseKey = objectName || 'global';
+        const eventTypesKey = filteredEventTypes.sort().join(',');
+        const hash = hashCode(eventTypesKey);
+        return `eventLogger_${baseKey}_${hash}`;
+    }, [objectName, filteredEventTypes]);
+
+    useEffect(() => {
+        setManualSubscriptions([...filteredEventTypes]);
+    }, [filteredEventTypes]);
+
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            const eventsToSubscribe = [...manualSubscriptions];
+            const connectionEvents = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
+            eventsToSubscribe.push(...connectionEvents);
+            const uniqueEvents = [...new Set(eventsToSubscribe)];
+
+            if (uniqueEvents.length > 0) {
+                logger.log("Starting logger reception (drawer opened):", {
+                    pageKey,
+                    manualSubscriptions,
+                    allEvents: uniqueEvents,
+                    objectName
+                });
+                try {
+                    startLoggerReception(token, uniqueEvents, objectName);
+                } catch (error) {
+                    logger.warn("Failed to start logger reception:", error);
+                }
+            } else {
+                logger.log("No events to subscribe to for this page");
+                closeLoggerEventSource();
+            }
         }
-    };
+
+        return () => {
+            logger.log("Closing logger reception (drawer closing)");
+            closeLoggerEventSource();
+        };
+    }, [manualSubscriptions, objectName, eventTypes, pageKey]);
+
+    const {eventLogs = [], isPaused, setPaused, clearLogs} = useEventLogStore();
 
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
 
-        if (subscribedEventTypes.length === 0 && filteredEventTypes.length > 0) {
+        if (manualSubscriptions.length === 0 && filteredEventTypes.length > 0) {
             filtered = filtered.filter(log => filteredEventTypes.includes(log.eventType));
-        } else if (subscribedEventTypes.length > 0) {
-            filtered = filtered.filter(log => subscribedEventTypes.includes(log.eventType));
+        } else if (manualSubscriptions.length > 0) {
+            filtered = filtered.filter(log => manualSubscriptions.includes(log.eventType));
         }
 
         const connectionEventsFromPage = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
         if (connectionEventsFromPage.length > 0) {
             filtered = filtered.filter(log =>
-                subscribedEventTypes.includes(log.eventType) ||
+                manualSubscriptions.includes(log.eventType) ||
                 connectionEventsFromPage.includes(log.eventType)
             );
         }
@@ -509,7 +524,7 @@ const EventLogger = ({
         }
 
         return filtered;
-    }, [eventLogs, subscribedEventTypes, objectName, eventTypes, filteredEventTypes]);
+    }, [eventLogs, manualSubscriptions, objectName, eventTypes, filteredEventTypes]);
 
     const availableEventTypes = useMemo(() => {
         const types = new Set();
@@ -527,15 +542,16 @@ const EventLogger = ({
 
     const filteredLogs = useMemo(() => {
         let result = [...baseFilteredLogs];
-        if (eventTypeFilter.length > 0) result = result.filter(log => eventTypeFilter.includes(log.eventType));
-        if (debouncedSearchTerm.trim()) {
-            const term = debouncedSearchTerm.toLowerCase().trim();
+        if (deferredEventTypeFilter.length > 0) {
+            result = result.filter(log => deferredEventTypeFilter.includes(log.eventType));
+        }
+        if (deferredSearchTerm.trim()) {
+            const term = deferredSearchTerm.toLowerCase().trim();
             result = result.filter(log => {
                 const typeMatch = String(log.eventType || "").toLowerCase().includes(term);
                 let dataMatch = false;
                 try {
-                    const filteredData = filterData(log.data || {});
-                    const dataString = JSON.stringify(filteredData).toLowerCase();
+                    const dataString = JSON.stringify(log.data || {}).toLowerCase();
                     dataMatch = dataString.includes(term);
                 } catch (err) {
                     logger.warn("Error serializing log data for search:", err);
@@ -544,13 +560,70 @@ const EventLogger = ({
             });
         }
         return result;
-    }, [baseFilteredLogs, eventTypeFilter, debouncedSearchTerm]);
+    }, [baseFilteredLogs, deferredEventTypeFilter, deferredSearchTerm]);
+
+    const visibleLogs = useMemo(() => {
+        return filteredLogs.slice(0, visibleCount);
+    }, [filteredLogs, visibleCount]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setInitialLoading(false), 200);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const handleScroll = useCallback(() => {
+        if (loadingMore || initialLoading) return;
+        const container = logsContainerRef.current;
+        if (!container) return;
+
+        const {scrollTop, scrollHeight, clientHeight} = container;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+        if (scrollPercentage > 0.8 && visibleCount < filteredLogs.length) {
+            setLoadingMore(true);
+            setTimeout(() => {
+                setVisibleCount(prev => Math.min(prev + 20, filteredLogs.length));
+                setLoadingMore(false);
+            }, 100);
+        }
+    }, [loadingMore, visibleCount, filteredLogs.length, initialLoading]);
+
+    useEffect(() => {
+        const container = logsContainerRef.current;
+        if (container) {
+            container.addEventListener('scroll', handleScroll);
+            return () => container.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll]);
+
+    useEffect(() => {
+        setVisibleCount(20);
+    }, [deferredSearchTerm, deferredEventTypeFilter, manualSubscriptions]);
+
+    const handleClear = useCallback(() => {
+        clearLogs();
+        setSearchTerm("");
+        setEventTypeFilter([]);
+        setExpandedLogIds([]);
+        setVisibleCount(20);
+    }, [clearLogs]);
+
+    const handleClearFilters = useCallback(() => {
+        setSearchTerm("");
+        setEventTypeFilter([]);
+        setVisibleCount(20);
+    }, []);
+
+    const toggleExpand = useCallback((id) => {
+        setExpandedLogIds(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    }, []);
 
     const SubscriptionInfo = () => {
         const eventTypeChips = useMemo(() => {
-            if (subscribedEventTypes.length === 0) return null;
-
-            return subscribedEventTypes.sort().map((type) => (
+            if (manualSubscriptions.length === 0) return null;
+            return manualSubscriptions.sort().map((type) => (
                 <Chip
                     key={String(type)}
                     label={`${type} (${eventStats[type] || 0})`}
@@ -572,13 +645,13 @@ const EventLogger = ({
                     }}
                 />
             ));
-        }, [subscribedEventTypes, eventStats, filteredEventTypes, isDarkMode, setManualSubscriptions]);
+        }, [manualSubscriptions, eventStats, filteredEventTypes, isDarkMode]);
 
         return (
             <Box sx={{px: 1, py: 0.5}}>
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
                     <Typography variant="body2" color={isDarkMode ? '#ffffff' : 'inherit'}>
-                        Subscribed to: {subscribedEventTypes.length} event type(s)
+                        Subscribed to: {manualSubscriptions.length} event type(s)
                     </Typography>
                     {objectName && (
                         <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'}>
@@ -593,8 +666,7 @@ const EventLogger = ({
                         <Settings/>
                     </IconButton>
                 </Box>
-
-                {subscribedEventTypes.length > 0 && (
+                {manualSubscriptions.length > 0 && (
                     <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
                         {eventTypeChips}
                     </Box>
@@ -603,27 +675,265 @@ const EventLogger = ({
         );
     };
 
-    useEffect(() => {
-        logger.log("Subscriptions updated:", {
-            subscribedEventTypes,
-            filteredEventTypes,
-            pageKey
-        });
-    }, [subscribedEventTypes, filteredEventTypes, pageKey]);
+    return (
+        <>
+            <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                    <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
+                        {title}
+                    </Typography>
+                    <Chip
+                        label={`${visibleLogs.length}/${filteredLogs.length} events`}
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined,
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                        }}
+                    />
+                    {isPaused && (
+                        <Chip
+                            label="PAUSED"
+                            color="warning"
+                            size="small"
+                            sx={{
+                                backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : undefined,
+                                color: isDarkMode ? '#ff9800' : undefined
+                            }}
+                        />
+                    )}
+                    {(eventTypeFilter.length > 0 || searchTerm) && (
+                        <Chip
+                            label="Filtered"
+                            color="info"
+                            size="small"
+                            onDelete={handleClearFilters}
+                            sx={{
+                                backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : undefined,
+                                color: isDarkMode ? '#2196f3' : undefined
+                            }}
+                        />
+                    )}
+                </Box>
 
-    useEffect(() => {
-        if (autoScroll && logsEndRef.current && filteredLogs.length > 0 && drawerOpen) {
-            const scrollToBottom = () => logsEndRef.current?.scrollIntoView({behavior: "smooth", block: "end"});
-            requestAnimationFrame(() => setTimeout(scrollToBottom, 100));
-        }
-    }, [filteredLogs, autoScroll, drawerOpen]);
+                <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
+                    <Tooltip title={isPaused ? "Resume" : "Pause"}>
+                        <IconButton
+                            onClick={() => setPaused(!isPaused)}
+                            color={isPaused ? "warning" : "primary"}
+                            size="small"
+                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                        >
+                            {isPaused ? <PlayArrow/> : <Pause/>}
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Clear logs">
+                        <IconButton
+                            onClick={handleClear}
+                            size="small"
+                            disabled={eventLogs.length === 0}
+                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                        >
+                            <DeleteOutline/>
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Close">
+                        <IconButton
+                            onClick={onClose}
+                            size="small"
+                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                        >
+                            <Close/>
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+            </Box>
 
-    const handleScroll = useCallback(() => {
-        if (!logsContainerRef.current) return;
-        const {scrollTop, scrollHeight, clientHeight} = logsContainerRef.current;
-        const atBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
-        if (atBottom !== autoScroll) setAutoScroll(atBottom);
-    }, [autoScroll]);
+            <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
+
+            <SubscriptionInfo/>
+
+            <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>
+                <TextField
+                    size="small"
+                    placeholder="Search events..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    sx={{
+                        minWidth: 240,
+                        flexGrow: 1,
+                        '& .MuiInputBase-root': {
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                            color: isDarkMode ? '#ffffff' : undefined
+                        },
+                        '& .MuiInputLabel-root': {
+                            color: isDarkMode ? '#cccccc' : undefined
+                        },
+                        '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                        }
+                    }}
+                    slotProps={{
+                        input: {
+                            endAdornment: searchTerm && (
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setSearchTerm("")}
+                                    sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                                >
+                                    <Close fontSize="small"/>
+                                </IconButton>
+                            )
+                        }
+                    }}
+                />
+                {availableEventTypes.length > 0 && (
+                    <FormControl size="small" sx={{minWidth: 240}}>
+                        <InputLabel sx={{color: isDarkMode ? '#cccccc' : undefined}}>
+                            Event Types
+                        </InputLabel>
+                        <Select
+                            multiple
+                            value={eventTypeFilter}
+                            onChange={(e) => setEventTypeFilter(e.target.value)}
+                            label="Event Types"
+                            renderValue={(selected) => (
+                                <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>
+                                    {selected.length === 0 ? "All events" : `${selected.length} selected`}
+                                </span>
+                            )}
+                            sx={{
+                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                color: isDarkMode ? '#ffffff' : undefined,
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                },
+                                '& .MuiSvgIcon-root': {
+                                    color: isDarkMode ? '#ffffff' : undefined
+                                }
+                            }}
+                        >
+                            {availableEventTypes.map((et) => (
+                                <MenuItem key={String(et)} value={String(et)}>
+                                    <Checkbox
+                                        checked={eventTypeFilter.includes(et)}
+                                        size="small"
+                                        sx={{
+                                            color: isDarkMode ? '#ffffff' : undefined,
+                                            '&.Mui-checked': {
+                                                color: isDarkMode ? '#90caf9' : undefined,
+                                            }
+                                        }}
+                                    />
+                                    <ListItemText
+                                        primary={
+                                            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                                                <Chip
+                                                    label={eventStats[et] || 0}
+                                                    size="small"
+                                                    variant="outlined"
+                                                    sx={{
+                                                        height: 20,
+                                                        minWidth: 20,
+                                                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
+                                                        color: isDarkMode ? '#ffffff' : undefined,
+                                                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+                                                    }}
+                                                />
+                                                <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
+                                            </Box>
+                                        }
+                                    />
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                )}
+            </Box>
+
+            <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
+
+            <Box
+                ref={logsContainerRef}
+                onScroll={handleScroll}
+                sx={{
+                    flex: 1,
+                    overflow: "auto",
+                    backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.grey[50],
+                    padding: 1,
+                    WebkitOverflowScrolling: 'touch',
+                    position: 'relative'
+                }}
+            >
+                {initialLoading ? (
+                    <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%'}}>
+                        <CircularProgress size={40}/>
+                    </Box>
+                ) : visibleLogs.length === 0 ? (
+                    <Box sx={{p: 4, textAlign: "center"}}>
+                        <Typography color={isDarkMode ? '#cccccc' : 'textSecondary'}>
+                            {eventLogs.length === 0
+                                ? "No events logged"
+                                : "No events match current filters"}
+                        </Typography>
+                    </Box>
+                ) : (
+                    <>
+                        {visibleLogs.map((log) => {
+                            const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
+                            const isOpen = expandedLogIds.includes(safeId);
+                            return (
+                                <LogRow
+                                    key={safeId}
+                                    log={log}
+                                    isOpen={isOpen}
+                                    onToggle={() => toggleExpand(safeId)}
+                                    isDarkMode={isDarkMode}
+                                    theme={theme}
+                                    searchTerm={deferredSearchTerm}
+                                />
+                            );
+                        })}
+                        {loadingMore && (
+                            <Box sx={{display: 'flex', justifyContent: 'center', py: 1}}>
+                                <CircularProgress size={24}/>
+                            </Box>
+                        )}
+                    </>
+                )}
+            </Box>
+
+            <SubscriptionDialog
+                open={subscriptionDialogOpen}
+                onClose={() => setSubscriptionDialogOpen(false)}
+                isDarkMode={isDarkMode}
+                theme={theme}
+                subscribedEventTypes={manualSubscriptions}
+                setManualSubscriptions={setManualSubscriptions}
+                filteredEventTypes={filteredEventTypes}
+                eventStats={eventStats}
+                clearLogs={clearLogs}
+            />
+        </>
+    );
+};
+
+const EventLogger = React.memo(({
+                                    eventTypes = [],
+                                    objectName = null,
+                                    title = "Event Logger",
+                                    buttonLabel = "Events"
+                                }) => {
+    const theme = useTheme();
+    const isDarkMode = theme.palette.mode === 'dark';
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [drawerHeight, setDrawerHeight] = useState(320);
+    const [isResizing, setIsResizing] = useState(false);
+    const startYRef = useRef(0);
+    const startHeightRef = useRef(0);
+    const isDraggingRef = useRef(false);
+    const resizeTimeoutRef = useRef(null);
 
     const handleResizeStart = useCallback((e) => {
         e.preventDefault();
@@ -695,48 +1005,8 @@ const EventLogger = ({
                 clearTimeout(resizeTimeoutRef.current);
                 resizeTimeoutRef.current = null;
             }
-
-            if (searchDebounceRef.current) {
-                clearTimeout(searchDebounceRef.current);
-                searchDebounceRef.current = null;
-            }
         };
     }, [isResizing, handleResizeMove, handleResizeEnd]);
-
-    const formatTimestamp = (ts) => {
-        try {
-            return new Date(ts).toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                fractionalSecondDigits: 3
-            });
-        } catch {
-            return String(ts);
-        }
-    };
-
-    const getEventColor = (eventType = "") => {
-        if (eventType.includes("ERROR")) return "error";
-        if (eventType.includes("UPDATED")) return "primary";
-        if (eventType.includes("DELETED")) return "warning";
-        if (eventType.includes("CONNECTION")) return "info";
-        return "default";
-    };
-
-    const handleClear = useCallback(() => {
-        clearLogs();
-        setSearchTerm("");
-        setDebouncedSearchTerm("");
-        setEventTypeFilter([]);
-        setExpandedLogIds([]);
-    }, [clearLogs]);
-
-    const handleClearFilters = useCallback(() => {
-        setSearchTerm("");
-        setDebouncedSearchTerm("");
-        setEventTypeFilter([]);
-    }, []);
 
     const paperStyle = {
         height: drawerHeight,
@@ -747,66 +1017,6 @@ const EventLogger = ({
         backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper,
         touchAction: 'none'
     };
-
-    const EventTypeChip = ({eventType, searchTerm}) => {
-        const color = getEventColor(eventType);
-        return (
-            <Chip
-                label={eventType}
-                size="small"
-                color={color === "default" ? "default" : color}
-                sx={{
-                    fontWeight: '600',
-                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                    color: isDarkMode ? '#ffffff' : undefined,
-                    ...(searchTerm && eventType.toLowerCase().includes(searchTerm.toLowerCase()) && {
-                        borderWidth: 2,
-                        borderStyle: 'solid',
-                        borderColor: '#ffeb3b'
-                    })
-                }}
-            />
-        );
-    };
-
-    const renderMenuItems = useMemo(() => {
-        if (availableEventTypes.length === 0) return null;
-
-        return availableEventTypes.map((et) => (
-            <MenuItem key={String(et)} value={String(et)}>
-                <Checkbox
-                    checked={eventTypeFilter.includes(et)}
-                    size="small"
-                    sx={{
-                        color: isDarkMode ? '#ffffff' : undefined,
-                        '&.Mui-checked': {
-                            color: isDarkMode ? '#90caf9' : undefined,
-                        }
-                    }}
-                />
-                <ListItemText
-                    primary={
-                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            <Chip
-                                label={eventStats[et] || 0}
-                                size="small"
-                                variant="outlined"
-                                sx={{
-                                    height: 20,
-                                    minWidth: 20,
-                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                    color: isDarkMode ? '#ffffff' : undefined,
-                                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                }}
-                            />
-                            <span
-                                style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
-                        </Box>
-                    }
-                />
-            </MenuItem>
-        ));
-    }, [availableEventTypes, eventTypeFilter, eventStats, isDarkMode]);
 
     return (
         <>
@@ -885,288 +1095,17 @@ const EventLogger = ({
                     }}/>
                 </div>
 
-                <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
-                    <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                        <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
-                            {title}
-                        </Typography>
-                        <Chip
-                            label={`${filteredLogs.length}/${baseFilteredLogs.length} events`}
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                color: isDarkMode ? '#ffffff' : undefined,
-                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                            }}
-                        />
-                        {isPaused && (
-                            <Chip
-                                label="PAUSED"
-                                color="warning"
-                                size="small"
-                                sx={{
-                                    backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : undefined,
-                                    color: isDarkMode ? '#ff9800' : undefined
-                                }}
-                            />
-                        )}
-                        {(eventTypeFilter.length > 0 || debouncedSearchTerm) &&
-                            <Chip
-                                label="Filtered"
-                                color="info"
-                                size="small"
-                                onDelete={handleClearFilters}
-                                sx={{
-                                    backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : undefined,
-                                    color: isDarkMode ? '#2196f3' : undefined
-                                }}
-                            />
-                        }
-                    </Box>
-
-                    <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
-                        <Tooltip title={isPaused ? "Resume" : "Pause"}>
-                            <IconButton
-                                onClick={() => setPaused(!isPaused)}
-                                color={isPaused ? "warning" : "primary"}
-                                size="small"
-                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                            >
-                                {isPaused ? <PlayArrow/> : <Pause/>}
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Clear logs">
-                            <IconButton
-                                onClick={handleClear}
-                                size="small"
-                                disabled={eventLogs.length === 0}
-                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                            >
-                                <DeleteOutline/>
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Close">
-                            <IconButton
-                                onClick={() => setDrawerOpen(false)}
-                                size="small"
-                                sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                            >
-                                <Close/>
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                </Box>
-
-                <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-
-                <SubscriptionInfo/>
-
-                <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>
-                    <TextField
-                        size="small"
-                        placeholder="Search events..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        sx={{
-                            minWidth: 240,
-                            flexGrow: 1,
-                            '& .MuiInputBase-root': {
-                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                color: isDarkMode ? '#ffffff' : undefined
-                            },
-                            '& .MuiInputLabel-root': {
-                                color: isDarkMode ? '#cccccc' : undefined
-                            },
-                            '& .MuiOutlinedInput-notchedOutline': {
-                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                            }
-                        }}
-                        slotProps={{
-                            input: {
-                                endAdornment: searchTerm && (
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => setSearchTerm("")}
-                                        sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                                    >
-                                        <Close fontSize="small"/>
-                                    </IconButton>
-                                )
-                            }
-                        }}
+                {drawerOpen && (
+                    <EventDrawerContent
+                        eventTypes={eventTypes}
+                        objectName={objectName}
+                        isDarkMode={isDarkMode}
+                        theme={theme}
+                        onClose={() => setDrawerOpen(false)}
+                        title={title}
                     />
-                    {availableEventTypes.length > 0 && (
-                        <FormControl size="small" sx={{minWidth: 240}}>
-                            <InputLabel sx={{color: isDarkMode ? '#cccccc' : undefined}}>
-                                Event Types
-                            </InputLabel>
-                            <Select
-                                multiple
-                                value={eventTypeFilter}
-                                onChange={(e) => setEventTypeFilter(e.target.value)}
-                                label="Event Types"
-                                renderValue={(selected) => (
-                                    <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>
-                                        {selected.length === 0 ? "All events" : `${selected.length} selected`}
-                                    </span>
-                                )}
-                                sx={{
-                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                    color: isDarkMode ? '#ffffff' : undefined,
-                                    '& .MuiOutlinedInput-notchedOutline': {
-                                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                    },
-                                    '& .MuiSvgIcon-root': {
-                                        color: isDarkMode ? '#ffffff' : undefined
-                                    }
-                                }}
-                            >
-                                {renderMenuItems}
-                            </Select>
-                        </FormControl>
-                    )}
-                </Box>
-
-                <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-
-                <Box
-                    ref={logsContainerRef}
-                    onScroll={handleScroll}
-                    sx={{
-                        flex: 1,
-                        overflow: "auto",
-                        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.grey[50],
-                        padding: 1,
-                        ...jsonStyles,
-                        WebkitOverflowScrolling: 'touch'
-                    }}
-                >
-                    {filteredLogs.length === 0 ? (
-                        <Box sx={{p: 4, textAlign: "center"}}>
-                            <Typography
-                                color={isDarkMode ? '#cccccc' : 'textSecondary'}
-                            >
-                                {eventLogs.length === 0
-                                    ? "No events logged"
-                                    : "No events match current filters"}
-                            </Typography>
-                        </Box>
-                    ) : (
-                        <>
-                            {filteredLogs.map((log) => {
-                                const safeId = log.id ?? Math.random().toString(36).slice(2, 9);
-                                const isOpen = expandedLogIds.includes(safeId);
-                                return (
-                                    <Box
-                                        key={String(safeId)}
-                                        onClick={() => toggleExpand(safeId)}
-                                        sx={{
-                                            cursor: "pointer",
-                                            borderBottom: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
-                                            mb: 1,
-                                            borderRadius: 1,
-                                            "&:hover": {
-                                                bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.palette.action.hover
-                                            },
-                                            bgcolor: isOpen
-                                                ? isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.palette.action.selected
-                                                : "transparent",
-                                            transition: "background-color 0.2s ease",
-                                            touchAction: 'manipulation'
-                                        }}
-                                    >
-                                        <Box sx={{display: "flex", alignItems: "center", gap: 1, p: 1}}>
-                                            <EventTypeChip
-                                                eventType={log.eventType}
-                                                searchTerm={debouncedSearchTerm}
-                                            />
-                                            <Typography
-                                                variant="caption"
-                                                color={isDarkMode ? '#cccccc' : 'textSecondary'}
-                                            >
-                                                {formatTimestamp(log.timestamp)}
-                                            </Typography>
-                                            <ExpandMore sx={{
-                                                marginLeft: "auto",
-                                                transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                                transition: "0.2s",
-                                                color: isDarkMode ? '#ffffff' : theme.palette.text.secondary
-                                            }}/>
-                                        </Box>
-                                        {!isOpen && (
-                                            <Box sx={{
-                                                p: 1,
-                                                maxHeight: 160,
-                                                overflow: "hidden",
-                                                backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
-                                                borderRadius: 1,
-                                                mx: 0.5,
-                                                mb: 0.5
-                                            }}>
-                                                <JSONView data={log.data} dense={true}
-                                                          searchTerm={debouncedSearchTerm}/>
-                                            </Box>
-                                        )}
-                                        {isOpen && (
-                                            <Box sx={{
-                                                p: 1,
-                                                borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
-                                                backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
-                                                borderRadius: 1,
-                                                mx: 0.5,
-                                                mb: 0.5
-                                            }}>
-                                                <JSONView data={log.data} dense={false}
-                                                          searchTerm={debouncedSearchTerm}/>
-                                            </Box>
-                                        )}
-                                    </Box>
-                                );
-                            })}
-                            <div ref={logsEndRef} style={{height: 2}}/>
-                        </>
-                    )}
-                </Box>
-
-                {!autoScroll && filteredLogs.length > 0 && (
-                    <Box sx={{
-                        p: 1,
-                        borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
-                        textAlign: "center"
-                    }}>
-                        <Button
-                            size="small"
-                            startIcon={<KeyboardArrowUp sx={{color: isDarkMode ? '#ffffff' : undefined}}/>}
-                            onClick={() => {
-                                setAutoScroll(true);
-                                setTimeout(() => logsEndRef.current?.scrollIntoView({behavior: "smooth"}), 100);
-                            }}
-                            sx={{
-                                color: isDarkMode ? '#ffffff' : undefined,
-                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                '&:hover': {
-                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                }
-                            }}
-                        >
-                            Scroll to bottom
-                        </Button>
-                    </Box>
                 )}
             </Drawer>
-
-            <SubscriptionDialog
-                open={subscriptionDialogOpen}
-                onClose={() => setSubscriptionDialogOpen(false)}
-                isDarkMode={isDarkMode}
-                theme={theme}
-                subscribedEventTypes={subscribedEventTypes}
-                setManualSubscriptions={setManualSubscriptions}
-                filteredEventTypes={filteredEventTypes}
-                eventStats={eventStats}
-                clearLogs={clearLogs}
-            />
 
             <style>{`
                 .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
@@ -1209,7 +1148,6 @@ const EventLogger = ({
                         min-width: 100% !important;
                     }
                 }
-                
                 @media screen and (max-width: 768px) {
                     input, select, textarea {
                         font-size: 16px !important;
@@ -1218,6 +1156,6 @@ const EventLogger = ({
             `}</style>
         </>
     );
-};
+});
 
 export default EventLogger;

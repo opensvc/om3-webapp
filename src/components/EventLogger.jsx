@@ -51,8 +51,6 @@ const ALL_EVENT_TYPES = [
     'InstanceConfigUpdated'
 ];
 
-const DEBOUNCE_DELAY = 300;
-
 const hashCode = (str) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -430,7 +428,6 @@ const EventDrawerContent = ({
     const [loadingMore, setLoadingMore] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const logsContainerRef = useRef(null);
-    const searchDebounceRef = useRef(null);
 
     const deferredSearchTerm = useDeferredValue(searchTerm);
     const deferredEventTypeFilter = useDeferredValue(eventTypeFilter);

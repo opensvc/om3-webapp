@@ -73,7 +73,6 @@ const SubscriptionDialog = ({
                                 clearLogs
                             }) => {
     const [tempSubscribedEventTypes, setTempSubscribedEventTypes] = useState(subscribedEventTypes);
-
     const otherEventTypes = useMemo(() => {
         return ALL_EVENT_TYPES.filter(type => !filteredEventTypes.includes(type)).sort();
     }, [filteredEventTypes]);
@@ -154,13 +153,10 @@ const SubscriptionDialog = ({
                     <Close sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}/>
                 </IconButton>
             </Box>
-
             <Divider sx={{mb: 2}}/>
-
             <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mb: 2}}>
                 Select which event types you want to SUBSCRIBE to (future events only):
             </Typography>
-
             <Box sx={{mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
                 <Button size="small" variant="outlined" onClick={handleSubscribeAll}>
                     Subscribe to All
@@ -177,7 +173,6 @@ const SubscriptionDialog = ({
                     Unsubscribe from All
                 </Button>
             </Box>
-
             <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
                 {filteredEventTypes.length > 0 && renderEventTypeList(filteredEventTypes, true)}
                 {otherEventTypes.length > 0 && renderEventTypeList(otherEventTypes, false)}
@@ -187,7 +182,6 @@ const SubscriptionDialog = ({
                     </Typography>
                 )}
             </Box>
-
             <Box sx={{mt: 'auto', pt: 2}}>
                 <Button
                     fullWidth
@@ -242,7 +236,6 @@ const FullJSONView = ({data, isDarkMode, theme}) => {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     };
-
     const syntaxHighlightJSON = (json) => {
         if (typeof json !== 'string') {
             try {
@@ -271,7 +264,6 @@ const FullJSONView = ({data, isDarkMode, theme}) => {
             }
         );
     };
-
     const jsonString = useMemo(() => {
         try {
             return JSON.stringify(data, null, 2);
@@ -280,7 +272,6 @@ const FullJSONView = ({data, isDarkMode, theme}) => {
         }
     }, [data]);
     const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString), [jsonString]);
-
     return (
         <pre
             style={{
@@ -318,7 +309,6 @@ const LogRow = React.memo(({
             return "INVALID_DATE";
         }
     };
-
     const getEventColor = (eventType = "") => {
         if (eventType.includes("ERROR")) return "error";
         if (eventType.includes("UPDATED")) return "primary";
@@ -326,7 +316,6 @@ const LogRow = React.memo(({
         if (eventType.includes("CONNECTION")) return "info";
         return "default";
     };
-
     const EventTypeChip = ({eventType}) => {
         const color = getEventColor(eventType);
         return (
@@ -347,7 +336,6 @@ const LogRow = React.memo(({
             />
         );
     };
-
     return (
         <Box
             onClick={onToggle}
@@ -428,7 +416,6 @@ const EventDrawerContent = ({
     const [loadingMore, setLoadingMore] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const logsContainerRef = useRef(null);
-
     const deferredSearchTerm = useDeferredValue(searchTerm);
     const deferredEventTypeFilter = useDeferredValue(eventTypeFilter);
 
@@ -454,7 +441,6 @@ const EventDrawerContent = ({
             const connectionEvents = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
             eventsToSubscribe.push(...connectionEvents);
             const uniqueEvents = [...new Set(eventsToSubscribe)];
-
             if (uniqueEvents.length > 0) {
                 logger.log("Starting logger reception (drawer opened):", {
                     pageKey,
@@ -472,7 +458,6 @@ const EventDrawerContent = ({
                 closeLoggerEventSource();
             }
         }
-
         return () => {
             logger.log("Closing logger reception (drawer closing)");
             closeLoggerEventSource();
@@ -483,13 +468,11 @@ const EventDrawerContent = ({
 
     const baseFilteredLogs = useMemo(() => {
         let filtered = Array.isArray(eventLogs) ? eventLogs : [];
-
         if (manualSubscriptions.length === 0 && filteredEventTypes.length > 0) {
             filtered = filtered.filter(log => filteredEventTypes.includes(log.eventType));
         } else if (manualSubscriptions.length > 0) {
             filtered = filtered.filter(log => manualSubscriptions.includes(log.eventType));
         }
-
         const connectionEventsFromPage = eventTypes.filter(et => CONNECTION_EVENTS.includes(et));
         if (connectionEventsFromPage.length > 0) {
             filtered = filtered.filter(log =>
@@ -497,13 +480,10 @@ const EventDrawerContent = ({
                 connectionEventsFromPage.includes(log.eventType)
             );
         }
-
         if (objectName) {
             filtered = filtered.filter(log => {
                 const data = log.data || {};
-
                 if (log.eventType?.includes?.("CONNECTION")) return true;
-
                 if (log.eventType === "ObjectDeleted" && data._rawEvent) {
                     try {
                         const raw = JSON.parse(data._rawEvent);
@@ -511,15 +491,12 @@ const EventDrawerContent = ({
                     } catch {
                     }
                 }
-
                 if (data.path === objectName) return true;
                 if (data.labels?.path === objectName) return true;
                 if (data.data?.path === objectName) return true;
-
                 return data.data?.labels?.path === objectName;
             });
         }
-
         return filtered;
     }, [eventLogs, manualSubscriptions, objectName, eventTypes, filteredEventTypes]);
 
@@ -572,10 +549,8 @@ const EventDrawerContent = ({
         if (loadingMore || initialLoading) return;
         const container = logsContainerRef.current;
         if (!container) return;
-
         const {scrollTop, scrollHeight, clientHeight} = container;
         const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
         if (scrollPercentage > 0.8 && visibleCount < filteredLogs.length) {
             setLoadingMore(true);
             setTimeout(() => {
@@ -713,7 +688,6 @@ const EventDrawerContent = ({
                         />
                     )}
                 </Box>
-
                 <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
                     <Tooltip title={isPaused ? "Resume" : "Pause"}>
                         <IconButton
@@ -746,11 +720,8 @@ const EventDrawerContent = ({
                     </Tooltip>
                 </Box>
             </Box>
-
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-
             <SubscriptionInfo/>
-
             <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>
                 <TextField
                     size="small"
@@ -848,9 +819,7 @@ const EventDrawerContent = ({
                     </FormControl>
                 )}
             </Box>
-
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-
             <Box
                 ref={logsContainerRef}
                 onScroll={handleScroll}
@@ -900,7 +869,6 @@ const EventDrawerContent = ({
                     </>
                 )}
             </Box>
-
             <SubscriptionDialog
                 open={subscriptionDialogOpen}
                 onClose={() => setSubscriptionDialogOpen(false)}
@@ -982,7 +950,6 @@ const EventLogger = React.memo(({
         const handleMouseUp = (e) => handleResizeEnd(e);
         const handleTouchEnd = (e) => handleResizeEnd(e);
         const handleTouchCancel = (e) => handleResizeEnd(e);
-
         if (isResizing) {
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('touchmove', handleTouchMove, {passive: false});
@@ -990,14 +957,12 @@ const EventLogger = React.memo(({
             document.addEventListener('touchend', handleTouchEnd);
             document.addEventListener('touchcancel', handleTouchCancel);
         }
-
         return () => {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('touchmove', handleTouchMove);
             document.removeEventListener('mouseup', handleMouseUp);
             document.removeEventListener('touchend', handleTouchEnd);
             document.removeEventListener('touchcancel', handleTouchCancel);
-
             if (resizeTimeoutRef.current) {
                 clearTimeout(resizeTimeoutRef.current);
                 resizeTimeoutRef.current = null;
@@ -1021,7 +986,6 @@ const EventLogger = React.memo(({
                 <Tooltip title={title}>
                     <Button
                         variant="contained"
-                        color="primary.light"
                         startIcon={<Sensors/>}
                         onClick={() => setDrawerOpen(true)}
                         sx={{
@@ -1031,10 +995,14 @@ const EventLogger = React.memo(({
                             zIndex: 9999,
                             borderRadius: "20px",
                             px: 2,
-                            backgroundColor: isDarkMode ? '#333333' : undefined,
+                            backgroundColor: isDarkMode
+                                ? 'rgba(30, 30, 30, 0.88)'
+                                : 'rgba(255, 255, 255, 0.88)',
                             color: isDarkMode ? '#ffffff' : '#000000',
                             '&:hover': {
-                                backgroundColor: isDarkMode ? '#555555' : undefined,
+                                backgroundColor: isDarkMode
+                                    ? 'rgba(30, 30, 30, 0.96)'
+                                    : 'rgba(255, 255, 255, 0.96)',
                             },
                             '& .MuiButton-startIcon': {
                                 color: isDarkMode ? '#ffffff' : '#000000'
@@ -1045,7 +1013,6 @@ const EventLogger = React.memo(({
                     </Button>
                 </Tooltip>
             )}
-
             <Drawer
                 anchor="bottom"
                 open={drawerOpen}
@@ -1091,7 +1058,6 @@ const EventLogger = React.memo(({
                         opacity: isResizing ? 0.8 : 1
                     }}/>
                 </div>
-
                 {drawerOpen && (
                     <EventDrawerContent
                         eventTypes={eventTypes}
@@ -1103,7 +1069,6 @@ const EventLogger = React.memo(({
                     />
                 )}
             </Drawer>
-
             <style>{`
                 .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
                 .json-string { color: ${isDarkMode ? '#a5d6a7' : theme.palette.success.dark}; }

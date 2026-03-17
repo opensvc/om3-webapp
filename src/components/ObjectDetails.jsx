@@ -37,6 +37,7 @@ import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import EventLogger from "../components/EventLogger";
+import logger from "../utils/logger";
 
 // Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
@@ -392,7 +393,7 @@ const ObjectDetail = () => {
     // Individual node actions handlers
     const handleIndividualNodeActionClick = useCallback((action) => {
         if (!currentNode) {
-            console.warn("No valid pendingAction or action provided: No current node");
+            logger.warn("No valid pendingAction or action provided: No current node");
             return;
         }
         openActionDialog(action, {node: currentNode});
@@ -408,7 +409,7 @@ const ObjectDetail = () => {
     // Dialog confirm handler
     const handleDialogConfirm = useCallback(() => {
         if (!pendingAction || !pendingAction.action) {
-            console.warn("No valid pendingAction or action provided:", pendingAction);
+            logger.warn("No valid pendingAction or action provided:", pendingAction);
             setPendingAction(null);
             setConfirmDialogOpen(false);
             setStopDialogOpen(false);
@@ -552,7 +553,7 @@ const ObjectDetail = () => {
                             try {
                                 const lastUpdateKey = `${decodedObjectName}:${matchingUpdate.node}`;
                                 if (lastFetch.current[lastUpdateKey] && Date.now() - lastFetch.current[lastUpdateKey] < 2000) {
-                                    console.log("[ObjectDetail] Skipping fetchConfig due to recent update");
+                                    logger.info("[ObjectDetail] Skipping fetchConfig due to recent update");
                                     return;
                                 }
                                 await fetchConfig(matchingUpdate.node);
@@ -564,7 +565,7 @@ const ObjectDetail = () => {
                                 clearConfigUpdate(decodedObjectName);
                             }
                         } else {
-                            console.log("[ObjectDetail] No valid node in config update, skipping fetchConfig");
+                            logger.info("[ObjectDetail] No valid node in config update, skipping fetchConfig");
                         }
                     } finally {
                         isProcessingConfigUpdate.current = false;
@@ -573,14 +574,14 @@ const ObjectDetail = () => {
                 {fireImmediately: false}
             );
         } catch (err) {
-            console.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
+            logger.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
             return;
         }
         return () => {
             if (typeof subscription === "function") {
                 subscription();
             } else {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+                logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
     }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
@@ -610,14 +611,14 @@ const ObjectDetail = () => {
                 }
             );
         } catch (err) {
-            console.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
+            logger.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
             return;
         }
         return () => {
             if (typeof subscription === "function") {
                 subscription();
             } else {
-                console.warn("[ObjectDetail] Subscription is not a function:", subscription);
+                logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
             }
         };
     }, [decodedObjectName, configNode, openSnackbar]);

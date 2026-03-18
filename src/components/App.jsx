@@ -326,6 +326,7 @@ const App = () => {
 
     useEffect(() => {
         prepareForNavigation();
+        window.scrollTo(0, 0);
     }, [location]);
 
     useEffect(() => {
@@ -352,7 +353,7 @@ const App = () => {
                                            element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
                                     <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                     <Route path="/kinds"
-                                           element={<ProtectedRoute><Kinds/></ProtectedRoute>}/> {/* <-- AJOUT */}
+                                           element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
                                     <Route path="/heartbeats" element={<Heartbeats/>}/>
                                     <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                     <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>

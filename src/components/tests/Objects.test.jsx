@@ -114,6 +114,8 @@ describe('Objects Component', () => {
                 'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
                 'test-ns/svc/test2': {avail: 'down', frozen: 'frozen'},
                 'root/svc/test3': {avail: 'warn', frozen: 'unfrozen'},
+                'test-ns/svc/test4': {avail: 'n/a', frozen: 'unfrozen'},
+                'test-ns/svc/unprovisioned': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'},
             },
             objectInstanceStatus: {
                 'test-ns/svc/test1': {
@@ -125,6 +127,10 @@ describe('Objects Component', () => {
                 },
                 'root/svc/test3': {
                     node2: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
+                },
+                'test-ns/svc/test4': {},
+                'test-ns/svc/unprovisioned': {
+                    node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
                 },
             },
             instanceMonitor: {
@@ -541,7 +547,9 @@ describe('Objects Component', () => {
         await selectObject('test-ns/svc/test1');
 
         fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Unprovision/i));
+
+        const menu = await screen.findByRole('menu');
+        fireEvent.click(within(menu).getByText(/Unprovision/i));
 
         await waitFor(() => {
             expect(screen.getByRole('dialog', {name: /Confirm Unprovision/i})).toBeInTheDocument();
@@ -910,18 +918,6 @@ describe('Objects Component', () => {
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    test('filters objects by unprovisioned state', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Unprovisioned');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByText('No objects found matching the current filters.')).toBeInTheDocument();
-        });
-    });
-
     test('handles narrow screen layout', async () => {
         const mockUseMediaQuery = require('@mui/material/useMediaQuery');
         mockUseMediaQuery.mockReturnValue(false);
@@ -989,7 +985,6 @@ describe('Objects Component', () => {
     });
 
     test('handles scroll loading more objects', async () => {
-        // Create many objects to trigger infinite scroll
         const manyObjects = {};
         const manyInstanceStatus = {};
         for (let i = 0; i < 50; i++) {
@@ -1011,22 +1006,420 @@ describe('Objects Component', () => {
         setupComponent();
         await waitForComponentToLoad();
 
-        // Initially only 30 visible (default visibleCount)
-        const rows = screen.getAllByRole('row').slice(1); // exclude header
+        const rows = screen.getAllByRole('row').slice(1);
         expect(rows.length).toBe(30);
 
-        // Simulate scroll to bottom
         const tableContainer = document.querySelector('.MuiTableContainer-root');
         Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
         Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
-        Object.defineProperty(tableContainer, 'scrollTop', {value: 500}); // 50% scrolled (should trigger at >80%)
+        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
 
         fireEvent.scroll(tableContainer);
 
-        // Wait for loading and more rows
         await waitFor(() => {
             const newRows = screen.getAllByRole('row').slice(1);
             expect(newRows.length).toBeGreaterThan(30);
         });
+    });
+    test('uses daemon objects as fallback when objectStatus is empty', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {},
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+        useFetchDaemonStatus.mockReturnValue({
+            daemon: {
+                cluster: {
+                    object: {
+                        'daemon/svc/obj1': {avail: 'up', frozen: 'unfrozen'},
+                        'daemon/svc/obj2': {avail: 'down', frozen: 'frozen'},
+                    }
+                }
+            },
+        });
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /daemon\/svc\/obj1/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /daemon\/svc\/obj2/i})).toBeInTheDocument();
+        });
+    });
+
+    test('filters by unprovisioned global state and finds objects', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Global State', 'Unprovisioned');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned/i})).toBeInTheDocument();
+        });
+        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test1/i})).not.toBeInTheDocument();
+    });
+
+    test('freeze action is available for non-frozen object and unfreeze for frozen', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const row1 = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
+        const menuButton1 = within(row1).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton1);
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+        let menu = screen.getByRole('menu');
+        expect(within(menu).getByText('Freeze')).toBeInTheDocument();
+        expect(within(menu).queryByText('Unfreeze')).not.toBeInTheDocument();
+
+        fireEvent.keyDown(menu, {key: 'Escape', code: 'Escape'});
+        await waitFor(() => {
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        });
+
+        const row2 = screen.getByRole('row', {name: /test-ns\/svc\/test2/i});
+        const menuButton2 = within(row2).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton2);
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+        menu = screen.getByRole('menu');
+        expect(within(menu).queryByText('Freeze')).not.toBeInTheDocument();
+        expect(within(menu).getByText('Unfreeze')).toBeInTheDocument();
+    });
+
+    test('executes unfreeze action on frozen object', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test2');
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Unfreeze'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/test-ns/svc/test2/action/unfreeze'),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('handles partial success during action execution', async () => {
+        global.fetch
+            .mockResolvedValueOnce({ok: true})
+            .mockResolvedValueOnce({ok: false, status: 500});
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+        await selectObject('test-ns/svc/test2');
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/partially succeeded: 1 ok, 1 errors/i);
+        });
+    });
+
+    test('handles network error during action', async () => {
+        global.fetch.mockRejectedValue(new Error('Network error'));
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/failed on all 1 object\(s\)/i);
+        });
+    });
+
+    test('removes filter chip by clicking delete icon', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Namespace', 'test-ns');
+        await waitForFilterApplied();
+
+        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+
+        const deleteIcon = within(chip).getByTestId('CloseIcon');
+        fireEvent.click(deleteIcon);
+
+        await waitFor(() => {
+            expect(screen.queryByText('test-ns')).not.toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
+        });
+    });
+
+    test('global actions button is disabled when no objects selected', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const actionsButton = screen.getByRole('button', {name: /actions on selected objects/i});
+        expect(actionsButton).toBeDisabled();
+    });
+
+    test('row menu closes when clicking outside (backdrop)', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
+        const menuButton = within(row).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const backdrop = document.querySelector('.MuiModal-backdrop');
+        expect(backdrop).toBeInTheDocument();
+        fireEvent.click(backdrop);
+
+        await waitFor(() => {
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        });
+    });
+
+    test('sorts by status with n/a values', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const statusHeader = screen.getByText('Status');
+        fireEvent.click(statusHeader);
+
+        await waitFor(() => {
+            const rows = screen.getAllByRole('row').slice(1);
+            const firstRow = rows[0];
+            expect(firstRow).toHaveTextContent(/test-ns\/svc\/test4/i);
+        });
+    });
+
+    test('sorts by node column when some objects lack node data', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const nodeHeader = screen.getByRole('columnheader', {name: /node1/i});
+        fireEvent.click(nodeHeader);
+
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+        });
+    });
+
+    test('scroll does not load more when already loading', async () => {
+        const manyObjects = {};
+        for (let i = 0; i < 50; i++) {
+            manyObjects[`test/svc/obj${i}`] = {avail: 'up', frozen: 'unfrozen'};
+        }
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: manyObjects,
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const tableContainer = document.querySelector('.MuiTableContainer-root');
+        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
+        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
+        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
+
+        fireEvent.scroll(tableContainer);
+
+        await waitFor(() => {
+            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        });
+
+        fireEvent.scroll(tableContainer);
+
+        await new Promise(r => setTimeout(r, 50));
+        const rows = screen.getAllByRole('row').slice(1);
+        expect(rows.length).toBe(30);
+    });
+
+    test('scroll does not load more when no more objects', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {'test/svc/obj1': {avail: 'up'}},
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const tableContainer = document.querySelector('.MuiTableContainer-root');
+        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
+        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
+        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
+
+        fireEvent.scroll(tableContainer);
+
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        const rows = screen.getAllByRole('row').slice(1);
+        expect(rows.length).toBe(1);
+    });
+
+    test('synchronizes URL with debounce', async () => {
+        jest.useFakeTimers();
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const searchInput = screen.getByLabelText('Name');
+        fireEvent.change(searchInput, {target: {value: 'test'}});
+
+        jest.advanceTimersByTime(300);
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith(
+                '/objects?name=test',
+                {replace: true}
+            );
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('updates filters from URL on location change', async () => {
+        const {rerender} = setupComponent();
+        await waitForComponentToLoad();
+
+        require('react-router-dom').useLocation.mockReturnValue({
+            search: '?namespace=test-ns&kind=svc&name=test1',
+            pathname: '/objects'
+        });
+
+        rerender(
+            <MemoryRouter>
+                <Objects/>
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Namespace')).toHaveTextContent('test-ns');
+            expect(screen.getByText('test-ns')).toBeInTheDocument();
+            expect(screen.getByText('svc')).toBeInTheDocument();
+            expect(screen.getByLabelText('Name')).toHaveValue('test1');
+        });
+    });
+
+    test('handles parseObjectName with different formats', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'simpleName': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'simpleName': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('simpleName');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/root/svc/simpleName/action/restart'),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('shows snackbar when token missing on action', async () => {
+        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent('Authentication token not found');
+        });
+    });
+
+    test('closes snackbar after autoHideDuration', async () => {
+        jest.useFakeTimers();
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+        });
+
+        jest.advanceTimersByTime(4000);
+
+        await waitFor(() => {
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        });
+
+        jest.useRealTimers();
     });
 });

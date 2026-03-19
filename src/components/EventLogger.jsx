@@ -572,7 +572,6 @@ const EventDrawerContent = ({
 
     return (
         <>
-            {/* En-tête */}
             <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                     <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
@@ -601,7 +600,6 @@ const EventDrawerContent = ({
                     )}
                 </Box>
                 <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
-                    {/* Bouton d'engrenage pour ouvrir le dialogue d'abonnement */}
                     <Tooltip title="Manage subscriptions">
                         <IconButton
                             onClick={() => setSubscriptionDialogOpen(true)}
@@ -644,7 +642,6 @@ const EventDrawerContent = ({
             </Box>
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
-            {/* Chips de filtrage (cliquables) avec couleurs page/autres */}
             {availableEventTypes.length > 0 && (
                 <Box sx={{p: 1, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
                     <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mr: 1}}>
@@ -656,22 +653,28 @@ const EventDrawerContent = ({
 
                         let chipSx = {
                             cursor: 'pointer',
+                            fontWeight: 500,
                             borderColor: isDarkMode ? 'rgba(255,255,255,0.2)' : undefined,
                             '&:hover': {
-                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.2)' : undefined
+                                filter: 'brightness(0.95)'
                             }
                         };
 
                         if (isSelected) {
-                            chipSx.backgroundColor = isDarkMode ? 'primary.dark' : undefined;
-                            chipSx.color = isDarkMode ? '#ffffff' : undefined;
+                            if (isPageEvent) {
+                                chipSx.backgroundColor = isDarkMode ? '#90caf9' : '#1976d2';
+                                chipSx.color = isDarkMode ? '#000000' : '#ffffff';
+                            } else {
+                                chipSx.backgroundColor = isDarkMode ? '#a5d6a7' : '#2e7d32';
+                                chipSx.color = isDarkMode ? '#000000' : '#ffffff';
+                            }
                         } else {
                             if (isPageEvent) {
                                 chipSx.backgroundColor = isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)';
-                                chipSx.color = isDarkMode ? '#90caf9' : 'primary.main';
+                                chipSx.color = isDarkMode ? '#90caf9' : '#1976d2';
                             } else {
-                                chipSx.backgroundColor = isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)';
-                                chipSx.color = isDarkMode ? '#a5d6a7' : 'success.dark';
+                                chipSx.backgroundColor = isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(46, 125, 50, 0.1)';
+                                chipSx.color = isDarkMode ? '#a5d6a7' : '#2e7d32';
                             }
                         }
 
@@ -681,7 +684,6 @@ const EventDrawerContent = ({
                                 label={`${eventType} (${eventStats[eventType] || 0})`}
                                 size="small"
                                 onClick={() => toggleEventTypeFilter(eventType)}
-                                variant={isSelected ? "filled" : "outlined"}
                                 sx={chipSx}
                             />
                         );
@@ -691,7 +693,6 @@ const EventDrawerContent = ({
 
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
 
-            {/* Liste des logs */}
             <Box
                 ref={logsContainerRef}
                 onScroll={handleScroll}
@@ -741,7 +742,6 @@ const EventDrawerContent = ({
                 )}
             </Box>
 
-            {/* Dialogue d'abonnement */}
             <SubscriptionDialog
                 open={subscriptionDialogOpen}
                 onClose={() => setSubscriptionDialogOpen(false)}
@@ -773,7 +773,6 @@ const EventLogger = React.memo(({
     const isDraggingRef = useRef(false);
     const resizeTimeoutRef = useRef(null);
 
-    // Gestion du redimensionnement du drawer
     const handleResizeStart = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -898,7 +897,6 @@ const EventLogger = React.memo(({
                     }
                 }}
             >
-                {/* Poignée de redimensionnement */}
                 <div
                     onMouseDown={handleResizeStart}
                     onTouchStart={handleResizeStart}
@@ -944,7 +942,6 @@ const EventLogger = React.memo(({
                     />
                 )}
             </Drawer>
-            {/* Styles globaux pour la coloration JSON et le responsive */}
             <style>{`
                 .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
                 .json-string { color: ${isDarkMode ? '#a5d6a7' : theme.palette.success.dark}; }

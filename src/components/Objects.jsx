@@ -1019,6 +1019,7 @@ const Objects = () => {
                                                                         {value.charAt(0).toUpperCase() + value.slice(1)}
                                                                     </Box>
                                                                 }
+                                                                onClick={() => handleGlobalStateChange(value)}
                                                                 onDelete={() => handleGlobalStateChange(value)}
                                                                 onMouseDown={(event) => {
                                                                     event.stopPropagation();

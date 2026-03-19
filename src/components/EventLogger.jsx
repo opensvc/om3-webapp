@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState, useDeferredValue} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
     Box,
     Button,
@@ -6,13 +6,7 @@ import {
     Chip,
     Divider,
     Drawer,
-    FormControl,
     IconButton,
-    InputLabel,
-    ListItemText,
-    MenuItem,
-    Select,
-    TextField,
     Tooltip,
     Typography,
     useTheme,
@@ -73,6 +67,13 @@ const SubscriptionDialog = ({
                                 clearLogs
                             }) => {
     const [tempSubscribedEventTypes, setTempSubscribedEventTypes] = useState(subscribedEventTypes);
+
+    useEffect(() => {
+        if (open) {
+            setTempSubscribedEventTypes(subscribedEventTypes);
+        }
+    }, [open, subscribedEventTypes]);
+
     const otherEventTypes = useMemo(() => {
         return ALL_EVENT_TYPES.filter(type => !filteredEventTypes.includes(type)).sort();
     }, [filteredEventTypes]);
@@ -294,8 +295,7 @@ const LogRow = React.memo(({
                                isOpen,
                                onToggle,
                                isDarkMode,
-                               theme,
-                               searchTerm
+                               theme
                            }) => {
     const formatTimestamp = (ts) => {
         try {
@@ -326,12 +326,7 @@ const LogRow = React.memo(({
                 sx={{
                     fontWeight: '600',
                     backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                    color: isDarkMode ? '#ffffff' : undefined,
-                    ...(searchTerm && eventType.toLowerCase().includes(searchTerm.toLowerCase()) && {
-                        borderWidth: 2,
-                        borderStyle: 'solid',
-                        borderColor: '#ffeb3b'
-                    })
+                    color: isDarkMode ? '#ffffff' : undefined
                 }}
             />
         );
@@ -395,7 +390,6 @@ const LogRow = React.memo(({
 }, (prevProps, nextProps) => {
     return prevProps.log === nextProps.log &&
         prevProps.isOpen === nextProps.isOpen &&
-        prevProps.searchTerm === nextProps.searchTerm &&
         prevProps.isDarkMode === nextProps.isDarkMode;
 });
 
@@ -407,17 +401,14 @@ const EventDrawerContent = ({
                                 onClose,
                                 title
                             }) => {
-    const [searchTerm, setSearchTerm] = useState("");
-    const [eventTypeFilter, setEventTypeFilter] = useState([]);
+    const [selectedEventTypes, setSelectedEventTypes] = useState([]);
     const [expandedLogIds, setExpandedLogIds] = useState([]);
-    const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
-    const [manualSubscriptions, setManualSubscriptions] = useState([]);
     const [visibleCount, setVisibleCount] = useState(20);
     const [loadingMore, setLoadingMore] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+    const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
+    const [manualSubscriptions, setManualSubscriptions] = useState([]);
     const logsContainerRef = useRef(null);
-    const deferredSearchTerm = useDeferredValue(searchTerm);
-    const deferredEventTypeFilter = useDeferredValue(eventTypeFilter);
 
     const filteredEventTypes = useMemo(() => {
         return eventTypes.filter(et => !CONNECTION_EVENTS.includes(et));
@@ -516,25 +507,11 @@ const EventDrawerContent = ({
 
     const filteredLogs = useMemo(() => {
         let result = [...baseFilteredLogs];
-        if (deferredEventTypeFilter.length > 0) {
-            result = result.filter(log => deferredEventTypeFilter.includes(log.eventType));
-        }
-        if (deferredSearchTerm.trim()) {
-            const term = deferredSearchTerm.toLowerCase().trim();
-            result = result.filter(log => {
-                const typeMatch = String(log.eventType || "").toLowerCase().includes(term);
-                let dataMatch = false;
-                try {
-                    const dataString = JSON.stringify(log.data || {}).toLowerCase();
-                    dataMatch = dataString.includes(term);
-                } catch (err) {
-                    logger.warn("Error serializing log data for search:", err);
-                }
-                return typeMatch || dataMatch;
-            });
+        if (selectedEventTypes.length > 0) {
+            result = result.filter(log => selectedEventTypes.includes(log.eventType));
         }
         return result;
-    }, [baseFilteredLogs, deferredEventTypeFilter, deferredSearchTerm]);
+    }, [baseFilteredLogs, selectedEventTypes]);
 
     const visibleLogs = useMemo(() => {
         return filteredLogs.slice(0, visibleCount);
@@ -570,21 +547,14 @@ const EventDrawerContent = ({
 
     useEffect(() => {
         setVisibleCount(20);
-    }, [deferredSearchTerm, deferredEventTypeFilter, manualSubscriptions]);
+    }, [selectedEventTypes]);
 
     const handleClear = useCallback(() => {
         clearLogs();
-        setSearchTerm("");
-        setEventTypeFilter([]);
+        setSelectedEventTypes([]);
         setExpandedLogIds([]);
         setVisibleCount(20);
     }, [clearLogs]);
-
-    const handleClearFilters = useCallback(() => {
-        setSearchTerm("");
-        setEventTypeFilter([]);
-        setVisibleCount(20);
-    }, []);
 
     const toggleExpand = useCallback((id) => {
         setExpandedLogIds(prev =>
@@ -592,63 +562,17 @@ const EventDrawerContent = ({
         );
     }, []);
 
-    const SubscriptionInfo = () => {
-        const eventTypeChips = useMemo(() => {
-            if (manualSubscriptions.length === 0) return null;
-            return manualSubscriptions.sort().map((type) => (
-                <Chip
-                    key={String(type)}
-                    label={`${type} (${eventStats[type] || 0})`}
-                    size="small"
-                    variant="outlined"
-                    onDelete={() => {
-                        setManualSubscriptions(prev => prev.filter(t => t !== type));
-                    }}
-                    sx={{
-                        backgroundColor: filteredEventTypes.includes(type)
-                            ? (isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)')
-                            : (isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)'),
-                        color: filteredEventTypes.includes(type)
-                            ? (isDarkMode ? '#90caf9' : 'primary.main')
-                            : (isDarkMode ? '#a5d6a7' : 'success.dark'),
-                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined,
-                        fontSize: '0.7rem',
-                        height: 20
-                    }}
-                />
-            ));
-        }, [manualSubscriptions, eventStats, filteredEventTypes, isDarkMode]);
-
-        return (
-            <Box sx={{px: 1, py: 0.5}}>
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
-                    <Typography variant="body2" color={isDarkMode ? '#ffffff' : 'inherit'}>
-                        Subscribed to: {manualSubscriptions.length} event type(s)
-                    </Typography>
-                    {objectName && (
-                        <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'}>
-                            • object: {objectName}
-                        </Typography>
-                    )}
-                    <IconButton
-                        onClick={() => setSubscriptionDialogOpen(true)}
-                        size="small"
-                        sx={{ml: 'auto', color: isDarkMode ? '#ffffff' : undefined}}
-                    >
-                        <Settings/>
-                    </IconButton>
-                </Box>
-                {manualSubscriptions.length > 0 && (
-                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
-                        {eventTypeChips}
-                    </Box>
-                )}
-            </Box>
+    const toggleEventTypeFilter = useCallback((eventType) => {
+        setSelectedEventTypes(prev =>
+            prev.includes(eventType)
+                ? prev.filter(et => et !== eventType)
+                : [...prev, eventType]
         );
-    };
+    }, []);
 
     return (
         <>
+            {/* En-tête */}
             <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
                 <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
                     <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
@@ -675,20 +599,18 @@ const EventDrawerContent = ({
                             }}
                         />
                     )}
-                    {(eventTypeFilter.length > 0 || searchTerm) && (
-                        <Chip
-                            label="Filtered"
-                            color="info"
-                            size="small"
-                            onDelete={handleClearFilters}
-                            sx={{
-                                backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : undefined,
-                                color: isDarkMode ? '#2196f3' : undefined
-                            }}
-                        />
-                    )}
                 </Box>
                 <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
+                    {/* Bouton d'engrenage pour ouvrir le dialogue d'abonnement */}
+                    <Tooltip title="Manage subscriptions">
+                        <IconButton
+                            onClick={() => setSubscriptionDialogOpen(true)}
+                            size="small"
+                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
+                        >
+                            <Settings/>
+                        </IconButton>
+                    </Tooltip>
                     <Tooltip title={isPaused ? "Resume" : "Pause"}>
                         <IconButton
                             onClick={() => setPaused(!isPaused)}
@@ -721,105 +643,55 @@ const EventDrawerContent = ({
                 </Box>
             </Box>
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-            <SubscriptionInfo/>
-            <Box sx={{p: 1, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap"}}>
-                <TextField
-                    size="small"
-                    placeholder="Search events..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    sx={{
-                        minWidth: 240,
-                        flexGrow: 1,
-                        '& .MuiInputBase-root': {
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                            color: isDarkMode ? '#ffffff' : undefined
-                        },
-                        '& .MuiInputLabel-root': {
-                            color: isDarkMode ? '#cccccc' : undefined
-                        },
-                        '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
+
+            {/* Chips de filtrage (cliquables) avec couleurs page/autres */}
+            {availableEventTypes.length > 0 && (
+                <Box sx={{p: 1, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
+                    <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mr: 1}}>
+                        Filter by type:
+                    </Typography>
+                    {availableEventTypes.map((eventType) => {
+                        const isPageEvent = filteredEventTypes.includes(eventType);
+                        const isSelected = selectedEventTypes.includes(eventType);
+
+                        let chipSx = {
+                            cursor: 'pointer',
+                            borderColor: isDarkMode ? 'rgba(255,255,255,0.2)' : undefined,
+                            '&:hover': {
+                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.2)' : undefined
+                            }
+                        };
+
+                        if (isSelected) {
+                            chipSx.backgroundColor = isDarkMode ? 'primary.dark' : undefined;
+                            chipSx.color = isDarkMode ? '#ffffff' : undefined;
+                        } else {
+                            if (isPageEvent) {
+                                chipSx.backgroundColor = isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)';
+                                chipSx.color = isDarkMode ? '#90caf9' : 'primary.main';
+                            } else {
+                                chipSx.backgroundColor = isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(76, 175, 80, 0.1)';
+                                chipSx.color = isDarkMode ? '#a5d6a7' : 'success.dark';
+                            }
                         }
-                    }}
-                    slotProps={{
-                        input: {
-                            endAdornment: searchTerm && (
-                                <IconButton
-                                    size="small"
-                                    onClick={() => setSearchTerm("")}
-                                    sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                                >
-                                    <Close fontSize="small"/>
-                                </IconButton>
-                            )
-                        }
-                    }}
-                />
-                {availableEventTypes.length > 0 && (
-                    <FormControl size="small" sx={{minWidth: 240}}>
-                        <InputLabel sx={{color: isDarkMode ? '#cccccc' : undefined}}>
-                            Event Types
-                        </InputLabel>
-                        <Select
-                            multiple
-                            value={eventTypeFilter}
-                            onChange={(e) => setEventTypeFilter(e.target.value)}
-                            label="Event Types"
-                            renderValue={(selected) => (
-                                <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>
-                                    {selected.length === 0 ? "All events" : `${selected.length} selected`}
-                                </span>
-                            )}
-                            sx={{
-                                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                color: isDarkMode ? '#ffffff' : undefined,
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                    borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                },
-                                '& .MuiSvgIcon-root': {
-                                    color: isDarkMode ? '#ffffff' : undefined
-                                }
-                            }}
-                        >
-                            {availableEventTypes.map((et) => (
-                                <MenuItem key={String(et)} value={String(et)}>
-                                    <Checkbox
-                                        checked={eventTypeFilter.includes(et)}
-                                        size="small"
-                                        sx={{
-                                            color: isDarkMode ? '#ffffff' : undefined,
-                                            '&.Mui-checked': {
-                                                color: isDarkMode ? '#90caf9' : undefined,
-                                            }
-                                        }}
-                                    />
-                                    <ListItemText
-                                        primary={
-                                            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                                <Chip
-                                                    label={eventStats[et] || 0}
-                                                    size="small"
-                                                    variant="outlined"
-                                                    sx={{
-                                                        height: 20,
-                                                        minWidth: 20,
-                                                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                                                        color: isDarkMode ? '#ffffff' : undefined,
-                                                        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                                                    }}
-                                                />
-                                                <span style={{color: isDarkMode ? '#ffffff' : 'inherit'}}>{et}</span>
-                                            </Box>
-                                        }
-                                    />
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                )}
-            </Box>
+
+                        return (
+                            <Chip
+                                key={eventType}
+                                label={`${eventType} (${eventStats[eventType] || 0})`}
+                                size="small"
+                                onClick={() => toggleEventTypeFilter(eventType)}
+                                variant={isSelected ? "filled" : "outlined"}
+                                sx={chipSx}
+                            />
+                        );
+                    })}
+                </Box>
+            )}
+
             <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
+
+            {/* Liste des logs */}
             <Box
                 ref={logsContainerRef}
                 onScroll={handleScroll}
@@ -857,7 +729,6 @@ const EventDrawerContent = ({
                                     onToggle={() => toggleExpand(safeId)}
                                     isDarkMode={isDarkMode}
                                     theme={theme}
-                                    searchTerm={deferredSearchTerm}
                                 />
                             );
                         })}
@@ -869,6 +740,8 @@ const EventDrawerContent = ({
                     </>
                 )}
             </Box>
+
+            {/* Dialogue d'abonnement */}
             <SubscriptionDialog
                 open={subscriptionDialogOpen}
                 onClose={() => setSubscriptionDialogOpen(false)}
@@ -900,6 +773,7 @@ const EventLogger = React.memo(({
     const isDraggingRef = useRef(false);
     const resizeTimeoutRef = useRef(null);
 
+    // Gestion du redimensionnement du drawer
     const handleResizeStart = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1024,6 +898,7 @@ const EventLogger = React.memo(({
                     }
                 }}
             >
+                {/* Poignée de redimensionnement */}
                 <div
                     onMouseDown={handleResizeStart}
                     onTouchStart={handleResizeStart}
@@ -1069,19 +944,13 @@ const EventLogger = React.memo(({
                     />
                 )}
             </Drawer>
+            {/* Styles globaux pour la coloration JSON et le responsive */}
             <style>{`
                 .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
                 .json-string { color: ${isDarkMode ? '#a5d6a7' : theme.palette.success.dark}; }
                 .json-number { color: ${isDarkMode ? '#80cbc4' : theme.palette.info.main}; font-weight: 500; }
                 .json-boolean { color: ${isDarkMode ? '#ffcc80' : theme.palette.warning.dark}; font-weight: 600; }
                 .json-null { color: ${isDarkMode ? theme.palette.grey[400] : theme.palette.grey[500]}; font-weight: 600; }
-                .search-highlight {
-                    background-color: ${isDarkMode ? '#ffeb3b' : '#ffeb3b'};
-                    color: ${isDarkMode ? '#000000' : '#000000'};
-                    padding: 0 2px;
-                    border-radius: 2px;
-                    font-weight: bold;
-                }
                 @media (max-width: 768px) {
                     .MuiDrawer-paper {
                         max-height: 90vh !important;
@@ -1105,9 +974,6 @@ const EventLogger = React.memo(({
                         padding: 6px !important;
                         min-width: 36px !important;
                         min-height: 36px !important;
-                    }
-                    .MuiTextField-root, .MuiFormControl-root {
-                        min-width: 100% !important;
                     }
                 }
                 @media screen and (max-width: 768px) {

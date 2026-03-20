@@ -68,13 +68,8 @@ const parseObjectName = (objectName) => {
     };
 };
 
-const renderTextField = (label) => (params) => (
-    <TextField {...params} label={label} fullWidth/>
-);
-
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
-const selectInstanceMonitor = (state) => state.instanceMonitor;
 const selectRemoveObject = (state) => state.removeObject;
 
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
@@ -317,22 +312,10 @@ const TableRowComponent = React.memo(({
                                           onSelectObject,
                                           onObjectClick,
                                           onRowMenuOpen,
-                                          isMenuOpen,
                                           allNodes,
                                           isWideScreen,
-                                          onActionClick,
-                                          onRowMenuClose,
                                       }) => {
     const objectData = useObjectData(objectName);
-    const filteredActions = useMemo(
-        () => OBJECT_ACTIONS.filter(
-            ({name}) =>
-                isActionAllowedForSelection(name, [objectName]) &&
-                (name !== "freeze" || !objectData.isFrozen) &&
-                (name !== "unfreeze" || objectData.hasAnyNodeFrozen)
-        ),
-        [objectName, objectData.isFrozen, objectData.hasAnyNodeFrozen]
-    );
     const handleCheckboxChange = useCallback((e) => {
         onSelectObject(e, objectName);
     }, [onSelectObject, objectName]);
@@ -423,15 +406,6 @@ const TableRowComponent = React.memo(({
             </TableCell>
         </TableRow>
     );
-}, (prevProps, nextProps) => {
-    return (
-        prevProps.objectName === nextProps.objectName &&
-        prevProps.isSelected === nextProps.isSelected &&
-        prevProps.isMenuOpen === nextProps.isMenuOpen &&
-        prevProps.isWideScreen === nextProps.isWideScreen &&
-        prevProps.allNodes.length === nextProps.allNodes.length &&
-        prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
-    );
 });
 
 const Objects = () => {
@@ -456,7 +430,6 @@ const Objects = () => {
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
     const objectInstanceStatus = useEventStore(selectObjectInstanceStatus);
-    const instanceMonitor = useEventStore(selectInstanceMonitor);
     const removeObject = useEventStore(selectRemoveObject);
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
@@ -820,7 +793,7 @@ const Objects = () => {
 
     useEffect(() => {
         setVisibleCount(30);
-    }, [sortedObjectNames]);
+    }, [sortedObjectNames.length]);
 
     useEffect(() => {
         const timer = setTimeout(() => {

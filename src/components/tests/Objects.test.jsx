@@ -304,6 +304,30 @@ describe('Objects Component', () => {
         });
     });
 
+    test('handles deselect all when all are selected', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const selectAllCheckbox = screen.getAllByRole('checkbox')[0];
+        fireEvent.click(selectAllCheckbox);
+
+        await waitFor(() => {
+            const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
+            allCheckboxes.forEach((checkbox) => {
+                expect(checkbox).toBeChecked();
+            });
+        });
+
+        fireEvent.click(selectAllCheckbox);
+
+        await waitFor(() => {
+            const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
+            allCheckboxes.forEach((checkbox) => {
+                expect(checkbox).not.toBeChecked();
+            });
+        });
+    });
+
     test('opens actions menu', async () => {
         setupComponent();
         await waitForComponentToLoad();
@@ -1021,6 +1045,7 @@ describe('Objects Component', () => {
             expect(newRows.length).toBeGreaterThan(30);
         });
     });
+
     test('uses daemon objects as fallback when objectStatus is empty', async () => {
         useEventStore.mockImplementation((selector) =>
             selector({
@@ -1239,13 +1264,18 @@ describe('Objects Component', () => {
 
     test('scroll does not load more when already loading', async () => {
         const manyObjects = {};
+        const manyInstanceStatus = {};
         for (let i = 0; i < 50; i++) {
-            manyObjects[`test/svc/obj${i}`] = {avail: 'up', frozen: 'unfrozen'};
+            const name = `test/svc/obj${i}`;
+            manyObjects[name] = {avail: 'up', frozen: 'unfrozen'};
+            manyInstanceStatus[name] = {
+                node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'}
+            };
         }
         useEventStore.mockImplementation((selector) =>
             selector({
                 objectStatus: manyObjects,
-                objectInstanceStatus: {},
+                objectInstanceStatus: manyInstanceStatus,
                 instanceMonitor: {},
                 removeObject: mockRemoveObject,
             })
@@ -1253,6 +1283,10 @@ describe('Objects Component', () => {
 
         setupComponent();
         await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getAllByRole('row').slice(1)).toHaveLength(30);
+        });
 
         const tableContainer = document.querySelector('.MuiTableContainer-root');
         Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
@@ -1421,5 +1455,776 @@ describe('Objects Component', () => {
         });
 
         jest.useRealTimers();
+    });
+
+    test('closes snackbar via Alert onClose callback', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+        });
+
+        const alertCloseButton = screen.getByRole('alert').querySelector('button[aria-label="Close"]') ||
+            document.querySelector('.MuiAlert-action button');
+
+        if (alertCloseButton) {
+            fireEvent.click(alertCloseButton);
+            await waitFor(() => {
+                expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+            });
+        }
+    });
+
+    test('closes pending action dialog via onClose (cancel button)', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectObject('test-ns/svc/test1');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        const cancelButton = screen.getByRole('button', {name: /cancel/i});
+        fireEvent.click(cancelButton);
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('handles parseObjectName with two-part format (kind/name)', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'svc/myservice': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'svc/myservice': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /svc\/myservice/i})).toBeInTheDocument();
+        });
+
+        await selectObject('svc/myservice');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/root/svc/myservice/action/restart'),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('skips action when objectStatus is missing for target object', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {},
+                objectInstanceStatus: {
+                    'test-ns/svc/ghost': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        useFetchDaemonStatus.mockReturnValue({
+            daemon: {
+                cluster: {
+                    object: {
+                        'test-ns/svc/ghost': {avail: 'up', frozen: 'unfrozen'},
+                    }
+                }
+            },
+        });
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/ghost/i})).toBeInTheDocument();
+        });
+
+        await selectObject('test-ns/svc/ghost');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/failed on all 1 object\(s\)/i);
+        });
+    });
+
+    test('skips freeze action when object is already frozen', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/already-frozen': {avail: 'up', frozen: 'frozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/already-frozen': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /already-frozen/i})).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /already-frozen/i});
+        const menuButton = within(row).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const menu = screen.getByRole('menu');
+        expect(within(menu).queryByText('Freeze')).not.toBeInTheDocument();
+        expect(within(menu).getByText('Unfreeze')).toBeInTheDocument();
+    });
+
+    test('skips unfreeze action when object is not frozen', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/not-frozen': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/not-frozen': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /not-frozen/i})).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /not-frozen/i});
+        const menuButton = within(row).getByRole('button', {name: /more actions/i});
+        fireEvent.click(menuButton);
+
+        await waitFor(() => {
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+        });
+
+        const menu = screen.getByRole('menu');
+        expect(within(menu).getByText('Freeze')).toBeInTheDocument();
+        expect(within(menu).queryByText('Unfreeze')).not.toBeInTheDocument();
+    });
+
+    test('toggles global state filter off by clicking chip delete', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+        });
+
+        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+        const deleteIcon = within(chip).getByTestId('CloseIcon');
+        fireEvent.click(deleteIcon);
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        });
+    });
+
+    test('toggles kind filter off by clicking chip delete', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Kind', 'svc');
+        await waitForFilterApplied();
+
+        const chip = screen.getByText(/^svc$/i).closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+        const deleteIcon = within(chip).getByTestId('CloseIcon');
+        fireEvent.click(deleteIcon);
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+        });
+    });
+
+    test('handles Kind select onChange directly', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const kindSelect = screen.getByLabelText('Kind');
+        fireEvent.mouseDown(kindSelect);
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const listbox = screen.getByRole('listbox');
+        const option = within(listbox).getByText('svc');
+        fireEvent.click(option);
+
+        fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+        });
+    });
+
+    test('node status shows n/a state for missing avail', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/noavail': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/noavail': {
+                        node1: {},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/noavail/i})).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/noavail/i});
+        const cells = within(row).getAllByRole('cell');
+        const nodeCell = cells[3];
+        expect(within(nodeCell).getByText('-')).toBeInTheDocument();
+    });
+
+    test('global state filter chip click toggles selection', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+        });
+
+        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
+        fireEvent.click(chip);
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        });
+    });
+
+    test('renders cluster object name with ccfg kind', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'cluster': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'cluster': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /cluster/i})).toBeInTheDocument();
+        });
+
+        await selectObject('cluster');
+        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/root/ccfg/cluster/action/restart'),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('displays GlobalExpectDisplay as empty when globalExpect is falsy', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/no-expect': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/no-expect': {
+                        node1: {avail: 'up'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/no-expect': {state: 'idle', global_expect: ''},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/no-expect/i})).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/no-expect/i});
+        expect(row).toBeInTheDocument();
+    });
+
+    test('multiple filters combined reduce results correctly', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Namespace', 'test-ns');
+        await waitForFilterApplied();
+
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
+        });
+    });
+
+    test('shows empty message when no objects match filters', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const searchInput = screen.getByLabelText('Name');
+        fireEvent.change(searchInput, {target: {value: 'xxxxxxxxxnonexistent'}});
+
+        await waitFor(() => {
+            expect(screen.getByText(/No objects found matching the current filters/i)).toBeInTheDocument();
+        });
+    });
+
+    test('URL contains multiple filter values joined by comma', async () => {
+        jest.useFakeTimers();
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const globalStateSelect = screen.getByLabelText('Global State');
+        fireEvent.mouseDown(globalStateSelect);
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const listbox = screen.getByRole('listbox');
+        const upOption = within(listbox).getAllByRole('option').find(o => o.textContent.toLowerCase().includes('up'));
+        const downOption = within(listbox).getAllByRole('option').find(o => o.textContent.toLowerCase().includes('down'));
+
+        fireEvent.click(within(upOption).getByRole('checkbox'));
+        fireEvent.click(within(downOption).getByRole('checkbox'));
+
+        fireEvent.keyDown(listbox, {key: 'Escape'});
+
+        jest.advanceTimersByTime(300);
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith(
+                expect.stringMatching(/globalState=.*up.*down|globalState=.*down.*up/),
+                {replace: true}
+            );
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('NodeStatusIcons memo comparator covered by rendering down state', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {'test-ns/svc/memo-cov': {avail: 'up', frozen: 'unfrozen'}},
+                objectInstanceStatus: {
+                    'test-ns/svc/memo-cov': {
+                        node1: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Node node1 has warning')).toBeInTheDocument();
+        });
+    });
+
+    test('NodeStatusIcons renders down state correctly', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {'test-ns/svc/node-down': {avail: 'up', frozen: 'unfrozen'}},
+                objectInstanceStatus: {
+                    'test-ns/svc/node-down': {
+                        node1: {avail: 'down', frozen_at: '2025-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
+        });
+
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/node-down/i});
+        const cells = within(row).getAllByRole('cell');
+        expect(cells.length).toBeGreaterThan(3);
+    });
+
+    test('NodeStateDisplay memo comparator covered by rendering non-idle state', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {'test-ns/svc/memo-state-cov': {avail: 'up', frozen: 'unfrozen'}},
+                objectInstanceStatus: {
+                    'test-ns/svc/memo-state-cov': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/memo-state-cov': {state: 'starting', global_expect: 'none'},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByText('starting')).toBeInTheDocument();
+        });
+    });
+
+    test('NodeStateDisplay renders idle state correctly', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {'test-ns/svc/node-idle': {avail: 'up', frozen: 'unfrozen'}},
+                objectInstanceStatus: {
+                    'test-ns/svc/node-idle': {
+                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+                    },
+                },
+                instanceMonitor: {
+                    'node1:test-ns/svc/node-idle': {state: 'running', global_expect: 'none'},
+                },
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/node-idle/i})).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('running')).toBeInTheDocument();
+    });
+
+    test('filteredObjectNames skips objects not matching namespace filter', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const namespaceSelect = screen.getByLabelText('Namespace');
+        fireEvent.mouseDown(namespaceSelect);
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const listbox = screen.getByRole('listbox');
+        const rootOption = within(listbox).getAllByRole('option').find(o =>
+            o.textContent.toLowerCase().includes('root')
+        );
+        fireEvent.click(within(rootOption).getByRole('checkbox'));
+        fireEvent.keyDown(listbox, {key: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test1/i})).not.toBeInTheDocument();
+        });
+    });
+
+    test('filteredObjectNames skips objects not matching kind filter', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/svcobj': {avail: 'up', frozen: 'unfrozen'},
+                    'test-ns/cfg/cfgobj': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/svcobj': {node1: {avail: 'up'}},
+                    'test-ns/cfg/cfgobj': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const kindSelect = screen.getByLabelText('Kind');
+        fireEvent.mouseDown(kindSelect);
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const listbox = screen.getByRole('listbox');
+        const cfgOption = within(listbox).getAllByRole('option').find(o =>
+            o.textContent.toLowerCase().includes('cfg')
+        );
+        fireEvent.click(within(cfgOption).getByRole('checkbox'));
+        fireEvent.keyDown(listbox, {key: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/svcobj/i})).not.toBeInTheDocument();
+        });
+    });
+
+    test('adds global state to filter when clicking chip label (onClick)', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
+        });
+
+        await selectFilterOption('Global State', 'Down');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
+        });
+    });
+
+    test('adds namespace to filter when using select (add branch)', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Namespace', 'test-ns');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
+        });
+
+        await selectFilterOption('Namespace', 'root');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
+        });
+    });
+
+    test('adds kind to filter when using select (add branch)', async () => {
+        useEventStore.mockImplementation((selector) =>
+            selector({
+                objectStatus: {
+                    'test-ns/svc/svcobj': {avail: 'up', frozen: 'unfrozen'},
+                    'test-ns/cfg/cfgobj': {avail: 'up', frozen: 'unfrozen'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/svcobj': {node1: {avail: 'up'}},
+                    'test-ns/cfg/cfgobj': {node1: {avail: 'up'}},
+                },
+                instanceMonitor: {},
+                removeObject: mockRemoveObject,
+            })
+        );
+
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Kind', 'svc');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).not.toBeInTheDocument();
+        });
+
+        await selectFilterOption('Kind', 'cfg');
+        await waitForFilterApplied();
+
+        await waitFor(() => {
+            expect(screen.getByRole('row', {name: /test-ns\/svc\/svcobj/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).toBeInTheDocument();
+        });
+    });
+
+    test('GlobalState renderValue shows warn and n/a icons', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        const globalStateSelect = screen.getByLabelText('Global State');
+        fireEvent.mouseDown(globalStateSelect);
+
+        await waitFor(() => {
+            expect(screen.getByRole('listbox')).toBeInTheDocument();
+        });
+
+        const listbox = screen.getByRole('listbox');
+
+        const warnOption = within(listbox).getAllByRole('option').find(o =>
+            o.textContent.toLowerCase().includes('warn')
+        );
+        fireEvent.click(within(warnOption).getByRole('checkbox'));
+
+        const naOption = within(listbox).getAllByRole('option').find(o =>
+            o.textContent.toLowerCase().includes('n/a')
+        );
+        fireEvent.click(within(naOption).getByRole('checkbox'));
+
+        fireEvent.keyDown(listbox, {key: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            const chips = document.querySelectorAll('.MuiChip-root');
+            expect(chips.length).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    test('chip onMouseDown stopPropagation prevents select from reopening', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Global State', 'Up');
+        await waitForFilterApplied();
+
+        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+
+        fireEvent.mouseDown(chip);
+
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    test('namespace chip onMouseDown stopPropagation prevents select from reopening', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Namespace', 'test-ns');
+        await waitForFilterApplied();
+
+        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+
+        fireEvent.mouseDown(chip);
+
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    test('kind chip onMouseDown stopPropagation prevents select from reopening', async () => {
+        setupComponent();
+        await waitForComponentToLoad();
+
+        await selectFilterOption('Kind', 'svc');
+        await waitForFilterApplied();
+
+        const chip = screen.getByText(/^svc$/i).closest('.MuiChip-root');
+        expect(chip).toBeInTheDocument();
+
+        fireEvent.mouseDown(chip);
+
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     });
 });

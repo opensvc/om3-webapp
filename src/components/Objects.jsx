@@ -45,7 +45,7 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
-import {closeEventSource, startEventReception} from "../eventSourceManager";
+import {closeEventSource, startEventReception, forceFlush} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
@@ -406,6 +406,15 @@ const TableRowComponent = React.memo(({
             </TableCell>
         </TableRow>
     );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.objectName === nextProps.objectName &&
+        prevProps.isSelected === nextProps.isSelected &&
+        prevProps.isMenuOpen === nextProps.isMenuOpen &&
+        prevProps.isWideScreen === nextProps.isWideScreen &&
+        prevProps.allNodes.length === nextProps.allNodes.length &&
+        prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
+    );
 });
 
 const Objects = () => {
@@ -637,6 +646,17 @@ const Objects = () => {
         [handleRowMenuClose, handleActionsMenuClose]
     );
 
+    const updateFrozenStatusOptimistic = useCallback((objectName, newFrozenValue) => {
+        const store = useEventStore.getState();
+        const currentStatus = store.objectStatus[objectName];
+        if (currentStatus) {
+            store.setObjectStatuses({
+                ...store.objectStatus,
+                [objectName]: {...currentStatus, frozen: newFrozenValue}
+            });
+        }
+    }, []);
+
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -672,13 +692,23 @@ const Objects = () => {
                         return;
                     }
                     successCount++;
-                    if (action === "delete") removeObject(objectName);
+
+                    if (action === "freeze") {
+                        updateFrozenStatusOptimistic(objectName, "frozen");
+                    } else if (action === "unfreeze") {
+                        updateFrozenStatusOptimistic(objectName, "unfrozen");
+                    } else if (action === "delete") {
+                        removeObject(objectName);
+                    }
                 } catch (error) {
                     logger.error(`Failed to execute ${action} on ${objectName}:`, error);
                     errorCount++;
                 }
             });
             await Promise.all(promises);
+
+            forceFlush();
+
             setSnackbar({
                 open: true,
                 message:
@@ -692,7 +722,7 @@ const Objects = () => {
             setSelectedObjects([]);
             setPendingAction(null);
         },
-        [pendingAction, selectedObjects, objectStatus, removeObject]
+        [pendingAction, selectedObjects, objectStatus, removeObject, updateFrozenStatusOptimistic]
     );
 
     const handleObjectClick = useCallback(
@@ -793,7 +823,7 @@ const Objects = () => {
 
     useEffect(() => {
         setVisibleCount(30);
-    }, [sortedObjectNames.length]);
+    }, [sortedObjectNames]);
 
     useEffect(() => {
         const timer = setTimeout(() => {

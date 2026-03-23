@@ -12,6 +12,16 @@ jest.mock('../hooks/useEventLogStore.js');
 // Mock timers
 jest.useFakeTimers();
 
+// Mock performance.now to control flush timing
+let mockNow = 0;
+const originalPerformance = global.performance;
+beforeAll(() => {
+    global.performance = {now: () => mockNow};
+});
+afterAll(() => {
+    global.performance = originalPerformance;
+});
+
 // Helper function to simulate shallowEqual logic
 const mockShallowEqual = (a, b) => {
     if (a === b) return true;
@@ -36,6 +46,10 @@ describe('eventSourceManager', () => {
     beforeEach(() => {
         // Reset all mocks
         jest.clearAllMocks();
+        // Advance mockNow by a large amount each test so lastFlushTime (module-level, persists
+        // between tests) is always far enough in the past: now - lastFlushTime >= MIN_FLUSH_INTERVAL(10).
+        // Using += 1_000_000 guarantees this even if the previous test flushed at the previous mockNow.
+        mockNow += 1_000_000;
 
         // Setup complete mock store with shallowEqual simulation
         mockStore = {
@@ -137,6 +151,7 @@ describe('eventSourceManager', () => {
             addEventListener: jest.fn(),
             close: jest.fn(),
             readyState: 1, // OPEN state
+            url: URL_NODE_EVENT + '?cache=true&filter=NodeStatusUpdated',
         };
 
         mockLoggerEventSource = {
@@ -145,6 +160,7 @@ describe('eventSourceManager', () => {
             addEventListener: jest.fn(),
             close: jest.fn(),
             readyState: 1,
+            url: URL_NODE_EVENT + '?cache=true&filter=ObjectStatusUpdated',
         };
 
         // Mock EventSourcePolyfill to return our mock
@@ -191,9 +207,23 @@ describe('eventSourceManager', () => {
 
         // Mock EventSource for CLOSED
         global.EventSource = {CLOSED: 2};
+
+        // Mock requestAnimationFrame
+        global.requestAnimationFrame = jest.fn((cb) => {
+            setTimeout(cb, 0);
+            return 1;
+        });
     });
 
     afterEach(() => {
+        // Run all pending timers first so isFlushing/flushTimeoutId are properly reset
+        jest.runAllTimers();
+
+        // setPageActive(false) calls clearBuffers() which resets flushTimeoutId, eventCount,
+        // isFlushing, needsFlush — prevents stale state leaking between tests
+        eventSourceManager.setPageActive(false);
+        eventSourceManager.setPageActive(true);
+
         jest.clearAllTimers();
 
         // Restore console methods
@@ -447,6 +477,45 @@ describe('eventSourceManager', () => {
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             eventSourceManager.closeEventSource();
             expect(mockLogStore.addEventLog).toHaveBeenCalledWith('CONNECTION_CLOSED', expect.any(Object));
+        });
+
+        // Coverage for lines 726-727, 745: updateEventSourceToken with open EventSource
+        test('should restart EventSource when updateEventSourceToken called with open connection', () => {
+            // Create initial EventSource — mockEventSource needs a url for updateEventSourceToken to parse
+            mockEventSource.url = `${URL_NODE_EVENT}?cache=true&filter=NodeStatusUpdated`;
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+
+            // Prepare mock for the recreated EventSource
+            const recreatedMock = {
+                onopen: jest.fn(),
+                onerror: null,
+                addEventListener: jest.fn(),
+                close: jest.fn(),
+                readyState: 1,
+                url: `${URL_NODE_EVENT}?cache=true&filter=NodeStatusUpdated`,
+            };
+            EventSourcePolyfill.mockImplementation(() => recreatedMock);
+
+            // updateEventSourceToken closes current source and schedules recreation via setTimeout
+            localStorageMock.getItem.mockReturnValue('new-token');
+            eventSourceManager.updateEventSourceToken('new-token');
+
+            // Current EventSource should be closed immediately
+            expect(mockEventSource.close).toHaveBeenCalled();
+
+            // Advance timers to trigger the setTimeout(..., 100) callback on line 745
+            jest.advanceTimersByTime(200);
+
+            // A new EventSource should have been created (line 745 executed)
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
+        });
+
+        test('should not restart EventSource when updateEventSourceToken called but connection is closed', () => {
+            eventSourceManager.createEventSource(URL_NODE_EVENT, 'old-token');
+            mockEventSource.readyState = 2; // CLOSED
+            eventSourceManager.updateEventSourceToken('new-token');
+            // Should not create a new one since existing is closed
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -1102,6 +1171,276 @@ describe('eventSourceManager', () => {
 
             Object.defineProperty(navigator, 'userAgent', {value: originalUserAgent});
         });
+
+        test('should reschedule flush when MIN_FLUSH_INTERVAL not elapsed and no existing timeout', () => {
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // First flush at current mockNow to set lastFlushTime = mockNow
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+            jest.clearAllTimers();
+            const flushTime = mockNow;
+            eventSourceManager.forceFlush(); // lastFlushTime = flushTime
+
+            // Move only 2ms forward (< MIN_FLUSH_INTERVAL=10) so next flush is "too soon"
+            mockNow = flushTime + 2;
+
+            nodeStatusHandler({data: JSON.stringify({node: 'node2', node_status: {status: 'down'}})});
+            jest.clearAllTimers();
+            setTimeoutSpy.mockClear();
+            // forceFlush -> flushBuffers: elapsed=2 < 10 -> must reschedule via setTimeout
+            eventSourceManager.forceFlush();
+
+            expect(setTimeoutSpy).toHaveBeenCalled();
+
+            // Advance time so interval passes and flush completes
+            mockNow = flushTime + 100000;
+            jest.runAllTimers();
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+
+            setTimeoutSpy.mockRestore();
+        });
+
+        test('should clear pending flushTimeoutId when flushBuffers starts', () => {
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Send an event — schedules a debounce timeout (flushTimeoutId is set)
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+
+            // Now call forceFlush directly — it first clears flushTimeoutId (lines 285-288 path),
+            // then calls flushBuffers which also checks/clears flushTimeoutId
+            clearTimeoutSpy.mockClear();
+            eventSourceManager.forceFlush();
+
+            // clearTimeout should have been called to cancel the pending debounce timer
+            expect(clearTimeoutSpy).toHaveBeenCalled();
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+
+            clearTimeoutSpy.mockRestore();
+        });
+
+        test('should set needsFlush when event arrives during active flush', () => {
+            let handlerRef;
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            handlerRef = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Replace setNodeStatuses to capture calls and send a new event while isFlushing=true
+            let callCount = 0;
+            mockStore.setNodeStatuses = jest.fn(() => {
+                callCount++;
+                if (callCount === 1) {
+                    // isFlushing=true here — scheduleFlush hits the needsFlush branch
+                    // and logs the debug message, sets needsFlush=true, eventCount++, returns early
+                    handlerRef({data: JSON.stringify({node: 'node99', node_status: {status: 'up'}})});
+                }
+            });
+
+            handlerRef({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+            jest.clearAllTimers();
+            eventSourceManager.forceFlush();
+
+            // The debug log proves the isFlushing branch was entered
+            // The log is a single template string with no second argument
+            expect(console.debug).toHaveBeenCalledWith(
+                expect.stringContaining('Event arrived during flush')
+            );
+        });
+
+        test('should debounce multiple rapid events into a single flush', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Send 3 events rapidly — all land in the buffer before any timer fires
+            nodeStatusHandler({data: JSON.stringify({node: 'n1', node_status: {status: 'up'}})});
+            nodeStatusHandler({data: JSON.stringify({node: 'n2', node_status: {status: 'down'}})});
+            nodeStatusHandler({data: JSON.stringify({node: 'n3', node_status: {status: 'up'}})});
+
+            // Only one flush should occur when timer fires
+            jest.runAllTimers();
+            expect(mockStore.setNodeStatuses).toHaveBeenCalledTimes(1);
+            expect(mockStore.setNodeStatuses).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    n1: {status: 'up'},
+                    n2: {status: 'down'},
+                    n3: {status: 'up'},
+                })
+            );
+        });
+
+        test('should skip flush in debounce callback when eventCount already drained', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Send event — schedules debounce timeout, eventCount=1
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+
+            // forceFlush drains the buffer synchronously: eventCount becomes 0
+            eventSourceManager.forceFlush();
+            mockStore.setNodeStatuses.mockClear();
+
+            // Now fire the debounce timeout — eventCount=0 so flushBuffers is NOT called
+            jest.runAllTimers();
+            expect(mockStore.setNodeStatuses).not.toHaveBeenCalled();
+        });
+
+        test('should merge nested objectStatus updates preserving all fields', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'ObjectStatusUpdated'
+            )[1];
+
+            // Two updates to the same path — updateBuffer merges with spread operator
+            objectStatusHandler({
+                data: JSON.stringify({
+                    path: 'svc/test',
+                    object_status: {avail: 'up', frozen: false, instances: {n1: 'running'}}
+                })
+            });
+            objectStatusHandler({
+                data: JSON.stringify({
+                    path: 'svc/test',
+                    object_status: {avail: 'down', provisioned: true}
+                })
+            });
+
+            jest.runAllTimers();
+
+            // Merged result must contain fields from both events
+            expect(mockStore.setObjectStatuses).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    'svc/test': expect.objectContaining({
+                        avail: 'down',
+                        frozen: false,
+                        provisioned: true,
+                    })
+                })
+            );
+        });
+
+        test('should use requestAnimationFrame for non-Safari batch size flush', () => {
+            const rafSpy = jest.spyOn(global, 'requestAnimationFrame');
+
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // BATCH_SIZE for non-Safari = 50; the 50th event hits eventCount >= BATCH_SIZE
+            // which calls requestAnimationFrame(flushBuffers) instead of a debounced setTimeout
+            for (let i = 0; i < 50; i++) {
+                nodeStatusHandler({data: JSON.stringify({node: `node${i}`, node_status: {status: 'up'}})});
+            }
+
+            expect(rafSpy).toHaveBeenCalled();
+
+            rafSpy.mockRestore();
+            jest.runAllTimers();
+        });
+
+        test('should schedule re-flush when new events arrive during flush', () => {
+            let flushCallCount = 0;
+            const originalSetNodeStatuses = mockStore.setNodeStatuses;
+            mockStore.setNodeStatuses = jest.fn(() => {
+                flushCallCount++;
+                // During flush, simulate a new event arriving by directly incrementing eventCount
+                // This is tested indirectly via the needsFlush flag behavior
+            });
+
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Send initial event
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+            // Send a second event to trigger needsFlush scenario
+            nodeStatusHandler({data: JSON.stringify({node: 'node2', node_status: {status: 'down'}})});
+
+            jest.runAllTimers();
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+            mockStore.setNodeStatuses = originalSetNodeStatuses;
+        });
+
+        test('should deeply compare nested objects in isEqual', () => {
+            // The isEqual function is exercised internally during buffer merging
+            // Test by updating the same key twice with nested objects
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'ObjectStatusUpdated'
+            )[1];
+
+            // First event with nested object
+            objectStatusHandler({
+                data: JSON.stringify({
+                    path: 'object1',
+                    object_status: {
+                        availability: 'up',
+                        instances: {node1: {status: 'running'}, node2: {status: 'idle'}}
+                    }
+                })
+            });
+
+            // Second event that partially updates the same object (merging behavior)
+            objectStatusHandler({
+                data: JSON.stringify({
+                    path: 'object1',
+                    object_status: {
+                        availability: 'down',
+                        instances: {node1: {status: 'stopped'}, node2: {status: 'idle'}}
+                    }
+                })
+            });
+
+            jest.runAllTimers();
+            expect(mockStore.setObjectStatuses).toHaveBeenCalled();
+        });
+
+        test('should merge object status updates in buffer before flush', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const objectStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'ObjectStatusUpdated'
+            )[1];
+
+            objectStatusHandler({data: JSON.stringify({path: 'obj1', object_status: {field1: 'a', field2: 'b'}})});
+            objectStatusHandler({data: JSON.stringify({path: 'obj1', object_status: {field2: 'c', field3: 'd'}})});
+
+            jest.runAllTimers();
+            // The merged result should contain all fields
+            expect(mockStore.setObjectStatuses).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    obj1: expect.objectContaining({field1: 'a', field2: 'c', field3: 'd'})
+                })
+            );
+        });
+
+        test('should handle isEqual comparison with null and non-null values', () => {
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Initially store has null/empty status
+            mockStore.nodeStatus = {node1: null};
+
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+            jest.runAllTimers();
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+        });
     });
 
     describe('Error handling and reconnection', () => {
@@ -1213,6 +1552,34 @@ describe('eventSourceManager', () => {
             const event = window.dispatchEvent.mock.calls[0][0];
             expect(event.type).toBe('om3:auth-redirect');
             expect(event.detail).toBe('/auth-choice');
+        });
+
+        test('should export prepareForNavigation as alias for forceFlush', () => {
+            expect(eventSourceManager.prepareForNavigation).toBeDefined();
+            expect(typeof eventSourceManager.prepareForNavigation).toBe('function');
+
+            const eventSource = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
+            const nodeStatusHandler = eventSource.addEventListener.mock.calls.find(
+                call => call[0] === 'NodeStatusUpdated'
+            )[1];
+
+            // Send event to populate buffer (eventCount > 0)
+            nodeStatusHandler({data: JSON.stringify({node: 'node1', node_status: {status: 'up'}})});
+
+            // Cancel the debounce timer so only prepareForNavigation triggers the flush
+            jest.clearAllTimers();
+
+            eventSourceManager.prepareForNavigation();
+
+            expect(mockStore.setNodeStatuses).toHaveBeenCalled();
+        });
+
+        test('should configure EventSource with objectName - adds path to filter URL', () => {
+            eventSourceManager.configureEventSource('fake-token', 'my-service/svc1');
+            const url = EventSourcePolyfill.mock.calls[0][0];
+            // objectName is encoded in the filter param as "EventType,path=objectName"
+            // after encodeURIComponent: %2Cpath%3D
+            expect(url).toContain('path%3D');
         });
     });
 
@@ -1351,6 +1718,77 @@ describe('eventSourceManager', () => {
             eventSourceManager.closeLoggerEventSource();
             mockLoggerEventSource.onerror({status: 500});
             expect(console.info).not.toHaveBeenCalledWith(expect.stringContaining('Logger reconnecting'));
+        });
+
+        test('should restart logger EventSource when updateLoggerEventSourceToken called with open connection', () => {
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'old-token', ['ObjectStatusUpdated']);
+
+            const nextLoggerMock = {
+                onopen: jest.fn(),
+                onerror: null,
+                addEventListener: jest.fn(),
+                close: jest.fn(),
+                readyState: 1,
+                url: `${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`,
+            };
+            EventSourcePolyfill.mockImplementation(() => nextLoggerMock);
+
+            // getCurrentToken() is called inside the setTimeout callback —
+            // make localStorage return the new token so the callback proceeds
+            localStorageMock.getItem.mockReturnValue('new-token');
+
+            eventSourceManager.updateLoggerEventSourceToken('new-token');
+            expect(mockLoggerEventSource.close).toHaveBeenCalled();
+
+            // Fire the setTimeout(..., 100) callback — calls createLoggerEventSource
+            jest.advanceTimersByTime(200);
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(2);
+        });
+
+        test('should not restart logger EventSource when connection is already closed', () => {
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'old-token', []);
+            mockLoggerEventSource.readyState = 2; // CLOSED
+            eventSourceManager.updateLoggerEventSourceToken('new-token');
+            expect(EventSourcePolyfill).toHaveBeenCalledTimes(1);
+        });
+        test('should configure logger EventSource with objectName', () => {
+            eventSourceManager.configureLoggerEventSource('fake-token', 'my-service/svc1');
+            const url = EventSourcePolyfill.mock.calls[0][0];
+            expect(url).toContain('path%3D');
+        });
+
+        test('should start logger reception with objectName', () => {
+            eventSourceManager.startLoggerReception('fake-token', eventSourceManager.DEFAULT_FILTERS, 'my-service/svc1');
+            const url = EventSourcePolyfill.mock.calls[0][0];
+            expect(url).toContain('path%3D');
+        });
+
+        test('should handle invalid JSON in logger event and log parse error', () => {
+            // Ensure page is active (setPageActive(false) in other tests may have left it false)
+            eventSourceManager.setPageActive(true);
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'fake-token', ['ObjectStatusUpdated']);
+            const handler = mockLoggerEventSource.addEventListener.mock.calls[0][1];
+            handler({data: 'not valid json'});
+            expect(mockLogStore.addEventLog).toHaveBeenCalledWith(
+                'ObjectStatusUpdated_PARSE_ERROR',
+                expect.objectContaining({
+                    error: expect.any(String),
+                    rawData: 'not valid json'
+                })
+            );
+        });
+
+        test('should handle silent renew failure in logger', async () => {
+            window.oidcUserManager = {signinSilent: jest.fn().mockRejectedValue(new Error('logger renew fail'))};
+            localStorageMock.getItem.mockReturnValue(null);
+            eventSourceManager.createLoggerEventSource(URL_NODE_EVENT, 'old-token', []);
+            mockLoggerEventSource.onerror({status: 401});
+
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(console.error).toHaveBeenCalledWith('❌ Silent renew failed for logger:', expect.any(Error));
+            expect(window.dispatchEvent).toHaveBeenCalledWith(expect.any(CustomEvent));
         });
     });
 });

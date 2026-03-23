@@ -1,7 +1,6 @@
 import {create} from "zustand";
 import logger from '../utils/logger.js';
 
-// Fonction helper
 const parseObjectPath = (objName) => {
     if (!objName || typeof objName !== "string") {
         return {namespace: "root", kind: "svc", name: ""};
@@ -95,7 +94,6 @@ const useEventStore = create((set, get) => ({
                     newObjectInstanceStatus[path] = {};
                     hasChanges = true;
                 } else {
-                    // CRITICAL: Always make shallow copy to avoid mutations
                     newObjectInstanceStatus[path] = {...newObjectInstanceStatus[path]};
                 }
 

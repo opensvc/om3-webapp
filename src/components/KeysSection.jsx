@@ -4,9 +4,6 @@ import {
     Typography,
     Tooltip,
     IconButton,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
     CircularProgress,
     Alert,
     Dialog,
@@ -28,11 +25,12 @@ import {
     FormControlLabel,
     Radio,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import {URL_OBJECT} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
@@ -42,7 +40,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
     const [keysError, setKeysError] = useState(null);
-    const [keysAccordionExpanded, setKeysAccordionExpanded] = useState(true);
 
     // State for key actions
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -59,13 +56,18 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [updateKeyFile, setUpdateKeyFile] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // New states for input mode
+    // States for input mode and content
     const [createInputMode, setCreateInputMode] = useState("empty"); // "empty", "file", "text"
     const [updateInputMode, setUpdateInputMode] = useState("file"); // "file", "text"
     const [newKeyText, setNewKeyText] = useState("");
     const [updateKeyText, setUpdateKeyText] = useState("");
+    const [updateContentLoading, setUpdateContentLoading] = useState(false);
 
-    // Fetch keys for cfg or sec objects
+    // Fullscreen states for textarea only (not the whole dialog)
+    const [createTextFullscreen, setCreateTextFullscreen] = useState(false);
+    const [updateTextFullscreen, setUpdateTextFullscreen] = useState(false);
+
+    // Fetch keys
     const fetchKeys = useCallback(async () => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         if (!["cfg", "sec"].includes(kind)) {
@@ -102,7 +104,68 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         }
     }, [decodedObjectName]);
 
-    // View key content
+    // Fetch key content
+    const fetchKeyContent = useCallback(async (keyName) => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            openSnackbar("Auth token not found.", "error");
+            return {type: 'error', content: null};
+        }
+
+        try {
+            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyName)}`;
+            const response = await fetch(url, {
+                headers: {Authorization: `Bearer ${token}`},
+            });
+            if (!response.ok) {
+                openSnackbar(`Failed to fetch key content: ${response.status}`, "error");
+                return {type: 'error', content: null};
+            }
+
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+
+            // Try to decode as text
+            let isText = true;
+            let textContent = "";
+            try {
+                textContent = new TextDecoder('utf-8', {fatal: true}).decode(uint8Array);
+                for (let i = 0; i < textContent.length; i++) {
+                    const code = textContent.charCodeAt(i);
+                    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+                        isText = false;
+                        break;
+                    }
+                }
+            } catch (e) {
+                isText = false;
+            }
+
+            if (isText && textContent.length > 0) {
+                return {type: "text", content: textContent};
+            } else {
+                const hexLines = [];
+                for (let i = 0; i < uint8Array.length; i += 16) {
+                    const chunk = uint8Array.slice(i, i + 16);
+                    const hex = Array.from(chunk)
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    const ascii = Array.from(chunk)
+                        .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
+                        .join('');
+                    hexLines.push(`${i.toString(16).padStart(8, '0')}  ${hex.padEnd(48, ' ')}  ${ascii}`);
+                }
+                return {type: "binary", content: hexLines.join('\n')};
+            }
+        } catch (err) {
+            openSnackbar(`Error: ${err.message}`, "error");
+            return {type: 'error', content: null};
+        }
+    }, [decodedObjectName, openSnackbar]);
+
+    // View key
     const handleViewKey = async (keyName) => {
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
@@ -131,12 +194,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             const arrayBuffer = await blob.arrayBuffer();
             const uint8Array = new Uint8Array(arrayBuffer);
 
-            // Try to decode as text
             let isText = true;
             let textContent = "";
             try {
                 textContent = new TextDecoder('utf-8', {fatal: true}).decode(uint8Array);
-                // Check if it contains only printable characters
                 for (let i = 0; i < textContent.length; i++) {
                     const code = textContent.charCodeAt(i);
                     if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
@@ -151,7 +212,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             if (isText && textContent.length > 0) {
                 setKeyViewContent({type: "text", content: textContent});
             } else {
-                // Display as hex
                 const hexLines = [];
                 for (let i = 0; i < uint8Array.length; i += 16) {
                     const chunk = uint8Array.slice(i, i + 16);
@@ -213,7 +273,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             return;
         }
 
-        // Validate based on input mode
         if (createInputMode === "file" && !newKeyFile) {
             openSnackbar("Please select a file.", "error");
             return;
@@ -246,6 +305,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
+
                 body: body,
             });
             if (!response.ok) {
@@ -263,6 +323,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             setNewKeyFile(null);
             setNewKeyText("");
             setCreateInputMode("empty");
+            setCreateTextFullscreen(false);
         }
     };
 
@@ -320,21 +381,32 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             setUpdateKeyFile(null);
             setUpdateKeyText("");
             setUpdateInputMode("file");
+            setUpdateTextFullscreen(false);
         }
     };
 
-    // Handle accordion expansion
-    const handleKeysAccordionChange = (isExpanded) => {
-        setKeysAccordionExpanded(isExpanded);
-    };
-
-    // Open update dialog for a specific key
-    const handleOpenUpdateDialog = (keyName) => {
+    // Open update dialog with pre-filled content
+    const handleOpenUpdateDialog = async (keyName) => {
         setUpdateKeyName(keyName);
         setUpdateDialogOpen(true);
+        setUpdateContentLoading(true);
+        setUpdateKeyText("");
+        setUpdateKeyFile(null);
+        setUpdateInputMode("file");
+        setUpdateTextFullscreen(false);
+
+        const result = await fetchKeyContent(keyName);
+        if (result.type === "text") {
+            setUpdateKeyText(result.content);
+            setUpdateInputMode("text");
+        } else if (result.type === "binary") {
+            openSnackbar("Key is binary – please use file upload to update.", "info");
+        }
+
+        setUpdateContentLoading(false);
     };
 
-    // Initial load effect with error handling
+    // Initial load
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -344,7 +416,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         }
     }, [decodedObjectName, fetchKeys]);
 
-    // Check if keys section should be displayed
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
 
@@ -352,146 +423,99 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         return null;
     }
 
-    // Helper to check if keysError has a value
     const hasKeysError = Boolean(keysError);
-
-    // Helper to ensure keys is an array and map to safe structure
     const safeKeys = Array.isArray(keys) ? keys : [];
 
     return (
-        <Box
-            sx={{
-                mb: 4,
-                p: 2,
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: 1,
-            }}
-        >
-            <Accordion
-                expanded={keysAccordionExpanded}
-                onChange={(isExpanded) => handleKeysAccordionChange(isExpanded)}
-                sx={{
-                    border: "none",
-                    boxShadow: "none",
-                    backgroundColor: "transparent",
-                    "&:before": {display: "none"},
-                    "& .MuiAccordionSummary-root": {
-                        border: "none",
-                        backgroundColor: "transparent",
-                        minHeight: "auto",
-                        "&.Mui-expanded": {minHeight: "auto"},
-                        padding: 0,
-                    },
-                    "& .MuiAccordionDetails-root": {
-                        border: "none",
-                        backgroundColor: "transparent",
-                        padding: 0,
-                    },
-                }}
-            >
-                <AccordionSummary
-                    expandIcon={<ExpandMoreIcon/>}
-                    aria-controls="panel-keys-content"
-                    id="panel-keys-header"
-                >
-                    <Typography variant="h6" fontWeight="medium">
-                        Object Keys ({safeKeys.length})
-                    </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                    <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2}}>
-                        <Tooltip title="Add new key">
-                            <IconButton
-                                color="primary"
-                                onClick={() => setCreateDialogOpen(true)}
-                                disabled={actionLoading}
-                                aria-label="Add new key"
-                            >
-                                <AddIcon/>
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                    {keysLoading && <CircularProgress size={24}/>}
-                    {hasKeysError && (
-                        <Alert severity="error" sx={{mb: 2}}>
-                            {String(keysError)}
-                        </Alert>
-                    )}
-                    {!keysLoading && !hasKeysError && safeKeys.length === 0 && (
-                        <Typography color="textSecondary">No keys available.</Typography>
-                    )}
-                    {!keysLoading && !hasKeysError && safeKeys.length > 0 && (
-                        <TableContainer component={Paper} sx={{boxShadow: "none"}}>
-                            <Table sx={{minWidth: 650}} aria-label="keys table">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
-                                        <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
-                                        <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
-                                        <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {(() => {
-                                        const rows = [];
-                                        for (const key of safeKeys) {
-                                            rows.push(
-                                                <TableRow key={key.name}>
-                                                    <TableCell component="th" scope="row">
-                                                        {key.name}
-                                                    </TableCell>
-                                                    <TableCell>{key.node}</TableCell>
-                                                    <TableCell>{key.size} bytes</TableCell>
-                                                    <TableCell>
-                                                        <Tooltip title="View">
-                                                            <span>
-                                                                <IconButton
-                                                                    onClick={() => handleViewKey(key.name)}
-                                                                    disabled={actionLoading}
-                                                                    aria-label={`View key ${key.name}`}
-                                                                >
-                                                                    <VisibilityIcon/>
-                                                                </IconButton>
-                                                            </span>
-                                                        </Tooltip>
-                                                        <Tooltip title="Edit">
-                                                            <span>
-                                                                <IconButton
-                                                                    onClick={() => handleOpenUpdateDialog(key.name)}
-                                                                    disabled={actionLoading}
-                                                                    aria-label={`Edit key ${key.name}`}
-                                                                >
-                                                                    <EditIcon/>
-                                                                </IconButton>
-                                                            </span>
-                                                        </Tooltip>
-                                                        <Tooltip title="Delete">
-                                                            <span>
-                                                                <IconButton
-                                                                    onClick={() => {
-                                                                        setKeyToDelete(key.name);
-                                                                        setDeleteDialogOpen(true);
-                                                                    }}
-                                                                    disabled={actionLoading}
-                                                                    aria-label={`Delete key ${key.name}`}
-                                                                >
-                                                                    <DeleteIcon/>
-                                                                </IconButton>
-                                                            </span>
-                                                        </Tooltip>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        }
-                                        return rows;
-                                    })()}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    )}
-                </AccordionDetails>
-            </Accordion>
+        <Box sx={{mb: 4}}>
+            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                <Typography variant="h6" fontWeight="medium">
+                    Object Keys ({safeKeys.length})
+                </Typography>
+                <Tooltip title="Add new key">
+                    <IconButton
+                        color="primary"
+                        onClick={() => setCreateDialogOpen(true)}
+                        disabled={actionLoading}
+                        aria-label="Add new key"
+                    >
+                        <AddIcon/>
+                    </IconButton>
+                </Tooltip>
+            </Box>
+
+            {keysLoading && <CircularProgress size={24}/>}
+            {hasKeysError && (
+                <Alert severity="error" sx={{mb: 2}}>
+                    {String(keysError)}
+                </Alert>
+            )}
+            {!keysLoading && !hasKeysError && safeKeys.length === 0 && (
+                <Typography color="textSecondary">No keys available.</Typography>
+            )}
+            {!keysLoading && !hasKeysError && safeKeys.length > 0 && (
+                <TableContainer component={Paper} sx={{boxShadow: "none"}}>
+                    <Table sx={{minWidth: 650}} aria-label="keys table">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
+                                <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {safeKeys.map((key) => (
+                                <TableRow key={key.name}>
+                                    <TableCell component="th" scope="row">
+                                        {key.name}
+                                    </TableCell>
+                                    <TableCell>{key.node}</TableCell>
+                                    <TableCell>{key.size} bytes</TableCell>
+                                    <TableCell>
+                                        <Tooltip title="View">
+                                            <span>
+                                                <IconButton
+                                                    onClick={() => handleViewKey(key.name)}
+                                                    disabled={actionLoading}
+                                                    aria-label={`View key ${key.name}`}
+                                                >
+                                                    <VisibilityIcon/>
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                        <Tooltip title="Edit">
+                                            <span>
+                                                <IconButton
+                                                    onClick={() => handleOpenUpdateDialog(key.name)}
+                                                    disabled={actionLoading}
+                                                    aria-label={`Edit key ${key.name}`}
+                                                >
+                                                    <EditIcon/>
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                        <Tooltip title="Delete">
+                                            <span>
+                                                <IconButton
+                                                    onClick={() => {
+                                                        setKeyToDelete(key.name);
+                                                        setDeleteDialogOpen(true);
+                                                    }}
+                                                    disabled={actionLoading}
+                                                    aria-label={`Delete key ${key.name}`}
+                                                >
+                                                    <DeleteIcon/>
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
 
             {/* VIEW KEY DIALOG */}
             <Dialog
@@ -567,50 +591,84 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             {/* CREATE KEY DIALOG */}
             <Dialog
                 open={createDialogOpen}
-                onClose={() => setCreateDialogOpen(false)}
-                maxWidth="sm"
-                fullWidth
+                onClose={() => {
+                    setCreateDialogOpen(false);
+                    setCreateTextFullscreen(false);
+                }}
+                maxWidth={createTextFullscreen ? false : "md"}
+                fullScreen={createTextFullscreen}
+                fullWidth={!createTextFullscreen}
             >
-                <DialogTitle>Create New Key</DialogTitle>
+                <DialogTitle>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                        <Typography variant="h6">Create New Key</Typography>
+                        {createTextFullscreen && (
+                            <IconButton
+                                edge="end"
+                                onClick={() => setCreateTextFullscreen(false)}
+                                aria-label="Exit full screen"
+                            >
+                                <FullscreenExitIcon/>
+                            </IconButton>
+                        )}
+                    </Box>
+                </DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Key Name"
-                        fullWidth
-                        variant="outlined"
-                        value={newKeyName}
-                        onChange={(e) => setNewKeyName(e.target.value)}
-                        disabled={actionLoading}
-                    />
-                    <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
-                        <FormLabel component="legend">Input Mode</FormLabel>
-                        <RadioGroup
-                            value={createInputMode}
-                            onChange={(e) => setCreateInputMode(e.target.value)}
-                        >
-                            <FormControlLabel
-                                value="empty"
-                                control={<Radio/>}
-                                label="Empty key (no content)"
+                    {!createTextFullscreen && (
+                        <>
+                            <TextField
+                                autoFocus
+                                margin="dense"
+                                label="Key Name"
+                                fullWidth
+                                variant="outlined"
+                                value={newKeyName}
+                                onChange={(e) => setNewKeyName(e.target.value)}
                                 disabled={actionLoading}
                             />
-                            <FormControlLabel
-                                value="file"
-                                control={<Radio/>}
-                                label="Upload from file"
-                                disabled={actionLoading}
-                            />
-                            <FormControlLabel
-                                value="text"
-                                control={<Radio/>}
-                                label="Enter text directly"
-                                disabled={actionLoading}
-                            />
-                        </RadioGroup>
-                    </FormControl>
+                            <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
+                                <FormLabel component="legend">Input Mode</FormLabel>
+                                <RadioGroup
+                                    value={createInputMode}
+                                    onChange={(e) => setCreateInputMode(e.target.value)}
+                                >
+                                    <FormControlLabel
+                                        value="empty"
+                                        control={<Radio/>}
+                                        label="Empty key (no content)"
+                                        disabled={actionLoading}
+                                    />
+                                    <FormControlLabel
+                                        value="file"
+                                        control={<Radio/>}
+                                        label="Upload from file"
+                                        disabled={actionLoading}
+                                    />
+                                    <Box display="flex" alignItems="center">
+                                        <FormControlLabel
+                                            value="text"
+                                            control={<Radio/>}
+                                            label="Enter text directly"
+                                            disabled={actionLoading}
+                                        />
+                                        {createInputMode === "text" && !createTextFullscreen && (
+                                            <Tooltip title="Full screen">
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => setCreateTextFullscreen(true)}
+                                                    sx={{ml: 1}}
+                                                >
+                                                    <FullscreenIcon/>
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
+                                    </Box>
+                                </RadioGroup>
+                            </FormControl>
+                        </>
+                    )}
 
-                    {createInputMode === "file" && (
+                    {createInputMode === "file" && !createTextFullscreen && (
                         <Box sx={{mt: 2}}>
                             <input
                                 id="create-key-file-upload"
@@ -639,24 +697,43 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     )}
 
                     {createInputMode === "text" && (
-                        <Box sx={{mt: 2}}>
+                        <Box
+                            sx={{
+                                mt: createTextFullscreen ? 0 : 2,
+                                height: createTextFullscreen ? 'calc(100vh - 180px)' : 'auto',
+                                width: '100%',
+                            }}
+                        >
                             <TextField
                                 multiline
                                 fullWidth
                                 variant="outlined"
-                                label="Key Content"
+                                label={createTextFullscreen ? undefined : "Key Content"}
                                 value={newKeyText}
                                 onChange={(e) => setNewKeyText(e.target.value)}
                                 disabled={actionLoading}
-                                minRows={4}
-                                maxRows={10}
+                                minRows={createTextFullscreen ? 20 : 8}
+                                maxRows={createTextFullscreen ? 40 : 20}
                                 placeholder="Enter the text content for this key..."
+                                sx={{
+                                    height: createTextFullscreen ? '100%' : 'auto',
+                                    '& .MuiInputBase-root': {
+                                        height: createTextFullscreen ? '100%' : 'auto',
+                                    },
+                                    '& .MuiInputBase-input': {
+                                        resize: 'vertical',
+                                        height: createTextFullscreen ? '100% !important' : 'auto',
+                                    }
+                                }}
                             />
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setCreateDialogOpen(false)} disabled={actionLoading}>
+                    <Button onClick={() => {
+                        setCreateDialogOpen(false);
+                        setCreateTextFullscreen(false);
+                    }} disabled={actionLoading}>
                         Cancel
                     </Button>
                     <Button
@@ -672,96 +749,162 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
             {/* UPDATE KEY DIALOG */}
             <Dialog
                 open={updateDialogOpen}
-                onClose={() => setUpdateDialogOpen(false)}
-                maxWidth="sm"
-                fullWidth
+                onClose={() => {
+                    setUpdateDialogOpen(false);
+                    setUpdateTextFullscreen(false);
+                }}
+                maxWidth={updateTextFullscreen ? false : "md"}
+                fullScreen={updateTextFullscreen}
+                fullWidth={!updateTextFullscreen}
             >
-                <DialogTitle>Update Key</DialogTitle>
+                <DialogTitle>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                        <Typography variant="h6">Update Key</Typography>
+                        {updateTextFullscreen && (
+                            <IconButton
+                                edge="end"
+                                onClick={() => setUpdateTextFullscreen(false)}
+                                aria-label="Exit full screen"
+                            >
+                                <FullscreenExitIcon/>
+                            </IconButton>
+                        )}
+                    </Box>
+                </DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Key Name"
-                        fullWidth
-                        variant="outlined"
-                        value={updateKeyName}
-                        onChange={(e) => setUpdateKeyName(e.target.value)}
-                        disabled={actionLoading}
-                    />
-                    <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
-                        <FormLabel component="legend">Input Mode</FormLabel>
-                        <RadioGroup
-                            value={updateInputMode}
-                            onChange={(e) => setUpdateInputMode(e.target.value)}
-                        >
-                            <FormControlLabel
-                                value="file"
-                                control={<Radio/>}
-                                label="Upload from file"
-                                disabled={actionLoading}
-                            />
-                            <FormControlLabel
-                                value="text"
-                                control={<Radio/>}
-                                label="Enter text directly"
-                                disabled={actionLoading}
-                            />
-                        </RadioGroup>
-                    </FormControl>
-
-                    {updateInputMode === "file" && (
-                        <Box sx={{mt: 2}}>
-                            <input
-                                id="update-key-file-upload"
-                                type="file"
-                                hidden
-                                onChange={(e) => setUpdateKeyFile(e.target.files[0])}
-                                disabled={actionLoading}
-                            />
-                            <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    component="label"
-                                    htmlFor="update-key-file-upload"
-                                    disabled={actionLoading}
-                                >
-                                    Choose File
-                                </Button>
-                                <Typography
-                                    variant="body2"
-                                    color={updateKeyFile ? "textPrimary" : "textSecondary"}
-                                >
-                                    {updateKeyFile ? updateKeyFile.name : "No file chosen"}
-                                </Typography>
-                            </Box>
+                    {updateContentLoading ? (
+                        <Box sx={{display: 'flex', justifyContent: 'center', p: 3}}>
+                            <CircularProgress/>
                         </Box>
-                    )}
+                    ) : (
+                        <>
+                            {!updateTextFullscreen && (
+                                <>
+                                    <TextField
+                                        autoFocus
+                                        margin="dense"
+                                        label="Key Name"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={updateKeyName}
+                                        onChange={(e) => setUpdateKeyName(e.target.value)}
+                                        disabled={actionLoading}
+                                    />
+                                    <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
+                                        <FormLabel component="legend">Input Mode</FormLabel>
+                                        <RadioGroup
+                                            value={updateInputMode}
+                                            onChange={(e) => setUpdateInputMode(e.target.value)}
+                                        >
+                                            <FormControlLabel
+                                                value="file"
+                                                control={<Radio/>}
+                                                label="Upload from file"
+                                                disabled={actionLoading}
+                                            />
+                                            <Box display="flex" alignItems="center">
+                                                <FormControlLabel
+                                                    value="text"
+                                                    control={<Radio/>}
+                                                    label="Enter text directly"
+                                                    disabled={actionLoading}
+                                                />
+                                                {updateInputMode === "text" && !updateTextFullscreen && (
+                                                    <Tooltip title="Full screen">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={() => setUpdateTextFullscreen(true)}
+                                                            sx={{ml: 1}}
+                                                        >
+                                                            <FullscreenIcon/>
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                            </Box>
+                                        </RadioGroup>
+                                    </FormControl>
+                                </>
+                            )}
 
-                    {updateInputMode === "text" && (
-                        <Box sx={{mt: 2}}>
-                            <TextField
-                                multiline
-                                fullWidth
-                                variant="outlined"
-                                label="Key Content"
-                                value={updateKeyText}
-                                onChange={(e) => setUpdateKeyText(e.target.value)}
-                                disabled={actionLoading}
-                                minRows={4}
-                                maxRows={10}
-                                placeholder="Enter the text content for this key..."
-                            />
-                        </Box>
+                            {updateInputMode === "file" && !updateTextFullscreen && (
+                                <Box sx={{mt: 2}}>
+                                    <input
+                                        id="update-key-file-upload"
+                                        type="file"
+                                        hidden
+                                        onChange={(e) => setUpdateKeyFile(e.target.files[0])}
+                                        disabled={actionLoading}
+                                    />
+                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                                        <Button
+                                            variant="outlined"
+                                            component="label"
+                                            htmlFor="update-key-file-upload"
+                                            disabled={actionLoading}
+                                        >
+                                            Choose File
+                                        </Button>
+                                        <Typography
+                                            variant="body2"
+                                            color={updateKeyFile ? "textPrimary" : "textSecondary"}
+                                        >
+                                            {updateKeyFile ? updateKeyFile.name : "No file chosen"}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            )}
+
+                            {updateInputMode === "text" && (
+                                <Box
+                                    sx={{
+                                        mt: updateTextFullscreen ? 0 : 2,
+                                        height: updateTextFullscreen ? 'calc(100vh - 180px)' : 'auto',
+                                        width: '100%',
+                                    }}
+                                >
+                                    <TextField
+                                        multiline
+                                        fullWidth
+                                        variant="outlined"
+                                        label={updateTextFullscreen ? undefined : "Key Content"}
+                                        value={updateKeyText}
+                                        onChange={(e) => setUpdateKeyText(e.target.value)}
+                                        disabled={actionLoading}
+                                        minRows={updateTextFullscreen ? 20 : 8}
+                                        maxRows={updateTextFullscreen ? 40 : 20}
+                                        placeholder="Enter the text content for this key..."
+                                        sx={{
+                                            height: updateTextFullscreen ? '100%' : 'auto',
+                                            '& .MuiInputBase-root': {
+                                                height: updateTextFullscreen ? '100%' : 'auto',
+                                            },
+                                            '& .MuiInputBase-input': {
+                                                resize: 'vertical',
+                                                height: updateTextFullscreen ? '100% !important' : 'auto',
+                                            }
+                                        }}
+                                    />
+                                </Box>
+                            )}
+                        </>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setUpdateDialogOpen(false)} disabled={actionLoading}>
+                    <Button onClick={() => {
+                        setUpdateDialogOpen(false);
+                        setUpdateTextFullscreen(false);
+                    }} disabled={actionLoading}>
                         Cancel
                     </Button>
                     <Button
                         variant="contained"
                         onClick={handleUpdateKey}
-                        disabled={actionLoading || !updateKeyName || (updateInputMode === "file" && !updateKeyFile)}
+                        disabled={
+                            actionLoading ||
+                            updateContentLoading ||
+                            !updateKeyName ||
+                            (updateInputMode === "file" && !updateKeyFile)
+                        }
                     >
                         Update
                     </Button>

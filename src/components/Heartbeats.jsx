@@ -666,7 +666,7 @@ const Heartbeats = () => {
                 </TableContainer>
             </Box>
 
-            {/* <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger" buttonLabel="Heartbeat Events"/> */}
+            <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger" buttonLabel="Heartbeat Events"/>
         </Box>
     );
 };

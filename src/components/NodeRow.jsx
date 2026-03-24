@@ -166,24 +166,28 @@ const NodeRow = ({
                     <Box sx={STYLES.iconsContainer}>
                         <Box sx={STYLES.fixedIconWrapper}>
                             {isDaemonNode ? (
-                                <Wifi
-                                    sx={{color: COLORS.daemon}}
-                                    aria-label="Daemon node indicator"
-                                />
+                                <Tooltip title="Connected to this node">
+                                    <Wifi
+                                        sx={{color: COLORS.daemon}}
+                                        aria-label="Daemon node indicator"
+                                    />
+                                </Tooltip>
                             ) : (
                                 <Box sx={{width: 24, height: 24}}/>
-                                )}
+                            )}
                         </Box>
 
                         <Box sx={STYLES.fixedIconWrapper}>
                             {isFrozen ? (
-                                <AcUnit
-                                    sx={{color: COLORS.frozen}}
-                                    aria-label="Frozen indicator"
-                                />
+                                <Tooltip title="Frozen">
+                                    <AcUnit
+                                        sx={{color: COLORS.frozen}}
+                                        aria-label="Frozen indicator"
+                                    />
+                                </Tooltip>
                             ) : (
                                 <Box sx={{width: 24, height: 24}}/>
-                                )}
+                            )}
                         </Box>
                     </Box>
                 </Box>

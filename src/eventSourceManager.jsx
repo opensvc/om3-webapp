@@ -92,7 +92,7 @@ const isEqual = (a, b) => {
         const key = keysA[i];
         const valA = a[key];
         const valB = b[key];
-        
+
         // Deep comparison for nested objects
         if (typeof valA === 'object' && typeof valB === 'object') {
             if (!isEqual(valA, valB)) return false;
@@ -172,7 +172,7 @@ const flushBuffers = () => {
     isFlushing = true;
     lastFlushTime = now;
     needsFlush = false;  // Reset flag before starting flush
-    
+
     // CRITICAL: Clear timeout ID to allow new events to schedule a fresh flush
     if (flushTimeoutId) {
         clearTimeout(flushTimeoutId);
@@ -263,7 +263,7 @@ const flushBuffers = () => {
         logger.error('Error during buffer flush:', error);
     } finally {
         isFlushing = false;
-        
+
         // CRITICAL: If new events arrived during flush, schedule another flush
         if (needsFlush && isPageActive) {
             logger.debug('⚡ New events arrived during flush, scheduling immediate re-flush');
@@ -378,7 +378,7 @@ const updateBuffer = (bufferName, key, value) => {
         scheduleFlush();
         return;
     }
-    
+
     if (bufferName === 'objectStatus') {
         // CRITICAL: Merge with existing buffer data instead of replacing!
         const existing = buffers.objectStatus[key];
@@ -395,7 +395,10 @@ const updateBuffer = (bufferName, key, value) => {
         }
         const existing = buffers.instanceStatus[path][node];
         buffers.instanceStatus[path][node] = existing ? {...existing, ...value} : value;
-        logger.debug(`📝 Buffer[instanceStatus]: ${path}:${node}`, {incoming: value, merged: buffers.instanceStatus[path][node]});
+        logger.debug(`📝 Buffer[instanceStatus]: ${path}:${node}`, {
+            incoming: value,
+            merged: buffers.instanceStatus[path][node]
+        });
     } else if (bufferName === 'instanceConfig') {
         const [path, node] = key.split(':');
         if (!buffers.instanceConfig[path]) {
@@ -414,7 +417,7 @@ const updateBuffer = (bufferName, key, value) => {
         buffers[bufferName][key] = existing ? {...existing, ...value} : value;
         logger.debug(`📝 Buffer[${bufferName}]: ${key}`, value);
     }
-    
+
     // Always schedule flush
     scheduleFlush();
 };
@@ -490,7 +493,11 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         });
                         updateBuffer('objectStatus', name, data.object_status);
                     } else {
-                        logger.warn('⚠️ OBJECT_STATUS_UPDATED missing data:', {path: name, has_object_status: !!data.object_status, data});
+                        logger.warn('⚠️ OBJECT_STATUS_UPDATED missing data:', {
+                            path: name,
+                            has_object_status: !!data.object_status,
+                            data
+                        });
                     }
                     break;
                 case EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED:
@@ -523,7 +530,12 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         });
                         updateBuffer('instanceStatus', `${instName}:${data.node}`, data.instance_status);
                     } else {
-                        logger.warn('⚠️ INSTANCE_STATUS_UPDATED missing data:', {instName, node: data.node, has_status: !!data.instance_status, data});
+                        logger.warn('⚠️ INSTANCE_STATUS_UPDATED missing data:', {
+                            instName,
+                            node: data.node,
+                            has_status: !!data.instance_status,
+                            data
+                        });
                     }
                     break;
                 case EVENT_TYPES.NODE_MONITOR_UPDATED:
@@ -554,7 +566,6 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                     }
                     break;
             }
-            // Also add to event log if logger is active
             useEventLogStore.getState().addEventLog(eventType, data);
         });
     });

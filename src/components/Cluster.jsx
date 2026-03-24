@@ -11,12 +11,28 @@ import {
     GridPools,
     GridNetworks,
     GridKinds
-} from "../components/ClusterStatGrids.jsx";
+} from "./ClusterStatGrids";
 import {URL_POOL, URL_NETWORK} from "../config/apiPath.js";
 import {startEventReception, DEFAULT_FILTERS} from "../eventSourceManager";
 import EventLogger from "../components/EventLogger";
 import {useNodeStats, useObjectStats, useHeartbeatStats} from "../hooks/useClusterData";
 import {useKindData} from "../hooks/useKindData";
+
+const CLUSTER_EVENT_TYPES = [
+    "NodeStatusUpdated",
+    "NodeMonitorUpdated",
+    "NodeStatsUpdated",
+    "DaemonHeartbeatUpdated",
+    "ObjectStatusUpdated",
+    "InstanceStatusUpdated",
+    "ObjectDeleted",
+    "InstanceMonitorUpdated",
+    "CONNECTION_OPENED",
+    "CONNECTION_ERROR",
+    "RECONNECTION_ATTEMPT",
+    "MAX_RECONNECTIONS_REACHED",
+    "CONNECTION_CLOSED"
+];
 
 const InitialLoader = memo(() => (
     <Box sx={{
@@ -248,13 +264,12 @@ const ClusterOverview = () => {
                         </Box>
                     </Box>
 
-                    {/* Colonne de droite : Namespaces et Kinds l'un en dessous de l'autre */}
                     <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
                         <GridNamespaces {...gridNamespacesProps} />
                         <GridKinds {...gridKindsProps} />
                     </Box>
                 </Box>
-                {/* <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/> */}
+                <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/>
             </Box>
         </Box>
     );

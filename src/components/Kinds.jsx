@@ -423,7 +423,7 @@ const Kinds = () => {
                     )}
                 </TableContainer>
 
-                {/*<EventLogger eventTypes={kindEventTypes} title="Kinds Events Logger" buttonLabel="Kind Events"/>*/}
+                <EventLogger eventTypes={kindEventTypes} title="Kinds Events Logger" buttonLabel="Kind Events"/>
             </Box>
         </Box>
     );

@@ -45,7 +45,7 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
-import {closeEventSource, startEventReception} from "../eventSourceManager";
+import {closeEventSource, startEventReception, forceFlush} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
@@ -68,13 +68,8 @@ const parseObjectName = (objectName) => {
     };
 };
 
-const renderTextField = (label) => (params) => (
-    <TextField {...params} label={label} fullWidth/>
-);
-
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
-const selectInstanceMonitor = (state) => state.instanceMonitor;
 const selectRemoveObject = (state) => state.removeObject;
 
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
@@ -317,22 +312,10 @@ const TableRowComponent = React.memo(({
                                           onSelectObject,
                                           onObjectClick,
                                           onRowMenuOpen,
-                                          isMenuOpen,
                                           allNodes,
                                           isWideScreen,
-                                          onActionClick,
-                                          onRowMenuClose,
                                       }) => {
     const objectData = useObjectData(objectName);
-    const filteredActions = useMemo(
-        () => OBJECT_ACTIONS.filter(
-            ({name}) =>
-                isActionAllowedForSelection(name, [objectName]) &&
-                (name !== "freeze" || !objectData.isFrozen) &&
-                (name !== "unfreeze" || objectData.hasAnyNodeFrozen)
-        ),
-        [objectName, objectData.isFrozen, objectData.hasAnyNodeFrozen]
-    );
     const handleCheckboxChange = useCallback((e) => {
         onSelectObject(e, objectName);
     }, [onSelectObject, objectName]);
@@ -456,7 +439,6 @@ const Objects = () => {
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
     const objectInstanceStatus = useEventStore(selectObjectInstanceStatus);
-    const instanceMonitor = useEventStore(selectInstanceMonitor);
     const removeObject = useEventStore(selectRemoveObject);
     const [selectedObjects, setSelectedObjects] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
@@ -664,6 +646,17 @@ const Objects = () => {
         [handleRowMenuClose, handleActionsMenuClose]
     );
 
+    const updateFrozenStatusOptimistic = useCallback((objectName, newFrozenValue) => {
+        const store = useEventStore.getState();
+        const currentStatus = store.objectStatus[objectName];
+        if (currentStatus) {
+            store.setObjectStatuses({
+                ...store.objectStatus,
+                [objectName]: {...currentStatus, frozen: newFrozenValue}
+            });
+        }
+    }, []);
+
     const handleExecuteActionOnSelected = useCallback(
         async (action) => {
             const token = localStorage.getItem("authToken");
@@ -699,13 +692,23 @@ const Objects = () => {
                         return;
                     }
                     successCount++;
-                    if (action === "delete") removeObject(objectName);
+
+                    if (action === "freeze") {
+                        updateFrozenStatusOptimistic(objectName, "frozen");
+                    } else if (action === "unfreeze") {
+                        updateFrozenStatusOptimistic(objectName, "unfrozen");
+                    } else if (action === "delete") {
+                        removeObject(objectName);
+                    }
                 } catch (error) {
                     logger.error(`Failed to execute ${action} on ${objectName}:`, error);
                     errorCount++;
                 }
             });
             await Promise.all(promises);
+
+            forceFlush();
+
             setSnackbar({
                 open: true,
                 message:
@@ -719,7 +722,7 @@ const Objects = () => {
             setSelectedObjects([]);
             setPendingAction(null);
         },
-        [pendingAction, selectedObjects, objectStatus, removeObject]
+        [pendingAction, selectedObjects, objectStatus, removeObject, updateFrozenStatusOptimistic]
     );
 
     const handleObjectClick = useCallback(
@@ -1019,6 +1022,7 @@ const Objects = () => {
                                                                         {value.charAt(0).toUpperCase() + value.slice(1)}
                                                                     </Box>
                                                                 }
+                                                                onClick={() => handleGlobalStateChange(value)}
                                                                 onDelete={() => handleGlobalStateChange(value)}
                                                                 onMouseDown={(event) => {
                                                                     event.stopPropagation();
@@ -1402,7 +1406,7 @@ const Objects = () => {
                     onClose={handleClosePendingAction}
                 />
             </Box>
-            {/* <EventLogger eventTypes={objectEventTypes} title="Object Events Logger" buttonLabel="Object Events"/> */}
+            <EventLogger eventTypes={objectEventTypes} title="Object Events Logger" buttonLabel="Object Events"/>
         </Box>
     );
 };

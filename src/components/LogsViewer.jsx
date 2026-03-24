@@ -28,6 +28,7 @@ import {
 import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 import {useDarkMode} from "../context/DarkModeContext";
+
 const LogsViewer = ({
                         nodename,
                         type = "node",
@@ -43,7 +44,7 @@ const LogsViewer = ({
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [levelFilter, setLevelFilter] = useState([]);
-    const [autoScroll, setAutoScroll] = useState(true);
+    const [autoScroll, setAutoScroll] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -56,9 +57,20 @@ const LogsViewer = ({
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
     const scrollToLogTimeoutRef = useRef(null);
+
     useEffect(() => {
         isPausedRef.current = isPaused;
     }, [isPaused]);
+
+    useEffect(() => {
+        if (logsContainerRef.current) {
+            logsContainerRef.current.scrollTop = 0;
+        }
+        setAutoScroll(false);
+        setSelectedLogId(null);
+        setShouldScrollToLog(false);
+    }, [nodename, type, namespace, kind, instanceName]);
+
     const buildLogUrl = useCallback(() => {
         let baseUrl;
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
@@ -68,12 +80,14 @@ const LogsViewer = ({
         }
         return `${baseUrl}?follow=true`;
     }, [type, nodename, namespace, kind, instanceName]);
+
     const buildSubtitle = useCallback(() => {
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
             return `${instanceName} on ${nodename}`;
         }
         return nodename;
     }, [type, nodename, instanceName]);
+
     const buildDownloadFilename = useCallback(() => {
         const timestamp = new Date().toISOString();
         if (type === "instance" && instanceName && instanceName.trim() !== "") {
@@ -81,6 +95,7 @@ const LogsViewer = ({
         }
         return `${nodename}-logs-${timestamp}.txt`;
     }, [type, nodename, instanceName]);
+
     const parseLogMessage = useCallback(
         (logData) => {
             try {
@@ -121,6 +136,7 @@ const LogsViewer = ({
         },
         [nodename]
     );
+
     const updateLogs = useCallback(() => {
         if (logBufferRef.current.length === 0 || isPausedRef.current) return;
         setLogs((prev) => {
@@ -129,6 +145,7 @@ const LogsViewer = ({
             return newLogs;
         });
     }, [maxLogs]);
+
     const fetchLogs = useCallback(
         async (signal) => {
             if (isPausedRef.current || !nodename) return;
@@ -221,6 +238,7 @@ const LogsViewer = ({
         },
         [nodename, type, instanceName, buildLogUrl, parseLogMessage, updateLogs]
     );
+
     const startStreaming = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -231,9 +249,11 @@ const LogsViewer = ({
         abortControllerRef.current = controller;
         void fetchLogs(controller.signal);
     }, [fetchLogs]);
+
     const isFiltered = useMemo(() => {
         return levelFilter.length > 0 || searchTerm !== "";
     }, [levelFilter, searchTerm]);
+
     const filteredLogs = useMemo(() => {
         let filtered = logs;
         if (levelFilter.length > 0) {
@@ -251,11 +271,13 @@ const LogsViewer = ({
         }
         return filtered;
     }, [logs, searchTerm, levelFilter]);
+
     useEffect(() => {
         if (autoScroll && logsEndRef.current && filteredLogs.length > 0) {
             logsEndRef.current.scrollIntoView({behavior: "smooth"});
         }
     }, [filteredLogs, autoScroll]);
+
     useEffect(() => {
         if (shouldScrollToLog && selectedLogId) {
             if (scrollToLogTimeoutRef.current) {
@@ -285,6 +307,7 @@ const LogsViewer = ({
             if (scrollToLogTimeoutRef.current) clearTimeout(scrollToLogTimeoutRef.current);
         };
     }, [shouldScrollToLog, selectedLogId, theme]);
+
     useEffect(() => {
         if (!nodename) return;
         if (type === "instance" && (!instanceName || instanceName.trim() === "")) {
@@ -296,6 +319,7 @@ const LogsViewer = ({
             if (abortControllerRef.current) abortControllerRef.current.abort();
         };
     }, [nodename, type, instanceName, startStreaming, isPaused]);
+
     useEffect(() => {
         if (isPaused) {
             if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -303,12 +327,14 @@ const LogsViewer = ({
             startStreaming();
         }
     }, [isPaused, startStreaming]);
+
     const handleScroll = useCallback(() => {
         if (!logsContainerRef.current) return;
         const {scrollTop, scrollHeight, clientHeight} = logsContainerRef.current;
         const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
         setAutoScroll(isAtBottom);
     }, []);
+
     const formatTime = (timestamp) =>
         timestamp.toLocaleTimeString("en-US", {
             hour: "2-digit",
@@ -316,6 +342,7 @@ const LogsViewer = ({
             second: "2-digit",
             fractionalSecondDigits: 3,
         });
+
     const getLevelColor = (level) => {
         switch (level) {
             case "error":
@@ -329,6 +356,7 @@ const LogsViewer = ({
                 return theme.palette.text.primary;
         }
     };
+
     const handleLogClick = (log) => {
         if (isFiltered) {
             setSearchTerm("");
@@ -337,7 +365,9 @@ const LogsViewer = ({
             setShouldScrollToLog(true);
         }
     };
+
     const getLogId = (log) => `log-${log.__REALTIME_TIMESTAMP}`;
+
     const handleDownload = () => {
         const content = filteredLogs
             .map(
@@ -352,17 +382,20 @@ const LogsViewer = ({
         a.click();
         URL.revokeObjectURL(url);
     };
+
     const handleManualReconnect = () => {
         setErrorMessage("");
         setLogs([]);
         seenLogsRef.current.clear();
         startStreaming();
     };
+
     const handleClearLogs = () => {
         setLogs([]);
         logBufferRef.current = [];
         seenLogsRef.current.clear();
     };
+
     return (
         <Paper
             elevation={3}
@@ -608,4 +641,5 @@ const LogsViewer = ({
         </Paper>
     );
 };
+
 export default LogsViewer;

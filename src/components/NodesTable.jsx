@@ -675,7 +675,7 @@ const NodesTable = () => {
                     />
                 )}
             </Drawer>
-            {/* <EventLogger eventTypes={nodeEventTypes} title="Node Events Logger" buttonLabel="Node Events"/> */}
+            <EventLogger eventTypes={nodeEventTypes} title="Node Events Logger" buttonLabel="Node Events"/>
         </Box>
     );
 };

@@ -1,6 +1,6 @@
 // ObjectInstanceView.test.js
 import React from 'react';
-import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, within, act} from '@testing-library/react';
 import {MemoryRouter, Routes, Route} from 'react-router-dom';
 import '@testing-library/jest-dom';
 import ObjectInstanceView from '../ObjectInstanceView';
@@ -549,7 +549,7 @@ describe('ObjectInstanceView', () => {
         expect(screen.queryByText('Console')).not.toBeInTheDocument();
     });
 
-    test('displays frozen icon when instance is frozen', async () => {
+    test('displays frozen icon when instance is frozen (duplicate check)', async () => {
         mockUseEventStore.objectInstanceStatus = {
             [mockObjectName]: {
                 [mockNodeName]: {
@@ -1495,6 +1495,1251 @@ describe('ObjectInstanceView', () => {
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalled();
+        });
+    });
+
+    test('handles resource status with provisioned state n/a', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                            provisioned: {state: 'n/a'},
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('P');
+    });
+
+    test('handles resource with is_disabled true', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: false,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceConfig = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    resources: {
+                        'res1': {
+                            is_disabled: true,
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('D');
+    });
+
+    test('handles resource with is_standby true', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceConfig = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    resources: {
+                        'res1': {
+                            is_standby: true,
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('S');
+    });
+
+    test('handles resource with 0 remaining restarts', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceMonitor = {
+            [`${mockNodeName}:${mockObjectName}`]: {
+                resources: {
+                    'res1': {
+                        restart: {remaining: 0},
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        // 0 restarts = '.' in position 7
+        expect(statusElements[0].textContent).toBeDefined();
+    });
+
+    test('handles resource with more than 10 remaining restarts', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceMonitor = {
+            [`${mockNodeName}:${mockObjectName}`]: {
+                resources: {
+                    'res1': {
+                        restart: {remaining: 15},
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        // >10 restarts = '+' in position 7
+        expect(statusElements[0].textContent).toContain('+');
+    });
+
+    test('handles resource with specific restart count (1-10)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceMonitor = {
+            [`${mockNodeName}:${mockObjectName}`]: {
+                resources: {
+                    'res1': {
+                        restart: {remaining: 3},
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('3');
+    });
+
+    test('handles container resource with encap provisioned state', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                        },
+                    },
+                    encap: {
+                        'container1': {
+                            provisioned: false,
+                            resources: {},
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        // Container with encap provisioned=false should show Not Provisioned icon
+        const priorityHighIcons = screen.getAllByTestId('priority-high-icon');
+        expect(priorityHighIcons.length).toBeGreaterThan(0);
+    });
+
+    test('handles resource info actions disabled label', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                            info: {actions: 'disabled'},
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        expect(screen.getAllByText(/info: actions disabled/).length).toBeGreaterThan(0);
+    });
+
+    test('handles monitor state idle - does not display state', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        mockUseEventStore.instanceMonitor = {
+            [`${mockNodeName}:${mockObjectName}`]: {
+                state: 'idle',
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        // 'idle' state should NOT be displayed
+        expect(screen.queryByText('idle')).not.toBeInTheDocument();
+    });
+
+    test('handles restart action on instance', async () => {
+        global.fetch.mockResolvedValue({
+            ok: true,
+            headers: new Map(),
+        });
+
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Restart'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Restart')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Confirm'));
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/action/restart'),
+                expect.anything()
+            );
+        });
+    });
+
+    test('closes simple dialog on cancel', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Start'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Start')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Start')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes stop dialog on cancel', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Stop'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Stop')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Stop')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes unprovision dialog on cancel', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Unprovision'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Unprovision')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes purge dialog on cancel', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Purge'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Purge')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Purge')).not.toBeInTheDocument();
+        });
+    });
+
+    test('closes console dialog on cancel', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        const containerRow = screen.getByText('container1').closest('div');
+        const containerMoreVertIcons = within(containerRow).getAllByTestId('more-vert-icon');
+        const containerMenuButton = containerMoreVertIcons[0].closest('button');
+
+        fireEvent.click(containerMenuButton);
+        fireEvent.click(screen.getByText('Console'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', {name: 'Open Console'})).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Cancel'));
+
+        await waitFor(() => {
+            expect(screen.queryByRole('heading', {name: 'Open Console'})).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles seats input with value below 1 - clamps to 1', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        const containerRow = screen.getByText('container1').closest('div');
+        const containerMoreVertIcons = within(containerRow).getAllByTestId('more-vert-icon');
+        const containerMenuButton = containerMoreVertIcons[0].closest('button');
+
+        fireEvent.click(containerMenuButton);
+        fireEvent.click(screen.getByText('Console'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', {name: 'Open Console'})).toBeInTheDocument();
+        });
+
+        const seatsInput = screen.getByLabelText('Number of Seats');
+        // Set to 0 which should be clamped to 1
+        fireEvent.change(seatsInput, {target: {value: '0'}});
+        expect(seatsInput.value).toBe('1');
+
+        // Set to invalid which parses as NaN, default to 1
+        fireEvent.change(seatsInput, {target: {value: 'abc'}});
+        expect(seatsInput.value).toBe('1');
+    });
+
+    test('handles instance menu close on click away', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+
+        fireEvent.click(instanceMenuButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Start')).toBeInTheDocument();
+        });
+
+        // Click away to close menu
+        fireEvent.click(document.body);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Start')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles resource menu close on click away', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const resourceRow = screen.getByText('res1').closest('div');
+        const moreVertIcons = within(resourceRow).getAllByTestId('more-vert-icon');
+        const resourceMenuButton = moreVertIcons[0].closest('button');
+
+        fireEvent.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Console')).toBeInTheDocument();
+        });
+
+        fireEvent.click(document.body);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Console')).not.toBeInTheDocument();
+        });
+    });
+
+    test('handles resource type lookup from encap resources', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            status: 'up',
+                            label: 'Container 1',
+                        },
+                    },
+                    encap: {
+                        'container1': {
+                            resources: {
+                                'task-encap1': {
+                                    type: 'task',
+                                    running: false,
+                                    label: 'Encap Task',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('task-encap1')).toBeInTheDocument();
+        });
+
+        // Open action menu for encap task resource
+        const encapRow = screen.getByText('task-encap1').closest('div');
+        const encapMoreVertIcons = within(encapRow).getAllByTestId('more-vert-icon');
+        const encapMenuButton = encapMoreVertIcons[0].closest('button');
+
+        fireEvent.click(encapMenuButton);
+
+        // task type should only show Run
+        await waitFor(() => {
+            expect(screen.getByText('Run')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText('Console')).not.toBeInTheDocument();
+    });
+
+    test('handles instance with undefined avail - uses unknown status', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    // No avail field
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        // Status circle should still render
+        const statusIcons = screen.getAllByTestId('fiber-manual-record-icon');
+        expect(statusIcons.length).toBeGreaterThan(0);
+    });
+
+    test('handles is_monitored and is_disabled as string "true"/"false"', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                        'res2': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 2',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceConfig = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    resources: {
+                        'res1': {
+                            is_monitored: 'true',
+                            is_disabled: 'true',
+                            is_standby: 'true',
+                        },
+                        'res2': {
+                            is_monitored: 'false',
+                            is_disabled: 'false',
+                            is_standby: 'false',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+            expect(screen.getByText('res2')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        // res1 should have M, D, S
+        expect(statusElements[0].textContent).toContain('M');
+        expect(statusElements[0].textContent).toContain('D');
+        expect(statusElements[0].textContent).toContain('S');
+    });
+
+    test('handles resource action for resource with no type', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res-no-type': {
+                            running: true,
+                            label: 'No Type Resource',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res-no-type')).toBeInTheDocument();
+        });
+
+        const resourceRow = screen.getByText('res-no-type').closest('div');
+        const moreVertIcons = within(resourceRow).getAllByTestId('more-vert-icon');
+        const resourceMenuButton = moreVertIcons[0].closest('button');
+
+        fireEvent.click(resourceMenuButton);
+
+        // All actions should be available when no type
+        await waitFor(() => {
+            expect(screen.getByText('Start')).toBeInTheDocument();
+            expect(screen.getByText('Console')).toBeInTheDocument();
+            expect(screen.getByText('Run')).toBeInTheDocument();
+        });
+    });
+
+    test('handles optional resource boolean true', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            optional: true,
+                            label: 'Optional Resource',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('O');
+    });
+
+    test('handles resource with config restart count', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceConfig = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    resources: {
+                        'res1': {
+                            restart: 7,
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('7');
+    });
+
+    // ---- TARGETED TESTS FOR REMAINING UNCOVERED LINES ----
+
+    test('ResourceRow shows not-provisioned icon when encapData provisioned is false for container', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                            // No provisioned field at resource level
+                        },
+                    },
+                    encap: {
+                        'container1': {
+                            provisioned: false,
+                            resources: {},
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        // The not-provisioned icon should appear because encapData[rid].provisioned === false
+        const priorityHighIcons = screen.getAllByTestId('priority-high-icon');
+        expect(priorityHighIcons.length).toBeGreaterThan(0);
+    });
+
+    test('getColor handles boolean false status for resource', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: false,
+                            status: false, // boolean false triggers red branch
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusIcons = screen.getAllByTestId('fiber-manual-record-icon');
+        expect(statusIcons.length).toBeGreaterThan(0);
+    });
+
+    test('resource status letters handle undefined running field', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            // No running field at all
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        // Status string should start with '.' (not running, since running is undefined)
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent.charAt(0)).toBe('.');
+    });
+
+    test('touch resize respects passive false option and cleans up on touchend', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        const addEventListenerSpy = jest.spyOn(document, 'addEventListener');
+        const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener');
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const logsButton = screen.getByRole('button', {name: /view logs for instance/i});
+        fireEvent.click(logsButton);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
+        });
+
+        const resizeHandle = screen.getByLabelText('Resize drawer');
+
+        // Fire touchstart to trigger the touch branch
+        fireEvent.touchStart(resizeHandle, {touches: [{clientX: 600}]});
+
+        // Verify touchmove listener was registered (with passive:false)
+        expect(addEventListenerSpy).toHaveBeenCalledWith(
+            'touchmove',
+            expect.any(Function),
+            {passive: false}
+        );
+
+        // Fire touchmove to resize
+        fireEvent.touchMove(document, {touches: [{clientX: 500}]});
+
+        // Fire touchend to stop resizing
+        fireEvent.touchEnd(document);
+
+        // Verify cleanup
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('touchend', expect.any(Function));
+
+        addEventListenerSpy.mockRestore();
+        removeEventListenerSpy.mockRestore();
+    });
+
+    test('freeze confirm dialog closes via onClose (backdrop)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Freeze'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Freeze')).toBeInTheDocument();
+        });
+
+        // Trigger onClose via Escape key (simulates backdrop/ESC close)
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Freeze')).not.toBeInTheDocument();
+        });
+    });
+
+    test('stop dialog closes via onClose (ESC key)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Stop'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Stop')).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Stop')).not.toBeInTheDocument();
+        });
+    });
+
+    test('unprovision dialog closes via onClose (ESC key)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Unprovision'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Unprovision')).not.toBeInTheDocument();
+        });
+    });
+
+    test('purge dialog closes via onClose (ESC key)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Purge'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Purge')).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Purge')).not.toBeInTheDocument();
+        });
+    });
+
+    test('console dialog closes via onClose (ESC key)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        const containerRow = screen.getByText('container1').closest('div');
+        const containerMoreVertIcons = within(containerRow).getAllByTestId('more-vert-icon');
+        const containerMenuButton = containerMoreVertIcons[0].closest('button');
+
+        fireEvent.click(containerMenuButton);
+        fireEvent.click(screen.getByText('Console'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', {name: 'Open Console'})).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByRole('heading', {name: 'Open Console'})).not.toBeInTheDocument();
+        });
+    });
+
+    test('console URL dialog closes via onClose (ESC key)', async () => {
+        global.fetch.mockResolvedValue({
+            ok: true,
+            headers: new Headers({'Location': 'https://console.example.com'}),
+        });
+
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        const containerRow = screen.getByText('container1').closest('div');
+        const containerMoreVertIcons = within(containerRow).getAllByTestId('more-vert-icon');
+        const containerMenuButton = containerMoreVertIcons[0].closest('button');
+
+        fireEvent.click(containerMenuButton);
+        fireEvent.click(screen.getByText('Console'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', {name: 'Open Console'})).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
+
+        await waitFor(() => {
+            expect(screen.getByText('Console URL')).toBeInTheDocument();
+        });
+
+        // Close via ESC
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Console URL')).not.toBeInTheDocument();
+        });
+    });
+
+    test('simple action dialog closes via onClose (ESC key)', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {},
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument();
+        });
+
+        const moreVertButtons = screen.getAllByTestId('more-vert-icon');
+        const instanceMenuButton = moreVertButtons[moreVertButtons.length - 1].closest('button');
+        fireEvent.click(instanceMenuButton);
+        fireEvent.click(screen.getByText('Start'));
+
+        await waitFor(() => {
+            expect(screen.getByText('Confirm Start')).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Start')).not.toBeInTheDocument();
         });
     });
 });

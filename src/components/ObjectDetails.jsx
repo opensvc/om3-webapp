@@ -28,6 +28,7 @@ import {green, grey, orange, red} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
+import {getResponseErrorMessage} from "../services/api.jsx";
 import ActionDialogManager from "../components/ActionDialogManager";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
@@ -221,7 +222,11 @@ const ObjectDetail = () => {
                 },
             });
             if (!response.ok) {
-                openSnackbar(`Failed to open console: HTTP error! status: ${response.status}`, "error");
+                const serverError = await getResponseErrorMessage(response);
+                openSnackbar(
+                    `Failed to open console: HTTP error! status: ${response.status}${serverError ? ` - ${serverError}` : ""}`,
+                    "error"
+                );
                 return;
             }
             const consoleUrl = response.headers.get('Location');
@@ -252,7 +257,11 @@ const ObjectDetail = () => {
                 headers: {Authorization: `Bearer ${token}`},
             });
             if (!res.ok) {
-                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}`, "error");
+                const serverError = await getResponseErrorMessage(res);
+                openSnackbar(
+                    `Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`,
+                    "error"
+                );
                 return;
             }
             openSnackbar(`'${action}' succeeded on object`);
@@ -275,7 +284,11 @@ const ObjectDetail = () => {
                 headers: {Authorization: `Bearer ${token}`},
             });
             if (!res.ok) {
-                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}`, "error");
+                const serverError = await getResponseErrorMessage(res);
+                openSnackbar(
+                    `Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`,
+                    "error"
+                );
                 return;
             }
             openSnackbar(`'${action}' succeeded on node '${node}'`);

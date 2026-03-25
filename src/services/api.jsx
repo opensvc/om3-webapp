@@ -73,7 +73,11 @@ export async function apiFetch(url, options = {}) {
         let serverMessage = parsedBody;
 
         if (parsedBody && typeof parsedBody === 'object') {
-            serverMessage = parsedBody.message || JSON.stringify(parsedBody);
+            if (parsedBody.message && typeof parsedBody.message === 'string' && parsedBody.message.trim() !== '') {
+                serverMessage = parsedBody.message;
+            } else {
+                serverMessage = JSON.stringify(parsedBody);
+            }
         }
 
         const message = serverMessage ||
@@ -88,6 +92,52 @@ export async function apiFetch(url, options = {}) {
     }
 
     return parsedBody;
+}
+
+export async function getResponseErrorMessage(response) {
+    if (!response) {
+        return null;
+    }
+
+    try {
+        let text = '';
+        if (typeof response.text === 'function') {
+            text = await response.text();
+        }
+
+        if (!text) {
+            return null;
+        }
+
+        try {
+            const json = JSON.parse(text);
+            if (json && typeof json === 'object') {
+                if (typeof json.message === 'string' && json.message.trim() !== '') {
+                    return json.message;
+                }
+                if (typeof json.error === 'string' && json.error.trim() !== '') {
+                    return json.error;
+                }
+                if (typeof json.detail === 'string' && json.detail.trim() !== '') {
+                    return json.detail;
+                }
+                if (typeof json.title === 'string' && json.title.trim() !== '') {
+                    return json.title;
+                }
+                // Keep plain text for object to avoid raw JSON display
+                if (json && Object.keys(json).length === 0) {
+                    return null;
+                }
+                return Object.keys(json).length > 0 ? Object.values(json).join(' | ') : null;
+            }
+        } catch (e) {
+            // not JSON
+        }
+
+        return text;
+    } catch (e) {
+        return null;
+    }
 }
 
 export const fetchDaemonStatus = async (token, options = {}) => {

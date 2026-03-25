@@ -32,10 +32,15 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import {URL_OBJECT} from "../config/apiPath.js";
+import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
 
 const KeysSection = ({decodedObjectName, openSnackbar}) => {
+    const formatResponseError = async (response, defaultMessage) => {
+        const serverError = await getResponseErrorMessage(response);
+        return `${defaultMessage}${serverError ? ` - ${serverError}` : ''}`;
+    };
     // State for keys
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
@@ -91,7 +96,9 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 cache: "no-cache",
             });
             if (!response.ok) {
-                setKeysError(`Failed to fetch keys: ${response.status}`);
+                const errorMessage = await formatResponseError(response, `Failed to fetch keys: ${response.status}`);
+                setKeysError(errorMessage);
+                openSnackbar(errorMessage, "error");
                 return;
             }
             const data = await response.json();
@@ -119,7 +126,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 headers: {Authorization: `Bearer ${token}`},
             });
             if (!response.ok) {
-                openSnackbar(`Failed to fetch key content: ${response.status}`, "error");
+                const errorMessage = await formatResponseError(response, `Failed to fetch key content: ${response.status}`);
+                openSnackbar(errorMessage, "error");
                 return {type: 'error', content: null};
             }
 
@@ -185,7 +193,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 headers: {Authorization: `Bearer ${token}`},
             });
             if (!response.ok) {
-                openSnackbar(`Failed to fetch key content: ${response.status}`, "error");
+                const errorMessage = await formatResponseError(response, `Failed to fetch key content: ${response.status}`);
+                openSnackbar(errorMessage, "error");
                 setViewDialogOpen(false);
                 return;
             }
@@ -252,7 +261,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 headers: {Authorization: `Bearer ${token}`},
             });
             if (!response.ok) {
-                openSnackbar(`Failed to delete key: ${response.status}`, "error");
+                const errorMessage = await formatResponseError(response, `Failed to delete key: ${response.status}`);
+                openSnackbar(errorMessage, "error");
                 return;
             }
             openSnackbar(`Key '${keyToDelete}' deleted successfully`);
@@ -309,7 +319,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 body: body,
             });
             if (!response.ok) {
-                openSnackbar(`Failed to create key: ${response.status}`, "error");
+                const errorMessage = await formatResponseError(response, `Failed to create key: ${response.status}`);
+                openSnackbar(errorMessage, "error");
                 return;
             }
             openSnackbar(`Key '${newKeyName}' created successfully`);
@@ -367,7 +378,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 body: body,
             });
             if (!response.ok) {
-                openSnackbar(`Failed to update key: ${response.status}`, "error");
+                const errorMessage = await formatResponseError(response, `Failed to update key: ${response.status}`);
+                openSnackbar(errorMessage, "error");
                 return;
             }
             openSnackbar(`Key '${updateKeyName}' updated successfully`);

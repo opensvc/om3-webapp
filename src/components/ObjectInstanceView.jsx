@@ -36,6 +36,7 @@ import {
 import {green, grey, orange, red, blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {URL_NODE} from "../config/apiPath.js";
+import {getResponseErrorMessage} from "../services/api.jsx";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {startEventReception, closeEventSource} from "../eventSourceManager.jsx";
@@ -558,7 +559,11 @@ const ObjectInstanceView = () => {
             });
 
             if (!response.ok) {
-                openSnackbar(`Failed: HTTP ${response.status}`, "error");
+                const serverError = await getResponseErrorMessage(response);
+                openSnackbar(
+                    `Failed: HTTP ${response.status}${serverError ? ` - ${serverError}` : ""}`,
+                    "error"
+                );
                 return;
             }
 

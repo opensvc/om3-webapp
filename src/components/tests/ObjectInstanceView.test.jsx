@@ -441,6 +441,8 @@ describe('ObjectInstanceView', () => {
         global.fetch.mockResolvedValue({
             ok: false,
             status: 500,
+            text: () => Promise.resolve(JSON.stringify({message: 'That is broken'})),
+            headers: {get: () => 'application/json'},
         });
 
         mockUseEventStore.objectInstanceStatus = {
@@ -478,9 +480,10 @@ describe('ObjectInstanceView', () => {
 
         fireEvent.click(screen.getByText('Confirm'));
 
-        // Check that error snackbar appears
+        // Check that error snackbar appears with both status and API message
         await waitFor(() => {
             expect(screen.getByText(/Failed: HTTP 500/i)).toBeInTheDocument();
+            expect(screen.getByText(/That is broken/i)).toBeInTheDocument();
         });
     });
 

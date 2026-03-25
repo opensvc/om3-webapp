@@ -68,7 +68,7 @@ jest.mock('@mui/material', () => {
         ),
         TableContainer: ({children, component, ...props}) => <div {...props}>{children}</div>,
         Table: ({children, 'aria-label': ariaLabel, ...props}) => (
-            <table aria-label={ariaLabel} {...props}>{children}</table>
+            <table aria-label={ariaLabel} {...props}>{children})</table>
         ),
         TableHead: ({children, ...props}) => <thead {...props}>{children}</thead>,
         TableBody: ({children, ...props}) => <tbody {...props}>{children}</tbody>,
@@ -107,8 +107,8 @@ jest.mock('@mui/icons-material/UploadFile', () => () => <span/>);
 jest.mock('@mui/icons-material/Edit', () => () => <span/>);
 jest.mock('@mui/icons-material/Delete', () => () => <span/>);
 jest.mock('@mui/icons-material/Add', () => () => <span/>);
-jest.mock('@mui/icons-material/Fullscreen', () => () => <span/>);
-jest.mock('@mui/icons-material/FullscreenExit', () => () => <span/>);
+jest.mock('@mui/icons-material/Fullscreen', () => () => <span data-testid="fullscreen-icon"/>);
+jest.mock('@mui/icons-material/FullscreenExit', () => () => <span data-testid="fullscreen-exit-icon"/>);
 jest.mock('@mui/icons-material/Visibility', () => () => <span/>);
 
 // Mock localStorage
@@ -214,6 +214,17 @@ describe('KeysSection Component', () => {
             await user.upload(fileInput, file);
         }
         return fileInput;
+    };
+
+    // Helper to get fullscreen button (icon inside Tooltip)
+    const getFullscreenButton = (dialog) => {
+        const icon = within(dialog).getByTestId('fullscreen-icon');
+        return icon.closest('button');
+    };
+
+    const getExitFullscreenButton = (dialog) => {
+        const icon = within(dialog).getByTestId('fullscreen-exit-icon');
+        return icon.closest('button');
     };
 
     test('displays no keys message when keys array is empty', async () => {
@@ -1889,5 +1900,694 @@ describe('KeysSection Component', () => {
 
         expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    test('handleViewKey displays text content correctly', async () => {
+        const textContent = 'Hello, World!';
+        const mockBlob = makeMockBlob(encodeText(textContent));
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'textkey', node: 'node1', size: textContent.length}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key textkey/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(screen.getByRole('dialog')).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        const dialog = screen.getByRole('dialog');
+        // Check for the type indicator – text is present but may be split across elements
+        expect(within(dialog).getByText(/Type:\s*Text/i)).toBeInTheDocument();
+        // Also verify the actual content is displayed
+        expect(within(dialog).getByDisplayValue(textContent)).toBeInTheDocument();
+    });
+
+    test('create dialog enters and exits fullscreen text mode', async () => {
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        await act(async () => {
+            await user.click(addButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+
+        // Switch to text mode first
+        await selectInputMode(dialog, 'text');
+
+        // Find the fullscreen button (via its child icon)
+        const fullscreenBtn = getFullscreenButton(dialog);
+        expect(fullscreenBtn).toBeInTheDocument();
+
+        await act(async () => {
+            await user.click(fullscreenBtn);
+        });
+
+        // Dialog should now be fullscreen
+        await waitFor(() => {
+            const updatedDialog = screen.getByRole('dialog');
+            expect(updatedDialog).toHaveAttribute('data-fullscreen', 'true');
+        });
+
+        // Exit fullscreen via the exit button
+        const exitBtn = getExitFullscreenButton(screen.getByRole('dialog'));
+        expect(exitBtn).toBeInTheDocument();
+        await act(async () => {
+            await user.click(exitBtn);
+        });
+
+        await waitFor(() => {
+            const updatedDialog = screen.getByRole('dialog');
+            expect(updatedDialog).toHaveAttribute('data-fullscreen', 'false');
+        });
+    });
+
+    test('update dialog enters and exits fullscreen text mode', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    blob: () => Promise.resolve(makeMockBlob(encodeText('some text content'))),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+
+        // Wait for content to load (text mode should be auto-selected for text content)
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        // Should be in text mode already since content is text
+        await waitFor(() => {
+            const radioGroup = within(dialog).getByRole('radiogroup');
+            expect(radioGroup).toHaveAttribute('data-value', 'text');
+        });
+
+        // Find the fullscreen button (via its child icon)
+        const fullscreenBtn = getFullscreenButton(dialog);
+        expect(fullscreenBtn).toBeInTheDocument();
+
+        await act(async () => {
+            await user.click(fullscreenBtn);
+        });
+
+        // Dialog should now be fullscreen
+        await waitFor(() => {
+            const updatedDialog = screen.getByRole('dialog');
+            expect(updatedDialog).toHaveAttribute('data-fullscreen', 'true');
+        });
+
+        // Exit fullscreen
+        const exitBtn = getExitFullscreenButton(screen.getByRole('dialog'));
+        expect(exitBtn).toBeInTheDocument();
+        await act(async () => {
+            await user.click(exitBtn);
+        });
+
+        await waitFor(() => {
+            const updatedDialog = screen.getByRole('dialog');
+            expect(updatedDialog).toHaveAttribute('data-fullscreen', 'false');
+        });
+    });
+
+    test('create dialog fullscreen mode hides name/radio fields and shows only textarea', async () => {
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        await act(async () => {
+            await user.click(screen.getByRole('button', {name: /add new key/i}));
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await selectInputMode(dialog, 'text');
+
+        const fullscreenBtn = getFullscreenButton(dialog);
+        expect(fullscreenBtn).toBeInTheDocument();
+        await act(async () => {
+            await user.click(fullscreenBtn);
+        });
+
+        await waitFor(() => {
+            // In fullscreen, Key Name input should not be visible
+            expect(within(screen.getByRole('dialog')).queryByPlaceholderText('Key Name')).not.toBeInTheDocument();
+            // Radio group should also be hidden
+            expect(within(screen.getByRole('dialog')).queryByRole('radiogroup')).not.toBeInTheDocument();
+            // Textarea should be present
+            const textarea = within(screen.getByRole('dialog')).getByPlaceholderText(/enter the text content/i);
+            expect(textarea).toBeInTheDocument();
+        });
+    });
+
+    test('update dialog cancel resets fullscreen state', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    blob: () => Promise.resolve(makeMockBlob(encodeText('text content'))),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        // Enter fullscreen
+        const fullscreenBtn = getFullscreenButton(dialog);
+        expect(fullscreenBtn).toBeInTheDocument();
+        await act(async () => {
+            await user.click(fullscreenBtn);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveAttribute('data-fullscreen', 'true');
+        });
+
+        // Click cancel — should close dialog (and reset fullscreen state)
+        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
+        await act(async () => {
+            await user.click(cancelButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        // Re-open — fullscreen should be reset
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const newDialog = await screen.findByRole('dialog');
+        expect(newDialog).toHaveAttribute('data-fullscreen', 'false');
+    });
+
+    test('create dialog cancel resets fullscreen state', async () => {
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        await act(async () => {
+            await user.click(screen.getByRole('button', {name: /add new key/i}));
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await selectInputMode(dialog, 'text');
+
+        const fullscreenBtn = getFullscreenButton(dialog);
+        expect(fullscreenBtn).toBeInTheDocument();
+        await act(async () => {
+            await user.click(fullscreenBtn);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toHaveAttribute('data-fullscreen', 'true');
+        });
+
+        const cancelButton = within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i});
+        await act(async () => {
+            await user.click(cancelButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        // Re-open — should not be fullscreen
+        await act(async () => {
+            await user.click(screen.getByRole('button', {name: /add new key/i}));
+        });
+
+        const newDialog = await screen.findByRole('dialog');
+        expect(newDialog).toHaveAttribute('data-fullscreen', 'false');
+    });
+
+    test('fetchKeyContent handles no auth token', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        // Remove auth token before clicking edit
+        mockLocalStorage.getItem.mockReturnValue(null);
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error');
+        });
+    });
+
+    test('fetchKeyContent handles network error during update prefetch', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.reject(new Error('Connection refused'));
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Error: Connection refused', 'error');
+        });
+    });
+
+    test('view key displays empty blob as binary', async () => {
+        // Empty Uint8Array: isText will be false because textContent.length === 0
+        const emptyData = new Uint8Array([]);
+        const mockBlob = makeMockBlob(emptyData);
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'emptykey', node: 'node1', size: 0}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => Promise.resolve(mockBlob)});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key emptykey/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(within(screen.getByRole('dialog')).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        // Empty content → falls into binary branch (content.length === 0, isText condition fails)
+        const dialog = screen.getByRole('dialog');
+        expect(within(dialog).getByText(/Binary \(Hex View\)/i)).toBeInTheDocument();
+    });
+
+    test('update key via file upload branch sends file body', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key') && options && options.method === 'PUT') {
+                // Verify the body is a File (file upload branch)
+                expect(options.body).toBeInstanceOf(File);
+                return Promise.resolve({ok: true});
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({
+                    ok: true,
+                    blob: () => Promise.resolve(makeMockBlob(encodeText('text content'))),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => {
+            expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        });
+
+        // Switch to file mode
+        await selectInputMode(dialog, 'file');
+
+        let fileInput;
+        await waitFor(() => {
+            fileInput = findFileInput(dialog, 'update');
+            expect(fileInput).toBeTruthy();
+        });
+
+        await act(async () => {
+            await user.upload(fileInput, new File(['file content'], 'upload.txt'));
+        });
+
+        const updateButton = within(dialog).getByRole('button', {name: /Update/i});
+        await act(async () => {
+            await user.click(updateButton);
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'key1' updated successfully");
+        });
+    });
+
+    test('create key with text content sends Blob body', async () => {
+        let capturedBody;
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options && options.method === 'POST') {
+                capturedBody = options.body;
+                return Promise.resolve({ok: true});
+            }
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({items: []})});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        }, {timeout: 15000});
+
+        await act(async () => {
+            await user.click(screen.getByRole('button', {name: /add new key/i}));
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const nameInput = within(dialog).getByPlaceholderText('Key Name');
+
+        await selectInputMode(dialog, 'text');
+
+        await act(async () => {
+            await user.type(nameInput, 'blobKey');
+        });
+
+        // Type some text content
+        const textArea = within(dialog).getByPlaceholderText(/enter the text content/i);
+        await act(async () => {
+            await user.type(textArea, 'some text data');
+        });
+
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Create/i}));
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'blobKey' created successfully");
+        });
+
+        // Body should be a Blob for text mode
+        expect(capturedBody).toBeInstanceOf(Blob);
+    });
+
+    test('displays loading spinner in update dialog while content is loading', async () => {
+        let resolveBlob;
+        const blobPromise = new Promise((res) => {
+            resolveBlob = res;
+        });
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'key1', node: 'node1', size: 100}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: true, blob: () => blobPromise});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const editButton = await screen.findByRole('button', {name: /Edit key key1/i});
+        await act(async () => {
+            await user.click(editButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        // Should show spinner while content loads
+        expect(within(dialog).getByRole('progressbar')).toBeInTheDocument();
+
+        // Resolve to clean up
+        await act(async () => {
+            resolveBlob(makeMockBlob(encodeText('hello')));
+        });
+    });
+
+
+    test('add new key button is rendered and accessible', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({ok: true, json: () => Promise.resolve({items: []})});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(0\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const addButton = screen.getByRole('button', {name: /add new key/i});
+        expect(addButton).toBeInTheDocument();
+        expect(addButton).not.toBeDisabled();
+
+        // Verify the tooltip container wraps it
+        const tooltipContainer = addButton.closest('[data-tooltip]');
+        expect(tooltipContainer).toHaveAttribute('data-tooltip', 'Add new key');
+    });
+
+    test('view key failure shows error snackbar and does not display dialog content', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        items: [{name: 'failkey', node: 'node1', size: 50}],
+                    }),
+                });
+            }
+            if (url.includes('/data/key')) {
+                return Promise.resolve({ok: false, status: 500});
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        const viewButton = await screen.findByRole('button', {name: /View key failkey/i});
+        await act(async () => {
+            await user.click(viewButton);
+        });
+
+        // Dialog should be closed after failure
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('Failed to fetch key content: 500', 'error');
+        });
+    });
+
+    test('fetchKeys called internally with no token sets auth error', async () => {
+        // Render with a valid token initially
+        mockLocalStorage.getItem.mockReturnValue('mock-token');
+
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: [{name: 'k1', node: 'n1', size: 5}]}),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+
+        await waitFor(() => {
+            expect(screen.getByText((c) => /Object Keys \(1\)/i.test(c))).toBeInTheDocument();
+        });
+
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/data/key') && options && options.method === 'DELETE') {
+                // Succeed, then remove token so subsequent fetchKeys fails
+                mockLocalStorage.getItem.mockReturnValue(null);
+                return Promise.resolve({ok: true});
+            }
+            if (url.includes('/data/keys')) {
+                // This should not be reached because fetchKeys will see no token
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({ok: true});
+        });
+
+        const deleteButton = await screen.findByRole('button', {name: /Delete key k1/i});
+        await act(async () => {
+            await user.click(deleteButton);
+        });
+
+        const dialog = await screen.findByRole('dialog');
+        const confirmButton = within(dialog).getByRole('button', {name: /Delete/i});
+
+        await act(async () => {
+            await user.click(confirmButton);
+        });
+
+        // The delete succeeds, then fetchKeys is called with no token
+        // The no-token branch sets keysError
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith("Key 'k1' deleted successfully");
+        });
+
+        // With no token, fetchKeys returns early setting the error
+        await waitFor(() => {
+            // keysError should be set — it appears as an Alert on screen
+            const alerts = screen.queryAllByRole('alert');
+            const hasAuthError = alerts.some(a => a.textContent.includes('Auth token not found'));
+            expect(hasAuthError).toBe(true);
+        });
     });
 });

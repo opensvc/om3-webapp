@@ -724,6 +724,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                 value={newKeyText}
                                 onChange={(e) => setNewKeyText(e.target.value)}
                                 disabled={actionLoading}
+                                InputLabelProps={{shrink: true}}
                                 minRows={createTextFullscreen ? 20 : 8}
                                 maxRows={createTextFullscreen ? 40 : 20}
                                 placeholder="Enter the text content for this key..."
@@ -882,6 +883,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                         value={updateKeyText}
                                         onChange={(e) => setUpdateKeyText(e.target.value)}
                                         disabled={actionLoading}
+                                        InputLabelProps={{shrink: true}}
                                         minRows={updateTextFullscreen ? 20 : 8}
                                         maxRows={updateTextFullscreen ? 40 : 20}
                                         placeholder="Enter the text content for this key..."

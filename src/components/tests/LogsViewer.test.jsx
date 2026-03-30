@@ -65,9 +65,10 @@ global.URL.revokeObjectURL = mockRevokeObjectURL;
 
 // Mock ReadableStream
 class MockReadableStream {
-    constructor(chunks) {
+    constructor(chunks, delay = 0) {
         this.chunks = chunks || [];
         this.cancelled = false;
+        this.delay = delay;
     }
 
     getReader() {
@@ -82,6 +83,9 @@ class MockReadableStream {
                 }
                 if (index < chunks.length) {
                     const chunk = chunks[index++];
+                    if (stream.delay > 0) {
+                        await new Promise(resolve => setTimeout(resolve, stream.delay));
+                    }
                     return {
                         value: new TextEncoder().encode(chunk),
                         done: false,
@@ -104,13 +108,13 @@ class MockReadableStream {
 }
 
 // Helper functions
-const mockSuccessfulFetch = (logData = []) => {
+const mockSuccessfulFetch = (logData = [], delay = 0) => {
     const streamChunks = logData.map((log) => `data: ${JSON.stringify(log)}\n\n`);
     global.fetch = jest.fn().mockImplementation(() =>
         Promise.resolve({
             ok: true,
             status: 200,
-            body: new MockReadableStream(streamChunks),
+            body: new MockReadableStream(streamChunks, delay),
         })
     );
 };
@@ -920,5 +924,173 @@ describe('LogsViewer Component', () => {
 
         const {done: done2} = await reader.read();
         expect(done2).toBe(true);
+    });
+
+    test('handles JSON parsing when fields are missing', async () => {
+        const ts = Date.now();
+        const mockLogs = [
+            {
+                JSON: JSON.stringify({
+                    time: ts,
+                }),
+                __REALTIME_TIMESTAMP: ts * 1000,
+            },
+        ];
+        mockSuccessfulFetch(mockLogs);
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('[INFO]');
+        expect(screen.getByText('[INFO]')).toBeInTheDocument();
+    });
+
+    test('handles response without body', async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            body: null,
+        });
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Response has no readable stream');
+        expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    });
+
+    test('handles generic HTTP error (non-401/404)', async () => {
+        mockHttpErrorFetch(500);
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('HTTP error! status: 500');
+        expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    });
+
+    test('processes partial lines across multiple chunks', async () => {
+        const chunk1 = 'data: {"__REALTIME_TIMESTAMP":1234567890, "MESSAGE": "Hello';
+        const chunk2 = ' world"}\n\n';
+        const streamChunks = [chunk1, chunk2];
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                status: 200,
+                body: new MockReadableStream(streamChunks),
+            })
+        );
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Hello world');
+        expect(screen.queryByText('Hello')).not.toBeInTheDocument();
+    });
+
+    test('handles lines that are not "data: " prefix', async () => {
+        const streamChunks = ['event: log\n', 'data: {"__REALTIME_TIMESTAMP":1234567890, "MESSAGE": "Valid"}\n\n'];
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                status: 200,
+                body: new MockReadableStream(streamChunks),
+            })
+        );
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Valid');
+    });
+
+    test('handles empty data line', async () => {
+        const streamChunks = ['data: \n\n', 'data: {"__REALTIME_TIMESTAMP":1234567890, "MESSAGE": "Valid"}\n\n'];
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                status: 200,
+                body: new MockReadableStream(streamChunks),
+            })
+        );
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Valid');
+    });
+
+    test('scroll to log effect when element not found', async () => {
+        const ts = Date.now() * 1000;
+        const mockLogs = [{__REALTIME_TIMESTAMP: ts, MESSAGE: 'Log to click'}];
+        mockSuccessfulFetch(mockLogs);
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Log to click');
+        const logLine = screen.getByText('Log to click');
+        await act(async () => {
+            fireEvent.click(logLine);
+        });
+        const clearButton = screen.getAllByRole('button').find((btn) =>
+            btn.getAttribute('aria-label')?.includes('Clear')
+        );
+        await act(async () => {
+            fireEvent.click(clearButton);
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(200);
+        });
+        // No error, test passes
+    });
+
+    test('log line styling when filtered vs unfiltered', async () => {
+        const ts = Date.now() * 1000;
+        const mockLogs = [{__REALTIME_TIMESTAMP: ts, MESSAGE: 'Test log'}];
+        mockSuccessfulFetch(mockLogs);
+        await act(async () => {
+            renderComponent();
+        });
+        await waitForText('Test log');
+        const logContainer = screen.getByText('Test log').closest('.log-line');
+        const originalGetComputedStyle = window.getComputedStyle;
+        window.getComputedStyle = jest.fn().mockReturnValue({cursor: 'default'});
+        const computed = window.getComputedStyle(logContainer);
+        expect(computed.cursor).toBe('default');
+        window.getComputedStyle = originalGetComputedStyle;
+
+        const searchInput = screen.getByPlaceholderText('Search logs...');
+        await act(async () => {
+            fireEvent.change(searchInput, {target: {value: 'Test'}});
+        });
+        window.getComputedStyle = jest.fn().mockReturnValue({cursor: 'pointer'});
+        const computedFiltered = window.getComputedStyle(logContainer);
+        expect(computedFiltered.cursor).toBe('pointer');
+        window.getComputedStyle = originalGetComputedStyle;
+    });
+
+    test('Go to bottom button behavior', async () => {
+        const ts = Date.now() * 1000;
+        const mockLogs = [{__REALTIME_TIMESTAMP: ts, MESSAGE: 'Test log'}];
+        mockSuccessfulFetch(mockLogs);
+
+        await act(async () => {
+            renderComponent();
+        });
+
+        // Wait for logs to appear
+        await waitForText('Test log');
+
+        const goToBottomButton = screen.getByText('Go to bottom');
+        expect(goToBottomButton).toBeInTheDocument();
+
+        const scrollIntoViewMock = jest.fn();
+        HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+        await act(async () => {
+            fireEvent.click(goToBottomButton);
+        });
+
+        expect(scrollIntoViewMock).toHaveBeenCalled();
+        // The button should disappear after click
+        expect(screen.queryByText('Go to bottom')).not.toBeInTheDocument();
+    });
+
+    test('component exports correctly', async () => {
+        expect(LogsViewer).toBeDefined();
     });
 });

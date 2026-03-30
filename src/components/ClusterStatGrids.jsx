@@ -317,7 +317,6 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
 export const GridHeartbeats = memo(({
                                         heartbeatCount,
                                         perHeartbeatStats = {},
-                                        nodeCount,
                                         onClick
                                     }) => {
     const [loadingId, setLoadingId] = useState('');

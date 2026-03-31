@@ -36,17 +36,303 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
 import {parseObjectPath} from '../utils/objectUtils';
 
-const KeysSection = ({decodedObjectName, openSnackbar}) => {
-    const formatResponseError = async (response, defaultMessage) => {
-        const serverError = await getResponseErrorMessage(response);
-        return `${defaultMessage}${serverError ? ` - ${serverError}` : ''}`;
+const getAuthToken = () => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+        logger.error("Auth token not found.");
+        return null;
+    }
+    return token;
+};
+
+const buildObjectUrl = (decodedObjectName) => {
+    const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+    return `${URL_OBJECT}/${namespace}/${kind}/${name}`;
+};
+
+const formatResponseError = async (response, defaultMessage) => {
+    const serverError = await getResponseErrorMessage(response);
+    return `${defaultMessage}${serverError ? ` - ${serverError}` : ''}`;
+};
+
+const parseBlobContent = async (blob) => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let isText = true;
+    let textContent = "";
+    try {
+        textContent = new TextDecoder('utf-8', {fatal: true}).decode(uint8Array);
+        for (let i = 0; i < textContent.length; i++) {
+            const code = textContent.charCodeAt(i);
+            if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+                isText = false;
+                break;
+            }
+        }
+    } catch (e) {
+        isText = false;
+    }
+
+    if (isText && textContent.length > 0) {
+        return {type: "text", content: textContent};
+    } else {
+        const hexLines = [];
+        for (let i = 0; i < uint8Array.length; i += 16) {
+            const chunk = uint8Array.slice(i, i + 16);
+            const hex = Array.from(chunk)
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join(' ');
+            const ascii = Array.from(chunk)
+                .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
+                .join('');
+            hexLines.push(`${i.toString(16).padStart(8, '0')}  ${hex.padEnd(48, ' ')}  ${ascii}`);
+        }
+        return {type: "binary", content: hexLines.join('\n')};
+    }
+};
+
+const KeyFormDialog = ({
+                           open,
+                           onClose,
+                           onSubmit,
+                           mode,
+                           initialName = "",
+                           initialContent = "",
+                           initialInputMode = "empty",
+                           title,
+                           allowEmpty = false,
+                           loading = false,
+                           initialLoading = false,
+                       }) => {
+    const [name, setName] = useState(initialName);
+    const [inputMode, setInputMode] = useState(initialInputMode);
+    const [file, setFile] = useState(null);
+    const [text, setText] = useState(initialContent);
+    const [fullscreen, setFullscreen] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            setName(initialName);
+            setInputMode(initialInputMode);
+            setFile(null);
+            setText(initialContent);
+            setFullscreen(false);
+        }
+    }, [open, initialName, initialInputMode, initialContent]);
+
+    const handleSubmit = () => {
+        if (!name) return;
+        let contentBlob = null;
+        if (inputMode === "empty") {
+            contentBlob = new Blob([], {type: "application/octet-stream"});
+        } else if (inputMode === "file" && file) {
+            contentBlob = file;
+        } else if (inputMode === "text") {
+            contentBlob = new Blob([text], {type: "application/octet-stream"});
+        } else {
+            return;
+        }
+        onSubmit({name, contentBlob});
     };
-    // State for keys
+
+    const isSubmitDisabled = () => {
+        if (!name) return true;
+        if (inputMode === "file" && !file) return true;
+        return false;
+    };
+
+    const fileUploadId = `${mode}-key-file-upload`;
+
+    const renderRadioOptions = () => {
+        const options = [];
+        if (allowEmpty) {
+            options.push(
+                <FormControlLabel
+                    key="empty"
+                    value="empty"
+                    control={<Radio/>}
+                    label="Empty key (no content)"
+                    disabled={loading}
+                />
+            );
+        }
+        options.push(
+            <FormControlLabel
+                key="file"
+                value="file"
+                control={<Radio/>}
+                label="Upload from file"
+                disabled={loading}
+            />
+        );
+        options.push(
+            <Box display="flex" alignItems="center" key="text">
+                <FormControlLabel
+                    value="text"
+                    control={<Radio/>}
+                    label="Enter text directly"
+                    disabled={loading}
+                />
+                {inputMode === "text" && !fullscreen && (
+                    <Tooltip title="Full screen">
+                        <IconButton
+                            size="small"
+                            onClick={() => setFullscreen(true)}
+                            sx={{ml: 1}}
+                        >
+                            <FullscreenIcon/>
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Box>
+        );
+        return options;
+    };
+
+    return (
+        <Dialog
+            open={open}
+            onClose={() => {
+                onClose();
+                setFullscreen(false);
+            }}
+            maxWidth={fullscreen ? false : "md"}
+            fullScreen={fullscreen}
+            fullWidth={!fullscreen}
+        >
+            <DialogTitle>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Typography variant="h6">{title}</Typography>
+                    {fullscreen && (
+                        <IconButton
+                            edge="end"
+                            onClick={() => setFullscreen(false)}
+                            aria-label="Exit full screen"
+                        >
+                            <FullscreenExitIcon/>
+                        </IconButton>
+                    )}
+                </Box>
+            </DialogTitle>
+            <DialogContent>
+                {initialLoading ? (
+                    <Box sx={{display: 'flex', justifyContent: 'center', p: 3}}>
+                        <CircularProgress/>
+                    </Box>
+                ) : (
+                    <>
+                        {!fullscreen && (
+                            <>
+                                <TextField
+                                    autoFocus
+                                    margin="dense"
+                                    label="Key Name"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    disabled={loading}
+                                />
+                                <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
+                                    <FormLabel component="legend">Input Mode</FormLabel>
+                                    <RadioGroup
+                                        value={inputMode}
+                                        onChange={(e) => setInputMode(e.target.value)}
+                                    >
+                                        {renderRadioOptions()}
+                                    </RadioGroup>
+                                </FormControl>
+                            </>
+                        )}
+
+                        {inputMode === "file" && !fullscreen && (
+                            <Box sx={{mt: 2}}>
+                                <input
+                                    id={fileUploadId}
+                                    type="file"
+                                    hidden
+                                    onChange={(e) => setFile(e.target.files[0])}
+                                    disabled={loading}
+                                />
+                                <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                                    <Button
+                                        variant="outlined"
+                                        component="label"
+                                        htmlFor={fileUploadId}
+                                        disabled={loading}
+                                    >
+                                        Choose File
+                                    </Button>
+                                    <Typography
+                                        variant="body2"
+                                        color={file ? "textPrimary" : "textSecondary"}
+                                    >
+                                        {file ? file.name : "No file selected"}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        )}
+
+                        {inputMode === "text" && (
+                            <Box
+                                sx={{
+                                    mt: fullscreen ? 0 : 2,
+                                    height: fullscreen ? 'calc(100vh - 180px)' : 'auto',
+                                    width: '100%',
+                                }}
+                            >
+                                <TextField
+                                    multiline
+                                    fullWidth
+                                    variant="outlined"
+                                    label={fullscreen ? undefined : "Key Content"}
+                                    value={text}
+                                    onChange={(e) => setText(e.target.value)}
+                                    disabled={loading}
+                                    InputLabelProps={{shrink: true}}
+                                    minRows={fullscreen ? 20 : 8}
+                                    maxRows={fullscreen ? 40 : 20}
+                                    placeholder="Enter the text content for this key..."
+                                    sx={{
+                                        height: fullscreen ? '100%' : 'auto',
+                                        '& .MuiInputBase-root': {
+                                            height: fullscreen ? '100%' : 'auto',
+                                        },
+                                        '& .MuiInputBase-input': {
+                                            resize: 'vertical',
+                                            height: fullscreen ? '100% !important' : 'auto',
+                                        }
+                                    }}
+                                />
+                            </Box>
+                        )}
+                    </>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => {
+                    onClose();
+                    setFullscreen(false);
+                }} disabled={loading}>
+                    Cancel
+                </Button>
+                <Button
+                    variant="contained"
+                    onClick={handleSubmit}
+                    disabled={loading || isSubmitDisabled() || initialLoading}
+                >
+                    {mode === 'create' ? 'Create' : 'Update'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
+const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
     const [keysError, setKeysError] = useState(null);
 
-    // State for key actions
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -55,42 +341,31 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keyToView, setKeyToView] = useState(null);
     const [keyViewContent, setKeyViewContent] = useState(null);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
-    const [updateKeyName, setUpdateKeyName] = useState("");
-    const [newKeyName, setNewKeyName] = useState("");
-    const [newKeyFile, setNewKeyFile] = useState(null);
-    const [updateKeyFile, setUpdateKeyFile] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // States for input mode and content
-    const [createInputMode, setCreateInputMode] = useState("empty"); // "empty", "file", "text"
-    const [updateInputMode, setUpdateInputMode] = useState("file"); // "file", "text"
-    const [newKeyText, setNewKeyText] = useState("");
-    const [updateKeyText, setUpdateKeyText] = useState("");
+    const [updateInitialName, setUpdateInitialName] = useState("");
+    const [updateInitialContent, setUpdateInitialContent] = useState("");
+    const [updateInitialInputMode, setUpdateInitialInputMode] = useState("file");
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
 
-    // Fullscreen states for textarea only (not the whole dialog)
-    const [createTextFullscreen, setCreateTextFullscreen] = useState(false);
-    const [updateTextFullscreen, setUpdateTextFullscreen] = useState(false);
-
-    // Fetch keys
     const fetchKeys = useCallback(async () => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        const {kind} = parseObjectPath(decodedObjectName);
         if (!["cfg", "sec"].includes(kind)) {
             setKeys([]);
             return;
         }
 
-        const token = localStorage.getItem("authToken");
+        const token = getAuthToken();
         if (!token) {
             setKeysError("Auth token not found.");
-            logger.error("❌ [fetchKeys] No auth token for:", decodedObjectName);
             return;
         }
 
         setKeysLoading(true);
         setKeysError(null);
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/keys`;
+            const baseUrl = buildObjectUrl(decodedObjectName);
+            const url = `${baseUrl}/data/keys`;
             const response = await fetch(url, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
@@ -109,19 +384,18 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         } finally {
             setKeysLoading(false);
         }
-    }, [decodedObjectName]);
+    }, [decodedObjectName, openSnackbar]);
 
-    // Fetch key content
     const fetchKeyContent = useCallback(async (keyName) => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
+        const token = getAuthToken();
         if (!token) {
             openSnackbar("Auth token not found.", "error");
             return {type: 'error', content: null};
         }
 
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyName)}`;
+            const baseUrl = buildObjectUrl(decodedObjectName);
+            const url = `${baseUrl}/data/key?name=${encodeURIComponent(keyName)}`;
             const response = await fetch(url, {
                 headers: {Authorization: `Bearer ${token}`},
             });
@@ -131,131 +405,34 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 return {type: 'error', content: null};
             }
 
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-
-            // Try to decode as text
-            let isText = true;
-            let textContent = "";
-            try {
-                textContent = new TextDecoder('utf-8', {fatal: true}).decode(uint8Array);
-                for (let i = 0; i < textContent.length; i++) {
-                    const code = textContent.charCodeAt(i);
-                    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-                        isText = false;
-                        break;
-                    }
-                }
-            } catch (e) {
-                isText = false;
-            }
-
-            if (isText && textContent.length > 0) {
-                return {type: "text", content: textContent};
+            let blob;
+            if (typeof response.blob === 'function') {
+                blob = await response.blob();
             } else {
-                const hexLines = [];
-                for (let i = 0; i < uint8Array.length; i += 16) {
-                    const chunk = uint8Array.slice(i, i + 16);
-                    const hex = Array.from(chunk)
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join(' ');
-                    const ascii = Array.from(chunk)
-                        .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
-                        .join('');
-                    hexLines.push(`${i.toString(16).padStart(8, '0')}  ${hex.padEnd(48, ' ')}  ${ascii}`);
-                }
-                return {type: "binary", content: hexLines.join('\n')};
+                const text = await response.text();
+                blob = new Blob([text], {type: 'text/plain'});
             }
+            return await parseBlobContent(blob);
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
             return {type: 'error', content: null};
         }
     }, [decodedObjectName, openSnackbar]);
 
-    // View key
-    const handleViewKey = async (keyName) => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-
-        setKeyToView(keyName);
-        setKeyViewLoading(true);
-        setViewDialogOpen(true);
-        setKeyViewContent(null);
-
-        try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyName)}`;
-            const response = await fetch(url, {
-                headers: {Authorization: `Bearer ${token}`},
-            });
-            if (!response.ok) {
-                const errorMessage = await formatResponseError(response, `Failed to fetch key content: ${response.status}`);
-                openSnackbar(errorMessage, "error");
-                setViewDialogOpen(false);
-                return;
-            }
-
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-
-            let isText = true;
-            let textContent = "";
-            try {
-                textContent = new TextDecoder('utf-8', {fatal: true}).decode(uint8Array);
-                for (let i = 0; i < textContent.length; i++) {
-                    const code = textContent.charCodeAt(i);
-                    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-                        isText = false;
-                        break;
-                    }
-                }
-            } catch (e) {
-                isText = false;
-            }
-
-            if (isText && textContent.length > 0) {
-                setKeyViewContent({type: "text", content: textContent});
-            } else {
-                const hexLines = [];
-                for (let i = 0; i < uint8Array.length; i += 16) {
-                    const chunk = uint8Array.slice(i, i + 16);
-                    const hex = Array.from(chunk)
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join(' ');
-                    const ascii = Array.from(chunk)
-                        .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
-                        .join('');
-                    hexLines.push(`${i.toString(16).padStart(8, '0')}  ${hex.padEnd(48, ' ')}  ${ascii}`);
-                }
-                setKeyViewContent({type: "binary", content: hexLines.join('\n')});
-            }
-        } catch (err) {
-            openSnackbar(`Error: ${err.message}`, "error");
-            setViewDialogOpen(false);
-        } finally {
-            setKeyViewLoading(false);
-        }
-    };
-
-    // Delete key
     const handleDeleteKey = async () => {
         if (!keyToDelete) return;
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
+        const token = getAuthToken();
         if (!token) {
             openSnackbar("Auth token not found.", "error");
+            setDeleteDialogOpen(false);
             return;
         }
 
         setActionLoading(true);
         openSnackbar(`Deleting key ${keyToDelete}…`, "info");
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(keyToDelete)}`;
+            const baseUrl = buildObjectUrl(decodedObjectName);
+            const url = `${baseUrl}/data/key?name=${encodeURIComponent(keyToDelete)}`;
             const response = await fetch(url, {
                 method: "DELETE",
                 headers: {Authorization: `Bearer ${token}`},
@@ -276,141 +453,104 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         }
     };
 
-    // Create key
-    const handleCreateKey = async () => {
-        if (!newKeyName) {
-            openSnackbar("Key name is required.", "error");
-            return;
-        }
-
-        if (createInputMode === "file" && !newKeyFile) {
-            openSnackbar("Please select a file.", "error");
-            return;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
+    const handleCreateKey = async ({name, contentBlob}) => {
+        const token = getAuthToken();
         if (!token) {
             openSnackbar("Auth token not found.", "error");
+            setCreateDialogOpen(false);
             return;
         }
 
         setActionLoading(true);
-        openSnackbar(`Creating key ${newKeyName}…`, "info");
+        openSnackbar(`Creating key ${name}…`, "info");
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(newKeyName)}`;
-
-            let body;
-            if (createInputMode === "empty") {
-                body = new Blob([], {type: "application/octet-stream"});
-            } else if (createInputMode === "text") {
-                body = new Blob([newKeyText], {type: "application/octet-stream"});
-            } else {
-                body = newKeyFile;
-            }
-
+            const baseUrl = buildObjectUrl(decodedObjectName);
+            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
             const response = await fetch(url, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
-
-                body: body,
+                body: contentBlob,
             });
             if (!response.ok) {
                 const errorMessage = await formatResponseError(response, `Failed to create key: ${response.status}`);
                 openSnackbar(errorMessage, "error");
                 return;
             }
-            openSnackbar(`Key '${newKeyName}' created successfully`);
+            openSnackbar(`Key '${name}' created successfully`);
             await fetchKeys();
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionLoading(false);
             setCreateDialogOpen(false);
-            setNewKeyName("");
-            setNewKeyFile(null);
-            setNewKeyText("");
-            setCreateInputMode("empty");
-            setCreateTextFullscreen(false);
         }
     };
 
-    // Update key
-    const handleUpdateKey = async () => {
-        if (!updateKeyName) {
-            openSnackbar("Key name is required.", "error");
-            return;
-        }
-
-        if (updateInputMode === "file" && !updateKeyFile) {
-            openSnackbar("Please select a file.", "error");
-            return;
-        }
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
+    const handleUpdateKey = async ({name, contentBlob}) => {
+        const token = getAuthToken();
         if (!token) {
             openSnackbar("Auth token not found.", "error");
+            setUpdateDialogOpen(false);
             return;
         }
 
         setActionLoading(true);
-        openSnackbar(`Updating key ${updateKeyName}…`, "info");
+        openSnackbar(`Updating key ${name}…`, "info");
         try {
-            const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/data/key?name=${encodeURIComponent(updateKeyName)}`;
-
-            let body;
-            if (updateInputMode === "text") {
-                body = new Blob([updateKeyText], {type: "application/octet-stream"});
-            } else {
-                body = updateKeyFile;
-            }
-
+            const baseUrl = buildObjectUrl(decodedObjectName);
+            const url = `${baseUrl}/data/key?name=${encodeURIComponent(name)}`;
             const response = await fetch(url, {
                 method: "PUT",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/octet-stream",
                 },
-                body: body,
+                body: contentBlob,
             });
             if (!response.ok) {
                 const errorMessage = await formatResponseError(response, `Failed to update key: ${response.status}`);
                 openSnackbar(errorMessage, "error");
                 return;
             }
-            openSnackbar(`Key '${updateKeyName}' updated successfully`);
+            openSnackbar(`Key '${name}' updated successfully`);
             await fetchKeys();
         } catch (err) {
             openSnackbar(`Error: ${err.message}`, "error");
         } finally {
             setActionLoading(false);
             setUpdateDialogOpen(false);
-            setUpdateKeyName("");
-            setUpdateKeyFile(null);
-            setUpdateKeyText("");
-            setUpdateInputMode("file");
-            setUpdateTextFullscreen(false);
         }
     };
 
-    // Open update dialog with pre-filled content
-    const handleOpenUpdateDialog = async (keyName) => {
-        setUpdateKeyName(keyName);
+    const handleViewKey = async (keyName) => {
+        setKeyToView(keyName);
+        setKeyViewLoading(true);
+        setViewDialogOpen(true);
+        setKeyViewContent(null);
+
+        const result = await fetchKeyContent(keyName);
+        if (result.type !== 'error') {
+            setKeyViewContent(result);
+        } else {
+            setViewDialogOpen(false);
+        }
+        setKeyViewLoading(false);
+    };
+
+    const openUpdateDialog = async (keyName) => {
+        setUpdateInitialName(keyName);
         setUpdateDialogOpen(true);
         setUpdateContentLoading(true);
-        setUpdateKeyText("");
-        setUpdateKeyFile(null);
-        setUpdateInputMode("file");
-        setUpdateTextFullscreen(false);
+        setUpdateInitialContent("");
+        setUpdateInitialInputMode("file");
 
         const result = await fetchKeyContent(keyName);
         if (result.type === "text") {
-            setUpdateKeyText(result.content);
-            setUpdateInputMode("text");
+            setUpdateInitialContent(result.content);
+            setUpdateInitialInputMode("text");
         } else if (result.type === "binary") {
             openSnackbar("Key is binary – please use file upload to update.", "info");
         }
@@ -418,10 +558,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         setUpdateContentLoading(false);
     };
 
-    // Initial load
     useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
+        if (getAuthToken()) {
             fetchKeys().catch((error) => {
                 logger.error("Error in fetchKeys:", error);
             });
@@ -430,10 +568,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
 
     const {kind} = parseObjectPath(decodedObjectName);
     const showKeys = ["cfg", "sec"].includes(kind);
-
-    if (!showKeys) {
-        return null;
-    }
+    if (!showKeys) return null;
 
     const hasKeysError = Boolean(keysError);
     const safeKeys = Array.isArray(keys) ? keys : [];
@@ -499,7 +634,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                         <Tooltip title="Edit">
                                             <span>
                                                 <IconButton
-                                                    onClick={() => handleOpenUpdateDialog(key.name)}
+                                                    onClick={() => openUpdateDialog(key.name)}
                                                     disabled={actionLoading}
                                                     aria-label={`Edit key ${key.name}`}
                                                 >
@@ -529,13 +664,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 </TableContainer>
             )}
 
-            {/* VIEW KEY DIALOG */}
-            <Dialog
-                open={viewDialogOpen}
-                onClose={() => setViewDialogOpen(false)}
-                maxWidth="md"
-                fullWidth
-            >
+            <Dialog open={viewDialogOpen} onClose={() => setViewDialogOpen(false)} maxWidth="md" fullWidth>
                 <DialogTitle>View Key: {keyToView}</DialogTitle>
                 <DialogContent>
                     {keyViewLoading && (
@@ -553,13 +682,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                 fullWidth
                                 variant="outlined"
                                 value={keyViewContent.content}
-                                InputProps={{
-                                    readOnly: true,
-                                    sx: {
-                                        fontFamily: 'monospace',
-                                        fontSize: '0.875rem',
-                                    }
-                                }}
+                                InputProps={{readOnly: true, sx: {fontFamily: 'monospace', fontSize: '0.875rem'}}}
                                 minRows={10}
                                 maxRows={20}
                                 sx={{mt: 1}}
@@ -572,13 +695,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 </DialogActions>
             </Dialog>
 
-            {/* DELETE KEY DIALOG */}
-            <Dialog
-                open={deleteDialogOpen}
-                onClose={() => setDeleteDialogOpen(false)}
-                maxWidth="xs"
-                fullWidth
-            >
+            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>Confirm Key Deletion</DialogTitle>
                 <DialogContent>
                     <Typography variant="body1">
@@ -586,344 +703,35 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="error"
-                        onClick={handleDeleteKey}
-                        disabled={actionLoading}
-                    >
+                    <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>Cancel</Button>
+                    <Button variant="contained" color="error" onClick={handleDeleteKey} disabled={actionLoading}>
                         Delete
                     </Button>
                 </DialogActions>
             </Dialog>
 
-            {/* CREATE KEY DIALOG */}
-            <Dialog
+            <KeyFormDialog
                 open={createDialogOpen}
-                onClose={() => {
-                    setCreateDialogOpen(false);
-                    setCreateTextFullscreen(false);
-                }}
-                maxWidth={createTextFullscreen ? false : "md"}
-                fullScreen={createTextFullscreen}
-                fullWidth={!createTextFullscreen}
-            >
-                <DialogTitle>
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                        <Typography variant="h6">Create New Key</Typography>
-                        {createTextFullscreen && (
-                            <IconButton
-                                edge="end"
-                                onClick={() => setCreateTextFullscreen(false)}
-                                aria-label="Exit full screen"
-                            >
-                                <FullscreenExitIcon/>
-                            </IconButton>
-                        )}
-                    </Box>
-                </DialogTitle>
-                <DialogContent>
-                    {!createTextFullscreen && (
-                        <>
-                            <TextField
-                                autoFocus
-                                margin="dense"
-                                label="Key Name"
-                                fullWidth
-                                variant="outlined"
-                                value={newKeyName}
-                                onChange={(e) => setNewKeyName(e.target.value)}
-                                disabled={actionLoading}
-                            />
-                            <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
-                                <FormLabel component="legend">Input Mode</FormLabel>
-                                <RadioGroup
-                                    value={createInputMode}
-                                    onChange={(e) => setCreateInputMode(e.target.value)}
-                                >
-                                    <FormControlLabel
-                                        value="empty"
-                                        control={<Radio/>}
-                                        label="Empty key (no content)"
-                                        disabled={actionLoading}
-                                    />
-                                    <FormControlLabel
-                                        value="file"
-                                        control={<Radio/>}
-                                        label="Upload from file"
-                                        disabled={actionLoading}
-                                    />
-                                    <Box display="flex" alignItems="center">
-                                        <FormControlLabel
-                                            value="text"
-                                            control={<Radio/>}
-                                            label="Enter text directly"
-                                            disabled={actionLoading}
-                                        />
-                                        {createInputMode === "text" && !createTextFullscreen && (
-                                            <Tooltip title="Full screen">
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => setCreateTextFullscreen(true)}
-                                                    sx={{ml: 1}}
-                                                >
-                                                    <FullscreenIcon/>
-                                                </IconButton>
-                                            </Tooltip>
-                                        )}
-                                    </Box>
-                                </RadioGroup>
-                            </FormControl>
-                        </>
-                    )}
+                onClose={() => setCreateDialogOpen(false)}
+                onSubmit={handleCreateKey}
+                mode="create"
+                title="Create New Key"
+                allowEmpty
+                loading={actionLoading}
+            />
 
-                    {createInputMode === "file" && !createTextFullscreen && (
-                        <Box sx={{mt: 2}}>
-                            <input
-                                id="create-key-file-upload"
-                                type="file"
-                                hidden
-                                onChange={(e) => setNewKeyFile(e.target.files[0])}
-                                disabled={actionLoading}
-                            />
-                            <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    component="label"
-                                    htmlFor="create-key-file-upload"
-                                    disabled={actionLoading}
-                                >
-                                    Choose File
-                                </Button>
-                                <Typography
-                                    variant="body2"
-                                    color={newKeyFile ? "textPrimary" : "textSecondary"}
-                                >
-                                    {newKeyFile ? newKeyFile.name : "No file selected"}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    )}
-
-                    {createInputMode === "text" && (
-                        <Box
-                            sx={{
-                                mt: createTextFullscreen ? 0 : 2,
-                                height: createTextFullscreen ? 'calc(100vh - 180px)' : 'auto',
-                                width: '100%',
-                            }}
-                        >
-                            <TextField
-                                multiline
-                                fullWidth
-                                variant="outlined"
-                                label={createTextFullscreen ? undefined : "Key Content"}
-                                value={newKeyText}
-                                onChange={(e) => setNewKeyText(e.target.value)}
-                                disabled={actionLoading}
-                                InputLabelProps={{shrink: true}}
-                                minRows={createTextFullscreen ? 20 : 8}
-                                maxRows={createTextFullscreen ? 40 : 20}
-                                placeholder="Enter the text content for this key..."
-                                sx={{
-                                    height: createTextFullscreen ? '100%' : 'auto',
-                                    '& .MuiInputBase-root': {
-                                        height: createTextFullscreen ? '100%' : 'auto',
-                                    },
-                                    '& .MuiInputBase-input': {
-                                        resize: 'vertical',
-                                        height: createTextFullscreen ? '100% !important' : 'auto',
-                                    }
-                                }}
-                            />
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setCreateDialogOpen(false);
-                        setCreateTextFullscreen(false);
-                    }} disabled={actionLoading}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleCreateKey}
-                        disabled={actionLoading || !newKeyName || (createInputMode === "file" && !newKeyFile)}
-                    >
-                        Create
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* UPDATE KEY DIALOG */}
-            <Dialog
+            <KeyFormDialog
                 open={updateDialogOpen}
-                onClose={() => {
-                    setUpdateDialogOpen(false);
-                    setUpdateTextFullscreen(false);
-                }}
-                maxWidth={updateTextFullscreen ? false : "md"}
-                fullScreen={updateTextFullscreen}
-                fullWidth={!updateTextFullscreen}
-            >
-                <DialogTitle>
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                        <Typography variant="h6">Update Key</Typography>
-                        {updateTextFullscreen && (
-                            <IconButton
-                                edge="end"
-                                onClick={() => setUpdateTextFullscreen(false)}
-                                aria-label="Exit full screen"
-                            >
-                                <FullscreenExitIcon/>
-                            </IconButton>
-                        )}
-                    </Box>
-                </DialogTitle>
-                <DialogContent>
-                    {updateContentLoading ? (
-                        <Box sx={{display: 'flex', justifyContent: 'center', p: 3}}>
-                            <CircularProgress/>
-                        </Box>
-                    ) : (
-                        <>
-                            {!updateTextFullscreen && (
-                                <>
-                                    <TextField
-                                        autoFocus
-                                        margin="dense"
-                                        label="Key Name"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={updateKeyName}
-                                        onChange={(e) => setUpdateKeyName(e.target.value)}
-                                        disabled={actionLoading}
-                                    />
-                                    <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
-                                        <FormLabel component="legend">Input Mode</FormLabel>
-                                        <RadioGroup
-                                            value={updateInputMode}
-                                            onChange={(e) => setUpdateInputMode(e.target.value)}
-                                        >
-                                            <FormControlLabel
-                                                value="file"
-                                                control={<Radio/>}
-                                                label="Upload from file"
-                                                disabled={actionLoading}
-                                            />
-                                            <Box display="flex" alignItems="center">
-                                                <FormControlLabel
-                                                    value="text"
-                                                    control={<Radio/>}
-                                                    label="Enter text directly"
-                                                    disabled={actionLoading}
-                                                />
-                                                {updateInputMode === "text" && !updateTextFullscreen && (
-                                                    <Tooltip title="Full screen">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => setUpdateTextFullscreen(true)}
-                                                            sx={{ml: 1}}
-                                                        >
-                                                            <FullscreenIcon/>
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                )}
-                                            </Box>
-                                        </RadioGroup>
-                                    </FormControl>
-                                </>
-                            )}
-
-                            {updateInputMode === "file" && !updateTextFullscreen && (
-                                <Box sx={{mt: 2}}>
-                                    <input
-                                        id="update-key-file-upload"
-                                        type="file"
-                                        hidden
-                                        onChange={(e) => setUpdateKeyFile(e.target.files[0])}
-                                        disabled={actionLoading}
-                                    />
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                        <Button
-                                            variant="outlined"
-                                            component="label"
-                                            htmlFor="update-key-file-upload"
-                                            disabled={actionLoading}
-                                        >
-                                            Choose File
-                                        </Button>
-                                        <Typography
-                                            variant="body2"
-                                            color={updateKeyFile ? "textPrimary" : "textSecondary"}
-                                        >
-                                            {updateKeyFile ? updateKeyFile.name : "No file chosen"}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                            )}
-
-                            {updateInputMode === "text" && (
-                                <Box
-                                    sx={{
-                                        mt: updateTextFullscreen ? 0 : 2,
-                                        height: updateTextFullscreen ? 'calc(100vh - 180px)' : 'auto',
-                                        width: '100%',
-                                    }}
-                                >
-                                    <TextField
-                                        multiline
-                                        fullWidth
-                                        variant="outlined"
-                                        label={updateTextFullscreen ? undefined : "Key Content"}
-                                        value={updateKeyText}
-                                        onChange={(e) => setUpdateKeyText(e.target.value)}
-                                        disabled={actionLoading}
-                                        InputLabelProps={{shrink: true}}
-                                        minRows={updateTextFullscreen ? 20 : 8}
-                                        maxRows={updateTextFullscreen ? 40 : 20}
-                                        placeholder="Enter the text content for this key..."
-                                        sx={{
-                                            height: updateTextFullscreen ? '100%' : 'auto',
-                                            '& .MuiInputBase-root': {
-                                                height: updateTextFullscreen ? '100%' : 'auto',
-                                            },
-                                            '& .MuiInputBase-input': {
-                                                resize: 'vertical',
-                                                height: updateTextFullscreen ? '100% !important' : 'auto',
-                                            }
-                                        }}
-                                    />
-                                </Box>
-                            )}
-                        </>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setUpdateDialogOpen(false);
-                        setUpdateTextFullscreen(false);
-                    }} disabled={actionLoading}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleUpdateKey}
-                        disabled={
-                            actionLoading ||
-                            updateContentLoading ||
-                            !updateKeyName ||
-                            (updateInputMode === "file" && !updateKeyFile)
-                        }
-                    >
-                        Update
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                onClose={() => setUpdateDialogOpen(false)}
+                onSubmit={handleUpdateKey}
+                mode="update"
+                initialName={updateInitialName}
+                initialContent={updateInitialContent}
+                initialInputMode={updateInitialInputMode}
+                title="Update Key"
+                loading={actionLoading}
+                initialLoading={updateContentLoading}
+            />
         </Box>
     );
 };

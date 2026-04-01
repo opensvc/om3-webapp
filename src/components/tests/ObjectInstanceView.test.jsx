@@ -1,4 +1,3 @@
-// ObjectInstanceView.test.js
 import React from 'react';
 import {render, screen, fireEvent, waitFor, within, act} from '@testing-library/react';
 import {MemoryRouter, Routes, Route} from 'react-router-dom';
@@ -1460,8 +1459,6 @@ describe('ObjectInstanceView', () => {
         expect(statusElements[0].textContent).toContain('M'); // Example check
     });
 
-    // Additional tests to improve coverage
-
     test('handles unfreeze action', async () => {
         global.fetch.mockResolvedValue({
             ok: true,
@@ -2351,7 +2348,6 @@ describe('ObjectInstanceView', () => {
         expect(statusElements[0].textContent).toContain('7');
     });
 
-    // ---- TARGETED TESTS FOR REMAINING UNCOVERED LINES ----
 
     test('ResourceRow shows not-provisioned icon when encapData provisioned is false for container', async () => {
         mockUseEventStore.objectInstanceStatus = {
@@ -2743,6 +2739,209 @@ describe('ObjectInstanceView', () => {
 
         await waitFor(() => {
             expect(screen.queryByText('Confirm Start')).not.toBeInTheDocument();
+        });
+    });
+
+    test('displays resource logs with debug level', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Resource 1',
+                            log: [
+                                {level: 'debug', message: 'Debug message'},
+                            ],
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('debug: Debug message')).toBeInTheDocument();
+        });
+    });
+
+    test('handles resource without provisioned state', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).not.toContain('P');
+    });
+
+    test('handles container resource with encap data but no provisioned field', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            running: true,
+                            label: 'Container 1',
+                            provisioned: {state: 'true'},
+                        },
+                    },
+                    encap: {
+                        'container1': {
+                            resources: {
+                                'encap1': {
+                                    type: 'fs',
+                                    running: true,
+                                    label: 'Encap FS',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+            expect(screen.getByText('encap1')).toBeInTheDocument();
+        });
+
+        const priorityHighIcons = screen.queryAllByTestId('priority-high-icon');
+        expect(priorityHighIcons.length).toBe(0);
+    });
+    test('does not display encapsulated resources when container status is down', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'container1': {
+                            type: 'container',
+                            status: 'down', // status down
+                            running: false,
+                            label: 'Container 1',
+                        },
+                    },
+                    encap: {
+                        'container1': {
+                            resources: {
+                                'encap1': {
+                                    type: 'fs',
+                                    running: true,
+                                    label: 'Encap FS',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('container1')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText('encap1')).not.toBeInTheDocument();
+    });
+
+    test('handles resource with config restart count zero or negative', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'res1': {
+                            type: 'fs',
+                            running: true,
+                            label: 'Resource 1',
+                        },
+                    },
+                },
+            },
+        };
+
+        mockUseEventStore.instanceConfig = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    resources: {
+                        'res1': {
+                            restart: 0, // <= 0
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('res1')).toBeInTheDocument();
+        });
+
+        const statusElements = screen.getAllByRole('status');
+        expect(statusElements[0].textContent).toContain('.');
+    });
+
+    test('handles resource with unknown type for action filtering', async () => {
+        mockUseEventStore.objectInstanceStatus = {
+            [mockObjectName]: {
+                [mockNodeName]: {
+                    avail: 'up',
+                    resources: {
+                        'unknown1': {
+                            type: 'unknownType',
+                            running: true,
+                            label: 'Unknown Resource',
+                        },
+                    },
+                },
+            },
+        };
+
+        setup();
+
+        await waitFor(() => {
+            expect(screen.getByText('unknown1')).toBeInTheDocument();
+        });
+
+        const resourceRow = screen.getByText('unknown1').closest('div');
+        const moreVertIcons = within(resourceRow).getAllByTestId('more-vert-icon');
+        const resourceMenuButton = moreVertIcons[0].closest('button');
+        fireEvent.click(resourceMenuButton);
+
+        await waitFor(() => {
+            expect(screen.getByText('Start')).toBeInTheDocument();
+            expect(screen.getByText('Stop')).toBeInTheDocument();
+            expect(screen.getByText('Console')).toBeInTheDocument();
+            expect(screen.getByText('Run')).toBeInTheDocument();
+            expect(screen.getByText('Freeze')).toBeInTheDocument();
+            expect(screen.getByText('Unprovision')).toBeInTheDocument();
+            expect(screen.getByText('Purge')).toBeInTheDocument();
         });
     });
 });

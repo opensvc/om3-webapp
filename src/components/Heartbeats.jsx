@@ -14,7 +14,6 @@ import {
     MenuItem,
     Button,
     Tooltip,
-    IconButton,
     CircularProgress,
     Typography,
     Grid,
@@ -120,7 +119,7 @@ const Heartbeats = () => {
     const tableContainerRef = useRef(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg")); // Ajout pour la cohérence
+    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
@@ -129,7 +128,6 @@ const Heartbeats = () => {
     const [visibleCount, setVisibleCount] = useState(30);
     const [loading, setLoading] = useState(false);
 
-    // Initialisation conditionnelle de showFilters
     const [showFilters, setShowFilters] = useState(() => isWideScreen ? true : !isMobile);
 
     // Read query parameters
@@ -145,7 +143,6 @@ const Heartbeats = () => {
     const [filterNode, setFilterNode] = useState(rawNode);
     const [filterState, setFilterState] = useState(rawState);
     const [filterId, setFilterId] = useState(() => {
-        // Nettoyer l'ID de l'URL : enlever le préfixe hb# et les suffixes .rx/.tx
         let cleaned = rawId;
         if (cleaned.startsWith("hb#")) {
             cleaned = cleaned.replace(/^hb#/, "");
@@ -206,7 +203,6 @@ const Heartbeats = () => {
 
     // Initialize filter states from URL
     useEffect(() => {
-        // Nettoyer l'ID de l'URL à chaque changement de l'URL
         let cleanedId = rawId;
         if (cleanedId.startsWith("hb#")) {
             cleanedId = cleanedId.replace(/^hb#/, "");
@@ -289,7 +285,6 @@ const Heartbeats = () => {
             for (let j = 0; j < streams.length; j++) {
                 const stream = streams[j];
                 if (stream.id && stream.id !== "all") {
-                    // Enlever le préfixe hb# puis les suffixes .rx/.tx
                     const cleanedId = stream.id.replace(/^hb#/, "");
                     const baseId = cleanedId.replace(/\.(rx|tx)$/, "");
                     ids.add(baseId);
@@ -386,7 +381,6 @@ const Heartbeats = () => {
 
     const filteredRows = useMemo(() => {
         return sortedRows.filter((row) => {
-            // Extraire l'ID de base de la ligne (sans .rx/.tx)
             const rowBaseId = row.id.replace(/\.(rx|tx)$/, "");
             return (
                 (deferredFilterBeating === "all" ||

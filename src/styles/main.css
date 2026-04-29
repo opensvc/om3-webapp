@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 /* Light mode (default) */
 :root {
     --bg-primary: #ffffff;
@@ -22,23 +28,56 @@
     --border-color: #333333;
 }
 
-html, body, #root {
+html, body {
     height: 100%;
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+    overflow: hidden !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+#root {
+    height: 100%;
+    overflow: hidden !important;
+    position: relative;
+}
+
+#app-root-container {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-*, *::before, *::after {
-    box-sizing: inherit;
+#app-scroll-container {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: inherit;
+    padding: 0;
+    margin: 0;
+}
+#app-scroll-container > * {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
-/* Force dark background for body and root in dark mode */
+#app-scroll-container,
+#app-scroll-container * {
+    min-height: auto;
+}
+
+/* Dark mode background forcé */
 .dark body,
-.dark #root {
+.dark #root,
+.dark #app-root-container {
     background-color: var(--bg-primary) !important;
 }
 
@@ -48,7 +87,6 @@ html, body, #root {
     color: var(--text-primary) !important;
 }
 
-/* Table styles in dark mode */
 .dark .MuiTableCell-root {
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
@@ -63,7 +101,6 @@ html, body, #root {
     background-color: var(--bg-tertiary) !important;
 }
 
-/* Input styles in dark mode */
 .dark .MuiInputBase-root {
     color: var(--text-primary) !important;
     background-color: var(--bg-secondary) !important;
@@ -73,30 +110,24 @@ html, body, #root {
     border-color: var(--border-color) !important;
 }
 
-/* Don't override specific background colors on Chips */
 .dark .MuiChip-root[style*="background-color"],
 .dark .MuiChip-root[style*="background"] {
-    /* Let inline styles take precedence for colored chips */
     background-color: inherit !important;
 }
 
-/* Ensure text in chips remains white in dark mode for colored chips */
 .dark .MuiChip-root[style*="background-color"] .MuiChip-label,
 .dark .MuiChip-root[style*="background"] .MuiChip-label {
     color: white !important;
 }
 
-/* Text colors in dark mode */
 .dark .MuiTypography-root {
     color: var(--text-primary) !important;
 }
 
-/* Keep NavBar dark in both modes */
 .MuiAppBar-root {
     background-color: #121212 !important;
 }
 
-/* Status colors should remain colored in both modes */
 .MuiChip-colorSuccess,
 .MuiChip-colorError,
 .MuiChip-colorWarning,
@@ -104,19 +135,15 @@ html, body, #root {
 [style*="background-color: red"],
 [style*="background-color: orange"],
 [style*="background-color: grey"] {
-    /* These keep their original colors in both modes */
 }
 
-/* For the colored circles in namespaces grid */
 .dark [style*="background-color: green"],
 .dark [style*="background-color: red"],
 .dark [style*="background-color: orange"],
 .dark [style*="background-color: grey"] {
-    /* Keep original colors in dark mode */
     color: white !important;
 }
 
-/* Ensure links are visible in dark mode */
 .dark a {
     color: #90caf9 !important;
 }

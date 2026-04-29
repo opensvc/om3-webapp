@@ -1,4 +1,4 @@
-import React, {useEffect, useCallback, lazy, Suspense} from "react";
+import React, {useEffect, useCallback, lazy, Suspense, useRef} from "react";
 import {Routes, Route, Navigate, useNavigate, useLocation} from "react-router-dom";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
@@ -40,8 +40,8 @@ const WhoAmI = lazy(() => import("./WhoAmI"));
 
 // Loading component for Suspense fallback
 const Loading = () => (
-    <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading...</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ fontSize: '1.125rem' }}>Loading...</div>
     </div>
 );
 
@@ -55,32 +55,15 @@ const DynamicThemeProvider = ({children}) => {
                     mode: isDarkMode ? 'dark' : 'light',
                     ...(isDarkMode
                         ? {
-                            primary: {
-                                main: '#90caf9',
-                            },
-                            secondary: {
-                                main: '#f48fb1',
-                            },
-                            background: {
-                                default: '#121212',
-                                paper: '#1e1e1e',
-                            },
-                            text: {
-                                primary: '#ffffff',
-                                secondary: '#cccccc',
-                            },
+                            primary: { main: '#90caf9' },
+                            secondary: { main: '#f48fb1' },
+                            background: { default: '#121212', paper: '#1e1e1e' },
+                            text: { primary: '#ffffff', secondary: '#cccccc' },
                         }
                         : {
-                            primary: {
-                                main: '#1976d2',
-                            },
-                            secondary: {
-                                main: '#dc004e',
-                            },
-                            background: {
-                                default: '#ffffff',
-                                paper: '#f5f5f5',
-                            },
+                            primary: { main: '#1976d2' },
+                            secondary: { main: '#dc004e' },
+                            background: { default: '#ffffff', paper: '#f5f5f5' },
                         }),
                 },
             }),
@@ -140,7 +123,6 @@ const OidcInitializer = ({children}) => {
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
     }, [authDispatch]);
 
-    // Initialize OIDC on startup if we have a token and auth choice is OIDC
     useEffect(() => {
         const initializeOidcOnStartup = async () => {
             const savedToken = localStorage.getItem('authToken');
@@ -150,7 +132,6 @@ const OidcInitializer = ({children}) => {
                 try {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
-                    // Update authentication state
                     authDispatch({type: SetAuthChoice, data: 'openid'});
                     authDispatch({type: SetAccessToken, data: savedToken});
                 } catch (error) {
@@ -161,22 +142,18 @@ const OidcInitializer = ({children}) => {
         initializeOidcOnStartup();
     }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
 
-    // Set up OIDC event listeners once the UserManager is created
     useEffect(() => {
         if (userManager && auth.authChoice === 'openid') {
             logger.info("Setting up OIDC event listeners");
-            // Remove old listeners
             userManager.events.removeUserLoaded(onUserRefreshed);
             userManager.events.removeAccessTokenExpired(handleTokenExpired);
             userManager.events.removeSilentRenewError(handleSilentRenewError);
-            // Add new listeners
             userManager.events.addUserLoaded(onUserRefreshed);
             userManager.events.addAccessTokenExpiring(() => {
                 logger.debug('Access token is about to expire, attempting silent renew...');
             });
             userManager.events.addAccessTokenExpired(handleTokenExpired);
             userManager.events.addSilentRenewError(handleSilentRenewError);
-            // Check for existing user
             userManager.getUser().then(user => {
                 if (user && !user.expired) {
                     logger.info("Found existing valid user:", user.profile?.preferred_username);
@@ -202,14 +179,12 @@ const OidcInitializer = ({children}) => {
         }
     }, [userManager, auth.authChoice, authDispatch, handleTokenExpired, handleSilentRenewError, onUserRefreshed]);
 
-    // Save auth choice to localStorage
     useEffect(() => {
         if (auth.authChoice) {
             localStorage.setItem('authChoice', auth.authChoice);
         }
     }, [auth.authChoice]);
 
-    // Listen for SPA-friendly redirects triggered from non-React modules
     useEffect(() => {
         const handler = (e) => {
             const path = e?.detail || '/auth-choice';
@@ -219,14 +194,12 @@ const OidcInitializer = ({children}) => {
         return () => window.removeEventListener('om3:auth-redirect', handler);
     }, [navigate]);
 
-    // Handle auth check on resume for OIDC
     useEffect(() => {
         const handleCheckAuthOnResume = () => {
             const authPaths = ['/auth-choice', '/auth/login', '/auth-callback', '/silent-renew'];
             if (authPaths.includes(location.pathname)) {
                 return;
             }
-
             try {
                 const authChoice = localStorage.getItem('authChoice');
                 const token = localStorage.getItem('authToken');
@@ -272,14 +245,11 @@ const OidcInitializer = ({children}) => {
                 setTimeout(handleCheckAuthOnResume, 500);
             }
         };
-
         const focusHandler = () => {
             setTimeout(handleCheckAuthOnResume, 500);
         };
-
         document.addEventListener('visibilitychange', visibilityHandler);
         window.addEventListener('focus', focusHandler);
-
         return () => {
             document.removeEventListener('visibilitychange', visibilityHandler);
             window.removeEventListener('focus', focusHandler);
@@ -299,7 +269,6 @@ const ProtectedRoute = ({children}) => {
         return children;
     }
 
-    // For OIDC, rely on UserManager to handle expiration
     if (authChoice === 'openid') {
         if (!token) {
             logger.warn("No OIDC token found, redirecting to /auth-choice");
@@ -308,7 +277,6 @@ const ProtectedRoute = ({children}) => {
         return children;
     }
 
-    // For other auth methods, validate the token
     if (!isTokenValid(token)) {
         logger.warn("Invalid or expired token, redirecting to /auth-choice");
         localStorage.removeItem("authToken");
@@ -323,10 +291,41 @@ const ProtectedRoute = ({children}) => {
 const App = () => {
     logger.info("App init");
     const location = useLocation();
+    const mainRef = useRef(null);
+
+    useEffect(() => {
+        const originalHtmlOverflow = document.documentElement.style.overflow;
+        const originalBodyOverflow = document.body.style.overflow;
+        const originalRootOverflow = document.getElementById('root')?.style.overflow;
+
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+        const root = document.getElementById('root');
+        if (root) root.style.overflow = 'hidden';
+
+        return () => {
+            document.documentElement.style.overflow = originalHtmlOverflow;
+            document.body.style.overflow = originalBodyOverflow;
+            if (root) root.style.overflow = originalRootOverflow;
+        };
+    }, []);
+
+    useEffect(() => {
+        const mainElement = mainRef.current;
+        if (!mainElement) return;
+
+        const adjustScroll = () => {
+        };
+        adjustScroll();
+        window.addEventListener('resize', adjustScroll);
+        return () => window.removeEventListener('resize', adjustScroll);
+    }, []);
 
     useEffect(() => {
         prepareForNavigation();
-        window.scrollTo(0, 0);
+        if (mainRef.current) {
+            mainRef.current.scrollTop = 0;
+        }
     }, [location]);
 
     useEffect(() => {
@@ -334,7 +333,6 @@ const App = () => {
             const newToken = localStorage.getItem("authToken");
             logger.debug("Storage event: newToken=", newToken);
         };
-
         window.addEventListener("storage", checkTokenChange);
         return () => window.removeEventListener("storage", checkTokenChange);
     }, []);
@@ -344,35 +342,32 @@ const App = () => {
             <OidcProvider>
                 <OidcInitializer>
                     <DynamicThemeProvider>
-                        <NavBar/>
-                        <div className="min-h-screen bg-inherit">
-                            <Suspense fallback={<Loading/>}>
-                                <Routes>
-                                    <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                                    <Route path="/cluster"
-                                           element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
-                                    <Route path="/namespaces" element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                                    <Route path="/kinds"
-                                           element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
-                                    <Route path="/heartbeats" element={<Heartbeats/>}/>
-                                    <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                    <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                                    <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                    <Route path="/network/:networkName"
-                                           element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
-                                    <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                    <Route path="/objects/:objectName"
-                                           element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                                    <Route path="/nodes/:node/objects/:objectName"
-                                           element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
-                                    <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                                    <Route path="/silent-renew" element={<SilentRenew/>}/>
-                                    <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                    <Route path="/auth-choice" element={<AuthChoice/>}/>
-                                    <Route path="/auth/login" element={<Login/>}/>
-                                    <Route path="*" element={<Navigate to="/"/>}/>
-                                </Routes>
-                            </Suspense>
+                        <div id="app-root-container">
+                            <NavBar />
+                            <main id="app-scroll-container" ref={mainRef}>
+                                <Suspense fallback={<Loading />}>
+                                    <Routes>
+                                        <Route path="/" element={<Navigate to="/cluster" replace />} />
+                                        <Route path="/cluster" element={<ProtectedRoute><ClusterOverview /></ProtectedRoute>} />
+                                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces /></ProtectedRoute>} />
+                                        <Route path="/kinds" element={<ProtectedRoute><Kinds /></ProtectedRoute>} />
+                                        <Route path="/heartbeats" element={<Heartbeats />} />
+                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable /></ProtectedRoute>} />
+                                        <Route path="/pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
+                                        <Route path="/network" element={<ProtectedRoute><Network /></ProtectedRoute>} />
+                                        <Route path="/network/:networkName" element={<ProtectedRoute><NetworkDetails /></ProtectedRoute>} />
+                                        <Route path="/objects" element={<ProtectedRoute><Objects /></ProtectedRoute>} />
+                                        <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails /></ProtectedRoute>} />
+                                        <Route path="/nodes/:node/objects/:objectName" element={<ProtectedRoute><ObjectInstanceView /></ProtectedRoute>} />
+                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI /></ProtectedRoute>} />
+                                        <Route path="/silent-renew" element={<SilentRenew />} />
+                                        <Route path="/auth-callback" element={<OidcCallback />} />
+                                        <Route path="/auth-choice" element={<AuthChoice />} />
+                                        <Route path="/auth/login" element={<Login />} />
+                                        <Route path="*" element={<Navigate to="/" />} />
+                                    </Routes>
+                                </Suspense>
+                            </main>
                         </div>
                     </DynamicThemeProvider>
                 </OidcInitializer>

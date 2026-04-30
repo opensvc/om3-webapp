@@ -2142,4 +2142,99 @@ size = 10GB
             return within(dialog).queryByText(title) !== null;
         });
     }
+
+    test('handles fetchKeywords timeout (AbortError)', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/keywords')) {
+                return Promise.reject(new DOMException('The operation was aborted', 'AbortError'));
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({items: []}),
+                headers: new Headers(),
+            });
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+        const keywordsButton = getKeywordsButton();
+        await act(async () => {
+            await user.click(keywordsButton);
+        });
+        await waitFor(() => {
+            expect(screen.getByText(/Configuration Keywords/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        const keywordsDialog = getDialogByTitle('Configuration Keywords');
+        const withinKeywordsDialog = within(keywordsDialog);
+        await waitFor(() => {
+            const alert = withinKeywordsDialog.getByRole('alert');
+            expect(alert).toHaveTextContent(/Request timed out after 60 seconds/i);
+        }, {timeout: 10000});
+    });
+
+    test('handles unset parameters with undefined option (already present but ensure coverage)', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = jest.fn((url) => {
+            if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        items: [
+                            {keyword: 'valid.param', value: 'test'},
+                        ],
+                    }),
+                    headers: new Headers(),
+                });
+            }
+            if (url.includes('/config/keywords')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({items: []}),
+                    headers: new Headers(),
+                });
+            }
+            return originalFetch(url);
+        });
+        render(
+            <ConfigSection
+                decodedObjectName="root/cfg/cfg1"
+                configNode="node1"
+                setConfigNode={setConfigNode}
+                openSnackbar={openSnackbar}
+                configDialogOpen={true}
+                setConfigDialogOpen={setConfigDialogOpen}
+            />
+        );
+        await waitFor(() => {
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+        }, {timeout: 5000});
+        const manageParamsButton = getManageParamsButton();
+        await act(async () => {
+            await user.click(manageParamsButton);
+        });
+        await waitFor(() => {
+            expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        }, {timeout: 10000});
+        const applyButton = screen.getByRole('button', {name: /Apply/i});
+        await act(async () => {
+            await user.click(applyButton);
+        });
+        await waitFor(() => {
+            expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error');
+        }, {timeout: 10000});
+        global.fetch = originalFetch;
+    });
 });

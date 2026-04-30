@@ -86,6 +86,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
     }, [configNode, decodedObjectName, fetchConfig]);
     return {...state, fetchConfig};
 };
+
 const useKeywords = (decodedObjectName) => {
     const initialState = {
         data: null,
@@ -145,6 +146,7 @@ const useKeywords = (decodedObjectName) => {
     };
     return {...state, fetchKeywords};
 };
+
 const useExistingParams = (decodedObjectName) => {
     const initialState = {
         data: null,
@@ -186,6 +188,7 @@ const useExistingParams = (decodedObjectName) => {
     };
     return {...state, fetchExistingParams};
 };
+
 const UpdateConfigDialog = ({
                                 open,
                                 onClose,
@@ -221,9 +224,7 @@ const UpdateConfigDialog = ({
             </Box>
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={actionLoading}>
-                Cancel
-            </Button>
+            <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
             <Button
                 variant="contained"
                 onClick={handleUpdateConfig}
@@ -235,16 +236,13 @@ const UpdateConfigDialog = ({
         </DialogActions>
     </Dialog>
 );
+
 const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsError}) => (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
         <DialogTitle>Configuration Keywords</DialogTitle>
         <DialogContent>
             {keywordsLoading && <CircularProgress size={24}/>}
-            {keywordsError && (
-                <Alert severity="error" sx={{mb: 2}}>
-                    {keywordsError}
-                </Alert>
-            )}
+            {keywordsError && <Alert severity="error" sx={{mb: 2}}>{keywordsError}</Alert>}
             {!keywordsLoading && !keywordsError && !keywordsData && (
                 <Typography color="textSecondary">No keywords available.</Typography>
             )}
@@ -278,12 +276,11 @@ const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsE
             )}
         </DialogContent>
         <DialogActions>
-            <Button onClick={onClose} disabled={keywordsLoading}>
-                Close
-            </Button>
+            <Button onClick={onClose} disabled={keywordsLoading}>Close</Button>
         </DialogActions>
     </Dialog>
 );
+
 const ManageParamsDialog = ({
                                 open,
                                 onClose,
@@ -304,6 +301,7 @@ const ManageParamsDialog = ({
                                 openSnackbar,
                             }) => {
     const [selectedKeyword, setSelectedKeyword] = useState(null);
+
     const existingKeywords = useMemo(() => {
         if (!existingParams) return [];
         return existingParams.map((param) => {
@@ -315,6 +313,7 @@ const ManageParamsDialog = ({
             };
         });
     }, [existingParams]);
+
     const existingSections = useMemo(() => {
         if (!existingParams) return [];
         const sections = new Set(
@@ -325,50 +324,79 @@ const ManageParamsDialog = ({
         );
         return Array.from(sections);
     }, [existingParams]);
+
     const addParameter = () => {
         if (selectedKeyword) {
             if (typeof selectedKeyword === 'string') {
                 openSnackbar(`Invalid parameter: ${selectedKeyword}`, 'error');
                 return;
             }
-            const isIndexed = !!selectedKeyword.section && selectedKeyword.section !== "DEFAULT";
-            const prefix = isIndexed ? selectedKeyword.section : undefined;
-            const section = isIndexed ? "" : (selectedKeyword.section === "DEFAULT" ? "DEFAULT" : selectedKeyword.section || "");
-            const newParam = {
-                section,
-                option: selectedKeyword.option,
-                value: "",
-                id: `${selectedKeyword.option}-${Date.now()}`,
-                isIndexed,
-                prefix,
-                keyword: {...selectedKeyword},
-            };
-            setParamsToSet([...paramsToSet, newParam]);
+            const keywordSection = selectedKeyword.section || "";
+            const hasSection = keywordSection && keywordSection !== "DEFAULT";
+            if (hasSection) {
+                const newParam = {
+                    sectionPrefix: keywordSection,
+                    sectionSuffix: "",
+                    option: selectedKeyword.option,
+                    value: "",
+                    id: `${selectedKeyword.option}-${Date.now()}`,
+                    keyword: {...selectedKeyword},
+                };
+                setParamsToSet([...paramsToSet, newParam]);
+            } else {
+                const newParam = {
+                    section: "",
+                    option: selectedKeyword.option,
+                    value: "",
+                    id: `${selectedKeyword.option}-${Date.now()}`,
+                    keyword: {...selectedKeyword},
+                };
+                setParamsToSet([...paramsToSet, newParam]);
+            }
             setSelectedKeyword(null);
         }
     };
+
     const removeParameter = (index) => {
         const newParams = paramsToSet.filter((_, i) => i !== index);
         setParamsToSet(newParams);
     };
+
+    const updateParamSection = (index, newSection) => {
+        const updated = [...paramsToSet];
+        updated[index].section = newSection;
+        setParamsToSet(updated);
+    };
+
+    const updateParamSectionSuffix = (index, newSuffix) => {
+        const updated = [...paramsToSet];
+        updated[index].sectionSuffix = newSuffix;
+        setParamsToSet(updated);
+    };
+
+    const updateParamValue = (index, newValue) => {
+        const updated = [...paramsToSet];
+        updated[index].value = newValue;
+        setParamsToSet(updated);
+    };
+
+    const getFullSection = (param) => {
+        if (param.section !== undefined) return param.section;
+        if (param.sectionPrefix !== undefined) {
+            return param.sectionSuffix ? `${param.sectionPrefix}#${param.sectionSuffix}` : param.sectionPrefix;
+        }
+        return "";
+    };
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
             <DialogTitle>Manage Configuration Parameters</DialogTitle>
             <DialogContent>
                 {(keywordsLoading || existingParamsLoading) && <CircularProgress size={24}/>}
-                {keywordsError && (
-                    <Alert severity="error" sx={{mb: 2}}>
-                        {keywordsError}
-                    </Alert>
-                )}
-                {existingParamsError && (
-                    <Alert severity="error" sx={{mb: 2}}>
-                        {existingParamsError}
-                    </Alert>
-                )}
-                <Typography variant="subtitle1" gutterBottom>
-                    Add parameters
-                </Typography>
+                {keywordsError && <Alert severity="error" sx={{mb: 2}}>{keywordsError}</Alert>}
+                {existingParamsError && <Alert severity="error" sx={{mb: 2}}>{existingParamsError}</Alert>}
+
+                <Typography variant="subtitle1" gutterBottom>Add parameters</Typography>
                 <Autocomplete
                     freeSolo={true}
                     options={keywordsData || []}
@@ -380,9 +408,7 @@ const ManageParamsDialog = ({
                             label="Select parameter to add"
                             placeholder="Select parameter"
                             helperText="Select a parameter to add, then click Add"
-                            slotProps={{
-                                inputLabel: {"aria-label": "Select parameter to add"}
-                            }}
+                            slotProps={{inputLabel: {"aria-label": "Select parameter to add"}}}
                         />
                     )}
                     onChange={(event, newValue) => setSelectedKeyword(newValue)}
@@ -397,87 +423,66 @@ const ManageParamsDialog = ({
                 >
                     Add Parameter
                 </Button>
+
                 {paramsToSet.length > 0 && (
                     <Box sx={{mb: 2}}>
                         <Box sx={{display: "flex", alignItems: "center", mb: 1, gap: 2}}>
-                            <Box sx={{flex: "0 0 20%"}}>
-                                <Typography variant="body2" fontWeight="bold">
-                                    Section
-                                </Typography>
-                            </Box>
                             <Box sx={{flex: "0 0 25%"}}>
-                                <Typography variant="body2" fontWeight="bold">
-                                    Parameter
-                                </Typography>
+                                <Typography variant="body2" fontWeight="bold">Section</Typography>
                             </Box>
                             <Box sx={{flex: "0 0 20%"}}>
-                                <Typography variant="body2" fontWeight="bold">
-                                    Value
-                                </Typography>
+                                <Typography variant="body2" fontWeight="bold">Parameter</Typography>
+                            </Box>
+                            <Box sx={{flex: "0 0 20%"}}>
+                                <Typography variant="body2" fontWeight="bold">Value</Typography>
                             </Box>
                             <Box sx={{flex: 1}}>
-                                <Typography variant="body2" fontWeight="bold">
-                                    Description
-                                </Typography>
+                                <Typography variant="body2" fontWeight="bold">Description</Typography>
                             </Box>
                             <Box sx={{flex: "0 0 40px"}}></Box>
                         </Box>
                         {paramsToSet.map((param, index) => {
                             const keyword = param.keyword;
+                            const hasSectionPrefix = param.sectionPrefix !== undefined;
                             return (
                                 <Box key={param.id} sx={{display: "flex", alignItems: "center", mb: 2, gap: 2}}>
-                                    <Box sx={{flex: "0 0 20%", display: "flex", alignItems: "center"}}>
-                                        {param.isIndexed ? (
-                                            <>
-                                                <Typography sx={{mr: 1}}>{param.prefix}#</Typography>
+                                    <Box sx={{flex: "0 0 25%"}}>
+                                        {hasSectionPrefix ? (
+                                            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+                                                <Typography variant="body2" sx={{whiteSpace: "nowrap"}}>
+                                                    {param.sectionPrefix}#
+                                                </Typography>
                                                 <TextField
                                                     fullWidth
-                                                    value={param.section}
-                                                    onChange={(e) => {
-                                                        const newParams = [...paramsToSet];
-                                                        newParams[index].section = e.target.value;
-                                                        setParamsToSet(newParams);
-                                                    }}
+                                                    label="Index (free text)"
+                                                    value={param.sectionSuffix}
+                                                    onChange={(e) => updateParamSectionSuffix(index, e.target.value)}
                                                     disabled={actionLoading}
                                                     size="small"
-                                                    placeholder="Index e.g. 1"
-                                                    type="number"
-                                                    slotProps={{
-                                                        htmlInput: {min: 0, step: 1},
-                                                        inputLabel: {"aria-label": "Index"}
-                                                    }}
+                                                    placeholder="e.g., prod, 1, data"
+                                                    slotProps={{inputLabel: {"aria-label": "Section suffix"}}}
                                                 />
-                                            </>
-                                        ) : param.section === "DEFAULT" ? (
-                                            <Typography>DEFAULT</Typography>
+                                            </Box>
                                         ) : (
                                             <TextField
                                                 fullWidth
-                                                label="Section"
-                                                value={param.section}
-                                                onChange={(e) => {
-                                                    const newParams = [...paramsToSet];
-                                                    newParams[index].section = e.target.value;
-                                                    setParamsToSet(newParams);
-                                                }}
+                                                label="Section (optional)"
+                                                value={param.section || ""}
+                                                onChange={(e) => updateParamSection(index, e.target.value)}
                                                 disabled={actionLoading}
                                                 size="small"
-                                                placeholder="e.g., fs#1, ip#1"
-                                                slotProps={{
-                                                    inputLabel: {"aria-label": "Section"}
-                                                }}
+                                                placeholder="e.g., database, fs#data"
+                                                slotProps={{inputLabel: {"aria-label": "Section"}}}
                                             />
                                         )}
                                     </Box>
-                                    <Box sx={{flex: "0 0 25%"}}>
+                                    <Box sx={{flex: "0 0 20%"}}>
                                         <Tooltip title={keyword?.text || ""} arrow>
-                                            <Typography
-                                                sx={{
-                                                    overflow: "hidden",
-                                                    textOverflow: "ellipsis",
-                                                    whiteSpace: "nowrap",
-                                                }}
-                                            >
+                                            <Typography sx={{
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                whiteSpace: "nowrap"
+                                            }}>
                                                 {param.option}
                                             </Typography>
                                         </Tooltip>
@@ -487,16 +492,10 @@ const ManageParamsDialog = ({
                                             fullWidth
                                             label="Value"
                                             value={param.value}
-                                            onChange={(e) => {
-                                                const newParams = [...paramsToSet];
-                                                newParams[index].value = e.target.value;
-                                                setParamsToSet(newParams);
-                                            }}
+                                            onChange={(e) => updateParamValue(index, e.target.value)}
                                             disabled={actionLoading}
                                             size="small"
-                                            slotProps={{
-                                                inputLabel: {"aria-label": "Value"}
-                                            }}
+                                            slotProps={{inputLabel: {"aria-label": "Value"}}}
                                         />
                                     </Box>
                                     <Box sx={{flex: 1}}>
@@ -507,18 +506,15 @@ const ManageParamsDialog = ({
                                                 whiteSpace: "normal",
                                                 maxHeight: "60px",
                                                 overflowY: "auto",
-                                                display: "block",
+                                                display: "block"
                                             }}
                                             title={keyword?.text || ""}
                                         >
                                             {keyword?.text || "N/A"}
                                         </Typography>
                                     </Box>
-                                    <IconButton
-                                        onClick={() => removeParameter(index)}
-                                        disabled={actionLoading}
-                                        aria-label="Remove parameter"
-                                    >
+                                    <IconButton onClick={() => removeParameter(index)} disabled={actionLoading}
+                                                aria-label="Remove parameter">
                                         <DeleteIcon/>
                                     </IconButton>
                                 </Box>
@@ -526,9 +522,8 @@ const ManageParamsDialog = ({
                         })}
                     </Box>
                 )}
-                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                    Unset parameters
-                </Typography>
+
+                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>Unset parameters</Typography>
                 <Autocomplete
                     multiple
                     options={existingKeywords}
@@ -540,9 +535,7 @@ const ManageParamsDialog = ({
                             label="Select parameters to unset"
                             placeholder="Select parameters"
                             helperText="Select existing parameters to remove their values"
-                            slotProps={{
-                                inputLabel: {"aria-label": "Select parameters to unset"}
-                            }}
+                            slotProps={{inputLabel: {"aria-label": "Select parameters to unset"}}}
                         />
                     )}
                     onChange={(event, newValue) => {
@@ -562,9 +555,8 @@ const ManageParamsDialog = ({
                     disabled={actionLoading || existingParamsLoading}
                     sx={{mb: 2}}
                 />
-                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                    Delete sections
-                </Typography>
+
+                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>Delete sections</Typography>
                 <Autocomplete
                     multiple
                     options={existingSections}
@@ -576,9 +568,7 @@ const ManageParamsDialog = ({
                             label="Select sections to delete"
                             placeholder="Select sections"
                             helperText="Select existing sections to delete"
-                            slotProps={{
-                                inputLabel: {"aria-label": "Select sections to delete"}
-                            }}
+                            slotProps={{inputLabel: {"aria-label": "Select sections to delete"}}}
                         />
                     )}
                     onChange={(event, newValue) => setParamsToDelete(newValue)}
@@ -586,9 +576,7 @@ const ManageParamsDialog = ({
                 />
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} disabled={actionLoading}>
-                    Cancel
-                </Button>
+                <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
                 <Button
                     variant="contained"
                     onClick={handleManageParamsSubmit}
@@ -601,6 +589,7 @@ const ManageParamsDialog = ({
         </Dialog>
     );
 };
+
 const ConfigSection = ({
                            decodedObjectName,
                            configNode,
@@ -614,15 +603,19 @@ const ConfigSection = ({
         configNode,
         setConfigNode
     );
-    const {data: keywordsData, loading: keywordsLoading, error: keywordsError, fetchKeywords} = useKeywords(
-        decodedObjectName
-    );
+    const {
+        data: keywordsData,
+        loading: keywordsLoading,
+        error: keywordsError,
+        fetchKeywords
+    } = useKeywords(decodedObjectName);
     const {
         data: existingParams,
         loading: existingParamsLoading,
         error: existingParamsError,
         fetchExistingParams,
     } = useExistingParams(decodedObjectName);
+
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
@@ -698,49 +691,42 @@ const ConfigSection = ({
         setActionLoading(true);
         let successCount = 0;
         for (const param of paramsToSet) {
-            const {section, option, value, isIndexed, prefix} = param;
+            let fullKeyword;
+            if (param.section !== undefined) {
+                fullKeyword = param.section ? `${param.section}.${param.option}` : param.option;
+            } else if (param.sectionPrefix !== undefined) {
+                const section = param.sectionSuffix ? `${param.sectionPrefix}#${param.sectionSuffix}` : param.sectionPrefix;
+                fullKeyword = section ? `${section}.${param.option}` : param.option;
+            } else {
+                fullKeyword = param.option;
+            }
+            const {value, option} = param;
             const keyword = param.keyword;
             try {
                 if (!keyword) {
-                    openSnackbar(`Invalid parameter: ${section ? `${section}.` : ""}${option}`, "error");
+                    openSnackbar(`Invalid parameter: ${option}`, "error");
                     continue;
-                }
-                if (keyword.section !== "DEFAULT") {
-                    if (!section && section !== 0) {
-                        openSnackbar(`Section${isIndexed ? " index" : ""} is required for parameter: ${option}`, "error");
-                        continue;
-                    }
-                    if (isIndexed) {
-                        const sectionNum = Number(section);
-                        if (isNaN(sectionNum) || sectionNum < 0 || !Number.isInteger(sectionNum)) {
-                            openSnackbar(`Invalid index for ${option}: must be a non-negative integer`, "error");
-                            continue;
-                        }
-                    }
                 }
                 if (keyword.converter === "converters.TListLowercase" && value.includes(",")) {
                     const values = value.split(",").map((v) => v.trim().toLowerCase());
                     if (values.some((v) => !v)) {
-                        openSnackbar(`Invalid value for ${option}: must be comma-separated lowercase strings`, "error");
+                        openSnackbar(`Invalid value for ${fullKeyword}: must be comma-separated lowercase strings`, "error");
                         continue;
                     }
                 }
-                const real_section = isIndexed ? `${prefix}#${section}` : section;
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(
-                    real_section ? `${real_section}.${option}` : option
-                )}=${encodeURIComponent(value)}`;
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?set=${encodeURIComponent(fullKeyword)}=${encodeURIComponent(value)}`;
                 const response = await fetch(url, {
                     method: "PATCH",
                     headers: {Authorization: `Bearer ${token}`},
                 });
                 if (!response.ok) {
                     const error = new Error(`HTTP ${response.status}`);
-                    openSnackbar(`Error adding parameter ${option}: ${error.message}`, "error");
+                    openSnackbar(`Error adding parameter ${fullKeyword}: ${error.message}`, "error");
                     continue;
                 }
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error adding parameter ${option}: ${err.message}`, "error");
+                openSnackbar(`Error adding parameter ${fullKeyword}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
@@ -769,25 +755,23 @@ const ConfigSection = ({
             const {section, option} = param;
             try {
                 if (!option) {
-                    const error = new Error("Parameter option is undefined");
-                    openSnackbar(`Error unsetting parameter ${param.option || "unknown"}: ${error.message}`, "error");
+                    openSnackbar(`Error unsetting parameter ${param.option || "unknown"}`, "error");
                     continue;
                 }
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(
-                    section ? `${section}.${option}` : option
-                )}`;
+                const fullKeyword = section ? `${section}.${option}` : option;
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/config?unset=${encodeURIComponent(fullKeyword)}`;
                 const response = await fetch(url, {
                     method: "PATCH",
                     headers: {Authorization: `Bearer ${token}`},
                 });
                 if (!response.ok) {
-                    const error = new Error(`Failed to unset parameter ${option}: ${response.status}`);
-                    openSnackbar(`Error unsetting parameter ${param.option || "unknown"}: ${error.message}`, "error");
+                    const error = new Error(`Failed to unset parameter ${fullKeyword}: ${response.status}`);
+                    openSnackbar(`Error unsetting parameter ${fullKeyword}: ${error.message}`, "error");
                     continue;
                 }
                 successCount++;
             } catch (err) {
-                openSnackbar(`Error unsetting parameter ${param.option || "unknown"}: ${err.message}`, "error");
+                openSnackbar(`Error unsetting parameter ${option || "unknown"}: ${err.message}`, "error");
             }
         }
         if (successCount > 0) {
@@ -860,11 +844,7 @@ const ConfigSection = ({
 
     return (
         <Box sx={{mb: 2, width: "100%", display: 'flex', justifyContent: 'flex-end'}}>
-            <Button
-                variant="contained"
-                size="small"
-                onClick={() => setConfigDialogOpen(true)}
-            >
+            <Button variant="contained" size="small" onClick={() => setConfigDialogOpen(true)}>
                 View Configuration
             </Button>
 
@@ -908,15 +888,9 @@ const ConfigSection = ({
                             </Tooltip>
                         </Box>
                         {configLoading && <CircularProgress size={24}/>}
-                        {configError && (
-                            <Alert severity="error" sx={{mb: 2}}>
-                                {configError}
-                            </Alert>
-                        )}
+                        {configError && <Alert severity="error" sx={{mb: 2}}>{configError}</Alert>}
                         {!configLoading && !configError && configData === null && (
-                            <Typography color="textSecondary" variant="body2">
-                                No configuration available.
-                            </Typography>
+                            <Typography color="textSecondary" variant="body2">No configuration available.</Typography>
                         )}
                         {!configLoading && !configError && configData !== null && (
                             <Box
@@ -928,13 +902,8 @@ const ConfigSection = ({
                                     overflowX: "auto",
                                     boxSizing: "border-box",
                                     scrollbarWidth: "thin",
-                                    "&::-webkit-scrollbar": {
-                                        height: "8px",
-                                    },
-                                    "&::-webkit-scrollbar-thumb": {
-                                        backgroundColor: "grey.400",
-                                        borderRadius: "4px",
-                                    },
+                                    "&::-webkit-scrollbar": {height: "8px"},
+                                    "&::-webkit-scrollbar-thumb": {backgroundColor: "grey.400", borderRadius: "4px"},
                                 }}
                             >
                                 <Box
@@ -957,9 +926,7 @@ const ConfigSection = ({
                     </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfigDialogOpen(false)}>
-                        Close
-                    </Button>
+                    <Button onClick={() => setConfigDialogOpen(false)}>Close</Button>
                 </DialogActions>
             </Dialog>
 
@@ -990,7 +957,6 @@ const ConfigSection = ({
                 handleManageParamsSubmit={handleManageParamsSubmit}
                 openSnackbar={openSnackbar}
             />
-
             <KeywordsDialog
                 open={keywordsDialogOpen}
                 onClose={() => setKeywordsDialogOpen(false)}

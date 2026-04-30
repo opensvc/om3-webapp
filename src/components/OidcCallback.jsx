@@ -37,7 +37,6 @@ const OidcCallback = () => {
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at?.toString() || '');
 
-        // Use BroadcastChannel only if available (browser environment)
         if (typeof BroadcastChannel !== 'undefined') {
             const channel = new BroadcastChannel('auth-channel');
             channel.postMessage({type: 'tokenUpdated', data: user.access_token, expires_at: user.expires_at});
@@ -54,6 +53,17 @@ const OidcCallback = () => {
         logger.error('Silent renew failed:', error);
         handleLogout();
     }, [handleLogout]);
+
+    const setupEventHandlers = useCallback(() => {
+        if (eventHandlersSet.current || !userManager) return;
+        userManager.events.addUserLoaded(onUserRefreshed);
+        userManager.events.addAccessTokenExpiring(() => {
+            logger.debug('Access token is about to expire, attempting silent renew...');
+        });
+        userManager.events.addAccessTokenExpired(handleTokenExpired);
+        userManager.events.addSilentRenewError(handleSilentRenewError);
+        eventHandlersSet.current = true;
+    }, [userManager, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
 
     const handleSigninRedirect = useCallback(() => {
         if (!userManager) {
@@ -76,18 +86,7 @@ const OidcCallback = () => {
                 logger.error("signinRedirectCallback failed:", err);
                 navigate('/auth-choice');
             });
-    }, [userManager, authDispatch, navigate, onUserRefreshed]);
-
-    const setupEventHandlers = useCallback(() => {
-        if (eventHandlersSet.current || !userManager) return;
-        userManager.events.addUserLoaded(onUserRefreshed);
-        userManager.events.addAccessTokenExpiring(() => {
-            logger.debug('Access token is about to expire, attempting silent renew...');
-        });
-        userManager.events.addAccessTokenExpired(handleTokenExpired);
-        userManager.events.addSilentRenewError(handleSilentRenewError);
-        eventHandlersSet.current = true;
-    }, [userManager, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
+    }, [userManager, authDispatch, navigate, onUserRefreshed, setupEventHandlers]);
 
     useEffect(() => {
         const initializeUserManager = async () => {
@@ -103,14 +102,13 @@ const OidcCallback = () => {
             }
         };
 
-        void initializeUserManager();
+        initializeUserManager();
     }, [authInfo, userManager, recreateUserManager, navigate]);
 
     useEffect(() => {
         if (userManager) {
             logger.debug("Handling OIDC callback or session check");
 
-            // Use getUser only if it exists (for testing compatibility)
             if (typeof userManager.getUser === 'function') {
                 userManager.getUser().then((user) => {
                     if (user && !user.expired) {
@@ -126,14 +124,13 @@ const OidcCallback = () => {
                     handleSigninRedirect();
                 });
             } else {
-                // Fallback for testing environment
+                // Fallback for environments where getUser is not available (e.g., testing)
                 handleSigninRedirect();
             }
         }
-    }, [userManager, handleSigninRedirect, setupEventHandlers, onUserRefreshed]);
+    }, [userManager, handleSigninRedirect, setupEventHandlers, onUserRefreshed, navigate]);
 
     useEffect(() => {
-        // Only set up BroadcastChannel in browser environment
         if (typeof BroadcastChannel === 'undefined') return;
 
         const channel = new BroadcastChannel('auth-channel');
@@ -153,7 +150,7 @@ const OidcCallback = () => {
         };
 
         return () => channel.close();
-    }, [authDispatch, navigate, handleLogout]);
+    }, [authDispatch, handleLogout]);
 
     return <>Logging ...</>;
 };

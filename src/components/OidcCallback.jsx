@@ -66,12 +66,6 @@ const OidcCallback = () => {
     }, [userManager, onUserRefreshed, handleTokenExpired, handleSilentRenewError]);
 
     const handleSigninRedirect = useCallback(() => {
-        if (!userManager) {
-            logger.error("UserManager not available");
-            navigate('/auth-choice');
-            return;
-        }
-
         userManager.signinRedirectCallback()
             .then((user) => {
                 onUserRefreshed(user);
@@ -101,7 +95,6 @@ const OidcCallback = () => {
                 }
             }
         };
-
         initializeUserManager();
     }, [authInfo, userManager, recreateUserManager, navigate]);
 
@@ -124,7 +117,6 @@ const OidcCallback = () => {
                     handleSigninRedirect();
                 });
             } else {
-                // Fallback for environments where getUser is not available (e.g., testing)
                 handleSigninRedirect();
             }
         }
@@ -132,7 +124,6 @@ const OidcCallback = () => {
 
     useEffect(() => {
         if (typeof BroadcastChannel === 'undefined') return;
-
         const channel = new BroadcastChannel('auth-channel');
         channel.onmessage = (event) => {
             const {type, data, expires_at} = event.data || {};
@@ -148,7 +139,6 @@ const OidcCallback = () => {
                 localStorage.setItem('tokenExpiration', expires_at.toString());
             }
         };
-
         return () => channel.close();
     }, [authDispatch, handleLogout]);
 

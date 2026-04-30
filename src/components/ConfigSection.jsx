@@ -20,6 +20,7 @@ import {
     TableRow,
     Paper,
     Autocomplete,
+    useTheme,
 } from "@mui/material";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import EditIcon from "@mui/icons-material/Edit";
@@ -380,14 +381,6 @@ const ManageParamsDialog = ({
         setParamsToSet(updated);
     };
 
-    const getFullSection = (param) => {
-        if (param.section !== undefined) return param.section;
-        if (param.sectionPrefix !== undefined) {
-            return param.sectionSuffix ? `${param.sectionPrefix}#${param.sectionSuffix}` : param.sectionPrefix;
-        }
-        return "";
-    };
-
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
             <DialogTitle>Manage Configuration Parameters</DialogTitle>
@@ -598,6 +591,9 @@ const ConfigSection = ({
                            configDialogOpen,
                            setConfigDialogOpen
                        }) => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
@@ -896,14 +892,17 @@ const ConfigSection = ({
                             <Box
                                 sx={{
                                     p: 2,
-                                    bgcolor: "grey.200",
+                                    bgcolor: isDark ? 'grey.900' : 'grey.200',
                                     borderRadius: 1,
                                     maxWidth: "100%",
                                     overflowX: "auto",
                                     boxSizing: "border-box",
                                     scrollbarWidth: "thin",
                                     "&::-webkit-scrollbar": {height: "8px"},
-                                    "&::-webkit-scrollbar-thumb": {backgroundColor: "grey.400", borderRadius: "4px"},
+                                    "&::-webkit-scrollbar-thumb": {
+                                        backgroundColor: isDark ? 'grey.600' : 'grey.400',
+                                        borderRadius: "4px"
+                                    },
                                 }}
                             >
                                 <Box
@@ -917,6 +916,7 @@ const ConfigSection = ({
                                         m: 0,
                                         minWidth: "max-content",
                                         fontSize: '0.875rem',
+                                        color: 'text.primary',
                                     }}
                                 >
                                     {configData}

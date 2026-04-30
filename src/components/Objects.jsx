@@ -275,10 +275,12 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
     );
 }, (prev, next) => prev.nodeState === next.nodeState && prev.node === next.node);
 
-const NodeStatus = React.memo(({objectName, node}) => {
+const NodeStatus = React.memo(({ objectName, node }) => {
     const nodeData = useNodeData(objectName, node);
-    const isNodeNotProvisioned = nodeData?.provisioned === "false" || nodeData?.provisioned === false;
-    return nodeData?.avail ? (
+    const hasData = Boolean(nodeData?.avail);
+    const isNodeNotProvisioned = hasData && (nodeData.provisioned === "false" || nodeData.provisioned === false);
+
+    return (
         <Box sx={{
             width: "130px",
             height: "100%",
@@ -286,22 +288,21 @@ const NodeStatus = React.memo(({objectName, node}) => {
             alignItems: "center",
             justifyContent: "space-between"
         }}>
-            <NodeStatusIcons
-                nodeAvail={nodeData.avail}
-                isNodeNotProvisioned={isNodeNotProvisioned}
-                nodeFrozen={nodeData.frozen}
-                node={node}
-            />
-            <NodeStateDisplay nodeState={nodeData.state} node={node}/>
-        </Box>
-    ) : (
-        <Box sx={{
-            width: "130px",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
-        }}>
-            <Typography variant="caption" color="textSecondary">-</Typography>
+            {hasData ? (
+                <NodeStatusIcons
+                    nodeAvail={nodeData.avail}
+                    isNodeNotProvisioned={isNodeNotProvisioned}
+                    nodeFrozen={nodeData.frozen}
+                    node={node}
+                />
+            ) : (
+                <Box sx={{ width: "80px" }} />
+            )}
+            {hasData ? (
+                <NodeStateDisplay nodeState={nodeData.state} node={node} />
+            ) : (
+                <Box sx={{ width: "50px" }} />
+                )}
         </Box>
     );
 }, (prev, next) => prev.objectName === next.objectName && prev.node === next.node);

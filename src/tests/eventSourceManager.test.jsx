@@ -151,7 +151,7 @@ describe('eventSourceManager', () => {
             addEventListener: jest.fn(),
             close: jest.fn(),
             readyState: 1, // OPEN state
-            url: URL_NODE_EVENT + '?cache=true&filter=NodeStatusUpdated',
+            url: URL_NODE_EVENT + '?replay=true&filter=NodeStatusUpdated',
         };
 
         mockLoggerEventSource = {
@@ -160,7 +160,7 @@ describe('eventSourceManager', () => {
             addEventListener: jest.fn(),
             close: jest.fn(),
             readyState: 1,
-            url: URL_NODE_EVENT + '?cache=true&filter=ObjectStatusUpdated',
+            url: URL_NODE_EVENT + '?replay=true&filter=ObjectStatusUpdated',
         };
 
         // Mock EventSourcePolyfill to return our mock
@@ -325,7 +325,7 @@ describe('eventSourceManager', () => {
         test('should configure EventSource without objectName', () => {
             eventSourceManager.configureEventSource('fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalled();
-            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('cache=true');
+            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('replay=true');
         });
 
         test('should create an EventSource with valid token via startEventReception', () => {
@@ -482,7 +482,7 @@ describe('eventSourceManager', () => {
         // Coverage for lines 726-727, 745: updateEventSourceToken with open EventSource
         test('should restart EventSource when updateEventSourceToken called with open connection', () => {
             // Create initial EventSource — mockEventSource needs a url for updateEventSourceToken to parse
-            mockEventSource.url = `${URL_NODE_EVENT}?cache=true&filter=NodeStatusUpdated`;
+            mockEventSource.url = `${URL_NODE_EVENT}?replay=true&filter=NodeStatusUpdated`;
             eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
 
             // Prepare mock for the recreated EventSource
@@ -492,7 +492,7 @@ describe('eventSourceManager', () => {
                 addEventListener: jest.fn(),
                 close: jest.fn(),
                 readyState: 1,
-                url: `${URL_NODE_EVENT}?cache=true&filter=NodeStatusUpdated`,
+                url: `${URL_NODE_EVENT}?replay=true&filter=NodeStatusUpdated`,
             };
             EventSourcePolyfill.mockImplementation(() => recreatedMock);
 
@@ -1516,7 +1516,7 @@ describe('eventSourceManager', () => {
     describe('Utility functions and helpers', () => {
         test('should create query string with default filters', () => {
             eventSourceManager.configureEventSource('fake-token');
-            expect(EventSourcePolyfill).toHaveBeenCalledWith(expect.stringContaining('cache=true'), expect.any(Object));
+            expect(EventSourcePolyfill).toHaveBeenCalledWith(expect.stringContaining('replay=true'), expect.any(Object));
         });
 
         test('should handle invalid filters in createQueryString', () => {
@@ -1542,7 +1542,7 @@ describe('eventSourceManager', () => {
         test('should create query string without objectName', () => {
             eventSourceManager.configureEventSource('fake-token');
             const url = EventSourcePolyfill.mock.calls[0][0];
-            expect(url).toContain('cache=true');
+            expect(url).toContain('replay=true');
             expect(url).not.toContain('path=');
         });
 
@@ -1729,7 +1729,7 @@ describe('eventSourceManager', () => {
                 addEventListener: jest.fn(),
                 close: jest.fn(),
                 readyState: 1,
-                url: `${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`,
+                url: `${URL_NODE_EVENT}?replay=true&filter=ObjectStatusUpdated`,
             };
             EventSourcePolyfill.mockImplementation(() => nextLoggerMock);
 

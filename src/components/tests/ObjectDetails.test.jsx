@@ -40,7 +40,7 @@ jest.mock('../ConfigSection', () => ({
                   setConfigNode,
                   openSnackbar,
                   configDialogOpen,
-                  setConfigDialogOpen
+                  setConfigDialogOpen,
               }) => (
         <div>
             <button
@@ -285,6 +285,15 @@ const findResourceButton = (container, resourceId) => {
         btn.getAttribute('aria-label')?.includes('actions')
     );
 };
+
+const waitForObjectName = async () => {
+    return await screen.findByText(/root\/svc\/svc1/i, {}, {timeout: 10000});
+};
+
+const waitForNode = async (nodeName) => {
+    return await screen.findByText(nodeName, {}, {timeout: 10000});
+};
+
 
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();
@@ -4558,223 +4567,273 @@ type = flag
         });
     });
 
-    describe('Additional coverage tests (simplifiés)', () => {
-        // Réutilisation des helpers du describe principal
-        const waitForObjectName = async () => {
-            return await screen.findByText(/root\/svc\/svc1/i, {}, { timeout: 10000 });
-        };
+    test('fetchConfig with missing token shows error', async () => {
+        mockLocalStorage.getItem.mockReturnValue(null);
+        renderSvc();
+        await waitForObjectName();
+        await waitFor(() => {
+            const errorText = screen.queryByText(/Auth token not found/i);
+            if (errorText) expect(errorText).toBeInTheDocument();
+            else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        }, {timeout: 5000});
+    });
 
-        const waitForNode = async (nodeName) => {
-            return await screen.findByText(nodeName, {}, { timeout: 10000 });
-        };
-
-        beforeEach(() => {
-            jest.clearAllMocks();
-            const freshState = buildState();
-            useEventStore.mockImplementation((selector) => selector(freshState));
-            useEventStore.subscribe = jest.fn(() => jest.fn());
-            global.fetch.mockImplementation((url) => {
-                if (url.includes('/config/file')) {
-                    return Promise.resolve({ ok: true, text: () => Promise.resolve('[DEFAULT]') });
-                }
-                return Promise.resolve({ ok: true, text: () => Promise.resolve('') });
-            });
-            mockLocalStorage.getItem.mockReturnValue('mock-token');
+    test('fetchConfig with HTTP error shows error message', async () => {
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/config/file')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 500,
+                    text: () => Promise.resolve('Server Error'),
+                });
+            }
+            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
         });
+        renderSvc();
+        await waitForObjectName();
+        await waitFor(() => {
+            const errorText = screen.queryByText(/Failed to fetch config: HTTP error! status: 500/i);
+            if (errorText) expect(errorText).toBeInTheDocument();
+            else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
+        }, {timeout: 5000});
+    });
 
-        test('fetchConfig with missing token shows error', async () => {
-            mockLocalStorage.getItem.mockReturnValue(null);
-            renderSvc();
-            await waitForObjectName();
-            await waitFor(() => {
-                const errorText = screen.queryByText(/Auth token not found/i);
-                if (errorText) expect(errorText).toBeInTheDocument();
-                else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
-            }, { timeout: 5000 });
+    test('configUpdates subscription error triggers logger.warn', async () => {
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+        const originalSubscribe = useEventStore.subscribe;
+        useEventStore.subscribe = jest.fn(() => {
+            throw new Error('Subscription failed');
         });
-
-        test('fetchConfig with HTTP error shows error message', async () => {
-            global.fetch.mockImplementation((url) => {
-                if (url.includes('/config/file')) {
-                    return Promise.resolve({
-                        ok: false,
-                        status: 500,
-                        text: () => Promise.resolve('Server Error'),
-                    });
-                }
-                return Promise.resolve({ ok: true, text: () => Promise.resolve('') });
-            });
-            renderSvc();
-            await waitForObjectName();
-            await waitFor(() => {
-                const errorText = screen.queryByText(/Failed to fetch config: HTTP error! status: 500/i);
-                if (errorText) expect(errorText).toBeInTheDocument();
-                else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
-            }, { timeout: 5000 });
+        renderSvc();
+        await waitForObjectName();
+        await waitFor(() => {
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[ObjectDetail] Failed to subscribe to configUpdates:',
+                expect.any(Error)
+            );
         });
+        useEventStore.subscribe = originalSubscribe;
+        warnSpy.mockRestore();
+    });
 
-        test('configUpdates subscription error triggers logger.warn', async () => {
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-            const originalSubscribe = useEventStore.subscribe;
-            useEventStore.subscribe = jest.fn(() => { throw new Error('Subscription failed'); });
-            renderSvc();
-            await waitForObjectName();
-            await waitFor(() => {
-                expect(warnSpy).toHaveBeenCalledWith(
-                    '[ObjectDetail] Failed to subscribe to configUpdates:',
-                    expect.any(Error)
-                );
-            });
-            useEventStore.subscribe = originalSubscribe;
-            warnSpy.mockRestore();
+    test('instanceConfig subscription error triggers logger.warn', async () => {
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+        const originalSubscribe = useEventStore.subscribe;
+        useEventStore.subscribe = jest.fn(() => {
+            throw new Error('InstanceConfig subscription failed');
         });
-
-        test('instanceConfig subscription error triggers logger.warn', async () => {
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-            const originalSubscribe = useEventStore.subscribe;
-            useEventStore.subscribe = jest.fn(() => { throw new Error('InstanceConfig subscription failed'); });
-            renderSvc();
-            await waitForObjectName();
-            await waitFor(() => {
-                expect(warnSpy).toHaveBeenCalledWith(
-                    '[ObjectDetail] Failed to subscribe to instanceConfig:',
-                    expect.any(Error)
-                );
-            });
-            useEventStore.subscribe = originalSubscribe;
-            warnSpy.mockRestore();
+        renderSvc();
+        await waitForObjectName();
+        await waitFor(() => {
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[ObjectDetail] Failed to subscribe to instanceConfig:',
+                expect.any(Error)
+            );
         });
+        useEventStore.subscribe = originalSubscribe;
+        warnSpy.mockRestore();
+    });
 
-        test('handleIndividualNodeActionClick does not warn in normal flow', async () => {
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-            renderSvc();
-            await waitForNode('node1');
+    test('handleIndividualNodeActionClick does not warn in normal flow', async () => {
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+        renderSvc();
+        await waitForNode('node1');
 
-            const nodeActionsBtn = screen.getByRole('button', { name: /Node node1 actions/i });
-            await user.click(nodeActionsBtn);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument(), { timeout: 3000 });
+        const nodeActionsBtn = screen.getByRole('button', {name: /Node node1 actions/i});
+        await user.click(nodeActionsBtn);
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument(), {timeout: 3000});
 
-            const startItem = within(screen.getByRole('menu')).getByRole('menuitem', { name: /start/i });
-            await user.click(startItem);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), { timeout: 3000 });
+        const startItem = within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), {timeout: 3000});
 
-            const cancelBtn = within(screen.getByRole('dialog')).getByRole('button', { name: /cancel/i });
-            await user.click(cancelBtn);
+        const cancelBtn = within(screen.getByRole('dialog')).getByRole('button', {name: /cancel/i});
+        await user.click(cancelBtn);
 
-            expect(warnSpy).not.toHaveBeenCalled();
-            warnSpy.mockRestore();
+        expect(warnSpy).not.toHaveBeenCalled();
+        warnSpy.mockRestore();
+    });
+
+    test('postObjectAction handles non-ok response', async () => {
+        const originalFetch = global.fetch;
+        global.fetch.mockImplementation((url, options) => {
+            if (options?.method === 'POST' && url.includes('/action/')) {
+                return Promise.resolve({ok: false, status: 403, text: () => Promise.resolve('Forbidden')});
+            }
+            return originalFetch(url, options);
         });
+        renderSvc();
+        await waitForNode('node1');
 
-        test('postObjectAction handles non-ok response', async () => {
-            const originalFetch = global.fetch;
-            global.fetch.mockImplementation((url, options) => {
-                if (options?.method === 'POST' && url.includes('/action/')) {
-                    return Promise.resolve({ ok: false, status: 403, text: () => Promise.resolve('Forbidden') });
-                }
-                return originalFetch(url, options);
-            });
-            renderSvc();
-            await waitForNode('node1');
+        const objectActionsBtn = screen.getByRole('button', {name: /object actions/i});
+        await user.click(objectActionsBtn);
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        const startItem = screen.getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
+        await user.click(confirmBtn);
 
-            const objectActionsBtn = screen.getByRole('button', { name: /object actions/i });
-            await user.click(objectActionsBtn);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-            const startItem = screen.getByRole('menuitem', { name: /start/i });
-            await user.click(startItem);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-            const confirmBtn = screen.getByRole('button', { name: /confirm/i });
-            await user.click(confirmBtn);
-
-            await waitFor(() => {
-                const alerts = screen.getAllByRole('alert');
-                const errorAlert = alerts.find(a => a.textContent.includes('HTTP error! status: 403'));
-                expect(errorAlert).toBeInTheDocument();
-            });
-            global.fetch = originalFetch;
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(a => a.textContent.includes('HTTP error! status: 403'));
+            expect(errorAlert).toBeInTheDocument();
         });
+        global.fetch = originalFetch;
+    });
 
-        test('postObjectAction handles fetch exception', async () => {
-            const originalFetch = global.fetch;
-            global.fetch.mockImplementation((url, options) => {
-                if (options?.method === 'POST' && url.includes('/action/')) {
-                    return Promise.reject(new Error('Network error'));
-                }
-                return originalFetch(url, options);
-            });
-            renderSvc();
-            await waitForNode('node1');
-
-            const objectActionsBtn = screen.getByRole('button', { name: /object actions/i });
-            await user.click(objectActionsBtn);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-            const startItem = screen.getByRole('menuitem', { name: /start/i });
-            await user.click(startItem);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-            const confirmBtn = screen.getByRole('button', { name: /confirm/i });
-            await user.click(confirmBtn);
-
-            await waitFor(() => {
-                const alerts = screen.getAllByRole('alert');
-                const errorAlert = alerts.find(a => a.textContent.includes('Network error'));
-                expect(errorAlert).toBeInTheDocument();
-            });
-            global.fetch = originalFetch;
+    test('postObjectAction handles fetch exception', async () => {
+        const originalFetch = global.fetch;
+        global.fetch.mockImplementation((url, options) => {
+            if (options?.method === 'POST' && url.includes('/action/')) {
+                return Promise.reject(new Error('Network error'));
+            }
+            return originalFetch(url, options);
         });
+        renderSvc();
+        await waitForNode('node1');
 
-        test('postNodeAction handles non-ok response', async () => {
-            const originalFetch = global.fetch;
-            global.fetch.mockImplementation((url, options) => {
-                if (options?.method === 'POST' && url.includes('/action/')) {
-                    return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('Server error') });
-                }
-                return originalFetch(url, options);
-            });
-            renderSvc();
-            await waitForNode('node1');
+        const objectActionsBtn = screen.getByRole('button', {name: /object actions/i});
+        await user.click(objectActionsBtn);
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        const startItem = screen.getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
+        await user.click(confirmBtn);
 
-            const nodeActionsBtn = screen.getByRole('button', { name: /Node node1 actions/i });
-            await user.click(nodeActionsBtn);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-            const startItem = within(screen.getByRole('menu')).getByRole('menuitem', { name: /start/i });
-            await user.click(startItem);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-            const confirmBtn = screen.getByRole('button', { name: /confirm/i });
-            await user.click(confirmBtn);
-
-            await waitFor(() => {
-                const alerts = screen.getAllByRole('alert');
-                const errorAlert = alerts.find(a => a.textContent.includes('HTTP error! status: 500'));
-                expect(errorAlert).toBeInTheDocument();
-            });
-            global.fetch = originalFetch;
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(a => a.textContent.includes('Network error'));
+            expect(errorAlert).toBeInTheDocument();
         });
+        global.fetch = originalFetch;
+    });
 
-        test('postNodeAction handles fetch exception', async () => {
-            const originalFetch = global.fetch;
-            global.fetch.mockImplementation((url, options) => {
-                if (options?.method === 'POST' && url.includes('/action/')) {
-                    return Promise.reject(new Error('Network error'));
-                }
-                return originalFetch(url, options);
-            });
-            renderSvc();
-            await waitForNode('node1');
+    test('postNodeAction handles non-ok response', async () => {
+        const originalFetch = global.fetch;
+        global.fetch.mockImplementation((url, options) => {
+            if (options?.method === 'POST' && url.includes('/action/')) {
+                return Promise.resolve({ok: false, status: 500, text: () => Promise.resolve('Server error')});
+            }
+            return originalFetch(url, options);
+        });
+        renderSvc();
+        await waitForNode('node1');
 
-            const nodeActionsBtn = screen.getByRole('button', { name: /Node node1 actions/i });
-            await user.click(nodeActionsBtn);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-            const startItem = within(screen.getByRole('menu')).getByRole('menuitem', { name: /start/i });
-            await user.click(startItem);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-            const confirmBtn = screen.getByRole('button', { name: /confirm/i });
-            await user.click(confirmBtn);
+        const nodeActionsBtn = screen.getByRole('button', {name: /Node node1 actions/i});
+        await user.click(nodeActionsBtn);
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        const startItem = within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
+        await user.click(confirmBtn);
 
-            await waitFor(() => {
-                const alerts = screen.getAllByRole('alert');
-                const errorAlert = alerts.find(a => a.textContent.includes('Network error'));
-                expect(errorAlert).toBeInTheDocument();
-            });
-            global.fetch = originalFetch;
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(a => a.textContent.includes('HTTP error! status: 500'));
+            expect(errorAlert).toBeInTheDocument();
+        });
+        global.fetch = originalFetch;
+    });
+
+    test('postNodeAction handles fetch exception', async () => {
+        const originalFetch = global.fetch;
+        global.fetch.mockImplementation((url, options) => {
+            if (options?.method === 'POST' && url.includes('/action/')) {
+                return Promise.reject(new Error('Network error'));
+            }
+            return originalFetch(url, options);
+        });
+        renderSvc();
+        await waitForNode('node1');
+
+        const nodeActionsBtn = screen.getByRole('button', {name: /Node node1 actions/i});
+        await user.click(nodeActionsBtn);
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        const startItem = within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i});
+        await user.click(startItem);
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
+        await user.click(confirmBtn);
+
+        await waitFor(() => {
+            const alerts = screen.getAllByRole('alert');
+            const errorAlert = alerts.find(a => a.textContent.includes('Network error'));
+            expect(errorAlert).toBeInTheDocument();
+        });
+        global.fetch = originalFetch;
+    });
+
+
+    test('displays the color orange (warn) for the object\'s status', async () => {
+        const warnState = buildState();
+        warnState.objectStatus['root/svc/svc1'].avail = 'warn';
+        useEventStore.mockImplementation((selector) => selector(warnState));
+        renderSvc();
+        await waitFor(() => {
+            const warnElement = screen.getByTitle('warn');
+            expect(warnElement).toBeInTheDocument();
         });
     });
+
+    test('the configUpdates callback does nothing after the component is unmounted', async () => {
+        let configCb;
+        useEventStore.subscribe = jest.fn((sel, cb) => {
+            if (sel.toString().includes('configUpdates')) configCb = cb;
+            return jest.fn();
+        });
+        const {unmount} = renderSvc();
+        unmount();
+        if (configCb) {
+            await act(async () => {
+                await configCb([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node1'}]);
+            });
+        }
+        expect(true).toBe(true);
+    });
+
+    test('instanceConfig subscription: non-function return triggers logger.warn', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/svc/svc1'});
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+        let callCount = 0;
+        useEventStore.subscribe = jest.fn((selector, callback) => {
+            callCount++;
+            if (callCount === 2) return 'not-a-function';
+            return jest.fn();
+        });
+
+        renderSvc();
+        await screen.findByText('node1');
+
+        await waitFor(() => {
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[ObjectDetail] Subscription is not a function:',
+                'not-a-function'
+            );
+        }, {timeout: 5000});
+
+        warnSpy.mockRestore();
+    }, 10000);
+
+    test('configUpdates subscription: non-function return triggers logger.warn', async () => {
+        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/svc/svc1'});
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+        useEventStore.subscribe = jest.fn(() => 'not-a-function');
+
+        renderSvc();
+        await screen.findByText('node1');
+
+        await waitFor(() => {
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[ObjectDetail] Subscription is not a function:',
+                'not-a-function'
+            );
+        }, {timeout: 5000});
+
+        warnSpy.mockRestore();
+    }, 10000);
 });

@@ -24,7 +24,7 @@ export const decodeToken = (token) => {
             // atob decodes base64 encoded string
             return atob(base64);
         } catch (e) {
-            return null; // Return null instead of throwing
+            return null;
         }
     };
 
@@ -52,7 +52,6 @@ export const decodeToken = (token) => {
 // Queue mechanism for concurrent refresh token calls
 let refreshTokenPromise = null;
 
-// --- Exported refreshToken with robust error and expiration handling ---
 export const refreshToken = async (dispatch) => {
     // If a refresh is already in progress, return the existing promise
     if (refreshTokenPromise) {
@@ -222,6 +221,12 @@ const Login = forwardRef((props, ref) => {
                     autoFocus
                     disabled={loading}
                     sx={{mb: 2}}
+                    className="login-autofill-field"
+                    InputProps={{
+                        classes: {
+                            input: 'login-autofill-input'
+                        }
+                    }}
                 />
                 <TextField
                     margin="normal"
@@ -233,6 +238,12 @@ const Login = forwardRef((props, ref) => {
                     onKeyDown={handleKeyDown}
                     disabled={loading}
                     sx={{mb: 2}}
+                    className="login-autofill-field"
+                    InputProps={{
+                        classes: {
+                            input: 'login-autofill-input'
+                        }
+                    }}
                 />
                 {errorMessage && (
                     <Typography

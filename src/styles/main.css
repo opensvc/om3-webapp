@@ -64,6 +64,7 @@ html, body {
     padding: 0;
     margin: 0;
 }
+
 #app-scroll-container > * {
     margin-top: 0;
     margin-bottom: 0;
@@ -150,4 +151,50 @@ html, body {
 
 .dark a:hover {
     color: #bbdefb !important;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active,
+.dark textarea:-webkit-autofill,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    caret-color: var(--text-primary) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.dark .MuiInputBase-input:-webkit-autofill,
+.dark .MuiOutlinedInput-input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    caret-color: var(--text-primary) !important;
+}
+
+@keyframes dark-autofill-fix {
+    to {
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill {
+    animation: dark-autofill-fix 1s forwards !important;
+}
+
+.dark input:autofill,
+.dark textarea:autofill,
+.dark .MuiInputBase-input:autofill {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+.dark .MuiInputLabel-root.Mui-focused {
+    color: var(--text-secondary) !important;
 }

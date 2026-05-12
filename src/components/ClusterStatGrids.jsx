@@ -191,7 +191,6 @@ export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}
             value={namespaceCount}
             subtitle={subtitle}
             onClick={handleCardClick}
-            dynamicHeight
             isLoading={isCardLoading}
         />
     );
@@ -368,7 +367,6 @@ export const GridHeartbeats = memo(({
 
         const chips = [];
         for (const [baseId, {total, healthy}] of groups.entries()) {
-
             const isHealthy = (total === healthy);
             const isLoading = loadingId === baseId;
 
@@ -513,7 +511,9 @@ export const GridNetworks = memo(({networks, onClick}) => {
                     const usagePercentage = network.size
                         ? ((network.used / network.size) * 100).toFixed(1)
                         : 0;
-                    const isLowStorage = network.size ? ((network.free / network.size) * 100) < 10 : false;
+                    const free = network.size - network.used;
+                    const freePercent = network.size ? (free / network.size) * 100 : 100;
+                    const isLowStorage = freePercent < 10;
 
                     return (
                         <Box key={network.name} sx={{
@@ -546,7 +546,6 @@ export const GridNetworks = memo(({networks, onClick}) => {
             value={networks.length}
             subtitle={subtitle}
             onClick={handleCardClick}
-            dynamicHeight
             isLoading={isLoading}
         />
     );
@@ -596,7 +595,6 @@ export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
             value={kindCount}
             subtitle={subtitle}
             onClick={handleCardClick}
-            dynamicHeight
             isLoading={isCardLoading}
         />
     );

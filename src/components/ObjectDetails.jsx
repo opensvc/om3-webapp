@@ -40,36 +40,25 @@ import {parseObjectPath} from "../utils/objectUtils.jsx";
 import EventLogger from "../components/EventLogger";
 import logger from "../utils/logger";
 
-// Constants for default checkboxes
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
-// Helper function to get resource type for a given resource ID
 export const getResourceType = (rid, nodeData) => {
-    if (!rid || !nodeData) {
-        return '';
-    }
+    if (!rid || !nodeData) return '';
     const topLevelType = nodeData?.resources?.[rid]?.type;
-    if (topLevelType) {
-        return topLevelType;
-    }
+    if (topLevelType) return topLevelType;
     const encapData = nodeData?.encap || {};
     for (const containerId of Object.keys(encapData)) {
         const encapType = encapData[containerId]?.resources?.[rid]?.type;
-        if (encapType) {
-            return encapType;
-        }
+        if (encapType) return encapType;
     }
     return '';
 };
 
-// Helper function to parse provisioned state
 export const parseProvisionedState = (state) => {
-    if (typeof state === "string") {
-        return state.toLowerCase() === "true";
-    }
+    if (typeof state === "string") return state.toLowerCase() === "true";
     return !!state;
 };
 
@@ -84,17 +73,15 @@ const ObjectDetail = () => {
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const instanceConfig = useEventStore((s) => s.instanceConfig);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
-    const objectData = objectInstanceStatus?.[decodedObjectName];
+
     const theme = useTheme();
 
-    // States for configuration
     const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configNode, setConfigNode] = useState(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
-    // States for batch & actions
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
     const nodesActionsAnchorRef = useRef(null);
@@ -102,19 +89,20 @@ const ObjectDetail = () => {
     const individualNodeMenuAnchorRef = useRef(null);
     const [currentNode, setCurrentNode] = useState(null);
 
-    // States for dialogs & snackbar
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
     const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
-    // States for dialog management
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [stopDialogOpen, setStopDialogOpen] = useState(false);
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
     const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
+    const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
+    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
+
     const [seats, setSeats] = useState(1);
     const [greetTimeout, setGreetTimeout] = useState("5s");
     const [checkboxes, setCheckboxes] = useState(DEFAULT_CHECKBOXES);
@@ -123,20 +111,15 @@ const ObjectDetail = () => {
     const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
-    // States for initial loading
     const [initialLoading, setInitialLoading] = useState(true);
+    const [initialDataError, setInitialDataError] = useState(null);
 
-    // States for logs drawer
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
     const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(null);
     const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.8;
-
-    // States for console URL display
-    const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
-    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
 
     const objectEventTypes = useMemo(() => [
         "ObjectStatusUpdated",
@@ -151,12 +134,10 @@ const ObjectDetail = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    // Refs for debounce and mounted
     const lastFetch = useRef({});
     const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
 
-    // Cleanup on unmount
     useEffect(() => {
         isMounted.current = true;
         return () => {
@@ -165,7 +146,38 @@ const ObjectDetail = () => {
         };
     }, [decodedObjectName]);
 
-    // Function to open snackbar
+    const fetchInitialObjectData = useCallback(async () => {
+        setInitialDataError(null);
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            setInitialDataError("Auth token not found");
+            return;
+        }
+        try {
+            const {namespace, kind, name: objName} = parseObjectPath(decodedObjectName);
+            const objRes = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${objName}`, {
+                headers: {Authorization: `Bearer ${token}`},
+                cache: "no-cache",
+            });
+            let objectData = null;
+            if (objRes.ok) objectData = await objRes.json();
+
+            const instRes = await fetch(`${URL_NODE}/all/instance/path/${namespace}/${kind}/${objName}`, {
+                headers: {Authorization: `Bearer ${token}`},
+                cache: "no-cache",
+            });
+            let instancesData = {};
+            if (instRes.ok) instancesData = await instRes.json();
+
+            const store = useEventStore.getState();
+            if (objectData) store.setObjectStatuses({[decodedObjectName]: objectData});
+            if (Object.keys(instancesData).length > 0) store.setInstanceStatuses({[decodedObjectName]: instancesData});
+        } catch (err) {
+            logger.error("Failed to fetch initial object data:", err);
+            setInitialDataError(err.message);
+        }
+    }, [decodedObjectName]);
+
     const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
     }, []);
@@ -174,7 +186,6 @@ const ObjectDetail = () => {
         setSnackbar((s) => ({...s, open: false}));
     }, []);
 
-    // Function to open action dialogs
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
         setSeats(1);
@@ -216,17 +227,11 @@ const ObjectDetail = () => {
         try {
             const response = await fetch(url, {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                },
+                headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
             });
             if (!response.ok) {
                 const serverError = await getResponseErrorMessage(response);
-                openSnackbar(
-                    `Failed to open console: HTTP error! status: ${response.status}${serverError ? ` - ${serverError}` : ""}`,
-                    "error"
-                );
+                openSnackbar(`Failed to open console: HTTP error! status: ${response.status}${serverError ? ` - ${serverError}` : ""}`, "error");
                 return;
             }
             const consoleUrl = response.headers.get('Location');
@@ -245,23 +250,16 @@ const ObjectDetail = () => {
     }, [decodedObjectName, openSnackbar]);
 
     const postObjectAction = useCallback(async ({action}) => {
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
         const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
         try {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`},
-            });
+            const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
                 const serverError = await getResponseErrorMessage(res);
-                openSnackbar(
-                    `Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`,
-                    "error"
-                );
+                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`, "error");
                 return;
             }
             openSnackbar(`'${action}' succeeded on object`);
@@ -270,7 +268,7 @@ const ObjectDetail = () => {
         } finally {
             setActionInProgress(false);
         }
-    }, [decodedObjectName, openSnackbar]);
+    }, [decodedObjectName, openSnackbar, namespace, kind, name]);
 
     const postNodeAction = useCallback(async ({node, action}) => {
         const token = localStorage.getItem("authToken");
@@ -279,16 +277,10 @@ const ObjectDetail = () => {
         openSnackbar(`Executing ${action} on node ${node}…`, "info");
         const url = postActionUrl({node, objectName: decodedObjectName, action});
         try {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`},
-            });
+            const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
                 const serverError = await getResponseErrorMessage(res);
-                openSnackbar(
-                    `Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`,
-                    "error"
-                );
+                openSnackbar(`Failed to execute ${action}: HTTP error! status: ${res.status}${serverError ? ` - ${serverError}` : ""}`, "error");
                 return;
             }
             openSnackbar(`'${action}' succeeded on node '${node}'`);
@@ -299,7 +291,6 @@ const ObjectDetail = () => {
         }
     }, [decodedObjectName, openSnackbar, postActionUrl]);
 
-    // Fetch configuration for the object
     const fetchConfig = useCallback(async (node) => {
         if (!node || !decodedObjectName) {
             setConfigError("No node or object available to fetch configuration.");
@@ -307,13 +298,10 @@ const ObjectDetail = () => {
         }
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
-        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) {
-            return;
-        }
+        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
         lastFetch.current[key] = now;
-        if (configLoading) {
-            return;
-        }
+        if (configLoading) return;
+
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -326,10 +314,7 @@ const ObjectDetail = () => {
         const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
         try {
             const fetchResponse = await Promise.race([
-                fetch(url, {
-                    headers: {Authorization: `Bearer ${token}`},
-                    cache: "no-cache",
-                }),
+                fetch(url, {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}),
                 new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 10000)),
             ]);
             if (!fetchResponse.ok) {
@@ -337,22 +322,15 @@ const ObjectDetail = () => {
                 return;
             }
             const text = await fetchResponse.text();
-            if (isMounted.current) {
-                setConfigData(text);
-            }
+            if (isMounted.current) setConfigData(text);
             return text;
         } catch (err) {
-            if (isMounted.current) {
-                setConfigError(err.message);
-            }
+            if (isMounted.current) setConfigError(err.message);
         } finally {
-            if (isMounted.current) {
-                setConfigLoading(false);
-            }
+            if (isMounted.current) setConfigLoading(false);
         }
     }, [decodedObjectName, configLoading]);
 
-    // Color helper
     const getColor = useCallback((status) => {
         if (status === "up" || status === true) return green[500];
         if (status === "down" || status === false) return red[500];
@@ -360,7 +338,6 @@ const ObjectDetail = () => {
         return grey[500];
     }, []);
 
-    // Node state helper
     const getNodeState = useCallback((node) => {
         const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
         const monitorKey = `${node}:${decodedObjectName}`;
@@ -371,7 +348,6 @@ const ObjectDetail = () => {
         return {avail, frozen, state};
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    // Object status helper
     const getObjectStatus = useCallback(() => {
         const obj = objectStatus[decodedObjectName] || {};
         const avail = obj?.avail;
@@ -389,40 +365,26 @@ const ObjectDetail = () => {
         return {avail, frozen, globalExpect};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    // Batch node actions handlers
-    const handleNodesActionsOpen = useCallback((e) => {
-        setNodesActionsAnchor(e.currentTarget);
-    }, []);
-
-    const handleNodesActionsClose = useCallback(() => {
-        setNodesActionsAnchor(null);
-    }, []);
-
+    const handleNodesActionsOpen = useCallback((e) => setNodesActionsAnchor(e.currentTarget), []);
+    const handleNodesActionsClose = useCallback(() => setNodesActionsAnchor(null), []);
     const handleBatchNodeActionClick = useCallback((action) => {
         openActionDialog(action, {batch: "nodes"});
         handleNodesActionsClose();
     }, [openActionDialog, handleNodesActionsClose]);
 
-    // Individual node actions handlers
     const handleIndividualNodeActionClick = useCallback((action) => {
-        if (!currentNode) {
-            logger.warn("No valid pendingAction or action provided: No current node");
-            return;
-        }
+        if (!currentNode) return;
         openActionDialog(action, {node: currentNode});
         setIndividualNodeMenuAnchor(null);
     }, [openActionDialog, currentNode]);
 
-    // Object action handler
     const handleObjectActionClick = useCallback((action) => {
         openActionDialog(action);
         setObjectMenuAnchor(null);
     }, [openActionDialog]);
 
-    // Dialog confirm handler
     const handleDialogConfirm = useCallback(() => {
         if (!pendingAction || !pendingAction.action) {
-            logger.warn("No valid pendingAction or action provided:", pendingAction);
             setPendingAction(null);
             setConfirmDialogOpen(false);
             setStopDialogOpen(false);
@@ -432,12 +394,8 @@ const ObjectDetail = () => {
             return;
         }
         if (pendingAction.batch === "nodes") {
-            selectedNodes.forEach((node) => {
-                if (node) {
-                    postNodeAction({node, action: pendingAction.action}).catch(() => {
-                    });
-                }
-            });
+            selectedNodes.forEach(node => node && postNodeAction({node, action: pendingAction.action}).catch(() => {
+            }));
             setSelectedNodes([]);
         } else if (pendingAction.node && !pendingAction.rid) {
             postNodeAction({node: pendingAction.node, action: pendingAction.action}).catch(() => {
@@ -468,20 +426,14 @@ const ObjectDetail = () => {
         setPendingAction(null);
     }, [pendingAction, seats, greetTimeout, postConsoleAction]);
 
-    // Selection helpers
     const toggleNode = useCallback((node) => {
-        setSelectedNodes((prev) =>
-            prev.includes(node) ? prev.filter((n) => n !== node) : [...prev, node]
-        );
+        setSelectedNodes(prev => prev.includes(node) ? prev.filter(n => n !== node) : [...prev, node]);
     }, []);
 
-    // Function to navigate to instance view
     const handleViewInstance = useCallback((node) => {
-        const encodedObjectName = encodeURIComponent(decodedObjectName);
-        navigate(`/nodes/${node}/objects/${encodedObjectName}`);
+        navigate(`/nodes/${node}/objects/${encodeURIComponent(decodedObjectName)}`);
     }, [decodedObjectName, navigate]);
 
-    // Logs handlers
     const handleOpenLogs = useCallback((node, instanceName = null) => {
         setSelectedNodeForLogs(node);
         setSelectedInstanceForLogs(instanceName);
@@ -502,9 +454,7 @@ const ObjectDetail = () => {
         const doResize = (moveEvent) => {
             const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
             const newWidth = startWidth + (startX - currentX);
-            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
-                setDrawerWidth(newWidth);
-            }
+            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) setDrawerWidth(newWidth);
         };
         const stopResize = () => {
             if (isTouch) {
@@ -526,6 +476,7 @@ const ObjectDetail = () => {
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
 
+    // SSE + initial data fetch
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
@@ -538,108 +489,18 @@ const ObjectDetail = () => {
             });
             startEventReception(token, filters);
         }
-        return () => {
-            closeEventSource();
-        };
-    }, [decodedObjectName, objectEventTypes]);
+        const hasData = objectInstanceStatus[decodedObjectName] && Object.keys(objectInstanceStatus[decodedObjectName]).length > 0;
+        if (!hasData) fetchInitialObjectData();
+        return () => closeEventSource();
+    }, [decodedObjectName, objectEventTypes, fetchInitialObjectData, objectInstanceStatus]);
 
-    // Effect for handling config updates
-    useEffect(() => {
-        if (!isMounted.current) {
-            return;
-        }
-        let subscription;
-        try {
-            subscription = useEventStore.subscribe(
-                (state) => state.configUpdates,
-                async (updates) => {
-                    if (!isMounted.current || isProcessingConfigUpdate.current) {
-                        return;
-                    }
-                    isProcessingConfigUpdate.current = true;
-                    try {
-                        const {name} = parseObjectPath(decodedObjectName);
-                        const matchingUpdate = updates.find(
-                            (u) => (u.name === name || u.fullName === decodedObjectName) && u.node
-                        );
-                        if (matchingUpdate && matchingUpdate.node) {
-                            try {
-                                const lastUpdateKey = `${decodedObjectName}:${matchingUpdate.node}`;
-                                if (lastFetch.current[lastUpdateKey] && Date.now() - lastFetch.current[lastUpdateKey] < 2000) {
-                                    logger.info("[ObjectDetail] Skipping fetchConfig due to recent update");
-                                    return;
-                                }
-                                await fetchConfig(matchingUpdate.node);
-                                setConfigDialogOpen(true);
-                                openSnackbar("Configuration updated", "info");
-                            } catch (err) {
-                                openSnackbar("Failed to load updated configuration", "error");
-                            } finally {
-                                clearConfigUpdate(decodedObjectName);
-                            }
-                        } else {
-                            logger.info("[ObjectDetail] No valid node in config update, skipping fetchConfig");
-                        }
-                    } finally {
-                        isProcessingConfigUpdate.current = false;
-                    }
-                },
-                {fireImmediately: false}
-            );
-        } catch (err) {
-            logger.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
-            return;
-        }
-        return () => {
-            if (typeof subscription === "function") {
-                subscription();
-            } else {
-                logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
-            }
-        };
-    }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
-
-    // Effect for handling instance config updates
-    useEffect(() => {
-        if (!isMounted.current) {
-            return;
-        }
-        let subscription;
-        try {
-            subscription = useEventStore.subscribe(
-                (state) => state.instanceConfig,
-                (newConfig) => {
-                    if (!isMounted.current) {
-                        return;
-                    }
-                    const config = newConfig[decodedObjectName];
-                    if (config && configNode) {
-                        try {
-                            setConfigDialogOpen(true);
-                            openSnackbar("Instance configuration updated", "info");
-                        } catch (err) {
-                            openSnackbar("Failed to process instance configuration update", "error");
-                        }
-                    }
-                }
-            );
-        } catch (err) {
-            logger.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
-            return;
-        }
-        return () => {
-            if (typeof subscription === "function") {
-                subscription();
-            } else {
-                logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
-            }
-        };
-    }, [decodedObjectName, configNode, openSnackbar]);
-
-    // Initial load effects
+    // Initial config loading effect (restored with immediate false if data exists)
+    const objectData = objectInstanceStatus?.[decodedObjectName];
     useEffect(() => {
         const loadInitialConfig = async () => {
             if (objectData) {
+                // If we already have instance data, we can stop the loading indicator immediately
+                setInitialLoading(false);
                 const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
                 const initialNode = nodes.find((node) => {
                     return objectData[node]?.encap && Object.values(objectData[node].encap).some(
@@ -657,56 +518,110 @@ const ObjectDetail = () => {
                 }
             } else {
                 setConfigError("No object data available.");
+                setInitialLoading(false);
             }
-            setInitialLoading(false);
         };
         loadInitialConfig().catch(() => {
         });
     }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
 
-    // Memoize data to prevent unnecessary re-renders
-    const memoizedObjectData = useMemo(() => {
-        const enhancedObjectData = {};
-        if (objectData) {
-            Object.keys(objectData).forEach((node) => {
-                enhancedObjectData[node] = {
-                    ...objectData[node],
-                    instanceConfig: instanceConfig && instanceConfig[decodedObjectName]
-                        ? instanceConfig[decodedObjectName][node] || {resources: {}}
-                        : {resources: {}},
-                    instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
-                };
-            });
+    // Config updates effect
+    useEffect(() => {
+        if (!isMounted.current) return;
+        let subscription;
+        try {
+            subscription = useEventStore.subscribe(
+                (state) => state.configUpdates,
+                async (updates) => {
+                    if (!isMounted.current || isProcessingConfigUpdate.current) return;
+                    isProcessingConfigUpdate.current = true;
+                    try {
+                        const {name} = parseObjectPath(decodedObjectName);
+                        const matchingUpdate = updates.find(
+                            (u) => (u.name === name || u.fullName === decodedObjectName) && u.node
+                        );
+                        if (matchingUpdate && matchingUpdate.node) {
+                            await fetchConfig(matchingUpdate.node);
+                            setConfigDialogOpen(true);
+                            openSnackbar("Configuration updated", "info");
+                            clearConfigUpdate(decodedObjectName);
+                        }
+                    } catch (err) {
+                        openSnackbar("Failed to load updated configuration", "error");
+                    } finally {
+                        isProcessingConfigUpdate.current = false;
+                    }
+                },
+                {fireImmediately: false}
+            );
+        } catch (err) {
+            logger.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
         }
-        return enhancedObjectData;
-    }, [objectData, instanceConfig, instanceMonitor, decodedObjectName]);
+        return () => {
+            if (typeof subscription === 'function') subscription();
+            else if (subscription) logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
+        };
+    }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
 
-    const memoizedNodes = useMemo(() => {
-        return Object.keys(memoizedObjectData || {});
-    }, [memoizedObjectData]);
+    // Instance config effect
+    useEffect(() => {
+        if (!isMounted.current) return;
+        let subscription;
+        try {
+            subscription = useEventStore.subscribe(
+                (state) => state.instanceConfig,
+                (newConfig) => {
+                    if (!isMounted.current) return;
+                    const config = newConfig[decodedObjectName];
+                    if (config && configNode) {
+                        setConfigDialogOpen(true);
+                        openSnackbar("Instance configuration updated", "info");
+                    }
+                }
+            );
+        } catch (err) {
+            logger.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
+            return;
+        }
+        return () => {
+            if (typeof subscription === 'function') subscription();
+            else if (subscription) logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
+        };
+    }, [decodedObjectName, configNode, openSnackbar]);
 
-    // Render loading state
-    if (initialLoading && !memoizedObjectData) {
+    const memoizedObjectData = useMemo(() => {
+        const enhanced = {};
+        const data = objectInstanceStatus?.[decodedObjectName] || {};
+        Object.keys(data).forEach(node => {
+            enhanced[node] = {
+                ...data[node],
+                instanceConfig: instanceConfig?.[decodedObjectName]?.[node] || {resources: {}},
+                instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
+            };
+        });
+        return enhanced;
+    }, [objectInstanceStatus, instanceConfig, instanceMonitor, decodedObjectName]);
+
+    const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData), [memoizedObjectData]);
+
+    if (initialLoading) {
         return (
-            <Box p={4} display="flex" justifyContent="center" alignItems="center">
+            <Box p={4} display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
                 <CircularProgress/>
                 <Typography ml={2}>Loading object data...</Typography>
             </Box>
         );
     }
 
-    // Render empty state
     const showKeys = ["cfg", "sec"].includes(kind);
-    if (!memoizedObjectData) {
+    if (Object.keys(memoizedObjectData).length === 0) {
         return (
             <Box p={4}>
                 <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
-                    No information available for object.
+                    {initialDataError ? `Error loading object: ${initialDataError}` : "No information available for object."}
                 </Typography>
-                {showKeys && (
-                    <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
-                )}
+                {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
                 <ConfigSection
                     decodedObjectName={decodedObjectName}
                     configNode={configNode}
@@ -715,51 +630,44 @@ const ObjectDetail = () => {
                     configDialogOpen={configDialogOpen}
                     setConfigDialogOpen={setConfigDialogOpen}
                 />
+                {configError && <Alert severity="error" sx={{mt: 2}}>{configError}</Alert>}
             </Box>
         );
     }
 
     return (
-        <Box
-            sx={{
-                display: "flex",
-                flexDirection: "row",
-                width: "100vw",
-                minHeight: "100vh",
-                overflow: "hidden",
-                boxSizing: "border-box",
-                position: 'relative',
-                margin: 0,
-                p: 0,
-            }}
-        >
-            <Box
-                sx={{
-                    flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
-                    overflow: "auto",
+        <Box sx={{
+            display: "flex",
+            flexDirection: "row",
+            width: "100vw",
+            minHeight: "100vh",
+            overflow: "hidden",
+            boxSizing: "border-box",
+            position: 'relative',
+            margin: 0,
+            p: 0
+        }}>
+            <Box sx={{
+                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
+                overflow: "auto", boxSizing: "border-box",
+                maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
+                transition: theme.transitions.create(["flex", "maxWidth"], {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+            }}>
+                <Box sx={{
+                    width: "100%",
+                    margin: "0 auto",
+                    px: 2,
+                    py: 4,
                     boxSizing: "border-box",
-                    maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
-                    transition: theme.transitions.create(["flex", "maxWidth"], {
-                        easing: theme.transitions.easing.sharp,
-                        duration: theme.transitions.duration.enteringScreen,
-                    }),
-                }}
-            >
-                <Box
-                    sx={{
-                        width: "100%",
-                        margin: "0 auto",
-                        px: 2,
-                        py: 4,
-                        boxSizing: "border-box",
-                        bgcolor: "background.paper",
-                        border: "2px solid",
-                        borderColor: "divider",
-                        borderRadius: 0,
-                        boxShadow: 3,
-                    }}
-                >
-                    {/* Header and Config Section in same line */}
+                    bgcolor: "background.paper",
+                    border: "2px solid",
+                    borderColor: "divider",
+                    borderRadius: 0,
+                    boxShadow: 3
+                }}>
                     <Grid container spacing={2} alignItems="flex-start">
                         <Grid item xs={12} md={10}>
                             <HeaderSection
@@ -786,16 +694,12 @@ const ObjectDetail = () => {
                         </Grid>
                     </Grid>
 
-                    {Boolean(pendingAction && pendingAction.action !== "console") && (
+                    {pendingAction && pendingAction.action !== "console" && (
                         <ActionDialogManager
                             pendingAction={pendingAction}
                             handleConfirm={handleDialogConfirm}
                             target={`object ${decodedObjectName}`}
-                            supportedActions={
-                                pendingAction?.batch === "nodes"
-                                    ? INSTANCE_ACTIONS.map((action) => action.name)
-                                    : OBJECT_ACTIONS.map((action) => action.name)
-                            }
+                            supportedActions={pendingAction?.batch === "nodes" ? INSTANCE_ACTIONS.map(a => a.name) : OBJECT_ACTIONS.map(a => a.name)}
                             onClose={() => {
                                 setPendingAction(null);
                                 setConfirmDialogOpen(false);
@@ -819,93 +723,59 @@ const ObjectDetail = () => {
                             setPurgeCheckboxes={setPurgeCheckboxes}
                         />
                     )}
-                    <Dialog
-                        open={consoleDialogOpen}
-                        onClose={() => setConsoleDialogOpen(false)}
-                        maxWidth="sm"
-                        fullWidth
-                    >
+
+                    <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
+                            fullWidth>
                         <DialogTitle>Open Console</DialogTitle>
                         <DialogContent>
-                            <Typography variant="body1" sx={{mb: 2}}>
-                                This will open a terminal console for the selected resource.
-                            </Typography>
-                            {pendingAction?.rid && (
-                                <Typography variant="body2" color="primary" sx={{mb: 2, fontWeight: 'bold'}}>
-                                    Resource: {pendingAction.rid}
-                                </Typography>
-                            )}
-                            {pendingAction?.node && (
-                                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
-                                    Node: {pendingAction.node}
-                                </Typography>
-                            )}
-                            <Typography variant="body2" sx={{mb: 3}}>
-                                The console session will open in a new browser tab and provide shell access to the
-                                container.
-                            </Typography>
+                            <Typography variant="body1" sx={{mb: 2}}>This will open a terminal console for the selected
+                                resource.</Typography>
+                            {pendingAction?.rid && <Typography variant="body2" color="primary" sx={{
+                                mb: 2,
+                                fontWeight: 'bold'
+                            }}>Resource: {pendingAction.rid}</Typography>}
+                            {pendingAction?.node && <Typography variant="body2" color="text.secondary"
+                                                                sx={{mb: 2}}>Node: {pendingAction.node}</Typography>}
                             <Box sx={{mb: 2}}>
-                                <TextField
-                                    autoFocus
-                                    margin="dense"
-                                    label="Number of Seats"
-                                    type="number"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={seats}
-                                    onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
-                                    helperText="Number of simultaneous users allowed in the console"
-                                />
+                                <TextField autoFocus margin="dense" label="Number of Seats" type="number" fullWidth
+                                           variant="outlined" value={seats}
+                                           onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
+                                           helperText="Number of simultaneous users allowed in the console"/>
                             </Box>
-                            <TextField
-                                margin="dense"
-                                label="Greet Timeout"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={greetTimeout}
-                                onChange={(e) => setGreetTimeout(e.target.value)}
-                                helperText="Time to wait for console connection (e.g., 5s, 10s)"
-                            />
+                            <TextField margin="dense" label="Greet Timeout" type="text" fullWidth variant="outlined"
+                                       value={greetTimeout} onChange={(e) => setGreetTimeout(e.target.value)}
+                                       helperText="Time to wait for console connection (e.g., 5s, 10s)"/>
                         </DialogContent>
                         <DialogActions>
                             <Button onClick={() => setConsoleDialogOpen(false)}>Cancel</Button>
                             <Button onClick={handleConsoleConfirm}>Open Console</Button>
                         </DialogActions>
                     </Dialog>
-                    <Dialog
-                        open={consoleUrlDialogOpen}
-                        onClose={() => setConsoleUrlDialogOpen(false)}
-                        maxWidth="sm"
-                        fullWidth
-                        sx={{
-                            '& .MuiDialog-paper': {
-                                minWidth: {xs: '90vw', sm: '500px'},
-                                maxWidth: '90vw',
-                                mx: {xs: 2, sm: 0},
-                                my: {xs: 2, sm: 0},
-                            }
-                        }}
-                    >
-                        <DialogTitle sx={{pb: 1, typography: {xs: 'h6', sm: 'h5'}}}>
-                            Console URL
-                        </DialogTitle>
+
+                    <Dialog open={consoleUrlDialogOpen} onClose={() => setConsoleUrlDialogOpen(false)} maxWidth="sm"
+                            fullWidth sx={{
+                        '& .MuiDialog-paper': {
+                            minWidth: {xs: '90vw', sm: '500px'},
+                            maxWidth: '90vw',
+                            mx: {xs: 2, sm: 0},
+                            my: {xs: 2, sm: 0}
+                        }
+                    }}>
+                        <DialogTitle sx={{pb: 1, typography: {xs: 'h6', sm: 'h5'}}}>Console URL</DialogTitle>
                         <DialogContent>
-                            <Box
-                                sx={{
-                                    border: '1px solid #ccc',
-                                    borderRadius: '4px',
-                                    padding: {xs: '8px 10px', sm: '12px 14px'},
-                                    backgroundColor: '#f5f5f5',
-                                    marginBottom: 2,
-                                    overflow: 'auto',
-                                    maxHeight: '100px',
-                                    fontFamily: 'monospace',
-                                    fontSize: {xs: '0.75rem', sm: '0.875rem'},
-                                    wordBreak: 'break-all',
-                                    whiteSpace: 'pre-wrap'
-                                }}
-                            >
+                            <Box sx={{
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                padding: {xs: '8px 10px', sm: '12px 14px'},
+                                backgroundColor: '#f5f5f5',
+                                marginBottom: 2,
+                                overflow: 'auto',
+                                maxHeight: '100px',
+                                fontFamily: 'monospace',
+                                fontSize: {xs: '0.75rem', sm: '0.875rem'},
+                                wordBreak: 'break-all',
+                                whiteSpace: 'pre-wrap'
+                            }}>
                                 {currentConsoleUrl ? String(currentConsoleUrl) : 'No URL available'}
                             </Box>
                             <Box sx={{
@@ -914,58 +784,31 @@ const ObjectDetail = () => {
                                 flexWrap: 'wrap',
                                 justifyContent: {xs: 'center', sm: 'flex-start'}
                             }}>
-                                <Button
-                                    variant="outlined"
-                                    size={window.innerWidth < 600 ? "small" : "medium"}
-                                    onClick={() => {
-                                        if (currentConsoleUrl) {
-                                            navigator.clipboard.writeText(String(currentConsoleUrl)).catch(() => {
-                                                openSnackbar('Failed to copy URL', 'error');
-                                            });
-                                        }
-                                    }}
-                                    disabled={!currentConsoleUrl}
-                                >
-                                    Copy URL
-                                </Button>
-                                <Button
-                                    variant="contained"
-                                    size={window.innerWidth < 600 ? "small" : "medium"}
-                                    onClick={() => {
-                                        if (currentConsoleUrl) {
-                                            window.open(String(currentConsoleUrl), '_blank', 'noopener,noreferrer');
-                                        }
-                                    }}
-                                    disabled={!currentConsoleUrl}
-                                >
-                                    Open in New Tab
-                                </Button>
+                                <Button variant="outlined" size={window.innerWidth < 600 ? "small" : "medium"}
+                                        onClick={() => {
+                                            if (currentConsoleUrl) navigator.clipboard.writeText(String(currentConsoleUrl)).catch(() => openSnackbar('Failed to copy URL', 'error'));
+                                        }} disabled={!currentConsoleUrl}>Copy URL</Button>
+                                <Button variant="contained" size={window.innerWidth < 600 ? "small" : "medium"}
+                                        onClick={() => {
+                                            if (currentConsoleUrl) window.open(String(currentConsoleUrl), '_blank', 'noopener,noreferrer');
+                                        }} disabled={!currentConsoleUrl}>Open in New Tab</Button>
                             </Box>
                         </DialogContent>
-                        <DialogActions sx={{px: {xs: 2, sm: 3}, pb: {xs: 2, sm: 1}}}>
-                            <Button onClick={() => setConsoleUrlDialogOpen(false)}
-                                    size={window.innerWidth < 600 ? "small" : "medium"}>
-                                Close
-                            </Button>
-                        </DialogActions>
+                        <DialogActions sx={{px: {xs: 2, sm: 3}, pb: {xs: 2, sm: 1}}}><Button
+                            onClick={() => setConsoleUrlDialogOpen(false)}
+                            size={window.innerWidth < 600 ? "small" : "medium"}>Close</Button></DialogActions>
                     </Dialog>
-                    {showKeys && (
-                        <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>
-                    )}
-                    {!(["sec", "cfg", "usr"].includes(kind)) && (
+
+                    {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+
+                    {!["sec", "cfg", "usr"].includes(kind) && (
                         <>
                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    onClick={handleNodesActionsOpen}
-                                    disabled={selectedNodes.length === 0}
-                                    aria-label="Actions on selected nodes"
-                                    ref={nodesActionsAnchorRef}
-                                >
-                                    Actions on Selected Nodes
-                                </Button>
+                                <Button variant="outlined" onClick={handleNodesActionsOpen}
+                                        disabled={selectedNodes.length === 0} aria-label="Actions on selected nodes"
+                                        ref={nodesActionsAnchorRef}>Actions on Selected Nodes</Button>
                             </Box>
-                            {memoizedNodes.map((node) => (
+                            {memoizedNodes.map(node => (
                                 <NodeCard
                                     key={node}
                                     node={node}
@@ -973,14 +816,14 @@ const ObjectDetail = () => {
                                     selectedNodes={selectedNodes}
                                     toggleNode={toggleNode}
                                     actionInProgress={actionInProgress}
-                                    setIndividualNodeMenuAnchor={(value) => setIndividualNodeMenuAnchor(value)}
-                                    setCurrentNode={(value) => setCurrentNode(value)}
+                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
+                                    setCurrentNode={setCurrentNode}
                                     handleIndividualNodeActionClick={handleIndividualNodeActionClick}
                                     getColor={getColor}
                                     getNodeState={getNodeState}
                                     parseProvisionedState={parseProvisionedState}
-                                    setPendingAction={(value) => setPendingAction(value)}
-                                    setSimpleDialogOpen={(value) => setSimpleDialogOpen(value)}
+                                    setPendingAction={setPendingAction}
+                                    setSimpleDialogOpen={setSimpleDialogOpen}
                                     individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
                                     namespace={namespace}
                                     kind={kind}
@@ -989,45 +832,19 @@ const ObjectDetail = () => {
                                     onViewInstance={handleViewInstance}
                                 />
                             ))}
-                            <Popper
-                                open={Boolean(nodesActionsAnchor)}
-                                anchorEl={nodesActionsAnchor}
-                                placement="bottom-end"
-                                disablePortal
-                                modifiers={[
-                                    {
-                                        name: "offset",
-                                        options: {
-                                            offset: [0, 8],
-                                        },
-                                    },
-                                    {
+                            <Popper open={Boolean(nodesActionsAnchor)} anchorEl={nodesActionsAnchor}
+                                    placement="bottom-end" disablePortal
+                                    modifiers={[{name: "offset", options: {offset: [0, 8]}}, {
                                         name: "preventOverflow",
-                                        options: {
-                                            boundariesElement: "viewport",
-                                        },
-                                    },
-                                    {
-                                        name: "flip",
-                                        options: {
-                                            enabled: true,
-                                        },
-                                    },
-                                ]}
-                                style={{zIndex: 1300}}
-                            >
+                                        options: {boundariesElement: "viewport"}
+                                    }, {name: "flip", options: {enabled: true}}]} style={{zIndex: 1300}}>
                                 <ClickAwayListener onClickAway={handleNodesActionsClose}>
-                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu" sx={{
-                                        minWidth: 200,
-                                        boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                                    }}>
+                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu"
+                                           sx={{minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}}>
                                         {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                            <MenuItem
-                                                key={name}
-                                                onClick={() => handleBatchNodeActionClick(name)}
-                                                role="menuitem"
-                                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
-                                            >
+                                            <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}
+                                                      role="menuitem"
+                                                      aria-label={name.charAt(0).toUpperCase() + name.slice(1)}>
                                                 <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                                 <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                                             </MenuItem>
@@ -1035,46 +852,19 @@ const ObjectDetail = () => {
                                     </Paper>
                                 </ClickAwayListener>
                             </Popper>
-                            <Popper
-                                open={Boolean(individualNodeMenuAnchor)}
-                                anchorEl={individualNodeMenuAnchor}
-                                placement="bottom-end"
-                                disablePortal
-                                modifiers={[
-                                    {
-                                        name: "offset",
-                                        options: {
-                                            offset: [0, 8],
-                                        },
-                                    },
-                                    {
+                            <Popper open={Boolean(individualNodeMenuAnchor)} anchorEl={individualNodeMenuAnchor}
+                                    placement="bottom-end" disablePortal
+                                    modifiers={[{name: "offset", options: {offset: [0, 8]}}, {
                                         name: "preventOverflow",
-                                        options: {
-                                            boundariesElement: "viewport",
-                                        },
-                                    },
-                                    {
-                                        name: "flip",
-                                        options: {
-                                            enabled: true,
-                                        },
-                                    },
-                                ]}
-                                style={{zIndex: 1300}}
-                            >
+                                        options: {boundariesElement: "viewport"}
+                                    }, {name: "flip", options: {enabled: true}}]} style={{zIndex: 1300}}>
                                 <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
                                     <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}
-                                           sx={{
-                                               minWidth: 200,
-                                               boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                                           }}>
+                                           sx={{minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}}>
                                         {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                            <MenuItem
-                                                key={name}
-                                                onClick={() => handleIndividualNodeActionClick(name)}
-                                                role="menuitem"
-                                                aria-label={name.charAt(0).toUpperCase() + name.slice(1)}
-                                            >
+                                            <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}
+                                                      role="menuitem"
+                                                      aria-label={name.charAt(0).toUpperCase() + name.slice(1)}>
                                                 <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
                                                 <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
                                             </MenuItem>
@@ -1084,86 +874,59 @@ const ObjectDetail = () => {
                             </Popper>
                         </>
                     )}
-                    <Snackbar
-                        open={snackbar.open}
-                        autoHideDuration={5000}
-                        onClose={closeSnackbar}
-                        anchorOrigin={{vertical: "bottom", horizontal: "center"}}
-                    >
-                        <Alert
-                            onClose={closeSnackbar}
-                            severity={snackbar.severity}
-                            variant="filled"
-                            aria-label={snackbar.severity === "error" ? "error alert" : `${snackbar.severity} alert`}
-                        >
-                            {snackbar.message}
-                        </Alert>
+
+                    {configError && <Alert severity="error" sx={{mt: 2}}>{configError}</Alert>}
+
+                    <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={closeSnackbar}
+                              anchorOrigin={{vertical: "bottom", horizontal: "center"}}>
+                        <Alert onClose={closeSnackbar} severity={snackbar.severity}
+                               variant="filled">{snackbar.message}</Alert>
                     </Snackbar>
                 </Box>
             </Box>
-            {Boolean(logsDrawerOpen && selectedNodeForLogs) && (
-                <Drawer
-                    anchor="right"
-                    open={logsDrawerOpen}
-                    variant="persistent"
-                    sx={{
-                        "& .MuiDrawer-paper": {
-                            width: logsDrawerOpen ? `${drawerWidth}px` : 0,
-                            maxWidth: "80vw",
-                            p: 2,
-                            boxSizing: "border-box",
-                            backgroundColor: theme.palette.background.paper,
-                            top: 0,
-                            height: "100vh",
-                            overflow: "auto",
-                            borderLeft: `1px solid ${theme.palette.divider}`,
-                            transition: theme.transitions.create("width", {
-                                easing: theme.transitions.easing.sharp,
-                                duration: theme.transitions.duration.enteringScreen,
-                            }),
-                        },
-                    }}
-                >
-                    <Box
-                        sx={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: "6px",
-                            height: "100%",
-                            cursor: "ew-resize",
-                            bgcolor: theme.palette.grey[300],
-                            "&:hover": {
-                                bgcolor: theme.palette.primary.light,
-                            },
-                            transition: "background-color 0.2s",
-                        }}
-                        onMouseDown={startResizing}
-                        onTouchStart={startResizing}
-                        aria-label="Resize drawer"
-                    />
+
+            {logsDrawerOpen && selectedNodeForLogs && (
+                <Drawer anchor="right" open={logsDrawerOpen} variant="persistent" sx={{
+                    "& .MuiDrawer-paper": {
+                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
+                        maxWidth: "80vw",
+                        p: 2,
+                        boxSizing: "border-box",
+                        backgroundColor: theme.palette.background.paper,
+                        top: 0,
+                        height: "100vh",
+                        overflow: "auto",
+                        borderLeft: `1px solid ${theme.palette.divider}`,
+                        transition: theme.transitions.create("width", {
+                            easing: theme.transitions.easing.sharp,
+                            duration: theme.transitions.duration.enteringScreen
+                        })
+                    }
+                }}>
+                    <Box sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "6px",
+                        height: "100%",
+                        cursor: "ew-resize",
+                        bgcolor: theme.palette.grey[300],
+                        "&:hover": {bgcolor: theme.palette.primary.light},
+                        transition: "background-color 0.2s"
+                    }} onMouseDown={startResizing} onTouchStart={startResizing} aria-label="Resize drawer"/>
                     <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                        <Typography variant="h6">
-                            {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
-                        </Typography>
-                        <IconButton onClick={handleCloseLogsDrawer}>
-                            <CloseIcon/>
-                        </IconButton>
+                        <Typography
+                            variant="h6">{selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}</Typography>
+                        <IconButton onClick={handleCloseLogsDrawer}><CloseIcon/></IconButton>
                     </Box>
-                    {Boolean(selectedNodeForLogs) && (
-                        <LogsViewer
-                            nodename={selectedNodeForLogs}
-                            type={selectedInstanceForLogs ? "instance" : "node"}
-                            namespace={namespace}
-                            kind={kind}
-                            instanceName={selectedInstanceForLogs}
-                            height="calc(100vh - 100px)"
-                        />
-                    )}
+                    <LogsViewer nodename={selectedNodeForLogs} type={selectedInstanceForLogs ? "instance" : "node"}
+                                namespace={namespace} kind={kind} instanceName={selectedInstanceForLogs}
+                                height="calc(100vh - 100px)"/>
                 </Drawer>
             )}
 
-            <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName} title={`Events - ${decodedObjectName}`} buttonLabel="Object Events"/>
+            <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}
+                         title={`Events - ${decodedObjectName}`} buttonLabel="Object Events"/>
         </Box>
     );
 };

@@ -836,12 +836,20 @@ type = flag
     }, 15000);
 
     test('displays no keys message when keys array is empty', async () => {
-        global.fetch.mockImplementationOnce(() =>
-            Promise.resolve({
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({items: []}),
+                });
+            }
+            return Promise.resolve({
                 ok: true,
-                json: () => Promise.resolve({items: []}),
-            })
-        );
+                text: () => Promise.resolve(''),
+                json: () => Promise.resolve({}),
+            });
+        });
+
         render(
             <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
                 <Routes>
@@ -849,10 +857,11 @@ type = flag
                 </Routes>
             </MemoryRouter>
         );
+
         await waitFor(() => {
             expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
         }, {timeout: 5000});
-    }, 10000);
+    });
 
     test('renders configuration section and fetches config', async () => {
         require('react-router-dom').useParams.mockReturnValue({
@@ -1736,7 +1745,7 @@ type = flag
         expect(nodeCards.length).toBeGreaterThan(0);
     });
 
-    test('handles getObjectStatus with global_expect on second node - simplified', async () => {
+    test('handles getObjectStatus with global_expect on second node', async () => {
         const mockState = {
             objectStatus: {
                 'root/svc/svc1': {avail: 'up', frozen: null},

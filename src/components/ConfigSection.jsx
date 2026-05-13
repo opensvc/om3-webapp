@@ -840,9 +840,23 @@ const ConfigSection = ({
 
     return (
         <Box sx={{mb: 2, width: "100%", display: 'flex', justifyContent: 'flex-end'}}>
-            <Button variant="contained" size="small" onClick={() => setConfigDialogOpen(true)}>
-                View Configuration
-            </Button>
+            <Box sx={{ width: '100%', overflow: 'hidden' }}>
+                <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => setConfigDialogOpen(true)}
+                    sx={{
+                        display: 'block',
+                        minWidth: 0,
+                        width: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    View Configuration
+                </Button>
+            </Box>
 
             <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="lg" fullWidth>
                 <DialogTitle>Configuration</DialogTitle>

@@ -289,7 +289,9 @@ const KeyFormDialog = ({
                                     value={text}
                                     onChange={(e) => setText(e.target.value)}
                                     disabled={loading}
-                                    InputLabelProps={{shrink: true}}
+                                    slotProps={{
+                                        inputLabel: {shrink: true}
+                                    }}
                                     minRows={fullscreen ? 20 : 8}
                                     maxRows={fullscreen ? 40 : 20}
                                     placeholder="Enter the text content for this key..."
@@ -682,7 +684,9 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                 fullWidth
                                 variant="outlined"
                                 value={keyViewContent.content}
-                                InputProps={{readOnly: true, sx: {fontFamily: 'monospace', fontSize: '0.875rem'}}}
+                                slotProps={{
+                                    input: {readOnly: true, sx: {fontFamily: 'monospace', fontSize: '0.875rem'}}
+                                }}
                                 minRows={10}
                                 maxRows={20}
                                 sx={{mt: 1}}

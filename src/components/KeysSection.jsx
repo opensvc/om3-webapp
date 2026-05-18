@@ -137,8 +137,8 @@ const KeyFormDialog = ({
 
     const isSubmitDisabled = () => {
         if (!name) return true;
-        if (inputMode === "file" && !file) return true;
-        return false;
+        return inputMode === "file" && !file;
+
     };
 
     const fileUploadId = `${mode}-key-file-upload`;

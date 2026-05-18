@@ -48,7 +48,6 @@ const NodeCard = ({
         return null;
     }
 
-    const encapData = nodeData?.encap || {};
     const {avail, frozen, state} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
 

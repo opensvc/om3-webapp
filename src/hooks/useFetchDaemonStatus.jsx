@@ -10,7 +10,6 @@ const useFetchDaemonStatus = () => {
     const cacheRef = useRef([]);
     const [clusterStats, setClusterStats] = useState({});
     const [clusterName, setClusterName] = useState("");
-    const isInitialMount = useRef(true);
 
     // Load cached data on mount
     useEffect(() => {

@@ -4,7 +4,6 @@ import {BrowserRouter as Router} from 'react-router-dom';
 import App from './components/App';
 import {ThemeProvider, createTheme} from '@mui/material/styles';
 import {grey} from '@mui/material/colors';
-import './i18n';
 import './styles/main.css';
 import logger from './utils/logger.js';
 import {DarkModeProvider} from './context/DarkModeContext';

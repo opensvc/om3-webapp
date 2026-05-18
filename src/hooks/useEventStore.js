@@ -42,14 +42,6 @@ const useEventStore = create(
             instanceConfig: {},
             configUpdates: [],
 
-            setInitialObjectData: (objectName, instanceData) =>
-                set((state) => ({
-                    objectInstanceStatus: {
-                        ...state.objectInstanceStatus,
-                        [objectName]: instanceData
-                    }
-                })),
-
             removeObject: (objectName) =>
                 set((state) => {
                     if (!state.objectStatus[objectName] &&
@@ -271,7 +263,6 @@ const useEventStore = create(
         }),
         {
             name: 'om3-event-storage',
-            getStorage: () => sessionStorage,
             partialize: (state) => ({
                 objectStatus: state.objectStatus,
                 objectInstanceStatus: state.objectInstanceStatus,

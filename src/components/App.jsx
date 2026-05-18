@@ -40,8 +40,8 @@ const WhoAmI = lazy(() => import("./WhoAmI"));
 
 // Loading component for Suspense fallback
 const Loading = () => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ fontSize: '1.125rem' }}>Loading...</div>
+    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%'}}>
+        <div style={{fontSize: '1.125rem'}}>Loading...</div>
     </div>
 );
 
@@ -55,15 +55,15 @@ const DynamicThemeProvider = ({children}) => {
                     mode: isDarkMode ? 'dark' : 'light',
                     ...(isDarkMode
                         ? {
-                            primary: { main: '#90caf9' },
-                            secondary: { main: '#f48fb1' },
-                            background: { default: '#121212', paper: '#1e1e1e' },
-                            text: { primary: '#ffffff', secondary: '#cccccc' },
+                            primary: {main: '#90caf9'},
+                            secondary: {main: '#f48fb1'},
+                            background: {default: '#121212', paper: '#1e1e1e'},
+                            text: {primary: '#ffffff', secondary: '#cccccc'},
                         }
                         : {
-                            primary: { main: '#1976d2' },
-                            secondary: { main: '#dc004e' },
-                            background: { default: '#ffffff', paper: '#f5f5f5' },
+                            primary: {main: '#1976d2'},
+                            secondary: {main: '#dc004e'},
+                            background: {default: '#ffffff', paper: '#f5f5f5'},
                         }),
                 },
             }),
@@ -81,7 +81,7 @@ const isTokenValid = (token) => {
 
     const payload = decodeTokenFromLogin(token);
     if (!payload || !payload.exp) {
-        return false;
+        return false
     }
 
     const now = Date.now() / 1000;
@@ -102,7 +102,7 @@ const OidcInitializer = ({children}) => {
 
     const handleTokenExpired = useCallback(() => {
         logger.warn('Access token expired, redirecting to /ui/auth-choice');
-        authDispatch({type: SetAccessToken, data: null});
+        authDispatch?.({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
         navigate('/auth-choice', {replace: true});
@@ -110,7 +110,7 @@ const OidcInitializer = ({children}) => {
 
     const handleSilentRenewError = useCallback((error) => {
         logger.error('Silent renew failed:', error);
-        authDispatch({type: SetAccessToken, data: null});
+        authDispatch?.({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
         navigate('/auth-choice', {replace: true});
@@ -118,7 +118,7 @@ const OidcInitializer = ({children}) => {
 
     const onUserRefreshed = useCallback((user) => {
         logger.info("User refreshed:", user.profile?.preferred_username, "expires_at:", user.expires_at);
-        authDispatch({type: SetAccessToken, data: user.access_token});
+        authDispatch?.({type: SetAccessToken, data: user.access_token});
         localStorage.setItem('authToken', user.access_token);
         localStorage.setItem('tokenExpiration', user.expires_at.toString());
     }, [authDispatch]);
@@ -132,8 +132,8 @@ const OidcInitializer = ({children}) => {
                 try {
                     const config = await oidcConfiguration(authInfo);
                     recreateUserManager(config);
-                    authDispatch({type: SetAuthChoice, data: 'openid'});
-                    authDispatch({type: SetAccessToken, data: savedToken});
+                    authDispatch?.({type: SetAuthChoice, data: 'openid'});
+                    authDispatch?.({type: SetAccessToken, data: savedToken});
                 } catch (error) {
                     logger.error("Failed to initialize OIDC on startup:", error);
                 }
@@ -158,14 +158,14 @@ const OidcInitializer = ({children}) => {
                 if (user && !user.expired) {
                     logger.info("Found existing valid user:", user.profile?.preferred_username);
                     onUserRefreshed(user);
-                    authDispatch({type: LoginAction, data: user.profile.preferred_username});
+                    authDispatch?.({type: LoginAction, data: user.profile.preferred_username});
                 } else if (user && user.expired) {
                     logger.debug("Found expired user, will attempt silent renew");
                     userManager.signinSilent().then(refreshedUser => {
                         if (refreshedUser && !refreshedUser.expired) {
                             logger.info("Silent renew succeeded for:", refreshedUser.profile?.preferred_username);
                             onUserRefreshed(refreshedUser);
-                            authDispatch({type: LoginAction, data: refreshedUser.profile.preferred_username});
+                            authDispatch?.({type: LoginAction, data: refreshedUser.profile.preferred_username});
                         } else {
                             logger.warn("Silent renew failed or user still expired, will trigger logout via error handler");
                         }
@@ -343,28 +343,33 @@ const App = () => {
                 <OidcInitializer>
                     <DynamicThemeProvider>
                         <div id="app-root-container">
-                            <NavBar />
+                            <NavBar/>
                             <main id="app-scroll-container" ref={mainRef}>
-                                <Suspense fallback={<Loading />}>
+                                <Suspense fallback={<Loading/>}>
                                     <Routes>
-                                        <Route path="/" element={<Navigate to="/cluster" replace />} />
-                                        <Route path="/cluster" element={<ProtectedRoute><ClusterOverview /></ProtectedRoute>} />
-                                        <Route path="/namespaces" element={<ProtectedRoute><Namespaces /></ProtectedRoute>} />
-                                        <Route path="/kinds" element={<ProtectedRoute><Kinds /></ProtectedRoute>} />
-                                        <Route path="/heartbeats" element={<Heartbeats />} />
-                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable /></ProtectedRoute>} />
-                                        <Route path="/pools" element={<ProtectedRoute><Pools /></ProtectedRoute>} />
-                                        <Route path="/network" element={<ProtectedRoute><Network /></ProtectedRoute>} />
-                                        <Route path="/network/:networkName" element={<ProtectedRoute><NetworkDetails /></ProtectedRoute>} />
-                                        <Route path="/objects" element={<ProtectedRoute><Objects /></ProtectedRoute>} />
-                                        <Route path="/objects/:objectName" element={<ProtectedRoute><ObjectDetails /></ProtectedRoute>} />
-                                        <Route path="/nodes/:node/objects/:objectName" element={<ProtectedRoute><ObjectInstanceView /></ProtectedRoute>} />
-                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI /></ProtectedRoute>} />
-                                        <Route path="/silent-renew" element={<SilentRenew />} />
-                                        <Route path="/auth-callback" element={<OidcCallback />} />
-                                        <Route path="/auth-choice" element={<AuthChoice />} />
-                                        <Route path="/auth/login" element={<Login />} />
-                                        <Route path="*" element={<Navigate to="/" />} />
+                                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
+                                        <Route path="/cluster"
+                                               element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                                        <Route path="/namespaces"
+                                               element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                        <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
+                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                        <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                        <Route path="/network/:networkName"
+                                               element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
+                                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                                        <Route path="/objects/:objectName"
+                                               element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
+                                        <Route path="/nodes/:node/objects/:objectName"
+                                               element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
+                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                        <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                        <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                        <Route path="/auth-choice" element={<AuthChoice/>}/>
+                                        <Route path="/auth/login" element={<Login/>}/>
+                                        <Route path="*" element={<Navigate to="/"/>}/>
                                     </Routes>
                                 </Suspense>
                             </main>

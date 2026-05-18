@@ -222,9 +222,9 @@ const Login = forwardRef((props, ref) => {
                     disabled={loading}
                     sx={{mb: 2}}
                     className="login-autofill-field"
-                    InputProps={{
-                        classes: {
-                            input: 'login-autofill-input'
+                    slotProps={{
+                        input: {
+                            className: 'login-autofill-input'
                         }
                     }}
                 />
@@ -239,9 +239,9 @@ const Login = forwardRef((props, ref) => {
                     disabled={loading}
                     sx={{mb: 2}}
                     className="login-autofill-field"
-                    InputProps={{
-                        classes: {
-                            input: 'login-autofill-input'
+                    slotProps={{
+                        input: {
+                            className: 'login-autofill-input'
                         }
                     }}
                 />

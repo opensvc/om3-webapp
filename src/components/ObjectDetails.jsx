@@ -21,8 +21,8 @@ import {
     IconButton,
     TextField,
     useTheme,
+    Grid,
 } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
 import CloseIcon from "@mui/icons-material/Close";
 import {green, grey, orange, red} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
@@ -76,7 +76,6 @@ const ObjectDetail = () => {
 
     const theme = useTheme();
 
-    const [configData, setConfigData] = useState(null);
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
     const [configNode, setConfigNode] = useState(null);
@@ -322,8 +321,7 @@ const ObjectDetail = () => {
                 return;
             }
             const text = await fetchResponse.text();
-            if (isMounted.current) setConfigData(text);
-            return text;
+            if (isMounted.current) return text;
         } catch (err) {
             if (isMounted.current) setConfigError(err.message);
         } finally {
@@ -668,8 +666,8 @@ const ObjectDetail = () => {
                     borderRadius: 0,
                     boxShadow: 3
                 }}>
-                    <Grid2 container spacing={2} alignItems="flex-start">
-                        <Grid2 item xs={12} md={10}>
+                    <Grid container spacing={2} alignItems="flex-start">
+                        <Grid item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
                                 globalStatus={objectStatus[decodedObjectName]}
@@ -681,8 +679,8 @@ const ObjectDetail = () => {
                                 getColor={getColor}
                                 objectMenuAnchorRef={objectMenuAnchorRef}
                             />
-                        </Grid2>
-                        <Grid2 item xs={12} md={2}>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
                             <ConfigSection
                                 decodedObjectName={decodedObjectName}
                                 configNode={configNode}
@@ -691,8 +689,8 @@ const ObjectDetail = () => {
                                 configDialogOpen={configDialogOpen}
                                 setConfigDialogOpen={setConfigDialogOpen}
                             />
-                        </Grid2>
-                    </Grid2>
+                        </Grid>
+                    </Grid>
 
                     {pendingAction && pendingAction.action !== "console" && (
                         <ActionDialogManager

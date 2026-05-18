@@ -16,11 +16,11 @@ import {
     Tooltip,
     CircularProgress,
     Typography,
-    Grid,
     Collapse,
     useMediaQuery,
     useTheme,
 } from "@mui/material";
+import Grid2 from "@mui/material/Grid2";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -527,8 +527,8 @@ const Heartbeats = () => {
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>
-                            <Grid container spacing={2} sx={{mb: 2}}>
-                                <Grid item xs={12} sm={6} md={3}>
+                            <Grid2 container spacing={2} sx={{mb: 2}}>
+                                <Grid2 item xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Running</InputLabel>
                                         <Select
@@ -543,9 +543,9 @@ const Heartbeats = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </Grid2>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <Grid2 item xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Beating</InputLabel>
                                         <Select
@@ -558,9 +558,9 @@ const Heartbeats = () => {
                                             <MenuItem value="stale">Stale</MenuItem>
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </Grid2>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <Grid2 item xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by Node</InputLabel>
                                         <Select
@@ -572,9 +572,9 @@ const Heartbeats = () => {
                                             {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </Grid2>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <Grid2 item xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel>Filter by ID</InputLabel>
                                         <Select
@@ -586,8 +586,8 @@ const Heartbeats = () => {
                                             {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
                                         </Select>
                                     </FormControl>
-                                </Grid>
-                            </Grid>
+                                </Grid2>
+                            </Grid2>
                         </Collapse>
                     </Box>
                 </Box>
@@ -660,7 +660,8 @@ const Heartbeats = () => {
                 </TableContainer>
             </Box>
 
-            <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger" buttonLabel="Heartbeat Events"/>
+            <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger"
+                         buttonLabel="Heartbeat Events"/>
         </Box>
     );
 };

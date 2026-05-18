@@ -22,7 +22,6 @@ import {
     Tooltip,
     IconButton,
     CircularProgress,
-    Grid,
     Collapse,
     Menu,
     FormControl,
@@ -31,6 +30,7 @@ import {
     OutlinedInput,
     Chip,
 } from "@mui/material";
+import Grid2 from "@mui/material/Grid2";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import CloseIcon from "@mui/icons-material/Close";
@@ -275,7 +275,7 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
     );
 }, (prev, next) => prev.nodeState === next.nodeState && prev.node === next.node);
 
-const NodeStatus = React.memo(({ objectName, node }) => {
+const NodeStatus = React.memo(({objectName, node}) => {
     const nodeData = useNodeData(objectName, node);
     const hasData = Boolean(nodeData?.avail);
     const isNodeNotProvisioned = hasData && (nodeData.provisioned === "false" || nodeData.provisioned === false);
@@ -296,13 +296,13 @@ const NodeStatus = React.memo(({ objectName, node }) => {
                     node={node}
                 />
             ) : (
-                <Box sx={{ width: "80px" }} />
+                <Box sx={{width: "80px"}}/>
             )}
             {hasData ? (
-                <NodeStateDisplay nodeState={nodeData.state} node={node} />
+                <NodeStateDisplay nodeState={nodeData.state} node={node}/>
             ) : (
-                <Box sx={{ width: "50px" }} />
-                )}
+                <Box sx={{width: "50px"}}/>
+            )}
         </Box>
     );
 }, (prev, next) => prev.objectName === next.objectName && prev.node === next.node);
@@ -977,8 +977,8 @@ const Objects = () => {
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>
-                            <Grid container spacing={2} sx={{mb: 2}}>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Grid2 container spacing={2} sx={{mb: 2}}>
+                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={globalStateId}>Global State</InputLabel>
                                         <Select
@@ -1060,8 +1060,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
+                                </Grid2>
+                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={namespaceId}>Namespace</InputLabel>
                                         <Select
@@ -1096,8 +1096,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
+                                </Grid2>
+                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={kindId}>Kind</InputLabel>
                                         <Select
@@ -1132,8 +1132,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
+                                </Grid2>
+                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
                                     <TextField
                                         id={nameSearchId}
                                         label="Name"
@@ -1142,8 +1142,8 @@ const Objects = () => {
                                         fullWidth
                                         size={isMobile ? "small" : "medium"}
                                     />
-                                </Grid>
-                            </Grid>
+                                </Grid2>
+                            </Grid2>
                         </Collapse>
 
                         <Box sx={{display: "flex", justifyContent: {xs: "center", md: "flex-end"}}}>

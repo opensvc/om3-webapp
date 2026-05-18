@@ -8,8 +8,8 @@ import {
     Typography,
     Button,
     Box,
-    Grid,
 } from '@mui/material';
+import Grid2 from '@mui/material/Grid2';
 import {useTheme} from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {FaSignOutAlt, FaServer, FaUser, FaLock, FaMoon, FaSun} from "react-icons/fa";
@@ -229,20 +229,20 @@ const WhoAmI = () => {
     if (isMobile) {
         return (
             <Box sx={{p: 3}}>
-                <Grid container spacing={3} direction="column">
-                    <Grid item>{MyInfoCard}</Grid>
-                    <Grid item>{PermissionCard}</Grid>
-                    <Grid item>{ServerInfoCard}</Grid>
-                    <Grid item>{ActionButtons}</Grid>
-                </Grid>
+                <Grid2 container spacing={3} direction="column">
+                    <Grid2 item>{MyInfoCard}</Grid2>
+                    <Grid2 item>{PermissionCard}</Grid2>
+                    <Grid2 item>{ServerInfoCard}</Grid2>
+                    <Grid2 item>{ActionButtons}</Grid2>
+                </Grid2>
             </Box>
         );
     }
 
     return (
         <Box sx={{p: 3}}>
-            <Grid container spacing={3}>
-                <Grid item xs={12} lg={8}>
+            <Grid2 container spacing={3}>
+                <Grid2 item xs={12} lg={8}>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 3}}>
                         <Box sx={{display: 'flex', flexDirection: {xs: 'column', md: 'row'}, gap: 3}}>
                             <Box sx={{flex: 1}}>{MyInfoCard}</Box>
@@ -250,12 +250,12 @@ const WhoAmI = () => {
                         </Box>
                         {ActionButtons}
                     </Box>
-                </Grid>
+                </Grid2>
 
-                <Grid item xs={12} lg={4}>
+                <Grid2 item xs={12} lg={4}>
                     {ServerInfoCard}
-                </Grid>
-            </Grid>
+                </Grid2>
+            </Grid2>
         </Box>
     );
 };

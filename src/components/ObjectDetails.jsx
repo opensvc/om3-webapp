@@ -21,8 +21,8 @@ import {
     IconButton,
     TextField,
     useTheme,
-    Grid,
 } from "@mui/material";
+import Grid2 from "@mui/material/Grid2";
 import CloseIcon from "@mui/icons-material/Close";
 import {green, grey, orange, red} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
@@ -668,8 +668,8 @@ const ObjectDetail = () => {
                     borderRadius: 0,
                     boxShadow: 3
                 }}>
-                    <Grid container spacing={2} alignItems="flex-start">
-                        <Grid item xs={12} md={10}>
+                    <Grid2 container spacing={2} alignItems="flex-start">
+                        <Grid2 item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
                                 globalStatus={objectStatus[decodedObjectName]}
@@ -681,8 +681,8 @@ const ObjectDetail = () => {
                                 getColor={getColor}
                                 objectMenuAnchorRef={objectMenuAnchorRef}
                             />
-                        </Grid>
-                        <Grid item xs={12} md={2}>
+                        </Grid2>
+                        <Grid2 item xs={12} md={2}>
                             <ConfigSection
                                 decodedObjectName={decodedObjectName}
                                 configNode={configNode}
@@ -691,8 +691,8 @@ const ObjectDetail = () => {
                                 configDialogOpen={configDialogOpen}
                                 setConfigDialogOpen={setConfigDialogOpen}
                             />
-                        </Grid>
-                    </Grid>
+                        </Grid2>
+                    </Grid2>
 
                     {pendingAction && pendingAction.action !== "console" && (
                         <ActionDialogManager

@@ -124,7 +124,7 @@ const OidcInitializer = ({children}) => {
     }, [authDispatch]);
 
     useEffect(() => {
-        const initializeOidcOnStartup = async () => {
+        const init = async () => {
             const savedToken = localStorage.getItem('authToken');
             const savedAuthChoice = auth.authChoice || localStorage.getItem('authChoice');
             if (savedToken && savedAuthChoice === 'openid' && authInfo && !isInitialized) {
@@ -139,7 +139,7 @@ const OidcInitializer = ({children}) => {
                 }
             }
         };
-        initializeOidcOnStartup();
+        init().catch((err) => logger.error("OIDC init error:", err));
     }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
 
     useEffect(() => {
@@ -294,19 +294,24 @@ const App = () => {
     const mainRef = useRef(null);
 
     useEffect(() => {
-        const originalHtmlOverflow = document.documentElement.style.overflow;
-        const originalBodyOverflow = document.body.style.overflow;
-        const originalRootOverflow = document.getElementById('root')?.style.overflow;
-
-        document.documentElement.style.overflow = 'hidden';
-        document.body.style.overflow = 'hidden';
+        // Use bracket notation to avoid "unresolved variable overflow" warnings
+        const htmlStyle = document.documentElement.style;
+        const bodyStyle = document.body.style;
         const root = document.getElementById('root');
-        if (root) root.style.overflow = 'hidden';
+        const rootStyle = root?.style;
+
+        const originalHtmlOverflow = htmlStyle['overflow'];
+        const originalBodyOverflow = bodyStyle['overflow'];
+        const originalRootOverflow = rootStyle?.['overflow'];
+
+        htmlStyle['overflow'] = 'hidden';
+        bodyStyle['overflow'] = 'hidden';
+        if (rootStyle) rootStyle['overflow'] = 'hidden';
 
         return () => {
-            document.documentElement.style.overflow = originalHtmlOverflow;
-            document.body.style.overflow = originalBodyOverflow;
-            if (root) root.style.overflow = originalRootOverflow;
+            htmlStyle['overflow'] = originalHtmlOverflow;
+            bodyStyle['overflow'] = originalBodyOverflow;
+            if (rootStyle) rootStyle['overflow'] = originalRootOverflow;
         };
     }, []);
 

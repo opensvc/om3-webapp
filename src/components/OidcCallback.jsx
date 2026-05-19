@@ -95,7 +95,10 @@ const OidcCallback = () => {
                 }
             }
         };
-        initializeUserManager();
+        initializeUserManager().catch(error => {
+            logger.error("Unhandled error in initializeUserManager:", error);
+            navigate('/auth-choice');
+        });
     }, [authInfo, userManager, recreateUserManager, navigate]);
 
     useEffect(() => {

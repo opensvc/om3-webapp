@@ -1,7 +1,7 @@
 import React from 'react';
-import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import '@testing-library/jest-dom';
-import EventLogger from '../EventLogger';
+import EventLogger, {hashCode} from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
 import {ThemeProvider, createTheme} from '@mui/material';
 import logger from '../../utils/logger.js';
@@ -1525,15 +1525,6 @@ describe('EventLogger Component', () => {
     });
 
     test('tests hashCode function', () => {
-        const hashCode = (str) => {
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                const char = str.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            return Math.abs(hash).toString(36);
-        };
 
         expect(hashCode('test')).toBeDefined();
         expect(hashCode('')).toBe('0');
@@ -1967,15 +1958,6 @@ describe('EventLogger Component', () => {
     });
 
     test('tests pageKey generation with different inputs', () => {
-        const hashCode = (str) => {
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                const char = str.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            return Math.abs(hash).toString(36);
-        };
 
         const pageKey = (objectName, filteredEventTypes) => {
             const baseKey = objectName || 'global';

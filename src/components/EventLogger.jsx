@@ -45,7 +45,7 @@ const ALL_EVENT_TYPES = [
     'InstanceConfigUpdated'
 ];
 
-const hashCode = (str) => {
+export const hashCode = (str) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);

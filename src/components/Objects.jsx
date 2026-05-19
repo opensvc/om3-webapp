@@ -30,7 +30,7 @@ import {
     OutlinedInput,
     Chip,
 } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
+import Grid from "@mui/material/Grid";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import CloseIcon from "@mui/icons-material/Close";
@@ -977,8 +977,8 @@ const Objects = () => {
                         </Box>
 
                         <Collapse in={showFilters} sx={{width: '100%'}}>
-                            <Grid2 container spacing={2} sx={{mb: 2}}>
-                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
+                            <Grid container spacing={2} sx={{mb: 2}}>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={globalStateId}>Global State</InputLabel>
                                         <Select
@@ -1060,8 +1060,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid2>
-                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={namespaceId}>Namespace</InputLabel>
                                         <Select
@@ -1096,8 +1096,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid2>
-                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                                         <InputLabel id={kindId}>Kind</InputLabel>
                                         <Select
@@ -1132,8 +1132,8 @@ const Objects = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid2>
-                                <Grid2 item xs={12} sm={6} md={4} lg={3}>
+                                </Grid>
+                                <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <TextField
                                         id={nameSearchId}
                                         label="Name"
@@ -1142,8 +1142,8 @@ const Objects = () => {
                                         fullWidth
                                         size={isMobile ? "small" : "medium"}
                                     />
-                                </Grid2>
-                            </Grid2>
+                                </Grid>
+                            </Grid>
                         </Collapse>
 
                         <Box sx={{display: "flex", justifyContent: {xs: "center", md: "flex-end"}}}>

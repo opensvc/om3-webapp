@@ -12,14 +12,13 @@ import {
     TextField,
     CircularProgress,
 } from "@mui/material";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import {green, red, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {useKindData} from "../hooks/useKindData";
+import {SortableTableCell} from "../utils/objectUtils";
 
 const getColorByStatus = (status) => {
     switch (status) {
@@ -98,45 +97,6 @@ const KindTableRow = React.memo(({
         prev.counts.warn === next.counts.warn &&
         prev.counts.unprovisioned === next.counts.unprovisioned;
 });
-
-const SortableTableCell = React.memo(({
-                                          column,
-                                          label,
-                                          currentSortColumn,
-                                          sortDirection,
-                                          onSort,
-                                          align = "left"
-                                      }) => {
-        const handleClick = useCallback(() => {
-            onSort(column);
-        }, [onSort, column]);
-
-        return (
-            <TableCell
-                align={align}
-                onClick={handleClick}
-                sx={{cursor: "pointer"}}
-            >
-                <Box sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: align === "center" ? "center" : "flex-start",
-                    gap: 0.5
-                }}>
-                    <strong>{label}</strong>
-                    {currentSortColumn === column && (
-                        sortDirection === "asc"
-                            ? <KeyboardArrowUpIcon fontSize="small"/>
-                            : <KeyboardArrowDownIcon fontSize="small"/>
-                    )}
-                </Box>
-            </TableCell>
-        );
-    }, (prev, next) =>
-        prev.column === next.column &&
-        prev.currentSortColumn === next.currentSortColumn &&
-        prev.sortDirection === next.sortDirection
-);
 
 const Kinds = () => {
     const navigate = useNavigate();

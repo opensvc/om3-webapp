@@ -9,7 +9,7 @@ import {
     Button,
     Box,
 } from '@mui/material';
-import Grid2 from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import {useTheme} from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {FaSignOutAlt, FaServer, FaUser, FaLock, FaMoon, FaSun} from "react-icons/fa";
@@ -241,8 +241,8 @@ const WhoAmI = () => {
 
     return (
         <Box sx={{p: 3}}>
-            <Grid2 container spacing={3}>
-                <Grid2 item xs={12} lg={8}>
+            <Grid container spacing={3}>
+                <Grid item xs={12} lg={8}>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 3}}>
                         <Box sx={{display: 'flex', flexDirection: {xs: 'column', md: 'row'}, gap: 3}}>
                             <Box sx={{flex: 1}}>{MyInfoCard}</Box>
@@ -250,12 +250,12 @@ const WhoAmI = () => {
                         </Box>
                         {ActionButtons}
                     </Box>
-                </Grid2>
+                </Grid>
 
-                <Grid2 item xs={12} lg={4}>
+                <Grid item xs={12} lg={4}>
                     {ServerInfoCard}
-                </Grid2>
-            </Grid2>
+                </Grid>
+            </Grid>
         </Box>
     );
 };

@@ -98,7 +98,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
                 )}
             </Box>
 
-            {/* Status icon - center */}
             <Box sx={{
                 width: "24px",
                 height: "24px",
@@ -453,6 +452,7 @@ const Objects = () => {
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
+    const [statusCycleIndex, setStatusCycleIndex] = useState(0);
     const theme = useTheme();
     const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -476,6 +476,7 @@ const Objects = () => {
     const deferredSelectedKinds = useDeferredValue(selectedKinds);
     const deferredSortColumn = useDeferredValue(sortColumn);
     const deferredSortDirection = useDeferredValue(sortDirection);
+    const deferredStatusCycleIndex = useDeferredValue(statusCycleIndex);
 
     const [visibleCount, setVisibleCount] = useState(30);
     const [loading, setLoading] = useState(false);
@@ -535,7 +536,6 @@ const Objects = () => {
         for (let i = 0; i < allObjectNames.length; i++) {
             const name = allObjectNames[i];
 
-            // Early exit for search
             if (hasSearch && !name.toLowerCase().includes(searchLower)) {
                 continue;
             }
@@ -584,31 +584,46 @@ const Objects = () => {
     }, [allObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, deferredSearchQuery, objects]);
 
+    const getStatusOrder = (cycleIndex) => {
+        const statuses = ["n/a", "up", "warn", "down"];
+        const order = {};
+        for (let i = 0; i < statuses.length; i++) {
+            order[statuses[i]] = (i - cycleIndex + statuses.length) % statuses.length;
+        }
+        return order;
+    };
+
     const sortedObjectNames = useMemo(() => {
-        const statusOrder = {up: 3, warn: 2, down: 1, "n/a": 0};
         const validStatuses = ["up", "down", "warn"];
 
-        return [...filteredObjectNames].sort((a, b) => {
-            let diff = 0;
-            if (deferredSortColumn === "object") {
-                diff = a.localeCompare(b);
-            } else if (deferredSortColumn === "status") {
-                const statusA = objectStatus[a]?.avail || "n/a";
-                const statusB = objectStatus[b]?.avail || "n/a";
-                const availA = validStatuses.includes(statusA) ? statusA : "n/a";
-                const availB = validStatuses.includes(statusB) ? statusB : "n/a";
-                diff = (statusOrder[availA] || 0) - (statusOrder[availB] || 0);
-            } else if (allNodes.includes(deferredSortColumn)) {
-                const getNodeAvail = (objName) => {
-                    return objectInstanceStatus[objName]?.[deferredSortColumn]?.avail || "n/a";
-                };
-                const statusA = getNodeAvail(a);
-                const statusB = getNodeAvail(b);
-                diff = (statusOrder[statusA] || 0) - (statusOrder[statusB] || 0);
-            }
-            return deferredSortDirection === "asc" ? diff : -diff;
-        });
-    }, [filteredObjectNames, deferredSortColumn, deferredSortDirection, objectStatus, objectInstanceStatus, allNodes]);
+        if (deferredSortColumn === "object") {
+            const sorted = [...filteredObjectNames].sort((a, b) => a.localeCompare(b));
+            return deferredSortDirection === "asc" ? sorted : sorted.reverse();
+        }
+
+        if (deferredSortColumn === "status" || allNodes.includes(deferredSortColumn)) {
+            const statusOrder = getStatusOrder(deferredStatusCycleIndex);
+            const compareFn = (a, b) => {
+                let statusA, statusB;
+                if (deferredSortColumn === "status") {
+                    statusA = objectStatus[a]?.avail || "n/a";
+                    statusB = objectStatus[b]?.avail || "n/a";
+                    statusA = validStatuses.includes(statusA) ? statusA : "n/a";
+                    statusB = validStatuses.includes(statusB) ? statusB : "n/a";
+                } else {
+                    const getNodeAvail = (objName) => {
+                        return objectInstanceStatus[objName]?.[deferredSortColumn]?.avail || "n/a";
+                    };
+                    statusA = getNodeAvail(a);
+                    statusB = getNodeAvail(b);
+                }
+                return (statusOrder[statusA] || 0) - (statusOrder[statusB] || 0);
+            };
+            return [...filteredObjectNames].sort(compareFn);
+        }
+
+        return filteredObjectNames;
+    }, [filteredObjectNames, deferredSortColumn, deferredSortDirection, deferredStatusCycleIndex, objectStatus, objectInstanceStatus, allNodes]);
 
     const visibleObjectNames = useMemo(() => {
         return sortedObjectNames.slice(0, visibleCount);
@@ -734,16 +749,25 @@ const Objects = () => {
     );
 
     const handleSort = useCallback((column) => {
-        setSortColumn(prev => {
-            if (prev === column) {
-                setSortDirection(dir => dir === "asc" ? "desc" : "asc");
-                return column;
+        if (column === "status" || allNodes.includes(column)) {
+            if (sortColumn === column) {
+                setStatusCycleIndex((prev) => (prev + 1) % 4);
+            } else {
+                setSortColumn(column);
+                setStatusCycleIndex(0);
             }
             setSortDirection("asc");
-            return column;
-        });
+        } else {
+            if (sortColumn === column) {
+                setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+            } else {
+                setSortColumn(column);
+                setSortDirection("asc");
+            }
+            setStatusCycleIndex(0);
+        }
         setVisibleCount(30);
-    }, []);
+    }, [sortColumn, allNodes]);
 
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
@@ -1161,7 +1185,6 @@ const Objects = () => {
                         </Box>
                     </Box>
 
-                    {/* Menu for row actions */}
                     <Menu
                         open={Boolean(rowMenuAnchor)}
                         anchorEl={rowMenuAnchor}

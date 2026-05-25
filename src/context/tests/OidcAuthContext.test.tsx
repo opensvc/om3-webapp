@@ -1,8 +1,15 @@
 import {renderHook, act} from '@testing-library/react';
 import {OidcProvider, useOidc, cleanupUserManager} from '../OidcAuthContext';
 import {UserManager, UserManagerSettings} from 'oidc-client-ts';
+import logger from '../../utils/logger';
 
-// Mock UserManager instance
+// Mock logger
+jest.mock('../../utils/logger', () => ({
+    info: jest.fn(),
+    debug: jest.fn(),
+}));
+
+// Mock UserManager
 const mockUserManagerInstance = {
     events: {
         removeUserLoaded: jest.fn().mockImplementation((cb) => cb()),
@@ -18,8 +25,9 @@ jest.mock('oidc-client-ts', () => ({
     UserManager: jest.fn().mockImplementation(() => mockUserManagerInstance),
     Log: {
         logger: console,
-        level: 0
-    }
+        level: 0,
+        DEBUG: 3,
+    },
 }));
 
 describe('OidcAuthContext', () => {
@@ -29,6 +37,7 @@ describe('OidcAuthContext', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        delete (window as any).oidcUserManager;
     });
 
     test('provides userManager context', () => {
@@ -44,11 +53,11 @@ describe('OidcAuthContext', () => {
         }).toThrow('useOidc must be used within an OidcProvider');
     });
 
-    test('recreateUserManager updates userManager with new settings', () => {
+    test('recreateUserManager updates userManager with new settings and sets global reference', () => {
         const settings: UserManagerSettings = {
             authority: 'https://example.com',
             client_id: 'test-client',
-            redirect_uri: 'https://example.com/callback'
+            redirect_uri: 'https://example.com/callback',
         };
         const {result} = renderHook(() => useOidc(), {wrapper});
         act(() => {
@@ -56,6 +65,7 @@ describe('OidcAuthContext', () => {
         });
         expect(result.current.userManager).toBeDefined();
         expect(UserManager).toHaveBeenCalledWith(settings);
+        expect((window as any).oidcUserManager).toBe(mockUserManagerInstance);
     });
 
     test('cleanupUserManager removes event listeners and clears stale state', () => {
@@ -85,17 +95,77 @@ describe('OidcAuthContext', () => {
         expect(mockUserManagerInstance.clearStaleState).not.toHaveBeenCalled();
     });
 
-    test('useEffect cleanup is called on unmount with userManager', () => {
+    test('cleanupUserManager handles missing event methods gracefully', () => {
+        const userManagerWithMissingEvents = {
+            events: {
+                removeUserUnloaded: jest.fn(),
+                removeAccessTokenExpired: jest.fn(),
+                removeAccessTokenExpiring: jest.fn(),
+                removeSilentRenewError: jest.fn(),
+            },
+            clearStaleState: jest.fn().mockResolvedValue(undefined),
+        };
+        expect(() => {
+            cleanupUserManager(userManagerWithMissingEvents as unknown as UserManager);
+        }).not.toThrow();
+        expect(userManagerWithMissingEvents.events.removeUserUnloaded).toHaveBeenCalled();
+        expect(userManagerWithMissingEvents.clearStaleState).toHaveBeenCalled();
+    });
+
+    test('cleanupUserManager catches errors from event removal', () => {
+        const mockError = new Error('Removal failed');
+        const userManagerWithFailingEvents = {
+            events: {
+                removeUserLoaded: jest.fn().mockImplementation(() => {
+                    throw mockError;
+                }),
+                removeUserUnloaded: jest.fn(),
+                removeAccessTokenExpired: jest.fn(),
+                removeAccessTokenExpiring: jest.fn(),
+                removeSilentRenewError: jest.fn(),
+            },
+            clearStaleState: jest.fn().mockResolvedValue(undefined),
+        };
+        cleanupUserManager(userManagerWithFailingEvents as unknown as UserManager);
+        expect(logger.debug).toHaveBeenCalledWith(
+            'Error removing UserManager listener:',
+            mockError
+        );
+        expect(userManagerWithFailingEvents.clearStaleState).toHaveBeenCalled();
+    });
+
+    test('cleanupUserManager logs error when clearStaleState rejects', async () => {
+        const mockError = new Error('Clear stale state failed');
+        const userManagerWithFailingClear = {
+            events: {
+                removeUserLoaded: jest.fn(),
+                removeUserUnloaded: jest.fn(),
+                removeAccessTokenExpired: jest.fn(),
+                removeAccessTokenExpiring: jest.fn(),
+                removeSilentRenewError: jest.fn(),
+            },
+            clearStaleState: jest.fn().mockRejectedValue(mockError),
+        };
+        cleanupUserManager(userManagerWithFailingClear as unknown as UserManager);
+        await new Promise(process.nextTick);
+        expect(logger.debug).toHaveBeenCalledWith(
+            'Error during clearStaleState:',
+            mockError
+        );
+    });
+
+    test('useEffect cleanup is called on unmount with userManager and deletes global reference', () => {
         const settings: UserManagerSettings = {
             authority: 'https://example.com',
             client_id: 'test-client',
-            redirect_uri: 'https://example.com/callback'
+            redirect_uri: 'https://example.com/callback',
         };
         const {result, unmount} = renderHook(() => useOidc(), {wrapper});
         act(() => {
             result.current.recreateUserManager(settings);
         });
         expect(result.current.userManager).toBe(mockUserManagerInstance);
+        expect((window as any).oidcUserManager).toBe(mockUserManagerInstance);
         unmount();
         expect(mockUserManagerInstance.events.removeUserLoaded).toHaveBeenCalledWith(expect.any(Function));
         expect(mockUserManagerInstance.events.removeUserUnloaded).toHaveBeenCalledWith(expect.any(Function));
@@ -103,6 +173,7 @@ describe('OidcAuthContext', () => {
         expect(mockUserManagerInstance.events.removeAccessTokenExpiring).toHaveBeenCalledWith(expect.any(Function));
         expect(mockUserManagerInstance.events.removeSilentRenewError).toHaveBeenCalledWith(expect.any(Function));
         expect(mockUserManagerInstance.clearStaleState).toHaveBeenCalled();
+        expect((window as any).oidcUserManager).toBeUndefined();
     });
 
     test('useEffect cleanup handles null userManager on unmount', () => {
@@ -110,5 +181,6 @@ describe('OidcAuthContext', () => {
         unmount();
         expect(mockUserManagerInstance.events.removeUserLoaded).not.toHaveBeenCalled();
         expect(mockUserManagerInstance.clearStaleState).not.toHaveBeenCalled();
+        expect((window as any).oidcUserManager).toBeUndefined();
     });
 });

@@ -14,10 +14,16 @@ jest.mock('react-router-dom', () => ({
 
 jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx');
+jest.mock('../../hooks/useNamespaceData', () => ({
+    useNamespaceData: jest.fn(),
+}));
+
+import {useNamespaceData} from '../../hooks/useNamespaceData';
 
 // Mock Material-UI components to add data-testid
 jest.mock('@mui/material', () => {
     const originalModule = jest.requireActual('@mui/material');
+    const React = require('react');
     return {
         ...originalModule,
         Box: ({children, ...props}) => (
@@ -38,9 +44,9 @@ jest.mock('@mui/material', () => {
         TableCell: ({children, onClick, justifyContent, alignItems, ...props}) => (
             <td data-testid="table-cell" onClick={onClick} {...props}>{children}</td>
         ),
-        TableContainer: ({children, ...props}) => (
-            <div data-testid="table-container" {...props}>{children}</div>
-        ),
+        TableContainer: React.forwardRef(({children, ...props}, ref) => (
+            <div ref={ref} data-testid="table-container" {...props}>{children}</div>
+        )),
         Typography: ({children, ...props}) => (
             <div data-testid="typography" {...props}>{children}</div>
         ),
@@ -124,27 +130,66 @@ const getColorByStatus = (status) => {
     }
 };
 
+// Build expected statusByNamespace from objectStatus (simplified duplicate of hook logic)
+const buildStatusByNamespace = (objectStatus) => {
+    const statusByNamespace = {};
+    Object.entries(objectStatus).forEach(([path, data]) => {
+        if (!path || !path.includes('/')) return;
+        const namespace = path.split('/')[0];
+        if (!namespace) return;
+        if (!statusByNamespace[namespace]) {
+            statusByNamespace[namespace] = {up: 0, down: 0, warn: 0, "n/a": 0};
+        }
+        if (!data || !data.avail) {
+            statusByNamespace[namespace]["n/a"]++;
+            return;
+        }
+        const status = data.avail;
+        if (status === 'up' || status === 'down' || status === 'warn') {
+            statusByNamespace[namespace][status]++;
+        } else {
+            statusByNamespace[namespace]["n/a"]++;
+        }
+    });
+    return statusByNamespace;
+};
+
+// Generate large dataset for scroll tests
+const generateLargeMockData = (namespaceCount) => {
+    const objectStatus = {};
+    for (let i = 0; i < namespaceCount; i++) {
+        objectStatus[`ns${i}/svc/service`] = {avail: 'up'};
+    }
+    const statusByNamespace = buildStatusByNamespace(objectStatus);
+    return {statusByNamespace, namespaces: Object.keys(statusByNamespace)};
+};
+
 describe('Namespaces Component', () => {
     const mockNavigate = jest.fn();
     const mockStartEventReception = startEventReception;
     const mockCloseEventSource = closeEventSource;
+
+    const defaultMockData = {
+        statusByNamespace: buildStatusByNamespace({
+            'root/svc/service1': {avail: 'up'},
+            'root/svc/service2': {avail: 'down'},
+            'prod/svc/service3': {avail: 'warn'},
+            'prod/svc/service4': {avail: 'up'},
+            'dev/svc/service5': {avail: 'up'},
+            'invalidObject': 'invalid',
+        }),
+        namespaces: ['root', 'prod', 'dev'],
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();
         Storage.prototype.getItem = jest.fn(() => 'valid-token');
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
         mockUseLocation.mockReturnValue({search: ''});
-        const mockState = {
-            objectStatus: {
-                'root/svc/service1': {avail: 'up'},
-                'root/svc/service2': {avail: 'down'},
-                'prod/svc/service3': {avail: 'warn'},
-                'prod/svc/service4': {avail: 'up'},
-                'dev/svc/service5': {avail: 'up'},
-                'invalidObject': 'invalid',
-            },
-        };
-        useEventStore.mockImplementation((selector) => selector(mockState));
+        // useEventStore is still mocked but not used for data
+        useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
+        // Default mock for useNamespaceData
+        useNamespaceData.mockReturnValue(defaultMockData);
     });
 
     test('renders table structure', async () => {
@@ -265,7 +310,7 @@ describe('Namespaces Component', () => {
     });
 
     test('displays no namespaces message when no data is available', async () => {
-        useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
+        useNamespaceData.mockReturnValue({statusByNamespace: {}, namespaces: []});
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -275,14 +320,12 @@ describe('Namespaces Component', () => {
     });
 
     test('handles malformed objectStatus data', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'invalid': {avail: 'error'},
-                    'prod/svc/valid': {avail: 'up'},
-                },
-            })
-        );
+        useNamespaceData.mockReturnValue({
+            statusByNamespace: {
+                prod: {up: 1, down: 0, warn: 0, 'n/a': 0},
+            },
+            namespaces: ['prod'],
+        });
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -325,7 +368,7 @@ describe('Namespaces Component', () => {
     });
 
     test('displays filtered message when no namespaces match', async () => {
-        useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
+        useNamespaceData.mockReturnValue({statusByNamespace: {}, namespaces: []});
         mockUseLocation.mockReturnValue({search: '?namespace=nonexistent'});
         render(
             <MemoryRouter>
@@ -349,17 +392,12 @@ describe('Namespaces Component', () => {
     });
 
     test('handles objectStatus with null or undefined values', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'valid/ns/service1': {avail: 'up'},
-                    'valid/ns/service2': null, // null object
-                    'valid/ns/service3': {avail: null}, // null status
-                    'valid/ns/service4': {avail: undefined}, // undefined status
-                    'valid/ns/service5': {avail: 'down'},
-                },
-            })
-        );
+        useNamespaceData.mockReturnValue({
+            statusByNamespace: {
+                valid: {up: 1, down: 1, warn: 0, 'n/a': 3},
+            },
+            namespaces: ['valid'],
+        });
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -419,15 +457,12 @@ describe('Namespaces Component', () => {
     });
 
     test('handles status counting for unknown status values', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test/svc/service1': {avail: 'unknown_status'},
-                    'test/svc/service2': {avail: 'up'},
-                    'test/svc/service3': {avail: 'custom_status'},
-                },
-            })
-        );
+        useNamespaceData.mockReturnValue({
+            statusByNamespace: {
+                test: {up: 1, down: 0, warn: 0, 'n/a': 2},
+            },
+            namespaces: ['test'],
+        });
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -473,7 +508,7 @@ describe('Namespaces Component', () => {
     });
 
     test('handles empty namespaces array in Autocomplete', async () => {
-        useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
+        useNamespaceData.mockReturnValue({statusByNamespace: {}, namespaces: []});
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -489,7 +524,7 @@ describe('Namespaces Component', () => {
     });
 
     test('handles filteredNamespaces with empty statusByNamespace', async () => {
-        useEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
+        useNamespaceData.mockReturnValue({statusByNamespace: {}, namespaces: []});
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -500,15 +535,13 @@ describe('Namespaces Component', () => {
     });
 
     test('handles allObjectNames with various edge cases', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    '': {avail: 'up'}, // empty string key
-                    'valid/ns/service': {avail: 'up'},
-                    '123': {avail: 'down'}, // number key comme string
-                },
-            })
-        );
+        useNamespaceData.mockReturnValue({
+            statusByNamespace: {
+                root: {up: 0, down: 1, warn: 0, 'n/a': 1},
+                valid: {up: 1, down: 0, warn: 0, 'n/a': 0},
+            },
+            namespaces: ['root', 'valid'],
+        });
         render(
             <MemoryRouter>
                 <Namespaces/>
@@ -600,5 +633,133 @@ describe('Namespaces Component', () => {
         });
         // Verify cleanup function was called
         expect(mockCloseEventSource).toHaveBeenCalled();
+    });
+
+    test('loads more namespaces on scroll near bottom', async () => {
+        jest.useFakeTimers();
+        const namespaceCount = 60;
+        const largeData = generateLargeMockData(namespaceCount);
+        useNamespaceData.mockReturnValue(largeData);
+        render(
+            <MemoryRouter>
+                <Namespaces/>
+            </MemoryRouter>
+        );
+        await screen.findByTestId('table-body');
+        let rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+        expect(rows).toHaveLength(50);
+
+        const container = screen.getByTestId('table-container');
+        Object.defineProperties(container, {
+            scrollTop: {value: 800, writable: true},
+            scrollHeight: {value: 1000},
+            clientHeight: {value: 200},
+        });
+        fireEvent.scroll(container);
+
+        act(() => {
+            jest.advanceTimersByTime(0);
+        });
+
+        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+        act(() => {
+            jest.advanceTimersByTime(100);
+        });
+
+        await waitFor(() => {
+            rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+            expect(rows).toHaveLength(60);
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('does not load more namespaces if already loading', async () => {
+        jest.useFakeTimers();
+        const namespaceCount = 60;
+        const largeData = generateLargeMockData(namespaceCount);
+        useNamespaceData.mockReturnValue(largeData);
+        render(
+            <MemoryRouter>
+                <Namespaces/>
+            </MemoryRouter>
+        );
+        await screen.findByTestId('table-body');
+        const container = screen.getByTestId('table-container');
+        Object.defineProperties(container, {
+            scrollTop: {value: 800, writable: true},
+            scrollHeight: {value: 1000},
+            clientHeight: {value: 200},
+        });
+        fireEvent.scroll(container);
+
+        act(() => {
+            jest.advanceTimersByTime(0);
+        });
+
+        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+        fireEvent.scroll(container);
+
+        act(() => {
+            jest.advanceTimersByTime(100);
+        });
+
+        await waitFor(() => {
+            const rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+            expect(rows).toHaveLength(60);
+        });
+
+        jest.useRealTimers();
+    });
+
+    test('does not load more if all namespaces already visible', async () => {
+        jest.useFakeTimers();
+        const namespaceCount = 40;
+        const largeData = generateLargeMockData(namespaceCount);
+        useNamespaceData.mockReturnValue(largeData);
+        render(
+            <MemoryRouter>
+                <Namespaces/>
+            </MemoryRouter>
+        );
+        await screen.findByTestId('table-body');
+        const container = screen.getByTestId('table-container');
+        Object.defineProperties(container, {
+            scrollTop: {value: 800, writable: true},
+            scrollHeight: {value: 1000},
+            clientHeight: {value: 200},
+        });
+        fireEvent.scroll(container);
+        act(() => {
+            jest.advanceTimersByTime(0);
+        });
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+        act(() => {
+            jest.advanceTimersByTime(100);
+        });
+        const rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+        expect(rows).toHaveLength(40);
+        jest.useRealTimers();
+    });
+
+    test('removes scroll listener on unmount', async () => {
+        const namespaceCount = 60;
+        const largeData = generateLargeMockData(namespaceCount);
+        useNamespaceData.mockReturnValue(largeData);
+        const {unmount} = render(
+            <MemoryRouter>
+                <Namespaces/>
+            </MemoryRouter>
+        );
+        await screen.findByTestId('table-body');
+        const container = screen.getByTestId('table-container');
+        const removeSpy = jest.spyOn(container, 'removeEventListener');
+        act(() => {
+            unmount();
+        });
+        expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+        removeSpy.mockRestore();
     });
 });

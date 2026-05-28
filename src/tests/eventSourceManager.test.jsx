@@ -42,6 +42,7 @@ describe('eventSourceManager', () => {
     let originalConsole;
     let localStorageMock;
     let originalDebug;
+    let originalLocation;
 
     beforeEach(() => {
         // Reset all mocks
@@ -197,9 +198,12 @@ describe('eventSourceManager', () => {
         originalDebug = console.debug;
         console.debug = jest.fn();
 
-        // Mock window.location
-        delete window.location;
-        window.location = {href: ''};
+        // Mock window.location in a non-destructive way
+        originalLocation = window.location;
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: {href: ''},
+        });
         window.oidcUserManager = null;
 
         // Mock dispatchEvent
@@ -232,6 +236,12 @@ describe('eventSourceManager', () => {
         console.warn = originalConsole.warn;
         console.info = originalConsole.info;
         console.debug = originalDebug;
+
+        // Restore window.location
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: originalLocation,
+        });
 
         // Reset module state
         eventSourceManager.closeEventSource();

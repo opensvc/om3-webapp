@@ -402,25 +402,59 @@ describe('NodeRow Component', () => {
         const originalScrollX = window.scrollX;
         const originalPageXOffset = window.pageXOffset;
 
-        delete window.scrollY;
-        delete window.pageYOffset;
-        delete window.scrollX;
-        delete window.pageXOffset;
+        Object.defineProperty(window, 'scrollY', {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        });
+        Object.defineProperty(window, 'pageYOffset', {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        });
+        Object.defineProperty(window, 'scrollX', {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        });
+        Object.defineProperty(window, 'pageXOffset', {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        });
 
-        render(<NodeRow {...defaultProps} />);
+        try {
+            render(<NodeRow {...defaultProps} />);
 
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
+            const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+            menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
 
-        fireEvent.click(menuButton);
-        jest.runAllTimers();
+            fireEvent.click(menuButton);
+            jest.runAllTimers();
 
-        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
-
-        // Restore original properties
-        window.scrollY = originalScrollY;
-        window.pageYOffset = originalPageYOffset;
-        window.scrollX = originalScrollX;
-        window.pageXOffset = originalPageXOffset;
+            expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+        } finally {
+            // Restore original properties
+            Object.defineProperty(window, 'scrollY', {
+                configurable: true,
+                writable: true,
+                value: originalScrollY,
+            });
+            Object.defineProperty(window, 'pageYOffset', {
+                configurable: true,
+                writable: true,
+                value: originalPageYOffset,
+            });
+            Object.defineProperty(window, 'scrollX', {
+                configurable: true,
+                writable: true,
+                value: originalScrollX,
+            });
+            Object.defineProperty(window, 'pageXOffset', {
+                configurable: true,
+                writable: true,
+                value: originalPageXOffset,
+            });
+        }
     });
 });

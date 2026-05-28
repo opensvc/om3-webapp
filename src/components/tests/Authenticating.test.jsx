@@ -10,6 +10,7 @@ jest.mock('react-i18next', () => ({
 
 describe('Authenticating Component', () => {
     const mockReload = jest.fn();
+    let originalLocation;
     const mockT = jest.fn((key) => key); // Simulates the `t` function returning the key
     const mockI18n = {language: 'en'};
 
@@ -17,14 +18,20 @@ describe('Authenticating Component', () => {
         jest.clearAllMocks();
         useTranslation.mockReturnValue({t: mockT, i18n: mockI18n});
 
-        // Mock window.location.reload
-        delete window.location;
-        window.location = {reload: mockReload};
+        // Mock window.location.reload in a non-destructive way
+        originalLocation = window.location;
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: {reload: mockReload},
+        });
     });
 
     afterEach(() => {
         // Restore window.location after each test
-        window.location = global.location;
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: originalLocation,
+        });
     });
 
     test('1. renders dialog with translated title, content, and button', () => {
@@ -53,9 +60,6 @@ describe('Authenticating Component', () => {
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeInTheDocument();
         expect(dialog).toBeVisible();
-        // Logs for debugging dialog attributes
-        console.log('Dialog attributes:', dialog.getAttributeNames());
-        console.log('Dialog open attribute:', dialog.getAttribute('open'));
     });
 
     test('3. clicking reload button calls window.location.reload', () => {

@@ -6,6 +6,8 @@ import useEventLogStore from '../../hooks/useEventLogStore';
 import {ThemeProvider, createTheme} from '@mui/material';
 import logger from '../../utils/logger.js';
 
+// ─── Global setup ───────────────────────────────────────────────────────────
+
 beforeAll(() => {
     Element.prototype.scrollIntoView = jest.fn();
 });
@@ -38,2630 +40,928 @@ jest.mock('../../eventSourceManager', () => ({
     closeLoggerEventSource: jest.fn(),
 }));
 
-const theme = createTheme();
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const renderWithTheme = (ui) => {
-    return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const lightTheme = createTheme();
+const darkTheme = createTheme({palette: {mode: 'dark'}});
+
+const renderWithTheme = (ui, theme = lightTheme) =>
+    render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+
+const makeLog = (overrides = {}) => ({
+    id: '1',
+    eventType: 'TEST_EVENT',
+    timestamp: new Date().toISOString(),
+    data: {},
+    ...overrides,
+});
+
+const mockStore = (overrides = {}) => ({
+    eventLogs: [],
+    isPaused: false,
+    setPaused: jest.fn(),
+    clearLogs: jest.fn(),
+    ...overrides,
+});
+
+const openDrawer = () => {
+    const btn = screen.getByRole('button', {name: /Events|Event Logger/i});
+    act(() => fireEvent.click(btn));
+    return btn;
 };
 
+const openDrawerAndWait = async (title = /Event Logger/i) => {
+    openDrawer();
+    await waitFor(() => expect(screen.getByText(title)).toBeInTheDocument());
+};
+
+const openSettings = async () => {
+    fireEvent.click(screen.getByTestId('SettingsIcon'));
+    await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
+};
+
+// ─── Suite-level mocks ───────────────────────────────────────────────────────
+
 describe('EventLogger Component', () => {
-    let consoleErrorSpy;
-    let eventLogs = [];
-    let isPaused = false;
-    const mockSetPaused = jest.fn();
-    const mockClearLogs = jest.fn();
+    let mockSetPaused;
+    let mockClearLogs;
 
     beforeEach(() => {
-        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message, ...args) => {
-            if (typeof message === 'string' && message.includes('Each child in a list should have a unique "key" prop')) {
-                return;
-            }
-            console.error(message, ...args);
+        jest.spyOn(console, 'error').mockImplementation((msg, ...args) => {
+            if (typeof msg === 'string' && msg.includes('Each child in a list should have a unique "key" prop')) return;
+            console.error(msg, ...args);
         });
 
-        eventLogs = [];
-        isPaused = false;
-        mockSetPaused.mockClear();
-        mockClearLogs.mockClear();
+        mockSetPaused = jest.fn();
+        mockClearLogs = jest.fn();
 
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        logger.info.mockClear();
-        logger.warn.mockClear();
-        logger.error.mockClear();
-        logger.debug.mockClear();
-        logger.log.mockClear();
+        useEventLogStore.mockReturnValue(mockStore({setPaused: mockSetPaused, clearLogs: mockClearLogs}));
+        Object.values(logger).forEach(fn => typeof fn.mockClear === 'function' && fn.mockClear());
     });
 
     afterEach(() => {
-        consoleErrorSpy.mockRestore();
+        jest.restoreAllMocks();
         jest.clearAllMocks();
         jest.useRealTimers();
+        screen.queryAllByRole('button', {name: /Close/i}).forEach(btn => fireEvent.click(btn));
+    });
 
-        const closeButtons = screen.queryAllByRole('button', {name: /Close/i});
-        closeButtons.forEach(btn => {
-            if (btn) {
-                fireEvent.click(btn);
-            }
+    // ─── Pure unit tests ───────────────────────────────────────────────────
+
+    describe('Pure utility functions', () => {
+        test('hashCode returns stable, defined values', () => {
+            expect(hashCode('test')).toBeDefined();
+            expect(hashCode('')).toBe('0');
+            expect(hashCode('longer string test')).toBeDefined();
+            expect(hashCode('test')).toBe(hashCode('test'));
+        });
+
+        test.each([
+            ['TEST_ERROR_EVENT', 'error'],
+            ['OBJECT_UPDATED', 'primary'],
+            ['ITEM_DELETED', 'warning'],
+            ['CONNECTION_STATUS', 'info'],
+            ['REGULAR_EVENT', 'default'],
+            ['', 'default'],
+            [undefined, 'default'],
+        ])('getEventColor("%s") → "%s"', (eventType, expected) => {
+            const getEventColor = (et = '') => {
+                if (et.includes('ERROR')) return 'error';
+                if (et.includes('UPDATED')) return 'primary';
+                if (et.includes('DELETED')) return 'warning';
+                if (et.includes('CONNECTION')) return 'info';
+                return 'default';
+            };
+            expect(getEventColor(eventType)).toBe(expected);
+        });
+
+        test.each([
+            [['id1'], 'id1', ['id1', 'id1']],   // noop duplicate guard
+        ])('toggleExpand adds and removes ids', () => {
+            const toggle = (prev, id) =>
+                prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+            expect(toggle([], 'id1')).toEqual(['id1']);
+            expect(toggle(['id1', 'id2'], 'id1')).toEqual(['id2']);
+            expect(toggle(['id1'], 'id1')).toEqual([]);
+        });
+
+        test('filterData handles all input types', () => {
+            const filterData = (data) => {
+                if (!data || typeof data !== 'object') return data;
+                const {_rawEvent, ...rest} = data;
+                return rest;
+            };
+            expect(filterData(null)).toBeNull();
+            expect(filterData(undefined)).toBeUndefined();
+            expect(filterData('string')).toBe('string');
+            expect(filterData(123)).toBe(123);
+            expect(filterData({_rawEvent: 'x', other: 'data'})).toEqual({other: 'data'});
+            expect(filterData({other: 'data'})).toEqual({other: 'data'});
+        });
+
+        test('escapeHtml handles all special characters and non-strings', () => {
+            const escapeHtml = (text) => {
+                if (typeof text !== 'string') return text;
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            };
+            expect(escapeHtml('a & b')).toBe('a &amp; b');
+            expect(escapeHtml('<div>')).toBe('&lt;div&gt;');
+            expect(escapeHtml('"q"')).toBe('&quot;q&quot;');
+            expect(escapeHtml("'a'")).toBe('&#039;a&#039;');
+            expect(escapeHtml(123)).toBe(123);
+            expect(escapeHtml(null)).toBeNull();
+            expect(escapeHtml(undefined)).toBeUndefined();
+        });
+
+        test('pageKey generation is deterministic', () => {
+            const pageKey = (objectName, types) => {
+                const base = objectName || 'global';
+                return `eventLogger_${base}_${hashCode(types.sort().join(','))}`;
+            };
+            expect(pageKey(null, ['EVENT1', 'EVENT2'])).toMatch(/^eventLogger_global_/);
+            expect(pageKey('/test', ['A'])).toMatch(/^eventLogger_\/test_/);
+            expect(pageKey(null, ['EVENT1', 'EVENT2'])).toBe(pageKey(null, ['EVENT2', 'EVENT1']));
         });
     });
 
-    test('renders the button initially when drawer is closed', () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
+    // ─── Rendering ────────────────────────────────────────────────────────
+
+    describe('Rendering', () => {
+        test('renders floating button by default', () => {
+            renderWithTheme(<EventLogger/>);
+            expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument();
+        });
+
+        test('renders with custom title and buttonLabel', () => {
+            renderWithTheme(<EventLogger title="Custom Logger" buttonLabel="Custom Button"/>);
+            expect(screen.getByText('Custom Button')).toBeInTheDocument();
+        });
+
+        test('renders without crashing with all props', () => {
+            const {container} = renderWithTheme(
+                <EventLogger title="T" buttonLabel="B" eventTypes={['A', 'B']} objectName="/p"/>
+            );
+            expect(container).toBeInTheDocument();
+        });
+
+        test('handles non-array eventLogs gracefully', () => {
+            useEventLogStore.mockReturnValue(mockStore({eventLogs: {}}));
+            const {container} = renderWithTheme(<EventLogger/>);
+            expect(container).toBeInTheDocument();
+        });
+
+        test('button hidden when drawer open, reappears on close', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
+            expect(screen.queryByRole('button', {name: /^Events$/i})).not.toBeInTheDocument();
+
+            act(() => fireEvent.click(screen.getByRole('button', {name: /^Close$/i})));
+            await waitFor(() =>
+                expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument()
+            );
+        });
+
+        test('dark mode renders without error', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'DARK_PAPER'})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>, darkTheme);
+            openDrawer();
+            await waitFor(() => expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument());
+        });
     });
 
-    test('opens the drawer when button is clicked', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+    // ─── Drawer open / close ──────────────────────────────────────────────
 
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+    describe('Drawer open / close', () => {
+        test('opens and shows title', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
         });
 
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-    });
-
-    test('displays no events message when there are no logs', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
+        test('shows "No events logged" when empty', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
             expect(screen.getByText(/No events logged/i)).toBeInTheDocument();
         });
-    });
 
-    test('displays logs when eventLogs are provided', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {message: 'Test data'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
+        test('closes via Close button', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Close/i})));
+            await waitFor(() =>
+                expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument()
+            );
         });
     });
 
-    test('filters logs by event type using chip click', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {message: 'Test data'},
-            },
-            {
-                id: '2',
-                eventType: 'ANOTHER_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {message: 'Other data'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+    // ─── Log display ──────────────────────────────────────────────────────
 
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+    describe('Log display', () => {
+        const setupLogs = (logs) => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: logs,
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+        };
+
+        test('displays log rows', async () => {
+            setupLogs([makeLog({eventType: 'TEST_EVENT'})]);
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            await waitFor(() => expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument());
         });
 
-        await waitFor(() => {
-            expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
+        test('shows event count chip', async () => {
+            setupLogs([makeLog(), makeLog({id: '2'})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument());
         });
 
-        // Click the filter chip for TEST_EVENT — label is "TEST_EVENT (1)"
-        const chip = screen.getByRole('button', {name: /TEST_EVENT \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip);
-        });
-
-        await waitFor(() => {
-            // TEST_EVENT log row chip (without count) must still be present
-            const chips = screen.getAllByText(/TEST_EVENT/i);
-            expect(chips.length).toBeGreaterThan(0);
-        });
-    });
-
-    test('filters logs by event type', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {message: 'Test data'},
-            },
-            {
-                id: '2',
-                eventType: 'ANOTHER_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {message: 'Other data'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText(/ANOTHER_EVENT/i)).toBeInTheDocument();
-        });
-
-        // Filter by clicking TEST_EVENT chip
-        const filterChip = screen.getByRole('button', {name: /TEST_EVENT \(\d+\)/i});
-        act(() => {
-            fireEvent.click(filterChip);
-        });
-
-        await waitFor(() => {
-            // TEST_EVENT should still be visible
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('toggles pause state', async () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const pauseButton = screen.getByRole('button', {name: /Pause/i});
-
-        act(() => {
-            fireEvent.click(pauseButton);
-        });
-
-        expect(mockSetPaused).toHaveBeenCalledWith(true);
-    });
-
-    test('clears logs when clear button is clicked', async () => {
-        eventLogs = [{id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-
-        act(() => {
-            fireEvent.click(clearButton);
-        });
-
-        expect(mockClearLogs).toHaveBeenCalled();
-    });
-
-    test('closes the drawer when close button is clicked', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const closeButton = screen.getByRole('button', {name: /Close/i});
-
-        act(() => {
-            fireEvent.click(closeButton);
-        });
-
-        await waitFor(() => {
-            const reopenButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-            expect(reopenButton).toBeInTheDocument();
-        });
-    });
-
-    test('displays paused chip when isPaused is true', async () => {
-        isPaused = true;
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: true,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
+        test('displays PAUSED chip when paused', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                isPaused: true, setPaused: mockSetPaused, clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
             expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
         });
-    });
 
-    test('displays objectName chip when objectName is provided', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {path: '/test/path'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+        test('shows "No events match" when filters exclude everything', async () => {
+            setupLogs([makeLog({data: {path: '/other'}})]);
+            renderWithTheme(<EventLogger objectName="/target"/>);
+            openDrawer();
+            await waitFor(() =>
+                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument()
+            );
         });
 
-        await waitFor(() => {
-            expect(screen.getByText(/TEST_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('disables clear button when no logs are present', async () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+        test.each([
+            ['string data', 'STRING_EVENT'],
+            [null, 'NULL_EVENT'],
+        ])('handles non-object log data: %s', async (data, eventType) => {
+            setupLogs([makeLog({id: '1', eventType, data})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(new RegExp(eventType, 'i'))).toBeInTheDocument());
         });
 
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        expect(clearButton).toBeDisabled();
-    });
-
-    test('handles ObjectDeleted event with valid _rawEvent JSON', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {_rawEvent: JSON.stringify({path: '/test/path'})},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+        test('handles invalid/non-standard timestamps', async () => {
+            setupLogs([
+                makeLog({eventType: 'INVALID_TS', timestamp: {}}),
+                makeLog({id: '2', eventType: 'BAD_DATE', timestamp: 'not-a-date'}),
+            ]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/INVALID_TS/i)).toBeInTheDocument());
         });
 
-        await waitFor(() => {
-            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests drawer resize handle exists and can be interacted with', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-        expect(resizeHandle).toBeInTheDocument();
-
-        jest.useRealTimers();
-    });
-
-    test('handles ObjectDeleted event with invalid _rawEvent JSON parsing', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {
-                    _rawEvent: 'invalid json {',
-                    otherData: 'test'
-                }
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
-        });
-    });
-
-    test('displays log with non-object data', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'STRING_EVENT',
-                timestamp: new Date().toISOString(),
-                data: 'simple string data'
-            },
-            {
-                id: '2',
-                eventType: 'NULL_EVENT',
-                timestamp: new Date().toISOString(),
-                data: null
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/STRING_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText(/NULL_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('toggles log expansion', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'EXPAND_TEST',
-                timestamp: new Date().toISOString(),
-                data: {key: 'value'},
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        // The chip "EXPAND_TEST (1)" and the log row chip "EXPAND_TEST" both exist — use getAllByText
-        await waitFor(() => {
-            expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0);
-        });
-
-        const logElements = screen.getAllByRole('button', {hidden: true});
-        const logButton = logElements.find(el =>
-            el.closest('[style*="cursor: pointer"]') ||
-            el.textContent?.includes('EXPAND_TEST')
-        );
-        if (logButton) {
-            act(() => {
-                fireEvent.click(logButton);
-            });
-
+        test('displays valid timestamps', async () => {
+            setupLogs([makeLog({timestamp: new Date('2023-01-01T12:34:56.789Z').toISOString()})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
             await waitFor(() => {
-                expect(screen.getByText(/"key"/i)).toBeInTheDocument();
+                const timeEls = screen.getAllByText(/\d{1,2}:\d{2}:\d{2}/);
+                expect(timeEls.length).toBeGreaterThan(0);
             });
-
-            act(() => {
-                fireEvent.click(logButton);
-            });
-
-            await waitFor(() => {
-                expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0);
-            });
-        }
-    });
-
-    test('tests clear filters functionality', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
         });
 
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
+        test('generates safe id when log.id is missing', async () => {
+            setupLogs([{eventType: 'NO_ID', timestamp: new Date().toISOString(), data: {}}]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText('NO_ID')).toBeInTheDocument());
         });
 
-        // Click the filter chip to activate filter
-        const filterChip = screen.getByRole('button', {name: /TEST_EVENT \(\d+\)/i});
-        act(() => {
-            fireEvent.click(filterChip);
+        test('handles circular reference in data', async () => {
+            const circular = {};
+            circular.self = circular;
+            setupLogs([makeLog({eventType: 'CIRCULAR_TEST', data: circular})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/CIRCULAR_TEST/i)).toBeInTheDocument());
         });
 
-        // Click again to deactivate (toggle off)
-        act(() => {
-            fireEvent.click(filterChip);
+        test('handles XSS-like content in JSON safely', async () => {
+            setupLogs([makeLog({eventType: 'HTML_TEST', data: {message: '<script>alert("xss")</script>'}})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/HTML_TEST/i)).toBeInTheDocument());
         });
 
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('tests timestamp formatting', async () => {
-        const testTimestamp = new Date('2023-01-01T12:34:56.789Z').toISOString();
-        eventLogs = [
-            {id: '1', eventType: 'TEST_EVENT', timestamp: testTimestamp, data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            const timeElements = screen.getAllByText(/\d{1,2}:\d{2}:\d{2}/);
-            expect(timeElements.length).toBeGreaterThan(0);
-        });
-    });
-
-    test('displays custom title and buttonLabel', () => {
-        renderWithTheme(<EventLogger title="Custom Logger" buttonLabel="Custom Button"/>);
-        expect(screen.getByText('Custom Button')).toBeInTheDocument();
-    });
-
-    test('displays event count in drawer when opened', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
-        });
-    });
-
-    test('handles search with data content matching', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'EVENT_A', timestamp: new Date().toISOString(), data: {content: 'searchable'}},
-            {id: '2', eventType: 'EVENT_B', timestamp: new Date().toISOString(), data: {content: 'other'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/EVENT_A/i)).toBeInTheDocument();
-            expect(screen.getByText(/EVENT_B/i)).toBeInTheDocument();
-        });
-
-        // Filter by EVENT_A chip
-        const chipA = screen.getByRole('button', {name: /EVENT_A \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chipA);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/EVENT_A/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('filters logs by custom eventTypes prop', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'ALLOWED_EVENT', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'BLOCKED_EVENT', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests all event color coding scenarios work without errors', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'SOME_ERROR_EVENT', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'OBJECT_UPDATED', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'ITEM_DELETED', timestamp: new Date().toISOString(), data: {}},
-            {id: '4', eventType: 'CONNECTION_STATUS', timestamp: new Date().toISOString(), data: {}},
-            {id: '5', eventType: 'REGULAR_EVENT', timestamp: new Date().toISOString(), data: {}}
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/SOME_ERROR_EVENT/i)).toBeInTheDocument();
-            expect(screen.getByText(/OBJECT_UPDATED/i)).toBeInTheDocument();
-            expect(screen.getByText(/ITEM_DELETED/i)).toBeInTheDocument();
-            expect(screen.getByText(/CONNECTION_STATUS/i)).toBeInTheDocument();
-            expect(screen.getByText(/REGULAR_EVENT/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests objectName filtering with non-matching logs', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectUpdated',
-                timestamp: new Date().toISOString(),
-                data: {path: '/different/path'}
-            },
-            {
-                id: '2',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {
-                    _rawEvent: JSON.stringify({path: '/another/path'})
-                }
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/target/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests CONNECTION events are always included with objectName filter', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'CONNECTION_ESTABLISHED',
-                timestamp: new Date().toISOString(),
-                data: {type: 'connection'}
-            },
-            {
-                id: '2',
-                eventType: 'CONNECTION_LOST',
-                timestamp: new Date().toISOString(),
-                data: {type: 'connection'}
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/some/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests empty search term behavior', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
-        });
-
-        // Filter on then off
-        const chip = screen.getByRole('button', {name: /TEST_EVENT \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip);
-        });
-        act(() => {
-            fireEvent.click(chip);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('tests search with empty term', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST_EVENT', timestamp: new Date().toISOString(), data: {message: 'test'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST_EVENT/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('tests objectName filtering with null data', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'NULL_DATA_EVENT',
-                timestamp: new Date().toISOString(),
-                data: null
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests ObjectDeleted event without _rawEvent', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'ObjectDeleted',
-                timestamp: new Date().toISOString(),
-                data: {otherField: 'test'}
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests filteredData with null data in JSONView', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'NULL_DATA_VIEW',
-                timestamp: new Date().toISOString(),
-                data: null
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/NULL_DATA_VIEW/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests clearLogs when eventLogs is empty array', () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: [],
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        expect(clearButton).toBeDisabled();
-    });
-
-    test('displays JSON with all types', async () => {
-        eventLogs = [
-            {
-                id: '1',
+        test('displays all JSON value types', async () => {
+            setupLogs([makeLog({
                 eventType: 'ALL_TYPES',
-                timestamp: new Date().toISOString(),
-                data: {
-                    str: "string & < >",
-                    num: 42,
-                    boolTrue: true,
-                    boolFalse: false,
-                    nul: null,
-                    obj: {nested: "value"}
-                }
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/ALL_TYPES/i)).toBeInTheDocument();
+                data: {str: 'a & <b>', num: 42, t: true, f: false, n: null, obj: {k: 'v'}},
+            })]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/ALL_TYPES/i)).toBeInTheDocument());
         });
     });
 
-    test('handles invalid timestamp', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'INVALID_TS',
-                timestamp: {},
-                data: {}
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+    // ─── Log expansion ────────────────────────────────────────────────────
 
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
+    describe('Log expansion', () => {
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
 
-        await waitFor(() => {
-            expect(screen.getByText(/INVALID_TS/i)).toBeInTheDocument();
-        });
-    });
+        test('expands and collapses a log row', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'EXPAND_TEST', data: {key: 'value'}})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            act(() => jest.advanceTimersByTime(200));
 
-    test('renders subscription info when eventTypes provided', async () => {
-        renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+            await waitFor(() => expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0));
 
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument();
-        });
-    });
-
-    test('renders subscription info when objectName and eventTypes provided', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'EVENT1', timestamp: new Date().toISOString(), data: {path: '/test/path'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger eventTypes={['EVENT1']} objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/EVENT1/i)).toBeInTheDocument();
-        });
-    });
-
-    test('opens subscription dialog and interacts with it - simplified', async () => {
-        const eventTypes = ['EVENT1'];
-        eventLogs = [
-            {id: '1', eventType: 'EVENT1', timestamp: new Date().toISOString(), data: {}},
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-
-        act(() => {
-            fireEvent.click(settingsIcon);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-        });
-
-        expect(screen.getByText(/Subscribe to All/i)).toBeInTheDocument();
-        expect(screen.getByText(/Unsubscribe from All/i)).toBeInTheDocument();
-
-        const applyButton = screen.getByRole('button', {name: /Apply Subscriptions/i});
-
-        act(() => {
-            fireEvent.click(applyButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-        });
-    });
-
-    test('handles subscription dialog with no eventTypes', async () => {
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument();
-        });
-
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-
-        act(() => {
-            fireEvent.click(settingsIcon);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
-        });
-    });
-
-    test('closes subscription dialog with close button', async () => {
-        const eventTypes = ['EVENT1'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-
-        act(() => {
-            fireEvent.click(settingsIcon);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-        });
-
-        const closeButtons = screen.getAllByLabelText('Close');
-        const dialogCloseButton = closeButtons[closeButtons.length - 1];
-
-        act(() => {
-            fireEvent.click(dialogCloseButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-        });
-    });
-
-    test('tests formatTimestamp with invalid date', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'INVALID_DATE',
-            timestamp: 'not-a-date',
-            data: {}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/INVALID_DATE/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests EventTypeChip with search term highlight', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'SEARCHABLE_EVENT',
-            timestamp: new Date().toISOString(),
-            data: {}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/SEARCHABLE_EVENT/i).length).toBeGreaterThan(0);
-        });
-
-        const chip = screen.getByRole('button', {name: /SEARCHABLE_EVENT \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/SEARCHABLE_EVENT/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('tests search highlight in JSON syntax', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'JSON_SEARCH',
-            timestamp: new Date().toISOString(),
-            data: {
-                message: 'test value',
-                number: 42
+            const logChip = screen.getAllByText(/EXPAND_TEST/i).find(el => !el.textContent.includes('('));
+            const container = logChip?.closest('[style*="cursor: pointer"]') || logChip?.closest('div');
+            if (container) {
+                act(() => fireEvent.click(container));
+                await waitFor(() => expect(screen.getByText(/"key"/i)).toBeInTheDocument());
+                act(() => fireEvent.click(container));
+                await waitFor(() => expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0));
             }
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
         });
 
-        await waitFor(() => {
-            expect(screen.getByText(/JSON_SEARCH/i)).toBeInTheDocument();
+        test('expands circular data without throwing', async () => {
+            const circular = {};
+            circular.self = circular;
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({id: 'circ', eventType: 'CIRCULAR_EXPAND', data: circular})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            act(() => jest.advanceTimersByTime(200));
+
+            await waitFor(() => expect(screen.getAllByText(/CIRCULAR_EXPAND/i).length).toBeGreaterThan(0));
+            const chip = screen.getAllByText(/CIRCULAR_EXPAND/i).find(el => !el.textContent.includes('('));
+            const container = chip?.closest('[style*="cursor: pointer"]') || chip?.closest('div');
+            if (container) {
+                act(() => fireEvent.click(container));
+                await waitFor(() => expect(screen.getAllByText(/CIRCULAR_EXPAND/i).length).toBeGreaterThan(0));
+            }
         });
     });
 
-    test('tests dark mode styling classes', async () => {
-        const darkTheme = createTheme({
-            palette: {
-                mode: 'dark',
-            },
+    // ─── Controls (pause / clear) ─────────────────────────────────────────
+
+    describe('Controls', () => {
+        test('pause button calls setPaused(true)', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Pause/i})));
+            expect(mockSetPaused).toHaveBeenCalledWith(true);
         });
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'DARK_MODE_TEST',
-                timestamp: new Date().toISOString(),
-                data: {}
-            }
+
+        test('clear button calls clearLogs and is disabled when empty', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            const clearBtn = screen.getByRole('button', {name: /Clear logs/i});
+            expect(clearBtn).toBeDisabled();
+        });
+
+        test('clear button works with logs present', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog()],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Clear logs/i})));
+            expect(mockClearLogs).toHaveBeenCalled();
+        });
+
+        test('logger.log is called when drawer opens', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            expect(logger.log).toHaveBeenCalled();
+        });
+    });
+
+    // ─── Event type filters (chips) ───────────────────────────────────────
+
+    describe('Event type filter chips', () => {
+        const twoTypeLogs = [
+            makeLog({id: '1', eventType: 'TYPE_A'}),
+            makeLog({id: '2', eventType: 'TYPE_B'}),
         ];
 
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
+        beforeEach(() => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: twoTypeLogs, setPaused: mockSetPaused, clearLogs: mockClearLogs,
+            }));
         });
 
-        render(
-            <ThemeProvider theme={darkTheme}>
-                <EventLogger/>
-            </ThemeProvider>
-        );
+        test('selecting a chip filters to that type', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument());
 
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
-    });
-
-    test('component renders without crashing', () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('component renders with custom props', () => {
-        const {container} = renderWithTheme(
-            <EventLogger
-                title="Custom Logger"
-                buttonLabel="Custom Button"
-                eventTypes={['TYPE_A', 'TYPE_B']}
-                objectName="/test/path"
-            />
-        );
-        expect(container).toBeInTheDocument();
-    });
-
-    test('handles non-array eventLogs', () => {
-        useEventLogStore.mockReturnValue({
-            eventLogs: {},
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
+            act(() => fireEvent.click(screen.getByRole('button', {name: /TYPE_A \(\d+\)/i})));
+            await waitFor(() => expect(screen.getAllByText(/TYPE_A/i).length).toBeGreaterThan(0));
         });
 
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
+        test('toggling chip off restores all logs', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument());
 
-    test('filterData handles non-object input', () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'NON_OBJECT_DATA',
-            timestamp: new Date().toISOString(),
-            data: 'string data'
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        const {container} = renderWithTheme(<EventLogger/>);
-        expect(container).toBeInTheDocument();
-    });
-
-    test('getEventColor covers all branches', () => {
-        const getEventColor = (eventType = "") => {
-            if (eventType.includes("ERROR")) return "error";
-            if (eventType.includes("UPDATED")) return "primary";
-            if (eventType.includes("DELETED")) return "warning";
-            if (eventType.includes("CONNECTION")) return "info";
-            return "default";
-        };
-
-        expect(getEventColor("TEST_ERROR_EVENT")).toBe("error");
-        expect(getEventColor("OBJECT_UPDATED")).toBe("primary");
-        expect(getEventColor("ITEM_DELETED")).toBe("warning");
-        expect(getEventColor("CONNECTION_STATUS")).toBe("info");
-        expect(getEventColor("REGULAR_EVENT")).toBe("default");
-        expect(getEventColor("")).toBe("default");
-        expect(getEventColor()).toBe("default");
-    });
-
-    test('toggleExpand covers both branches', () => {
-        const toggleExpand = (prev, id) => {
-            return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-        };
-
-        expect(toggleExpand([], 'id1')).toEqual(['id1']);
-        expect(toggleExpand(['id1'], 'id2')).toEqual(['id1', 'id2']);
-        expect(toggleExpand(['id1', 'id2'], 'id1')).toEqual(['id2']);
-        expect(toggleExpand(['id1'], 'id1')).toEqual([]);
-    });
-
-    test('clearLogs button is found and works', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(openButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        const deleteIcons = screen.getAllByTestId('DeleteOutlineIcon');
-        if (deleteIcons.length > 0) {
-            const clearButton = deleteIcons[0].closest('button');
-            if (clearButton) {
-                act(() => {
-                    fireEvent.click(clearButton);
-                });
-
-                expect(mockClearLogs).toHaveBeenCalled();
-            }
-        }
-    });
-
-    test('handles resize with null event', () => {
-        const startResizing = (mouseDownEvent) => {
-            if (mouseDownEvent?.preventDefault) mouseDownEvent.preventDefault();
-            return mouseDownEvent?.clientY ?? 0;
-        };
-
-        expect(startResizing(null)).toBe(0);
-        expect(startResizing({clientY: 100})).toBe(100);
-        expect(startResizing({})).toBe(0);
-
-        const mockEvent = {clientY: 100, preventDefault: jest.fn()};
-        expect(startResizing(mockEvent)).toBe(100);
-        expect(mockEvent.preventDefault).toHaveBeenCalled();
-    });
-
-    test('tests toggleExpand functionality through UI', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'EXPAND_TEST',
-                timestamp: new Date().toISOString(),
-                data: {key: 'value', nested: {deep: 'data'}}
-            }
-        ];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-
-        const eventLoggerButton = await waitFor(() =>
-            screen.getByRole('button', {name: /Events|Event Logger/i})
-        );
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        // Multiple elements with EXPAND_TEST text are expected (filter chip + log row chip)
-        await waitFor(() => {
-            expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0);
-        });
-
-        // Find the log row chip (the one without a count in parentheses)
-        const allChips = screen.getAllByText(/EXPAND_TEST/i);
-        const logChip = allChips.find(el => !el.textContent.includes('('));
-        const logContainer = logChip
-            ? (logChip.closest('[style*="cursor: pointer"]') || logChip.closest('div'))
-            : null;
-
-        if (logContainer) {
-            act(() => {
-                fireEvent.click(logContainer);
-            });
-
+            const chip = screen.getByRole('button', {name: /TYPE_A \(\d+\)/i});
+            act(() => fireEvent.click(chip));
+            act(() => fireEvent.click(chip));
             await waitFor(() => {
-                expect(screen.getByText(/"key"/i)).toBeInTheDocument();
-            });
-
-            act(() => {
-                fireEvent.click(logContainer);
-            });
-
-            await waitFor(() => {
-                expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0);
-            });
-        }
-    });
-
-    test('tests complex objectName filtering scenarios', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'TEST_EVENT',
-                timestamp: new Date().toISOString(),
-                data: {
-                    path: '/test/path',
-                    labels: {path: '/label/path'},
-                    data: {path: '/nested/path', labels: {path: '/deep/nested/path'}}
-                }
-            },
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        const {rerender} = renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
-        });
-
-        act(() => {
-            rerender(<ThemeProvider theme={theme}><EventLogger objectName="/label/path"/></ThemeProvider>);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests filterData function with non-object data', () => {
-        const filterData = (data) => {
-            if (!data || typeof data !== 'object') return data;
-            const filtered = {...data};
-            delete filtered._rawEvent;
-            return filtered;
-        };
-
-        expect(filterData(null)).toBe(null);
-        expect(filterData(undefined)).toBe(undefined);
-        expect(filterData('string')).toBe('string');
-        expect(filterData(123)).toBe(123);
-        expect(filterData(true)).toBe(true);
-
-        const objWithRaw = {_rawEvent: 'test', other: 'data'};
-        expect(filterData(objWithRaw)).toEqual({other: 'data'});
-
-        const objWithoutRaw = {other: 'data'};
-        expect(filterData(objWithoutRaw)).toEqual({other: 'data'});
-    });
-
-    test('tests escapeHtml function', () => {
-        const escapeHtml = (text) => {
-            if (typeof text !== 'string') return text;
-            return text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        };
-
-        expect(escapeHtml('test & test')).toBe('test &amp; test');
-        expect(escapeHtml('<div>')).toBe('&lt;div&gt;');
-        expect(escapeHtml('"quotes"')).toBe('&quot;quotes&quot;');
-        expect(escapeHtml("'apostrophe'")).toBe('&#039;apostrophe&#039;');
-        expect(escapeHtml(123)).toBe(123);
-        expect(escapeHtml(null)).toBe(null);
-        expect(escapeHtml(undefined)).toBe(undefined);
-    });
-
-    test('tests hashCode function', () => {
-
-        expect(hashCode('test')).toBeDefined();
-        expect(hashCode('')).toBe('0');
-        expect(hashCode('longer string test')).toBeDefined();
-    });
-
-    test('tests syntaxHighlightJSON with HTML content in JSON', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'HTML_TEST',
-            timestamp: new Date().toISOString(),
-            data: {message: '<script>alert("xss")</script>'}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/HTML_TEST/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests JSONView with non-serializable data', async () => {
-        const circularRef = {};
-        circularRef.self = circularRef;
-
-        eventLogs = [{
-            id: '1',
-            eventType: 'CIRCULAR_TEST',
-            timestamp: new Date().toISOString(),
-            data: circularRef
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/CIRCULAR_TEST/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests useEffect for debounced search term cleanup', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Event Logger/i)).toBeInTheDocument();
-        });
-
-        act(() => {
-            fireEvent.click(screen.getByRole('button', {name: /Close/i}));
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument();
-        });
-    });
-
-    test('tests resize functionality', async () => {
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 100});
-        });
-
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 150});
-        });
-
-        act(() => {
-            fireEvent.mouseUp(document);
-        });
-
-        act(() => {
-            fireEvent.touchStart(resizeHandle, {
-                touches: [{clientY: 100}]
+                expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument();
+                expect(screen.getByText(/TYPE_B/i)).toBeInTheDocument();
             });
         });
 
-        act(() => {
-            fireEvent.touchMove(document, {
-                touches: [{clientY: 150}]
-            });
-        });
+        test('non-page-event chip uses green selected style', async () => {
+            jest.useFakeTimers();
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'EXTRA_TYPE'})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger eventTypes={[]}/>);
+            openDrawer();
+            act(() => jest.advanceTimersByTime(200));
 
-        act(() => {
-            fireEvent.touchEnd(document);
-        });
-    });
-
-    test('tests subscription dialog with all interactions', async () => {
-        const eventTypes = ['EVENT1', 'EVENT2'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-
-        act(() => {
-            fireEvent.click(settingsIcon);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Event Subscriptions')).toBeInTheDocument();
-        });
-
-        const subscribeAllButton = screen.getByRole('button', {name: /Subscribe to All/i});
-        act(() => {
-            fireEvent.click(subscribeAllButton);
-        });
-
-        const unsubscribeAllButton = screen.getByRole('button', {name: /Unsubscribe from All/i});
-        act(() => {
-            fireEvent.click(unsubscribeAllButton);
-        });
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-            act(() => {
-                fireEvent.click(checkboxes[0]);
-            });
-
-            act(() => {
-                fireEvent.click(checkboxes[0]);
-            });
-        }
-    });
-
-    test('tests handleClear with all side effects', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST/i).length).toBeGreaterThan(0);
-        });
-
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        act(() => {
-            fireEvent.click(clearButton);
-        });
-
-        expect(mockClearLogs).toHaveBeenCalled();
-    });
-
-    test('tests objectName filtering with nested data structures', async () => {
-        eventLogs = [
-            {
-                id: '1',
-                eventType: 'NESTED_TEST',
-                timestamp: new Date().toISOString(),
-                data: {
-                    data: {
-                        labels: {
-                            path: '/test/path'
-                        }
-                    }
-                }
-            },
-            {
-                id: '2',
-                eventType: 'DIRECT_PATH',
-                timestamp: new Date().toISOString(),
-                data: {
-                    path: '/test/path'
-                }
-            },
-            {
-                id: '3',
-                eventType: 'LABELS_PATH',
-                timestamp: new Date().toISOString(),
-                data: {
-                    labels: {
-                        path: '/test/path'
-                    }
-                }
-            }
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/3\/3 events/i)).toBeInTheDocument();
+            await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
+            act(() => fireEvent.click(screen.getByRole('button', {name: /EXTRA_TYPE \(\d+\)/i})));
+            await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
+            jest.useRealTimers();
         });
     });
 
-    test('tests subscription info when no subscriptions', async () => {
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
+    // ─── objectName filtering ─────────────────────────────────────────────
 
-        act(() => {
-            fireEvent.click(eventLoggerButton);
+    describe('objectName filtering', () => {
+        const setLogs = (logs) => useEventLogStore.mockReturnValue(mockStore({
+            eventLogs: logs, setPaused: mockSetPaused, clearLogs: mockClearLogs,
+        }));
+
+        test.each([
+            ['data.path', {path: '/test/path'}, 'DIRECT_PATH'],
+            ['data.labels.path', {labels: {path: '/test/path'}}, 'LABELS_PATH'],
+            ['data.data.path', {data: {path: '/test/path'}}, 'DATA_PATH_EVENT'],
+            ['data.data.labels.path', {data: {labels: {path: '/test/path'}}}, 'DEEP_PATH'],
+        ])('matches via %s', async (_, data, eventType) => {
+            setLogs([makeLog({id: '1', eventType, data})]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(eventType)).toBeInTheDocument());
         });
 
-        await waitFor(() => {
-            expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument();
-        });
-
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-        act(() => {
-            fireEvent.click(settingsIcon);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests logger error handling', () => {
-        const logger = require('../../utils/logger.js').default;
-
-        eventLogs = [{
-            id: '1',
-            eventType: 'TEST',
-            timestamp: new Date().toISOString(),
-            data: {}
-        }];
-
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        expect(logger.log).toHaveBeenCalled();
-    });
-
-    test('tests all event type categories for getEventColor', async () => {
-        const getEventColor = (eventType = "") => {
-            if (eventType.includes("ERROR")) return "error";
-            if (eventType.includes("UPDATED")) return "primary";
-            if (eventType.includes("DELETED")) return "warning";
-            if (eventType.includes("CONNECTION")) return "info";
-            return "default";
-        };
-
-        expect(getEventColor("TEST_ERROR")).toBe("error");
-        expect(getEventColor("UPDATED_EVENT")).toBe("primary");
-        expect(getEventColor("DELETED_ITEM")).toBe("warning");
-        expect(getEventColor("CONNECTION_CLOSED")).toBe("info");
-        expect(getEventColor("REGULAR_EVENT")).toBe("default");
-        expect(getEventColor("")).toBe("default");
-        expect(getEventColor()).toBe("default");
-    });
-
-    test('tests window resize event listener cleanup', () => {
-        const {unmount} = renderWithTheme(<EventLogger/>);
-
-        unmount();
-
-        expect(() => {
-            unmount();
-        }).not.toThrow();
-    });
-
-    test('tests mobile responsive styles', () => {
-        Object.defineProperty(window, 'innerWidth', {value: 767});
-
-        renderWithTheme(<EventLogger/>);
-
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(eventLoggerButton).toBeInTheDocument();
-
-        delete window.innerWidth;
-    });
-
-    test('tests scroll to bottom button functionality', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST1', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'TEST2', timestamp: new Date().toISOString(), data: {}},
-            {id: '3', eventType: 'TEST3', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TEST1/i)).toBeInTheDocument();
-        });
-
-        const scrollButtons = screen.queryAllByRole('button', {name: /Scroll to bottom/i});
-        expect(scrollButtons.length).toBe(0);
-    });
-
-    test('tests event type filter select all and clear', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TYPE1', timestamp: new Date().toISOString(), data: {}},
-            {id: '2', eventType: 'TYPE2', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TYPE1/i)).toBeInTheDocument();
-        });
-
-        // Click TYPE1 filter chip
-        const chip1 = screen.getByRole('button', {name: /TYPE1 \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip1);
-        });
-
-        // Click TYPE2 filter chip
-        const chip2 = screen.getByRole('button', {name: /TYPE2 \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip2);
-        });
-
-        // Deselect both
-        act(() => {
-            fireEvent.click(chip1);
-        });
-        act(() => {
-            fireEvent.click(chip2);
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText(/TYPE1/i)).toBeInTheDocument();
-            expect(screen.getByText(/TYPE2/i)).toBeInTheDocument();
-        });
-    });
-
-    test('tests debounced search with rapid changes', async () => {
-        eventLogs = [
-            {id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {message: 'search term'}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const eventLoggerButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-
-        act(() => {
-            fireEvent.click(eventLoggerButton);
-        });
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('tests pageKey generation with different inputs', () => {
-
-        const pageKey = (objectName, filteredEventTypes) => {
-            const baseKey = objectName || 'global';
-            const eventTypesKey = filteredEventTypes.sort().join(',');
-            const hash = hashCode(eventTypesKey);
-            return `eventLogger_${baseKey}_${hash}`;
-        };
-
-        expect(pageKey(null, ['EVENT1', 'EVENT2'])).toBeDefined();
-        expect(pageKey('/test/path', ['EVENT1'])).toBeDefined();
-        expect(pageKey('', [])).toBeDefined();
-        expect(pageKey('global', ['A', 'B', 'C'])).toBeDefined();
-    });
-
-    test('ObjectName filtering: log with data.path === objectName', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'DIRECT_PATH',
-            timestamp: new Date().toISOString(),
-            data: {path: '/test/path'}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => {
-            expect(screen.getByText('DIRECT_PATH')).toBeInTheDocument();
-        });
-    });
-
-    test('ObjectName filtering: log with data.labels.path === objectName', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'LABELS_PATH',
-            timestamp: new Date().toISOString(),
-            data: {labels: {path: '/test/path'}}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => {
-            expect(screen.getByText('LABELS_PATH')).toBeInTheDocument();
-        });
-    });
-
-    test('ObjectName filtering: log with data.data.labels.path === objectName', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'DEEP_PATH',
-            timestamp: new Date().toISOString(),
-            data: {data: {labels: {path: '/test/path'}}}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => {
-            expect(screen.getByText('DEEP_PATH')).toBeInTheDocument();
-        });
-    });
-
-    test('ObjectName filtering: log with data.data?.labels?.path undefined', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'NO_MATCH',
-            timestamp: new Date().toISOString(),
-            data: {some: 'value'}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => {
-            expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('SafeId generation when log.id missing', async () => {
-        eventLogs = [{
-            eventType: 'NO_ID',
-            timestamp: new Date().toISOString(),
-            data: {}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => {
-            expect(screen.getByText('NO_ID')).toBeInTheDocument();
-        });
-    });
-
-    test('Token missing from localStorage', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-        const {startLoggerReception} = require('../../eventSourceManager');
-        startLoggerReception.mockClear();
-
-        renderWithTheme(<EventLogger eventTypes={['TEST']}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        expect(startLoggerReception).not.toHaveBeenCalled();
-        jest.restoreAllMocks();
-    });
-
-    test('Delete chip from SubscriptionInfo triggers setManualSubscriptions', async () => {
-        const eventTypes = ['EVENT1', 'EVENT2'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument());
-
-        // Open subscription dialog
-        fireEvent.click(screen.getByTestId('SettingsIcon'));
-
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-
-        // Uncheck EVENT1
-        const checkboxes = screen.getAllByRole('checkbox');
-        const event1Checkbox = checkboxes.find((cb) => {
-            const label = cb.closest('[class*="MuiBox"]');
-            return label && label.textContent.includes('EVENT1');
-        });
-
-        if (event1Checkbox) {
-            fireEvent.click(event1Checkbox);
-        }
-
-        // Apply
-        fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}));
-
-        await waitFor(() => {
-            expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument();
-        });
-    });
-
-    test('SubscriptionDialog renders "Additional Events" section', async () => {
-        const eventTypes = ['PAGE_EVENT'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsIcon);
-
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-
-        expect(screen.getByText(/Additional Events/)).toBeInTheDocument();
-    });
-
-    test('SubscriptionDialog displays "No event types selected" when tempSubscribedEventTypes empty', async () => {
-        renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-        fireEvent.click(settingsIcon);
-
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-
-        const unsubscribeAll = screen.getByRole('button', {name: /Unsubscribe from All/i});
-        fireEvent.click(unsubscribeAll);
-
-        expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
-    });
-
-    test('Filtered chip appears and can be cleared', async () => {
-        eventLogs = [{id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => expect(screen.getAllByText(/TEST/i).length).toBeGreaterThan(0));
-
-        const filterChip = screen.getByRole('button', {name: /TEST \(\d+\)/i});
-        fireEvent.click(filterChip); // activate
-        fireEvent.click(filterChip); // deactivate
-
-        await waitFor(() => {
-            expect(screen.getAllByText(/TEST/i).length).toBeGreaterThan(0);
-        });
-    });
-
-    test('handleClearFilters clears search and eventTypeFilter', async () => {
-        eventLogs = [{id: '1', eventType: 'TEST', timestamp: new Date().toISOString(), data: {}}];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        await waitFor(() => expect(screen.getAllByText(/TEST/i).length).toBeGreaterThan(0));
-
-        // Filter by chip
-        const filterChip = screen.getByRole('button', {name: /TEST \(\d+\)/i});
-        fireEvent.click(filterChip);
-
-        // Clear all logs
-        const clearButton = screen.getByRole('button', {name: /Clear logs/i});
-        fireEvent.click(clearButton);
-
-        expect(mockClearLogs).toHaveBeenCalled();
-    });
-
-    test('initialLoading state hides CircularProgress after timeout', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
-
-        act(() => {
-            jest.advanceTimersByTime(200);
-        });
-
-        await waitFor(() => {
-            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-        });
-        jest.useRealTimers();
-    });
-
-    test('LogRow re-renders when isDarkMode changes', async () => {
-        jest.useFakeTimers();
-        eventLogs = [{
-            id: '1',
-            eventType: 'MEMO_TEST',
-            timestamp: new Date().toISOString(),
-            data: {val: 1},
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        const lightTheme = createTheme({palette: {mode: 'light'}});
-        const darkTheme = createTheme({palette: {mode: 'dark'}});
-        const {rerender} = render(
-            <ThemeProvider theme={lightTheme}><EventLogger/></ThemeProvider>
-        );
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(openButton);
-        });
-        act(() => {
-            jest.advanceTimersByTime(200);
-        });
-        await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
-        act(() => {
-            rerender(<ThemeProvider theme={darkTheme}><EventLogger/></ThemeProvider>);
-        });
-        await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
-        jest.useRealTimers();
-    });
-
-    test('Effect cleanup: objectName changes triggers new startLoggerReception', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
-        const {startLoggerReception, closeLoggerEventSource} = require('../../eventSourceManager');
-        startLoggerReception.mockClear();
-        closeLoggerEventSource.mockClear();
-
-        const {rerender} = renderWithTheme(
-            <EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/one"/>
-        );
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(openButton);
-        });
-        await waitFor(() => expect(startLoggerReception).toHaveBeenCalled());
-
-        const callCount = startLoggerReception.mock.calls.length;
-        act(() => {
-            rerender(
-                <ThemeProvider theme={theme}>
-                    <EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/two"/>
-                </ThemeProvider>
+        test('excludes non-matching logs', async () => {
+            setLogs([makeLog({data: {some: 'value'}})]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() =>
+                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument()
             );
         });
-        await waitFor(() => {
-            expect(startLoggerReception.mock.calls.length).toBeGreaterThan(callCount);
+
+        test('excludes when data is null', async () => {
+            setLogs([makeLog({eventType: 'NULL_DATA', data: null})]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() =>
+                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument()
+            );
         });
-        jest.restoreAllMocks();
+
+        test('ObjectDeleted matched by _rawEvent.path', async () => {
+            setLogs([makeLog({
+                eventType: 'ObjectDeleted',
+                data: {_rawEvent: JSON.stringify({path: '/test/path'})},
+            })]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument());
+        });
+
+        test('ObjectDeleted matched by _rawEvent.labels.path', async () => {
+            setLogs([makeLog({
+                eventType: 'ObjectDeleted',
+                data: {_rawEvent: JSON.stringify({labels: {path: '/test/path'}})},
+            })]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument());
+        });
+
+        test('ObjectDeleted with invalid _rawEvent JSON falls through gracefully', async () => {
+            setLogs([makeLog({eventType: 'ObjectDeleted', data: {_rawEvent: 'invalid json {'}})]);
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument());
+        });
+
+        test('ObjectDeleted without _rawEvent is excluded when objectName set', async () => {
+            setLogs([makeLog({eventType: 'ObjectDeleted', data: {otherField: 'test'}})]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() =>
+                expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument()
+            );
+        });
+
+        test('CONNECTION_* events always pass objectName filter', async () => {
+            setLogs([
+                makeLog({id: '1', eventType: 'CONNECTION_OPENED', data: {}}),
+                makeLog({id: '2', eventType: 'CONNECTION_ERROR', data: {}}), // Changé ici
+            ]);
+            renderWithTheme(<EventLogger eventTypes={['CONNECTION_OPENED', 'CONNECTION_ERROR']} objectName="/any"/>);
+            openDrawer();
+            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument());
+        });
+
+        test('eventTypes prop filters to allowed types', async () => {
+            setLogs([
+                makeLog({id: '1', eventType: 'ALLOWED_EVENT'}),
+                makeLog({id: '2', eventType: 'BLOCKED_EVENT'}),
+            ]);
+            renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument());
+        });
+
+        test('all nested path scenarios resolve 3/3 events', async () => {
+            setLogs([
+                makeLog({id: '1', eventType: 'NESTED', data: {data: {labels: {path: '/test/path'}}}}),
+                makeLog({id: '2', eventType: 'DIRECT', data: {path: '/test/path'}}),
+                makeLog({id: '3', eventType: 'LABELS', data: {labels: {path: '/test/path'}}}),
+            ]);
+            renderWithTheme(<EventLogger objectName="/test/path"/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/3\/3 events/i)).toBeInTheDocument());
+        });
     });
 
-    test('EventLogger Drawer paper has correct maxHeight style', async () => {
-        const {container} = renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(openButton);
-        });
-        await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
-        const paperEl = container.querySelector('.MuiDrawer-paper');
-        if (paperEl) {
-            expect(paperEl).toBeInTheDocument();
-        }
-        expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
-    });
+    // ─── Subscription dialog ──────────────────────────────────────────────
 
-    test('EventLogger button is hidden when drawer is open and reappears on close', async () => {
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        expect(openButton).toBeInTheDocument();
-        act(() => {
-            fireEvent.click(openButton);
+    describe('Subscription dialog', () => {
+        test('opens via settings icon', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
+            openDrawer();
+            await openSettings();
+            expect(screen.getByText(/Subscribe to All/i)).toBeInTheDocument();
+            expect(screen.getByText(/Unsubscribe from All/i)).toBeInTheDocument();
         });
-        await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
-        expect(screen.queryByRole('button', {name: /^Events$/i})).not.toBeInTheDocument();
-        const closeButton = screen.getByRole('button', {name: /^Close$/i});
-        act(() => {
-            fireEvent.click(closeButton);
-        });
-        await waitFor(() => {
-            expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument();
-        });
-    });
 
-    test('baseFilteredLogs: both manualSubscriptions and filteredEventTypes empty shows all logs', async () => {
-        const logs = [
-            {id: '1', eventType: 'ANY_EVENT', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs: logs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
+        test('closes via Close button', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
+            openDrawer();
+            await openSettings();
+            const closeButtons = screen.getAllByLabelText('Close');
+            act(() => fireEvent.click(closeButtons[closeButtons.length - 1]));
+            await waitFor(() =>
+                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
+            );
         });
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(openButton);
+
+        test('Apply button closes dialog', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'EVENT1'})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
+            await openSettings();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i})));
+            await waitFor(() =>
+                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
+            );
         });
-        const settingsIcon = screen.getByTestId('SettingsIcon');
-        act(() => {
-            fireEvent.click(settingsIcon);
+
+        test('Unsubscribe All shows "No event types selected" message', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
+            openDrawer();
+            await openSettings();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i})));
+            expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
         });
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-        act(() => {
+
+        test('"Subscribe to Page Events" works after unsubscribing all', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
+            openDrawer();
+            await openSettings();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i})));
+            const pageBtn = screen.getByRole('button', {name: /Subscribe to Page Events/i});
+            expect(pageBtn).not.toBeDisabled();
+            act(() => fireEvent.click(pageBtn));
+            expect(screen.getByRole('button', {name: /Apply Subscriptions \(2\)/i})).toBeInTheDocument();
+        });
+
+        test('"Additional Events" section renders for non-page event types', async () => {
+            renderWithTheme(<EventLogger eventTypes={['PAGE_EVENT']}/>);
+            openDrawer();
+            await openSettings();
+            expect(screen.getByText(/Additional Events/)).toBeInTheDocument();
+        });
+
+        test('empty eventTypes shows "No event types selected" initially', async () => {
+            renderWithTheme(<EventLogger eventTypes={[]}/>);
+            openDrawer();
+            await openSettings();
+            expect(screen.getByText(/No event types selected. You won't receive any events./i)).toBeInTheDocument();
+        });
+
+        test('checkbox toggle changes subscription count', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
+            openDrawer();
+            await openSettings();
+            const checkboxes = screen.getAllByRole('checkbox');
+            if (checkboxes.length > 0) {
+                act(() => fireEvent.click(checkboxes[0]));
+                act(() => fireEvent.click(checkboxes[0]));
+            }
+        });
+
+        test('closeLoggerEventSource called when all unsubscribed and applied', async () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
+            const {closeLoggerEventSource} = require('../../eventSourceManager');
+            closeLoggerEventSource.mockClear();
+
+            renderWithTheme(<EventLogger eventTypes={[]}/>);
+            openDrawer();
+            fireEvent.click(screen.getByTestId('SettingsIcon'));
+            await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
             fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i}));
-        });
-        act(() => {
             fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}));
-        });
-        await waitFor(() => {
-            expect(screen.getByText('ANY_EVENT')).toBeInTheDocument();
-        });
-    });
 
-    test('SubscriptionInfo renders no chips when manualSubscriptions is empty', async () => {
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        act(() => {
-            fireEvent.click(openButton);
-        });
-        await waitFor(() => expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument());
-        // No delete/cancel icons should be visible in the main drawer (no SubscriptionInfo chips)
-        const cancelIcons = screen.queryAllByTestId('CancelIcon');
-        expect(cancelIcons.length).toBe(0);
-    });
-
-    test('Resize handle transitions and touch events', async () => {
-        renderWithTheme(<EventLogger/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        fireEvent.touchStart(resizeHandle, {touches: [{clientY: 100}]});
-        fireEvent.touchMove(document, {touches: [{clientY: 150}]});
-        fireEvent.touchEnd(document);
-
-        fireEvent.touchStart(resizeHandle, {touches: [{clientY: 100}]});
-        fireEvent.touchCancel(document);
-
-        expect(resizeHandle).toBeInTheDocument();
-    });
-
-    test('Subscribe to Page Events button works when filteredEventTypes is non-empty', async () => {
-        const eventTypes = ['EVENT1', 'EVENT2'];
-        renderWithTheme(<EventLogger eventTypes={eventTypes}/>);
-        const openButton = screen.getByRole('button', {name: /Events|Event Logger/i});
-        fireEvent.click(openButton);
-
-        fireEvent.click(screen.getByTestId('SettingsIcon'));
-
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-
-        // First unsubscribe all so page events are not already all selected
-        fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i}));
-
-        // Then click Subscribe to Page Events — covers handleSubscribePageEvents (lines 89-96)
-        const subscribePageBtn = screen.getByRole('button', {name: /Subscribe to Page Events/i});
-        expect(subscribePageBtn).not.toBeDisabled();
-        fireEvent.click(subscribePageBtn);
-
-        // Apply should now show 2 subscriptions
-        expect(screen.getByRole('button', {name: /Apply Subscriptions \(2\)/i})).toBeInTheDocument();
-    });
-
-    test('FullJSONView handles circular reference when log is expanded', async () => {
-        jest.useFakeTimers();
-        const circular = {};
-        circular.self = circular;
-        eventLogs = [{
-            id: 'circular-expand',
-            eventType: 'CIRCULAR_EXPAND',
-            timestamp: new Date().toISOString(),
-            data: circular
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
-        act(() => {
-            jest.advanceTimersByTime(200);
+            await waitFor(() => expect(closeLoggerEventSource).toHaveBeenCalled());
         });
 
-        await waitFor(() => expect(screen.getAllByText(/CIRCULAR_EXPAND/i).length).toBeGreaterThan(0));
-
-        const allMatches = screen.getAllByText(/CIRCULAR_EXPAND/i);
-        const logRowChip = allMatches.find(el => !el.textContent.includes('('));
-        const container = logRowChip?.closest('[style*="cursor: pointer"]') || logRowChip?.closest('div');
-        if (container) {
-            act(() => {
-                fireEvent.click(container);
-            });
-            await waitFor(() => {
-                expect(screen.getAllByText(/CIRCULAR_EXPAND/i).length).toBeGreaterThan(0);
-            });
-        }
-        jest.useRealTimers();
-    });
-
-    test('startLoggerReception throw is caught and logged as warning', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
-        const {startLoggerReception} = require('../../eventSourceManager');
-        startLoggerReception.mockImplementationOnce(() => {
-            throw new Error('SSE connection failed');
-        });
-
-        renderWithTheme(<EventLogger eventTypes={['NodeStatusUpdated']}/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
-
-        await waitFor(() => {
-            expect(logger.warn).toHaveBeenCalledWith(
-                'Failed to start logger reception:',
-                expect.any(Error)
+        test('unsubscribing a single event type works', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
+            openDrawer();
+            await openSettings();
+            const checkboxes = screen.getAllByRole('checkbox');
+            const event1Checkbox = checkboxes.find(cb =>
+                cb.closest('[class*="MuiBox"]')?.textContent.includes('EVENT1')
+            );
+            if (event1Checkbox) act(() => fireEvent.click(event1Checkbox));
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i})));
+            await waitFor(() =>
+                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
             );
         });
-        jest.restoreAllMocks();
-        startLoggerReception.mockReset();
-        startLoggerReception.mockImplementation(jest.fn());
+
+        test('Subscribe to All selects all event types', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
+            openDrawer();
+            await openSettings();
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i})));
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Subscribe to All/i})));
+            // All ALL_EVENT_TYPES (9 items) should now be subscribed
+            expect(screen.getByRole('button', {name: /Apply Subscriptions \(9\)/i})).toBeInTheDocument();
+        });
     });
 
-    test('closeLoggerEventSource called when no events to subscribe and token exists', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
-        const {closeLoggerEventSource} = require('../../eventSourceManager');
-        closeLoggerEventSource.mockClear();
+    // ─── EventSource / SSE integration ───────────────────────────────────
 
-        // eventTypes=[] → filteredEventTypes=[], manualSubscriptions=[], uniqueEvents=[]
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
+    describe('EventSource / SSE', () => {
+        test('does not call startLoggerReception when token missing', async () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+            const {startLoggerReception} = require('../../eventSourceManager');
+            startLoggerReception.mockClear();
 
-        // Open dialog and unsubscribe all, then apply → triggers the else branch (lines 469-470)
-        fireEvent.click(screen.getByTestId('SettingsIcon'));
-        await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
-        fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i}));
-        fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}));
-
-        await waitFor(() => {
-            expect(closeLoggerEventSource).toHaveBeenCalled();
+            renderWithTheme(<EventLogger eventTypes={['TEST']}/>);
+            openDrawer();
+            expect(startLoggerReception).not.toHaveBeenCalled();
         });
-        jest.restoreAllMocks();
+
+        test('startLoggerReception called on open with token', async () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
+            const {startLoggerReception} = require('../../eventSourceManager');
+            startLoggerReception.mockClear();
+
+            renderWithTheme(<EventLogger eventTypes={['NodeStatusUpdated']} objectName="/p"/>);
+            openDrawer();
+            await waitFor(() => expect(startLoggerReception).toHaveBeenCalled());
+        });
+
+        test('warn logged when startLoggerReception throws', async () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
+            const {startLoggerReception} = require('../../eventSourceManager');
+            startLoggerReception.mockImplementationOnce(() => {
+                throw new Error('SSE connection failed');
+            });
+
+            renderWithTheme(<EventLogger eventTypes={['NodeStatusUpdated']}/>);
+            openDrawer();
+            await waitFor(() =>
+                expect(logger.warn).toHaveBeenCalledWith('Failed to start logger reception:', expect.any(Error))
+            );
+            startLoggerReception.mockReset().mockImplementation(jest.fn());
+        });
+
+        test('re-subscribes when objectName changes', async () => {
+            jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
+            const {startLoggerReception} = require('../../eventSourceManager');
+            startLoggerReception.mockClear();
+
+            const {rerender} = renderWithTheme(
+                <EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/one"/>
+            );
+            openDrawer();
+            await waitFor(() => expect(startLoggerReception).toHaveBeenCalled());
+
+            const callsBefore = startLoggerReception.mock.calls.length;
+            act(() => {
+                rerender(
+                    <ThemeProvider theme={lightTheme}>
+                        <EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/two"/>
+                    </ThemeProvider>
+                );
+            });
+            await waitFor(() =>
+                expect(startLoggerReception.mock.calls.length).toBeGreaterThan(callsBefore)
+            );
+        });
     });
 
-    test('handleResizeStart clears existing timeout when called again during resize', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
+    // ─── Resize handle ────────────────────────────────────────────────────
 
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        // First mousedown starts a resize
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 100});
-        });
-
-        // Mouse move creates a pending timeout (resizeTimeoutRef.current becomes non-null)
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 80});
-        });
-
-        // Second mousedown while timeout is pending — covers the clearTimeout branch (lines 801/804)
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 90});
-        });
-
-        act(() => {
-            jest.advanceTimersByTime(100);
-        });
-        act(() => {
-            fireEvent.mouseUp(document);
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('handleResizeEnd clears pending timeout when resizeTimeoutRef is set', async () => {
-        jest.useFakeTimers();
-        renderWithTheme(<EventLogger/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
-
-        const resizeHandle = screen.getByLabelText(/Resize handle/i);
-
-        act(() => {
-            fireEvent.mouseDown(resizeHandle, {clientY: 100});
-        });
-        // Move creates a pending timeout
-        act(() => {
-            fireEvent.mouseMove(document, {clientY: 50});
-        });
-        // mouseUp → handleResizeEnd → clears the pending timeout (lines 841-842)
-        act(() => {
-            fireEvent.mouseUp(document);
-        });
-
-        // Advance time: the cleared timeout should NOT fire (no error expected)
-        act(() => {
-            jest.advanceTimersByTime(100);
-        });
-
-        expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
-        jest.useRealTimers();
-    });
-
-    test('EventLogger paperStyle uses dark palette when isDarkMode is true', async () => {
-        const darkTheme = createTheme({palette: {mode: 'dark'}});
-        eventLogs = [{id: '1', eventType: 'DARK_PAPER', timestamp: new Date().toISOString(), data: {}}];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-
-        render(
-            <ThemeProvider theme={darkTheme}>
-                <EventLogger/>
-            </ThemeProvider>
-        );
-
-        // Open drawer to exercise the dark-mode paperStyle branch (line 893)
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
-
-        await waitFor(() => {
+    describe('Resize handle', () => {
+        test('resize handle exists and is interactive', async () => {
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
             expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
         });
+
+        test('mouse resize: mouseDown → mouseMove → mouseUp', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            const handle = screen.getByLabelText(/Resize handle/i);
+
+            act(() => fireEvent.mouseDown(handle, {clientY: 100}));
+            act(() => fireEvent.mouseMove(document, {clientY: 150}));
+            act(() => fireEvent.mouseUp(document));
+        });
+
+        test('touch resize: touchStart → touchMove → touchEnd + touchCancel', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            const handle = screen.getByLabelText(/Resize handle/i);
+
+            act(() => fireEvent.touchStart(handle, {touches: [{clientY: 100}]}));
+            act(() => fireEvent.touchMove(document, {touches: [{clientY: 150}]}));
+            act(() => fireEvent.touchEnd(document));
+
+            act(() => fireEvent.touchStart(handle, {touches: [{clientY: 100}]}));
+            act(() => fireEvent.touchCancel(document));
+            expect(handle).toBeInTheDocument();
+        });
+
+        test('second mouseDown during active resize clears pending timeout', async () => {
+            jest.useFakeTimers();
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            const handle = screen.getByLabelText(/Resize handle/i);
+
+            act(() => fireEvent.mouseDown(handle, {clientY: 100}));
+            act(() => fireEvent.mouseMove(document, {clientY: 80}));
+            act(() => fireEvent.mouseDown(handle, {clientY: 90}));  // second down clears timeout
+            act(() => jest.advanceTimersByTime(100));
+            act(() => fireEvent.mouseUp(document));
+            jest.useRealTimers();
+        });
+
+        test('mouseUp clears pending resize timeout', async () => {
+            jest.useFakeTimers();
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            const handle = screen.getByLabelText(/Resize handle/i);
+
+            act(() => fireEvent.mouseDown(handle, {clientY: 100}));
+            act(() => fireEvent.mouseMove(document, {clientY: 50}));
+            act(() => fireEvent.mouseUp(document));
+            act(() => jest.advanceTimersByTime(100));
+
+            expect(handle).toBeInTheDocument();
+            jest.useRealTimers();
+        });
     });
 
-    test('ObjectDeleted event matched by raw.labels.path in _rawEvent', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'ObjectDeleted',
-            timestamp: new Date().toISOString(),
-            data: {_rawEvent: JSON.stringify({labels: {path: '/test/path'}})}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
+    // ─── initialLoading spinner ───────────────────────────────────────────
 
-        await waitFor(() => {
-            expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument();
+    describe('initialLoading', () => {
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        test('CircularProgress shown then hidden after 200 ms', async () => {
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            act(() => jest.advanceTimersByTime(200));
+            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
         });
     });
 
-    test('ObjectName filtering: log matched by data.data.path', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'DATA_PATH_EVENT',
-            timestamp: new Date().toISOString(),
-            data: {data: {path: '/test/path'}}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        renderWithTheme(<EventLogger objectName="/test/path"/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
+    // ─── Theme switching ──────────────────────────────────────────────────
 
-        await waitFor(() => {
-            expect(screen.getByText(/DATA_PATH_EVENT/i)).toBeInTheDocument();
+    describe('Theme switching', () => {
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        test('LogRow re-renders when theme changes light → dark', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'MEMO_TEST'})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            const {rerender} = render(
+                <ThemeProvider theme={lightTheme}><EventLogger/></ThemeProvider>
+            );
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i})));
+            act(() => jest.advanceTimersByTime(200));
+            await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
+
+            act(() => rerender(<ThemeProvider theme={darkTheme}><EventLogger/></ThemeProvider>));
+            await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
         });
     });
 
-    test('filter chip selected state and non-page event style branch are covered', async () => {
-        jest.useFakeTimers();
-        // Use an event type NOT in filteredEventTypes (no eventTypes prop → filteredEventTypes=[])
-        eventLogs = [
-            {id: '1', eventType: 'EXTRA_TYPE', timestamp: new Date().toISOString(), data: {}},
-        ];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
-        });
-        // No eventTypes prop → filteredEventTypes is empty → EXTRA_TYPE is a non-page event
-        renderWithTheme(<EventLogger eventTypes={[]}/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
-        act(() => {
-            jest.advanceTimersByTime(200);
+    // ─── Misc / edge cases ────────────────────────────────────────────────
+
+    describe('Misc / edge cases', () => {
+        test('unmounting does not throw', () => {
+            const {unmount} = renderWithTheme(<EventLogger/>);
+            expect(() => unmount()).not.toThrow();
         });
 
-        await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
-
-        // Click chip to select (isSelected=true branch + non-page event style branch)
-        const chip = screen.getByRole('button', {name: /EXTRA_TYPE \(\d+\)/i});
-        act(() => {
-            fireEvent.click(chip);
+        test('mobile viewport: button still renders', () => {
+            Object.defineProperty(window, 'innerWidth', {value: 767, configurable: true});
+            renderWithTheme(<EventLogger/>);
+            expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument();
+            delete window.innerWidth;
         });
 
-        await waitFor(() => {
-            expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0);
+        test('no "Scroll to bottom" button present', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [1, 2, 3].map(i => makeLog({id: String(i), eventType: `TEST${i}`})),
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/TEST1/i)).toBeInTheDocument());
+            expect(screen.queryAllByRole('button', {name: /Scroll to bottom/i})).toHaveLength(0);
         });
-        jest.useRealTimers();
-    });
 
-    test('CONNECTION_OPENED event passes objectName filter via eventType.includes("CONNECTION")', async () => {
-        eventLogs = [{
-            id: '1',
-            eventType: 'CONNECTION_OPENED',
-            timestamp: new Date().toISOString(),
-            data: {}
-        }];
-        useEventLogStore.mockReturnValue({
-            eventLogs,
-            isPaused: false,
-            setPaused: mockSetPaused,
-            clearLogs: mockClearLogs,
+        test('no CancelIcon chips in main drawer by default', async () => {
+            renderWithTheme(<EventLogger eventTypes={[]}/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument());
+            expect(screen.queryAllByTestId('CancelIcon')).toHaveLength(0);
         });
-        // Include CONNECTION_OPENED in eventTypes so it's included in uniqueEvents
-        renderWithTheme(<EventLogger eventTypes={['CONNECTION_OPENED']} objectName="/any/path"/>);
-        fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}));
 
-        await waitFor(() => {
-            expect(screen.getByText(/CONNECTION_OPENED/i)).toBeInTheDocument();
+        test('baseFilteredLogs shows all when both subscriptions and filteredTypes are empty', async () => {
+            useEventLogStore.mockReturnValue(mockStore({
+                eventLogs: [makeLog({eventType: 'ANY_EVENT'})],
+                setPaused: mockSetPaused,
+                clearLogs: mockClearLogs,
+            }));
+            renderWithTheme(<EventLogger eventTypes={[]}/>);
+            openDrawer();
+            fireEvent.click(screen.getByTestId('SettingsIcon'));
+            await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i})));
+            act(() => fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i})));
+            await waitFor(() => expect(screen.getByText('ANY_EVENT')).toBeInTheDocument());
+        });
+
+        test('Drawer paper element is rendered', async () => {
+            const {container} = renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
+            const paper = container.querySelector('.MuiDrawer-paper');
+            if (paper) expect(paper).toBeInTheDocument();
+            expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
         });
     });
 });

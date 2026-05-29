@@ -5,25 +5,38 @@ const mockLocation = {
     origin: 'https://example.com',
     pathname: '/app/subpath/index.html',
 };
-Object.defineProperty(window, 'location', {
-    value: mockLocation,
-    writable: true,
-});
+const originalWindow = global.window;
 
-// Mock fetch globally
-global.fetch = jest.fn();
+describe('oidcConfiguration (browser environment)', () => {
+    beforeAll(() => {
+        Object.defineProperty(window, 'location', {
+            value: mockLocation,
+            writable: true,
+            configurable: true,
+        });
+    });
 
-// Mock WebStorageStateStore
-jest.mock("oidc-client-ts", () => ({
-    WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
-}));
+    afterAll(() => {
+        Object.defineProperty(window, 'location', {
+            value: originalWindow.location,
+            writable: true,
+            configurable: true,
+        });
+    });
 
-describe('oidcConfiguration', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        global.fetch = jest.fn();
         console.warn = jest.fn();
         console.error = jest.fn();
+        console.debug = jest.fn();
+        console.info = jest.fn();
     });
+
+    // Mock WebStorageStateStore
+    jest.mock("oidc-client-ts", () => ({
+        WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
+    }));
 
     test('returns default configuration when authInfo is missing', async () => {
         const result = await oidcConfiguration(null);
@@ -78,7 +91,7 @@ describe('oidcConfiguration', () => {
         });
 
         const result = await oidcConfiguration(authInfo);
-        expect(String(fetch.mock.calls[0][0])).toEqual('https://auth.example.com/.well-known/openid-configuration');
+        expect(fetch.mock.calls[0][0].toString()).toBe('https://auth.example.com/.well-known/openid-configuration');
         expect(result).toEqual({
             client_id: 'test-client',
             response_type: 'code',
@@ -95,7 +108,7 @@ describe('oidcConfiguration', () => {
         });
     });
 
-    test('handles non-OK fetch response and uses default scopes', async () => {
+    test('handles non-OK fetch response and uses default scopes (no warning from filterScopes because DEFAULT_SCOPES is non-empty)', async () => {
         const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
         fetch.mockResolvedValueOnce({
             ok: false,
@@ -103,7 +116,7 @@ describe('oidcConfiguration', () => {
         });
 
         const result = await oidcConfiguration(authInfo);
-        expect(String(fetch.mock.calls[0][0])).toEqual('https://auth.example.com/.well-known/openid-configuration');
+        expect(fetch.mock.calls[0][0].toString()).toBe('https://auth.example.com/.well-known/openid-configuration');
         expect(console.warn).toHaveBeenCalledWith('Failed to fetch .well-known/openid-configuration:', 404);
         expect(result).toEqual({
             client_id: 'test-client',
@@ -129,7 +142,7 @@ describe('oidcConfiguration', () => {
         });
 
         await oidcConfiguration(authInfo);
-        expect(String(fetch.mock.calls[0][0])).toEqual('https://auth.example.com/oidc/.well-known/openid-configuration');
+        expect(fetch.mock.calls[0][0].toString()).toBe('https://auth.example.com/oidc/.well-known/openid-configuration');
     });
 
     test('handles fetch error and returns default configuration', async () => {
@@ -148,5 +161,125 @@ describe('oidcConfiguration', () => {
             automaticSilentRenew: true,
             monitorSession: true,
         });
+    });
+
+    test('uses default scopes and triggers filterScopes warning when well-known returns empty scopes_supported array', async () => {
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: []}), // Tableau vide
+        });
+
+        const result = await oidcConfiguration(authInfo);
+        expect(result.scope).toBe('openid profile email offline_access opensvc:om3 opensvc:om3:root opensvc:om3:guest opensvc:badscope');
+        expect(console.warn).toHaveBeenCalledWith('No allowed scopes provided, using default scopes');
+    });
+
+    test('uses default scopes and triggers filterScopes warning when well-known returns non-array scopes_supported', async () => {
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: {invalid: 'object'}}),
+        });
+
+        const result = await oidcConfiguration(authInfo);
+        expect(result.scope).toBe('openid profile email offline_access opensvc:om3 opensvc:om3:root opensvc:om3:guest opensvc:badscope');
+        expect(console.warn).toHaveBeenCalledWith('No allowed scopes provided, using default scopes');
+    });
+
+    test('returns empty scope when well-known scopes do not include any default scope', async () => {
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: ['foo', 'bar']}),
+        });
+
+        const result = await oidcConfiguration(authInfo);
+        expect(result.scope).toBe('');
+        expect(console.warn).not.toHaveBeenCalledWith('No allowed scopes provided, using default scopes');
+    });
+});
+
+describe('oidcConfiguration (non-browser environment)', () => {
+    let originalWindow;
+
+    beforeAll(() => {
+        originalWindow = global.window;
+        delete global.window;
+    });
+
+    afterAll(() => {
+        global.window = originalWindow;
+    });
+
+    beforeEach(() => {
+        jest.resetModules();
+        global.fetch = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+        console.debug = jest.fn();
+        console.info = jest.fn();
+    });
+
+    test('builds config with empty baseUrl and no userStore when window is undefined', async () => {
+        const oidcConfigurationNonBrowser = (await import('../oidcConfiguration')).default;
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: ['openid', 'profile']}),
+        });
+
+        const result = await oidcConfigurationNonBrowser(authInfo);
+        expect(result).toEqual({
+            client_id: 'test-client',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+            authority: 'https://auth.example.com',
+            scope: 'openid profile',
+            redirect_uri: '/auth-callback',
+            silent_redirect_uri: '/silent-renew',
+            useRefreshToken: true,
+            post_logout_redirect_uri: '/',
+            // userStore absent car isBrowser false
+        });
+        expect(result.userStore).toBeUndefined();
+    });
+});
+
+describe('oidcConfiguration (browser without localStorage)', () => {
+    let originalLocalStorage;
+
+    beforeAll(() => {
+        originalLocalStorage = global.window.localStorage;
+        delete global.window.localStorage;
+        Object.defineProperty(window, 'location', {
+            value: {origin: 'https://example.com', pathname: '/app/'},
+            writable: true,
+            configurable: true,
+        });
+    });
+
+    afterAll(() => {
+        global.window.localStorage = originalLocalStorage;
+    });
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        global.fetch = jest.fn();
+        console.warn = jest.fn();
+        console.error = jest.fn();
+    });
+
+    test('does not create userStore when localStorage is undefined', async () => {
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: ['openid']}),
+        });
+
+        const result = await oidcConfiguration(authInfo);
+        expect(result.userStore).toBeUndefined();
     });
 });

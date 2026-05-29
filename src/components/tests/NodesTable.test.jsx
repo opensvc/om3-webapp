@@ -872,13 +872,23 @@ describe('NodesTable', () => {
 
     test('getZoomLevel returns 1 when devicePixelRatio is undefined', () => {
         const originalDevicePixelRatio = window.devicePixelRatio;
-        delete window.devicePixelRatio;
+        Object.defineProperty(window, 'devicePixelRatio', {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        });
 
-        renderWithRouter(<NodesTable/>);
+        try {
+            renderWithRouter(<NodesTable/>);
 
-        expect(screen.getByText('node-1')).toBeInTheDocument();
-
-        window.devicePixelRatio = originalDevicePixelRatio;
+            expect(screen.getByText('node-1')).toBeInTheDocument();
+        } finally {
+            Object.defineProperty(window, 'devicePixelRatio', {
+                configurable: true,
+                writable: true,
+                value: originalDevicePixelRatio,
+            });
+        }
     });
 
     test('startResizing with touch events', async () => {

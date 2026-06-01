@@ -35,7 +35,6 @@ const NodeCard = ({
                       individualNodeMenuAnchorRef = null,
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
-                      parseProvisionedState = (state) => !!state,
                       instanceName,
                       onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                       onViewInstance,
@@ -49,7 +48,7 @@ const NodeCard = ({
     }
 
     const {avail, frozen, state} = getNodeState(node);
-    const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
+    const isInstanceNotProvisioned = nodeData?.provisioned === false || nodeData?.provisioned === "false";
 
     const handleCardClick = (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
@@ -112,13 +111,12 @@ const NodeCard = ({
                     </Box>
                 </Box>
 
-                {/* Bloc central : freeze / not provisioned / state, juste avant logs+status */}
                 <Box
                     sx={{
                         display: "flex",
                         alignItems: "center",
                         gap: 1,
-                        ml: "auto", // pousse ce bloc + celui de droite à droite
+                        ml: "auto",
                     }}
                     className="no-click"
                 >
@@ -138,7 +136,6 @@ const NodeCard = ({
                     {state && <Typography variant="caption">{state}</Typography>}
                 </Box>
 
-                {/* Bloc droite : logs + rond de status + bouton d’actions, fixes */}
                 <Box
                     sx={{
                         display: "flex",

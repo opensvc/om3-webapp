@@ -119,7 +119,7 @@ const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
         ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
         : validFilters;
 
-    return `replay=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
+    return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 };
 
 // Get current token
@@ -632,7 +632,7 @@ const handleAuthError = (token, url) => {
     navigationService.redirectToAuth();
 };
 
-const handleReconnection = (url, _token, filters) => {
+const handleReconnection = (url, token, filters) => {
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
         reconnectAttempts++;
 

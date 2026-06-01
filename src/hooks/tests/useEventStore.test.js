@@ -556,4 +556,295 @@ describe('useEventStore', () => {
             expect(true).toBe(true);
         });
     });
+
+    test('should skip node iteration when no own node properties', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        const proto = {node1: {status: 'active'}};
+        const instanceStatuses = {
+            object1: Object.create(proto)
+        };
+
+        act(() => {
+            setInstanceStatuses(instanceStatuses);
+        });
+
+        expect(useEventStore.getState().objectInstanceStatus).toEqual({object1: {}});
+    });
+
+    test('should merge non-encap status correctly', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'old',
+                        value: 1
+                    }
+                }
+            });
+        });
+
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {
+                        status: 'new'
+                    }
+                }
+            });
+        });
+
+        expect(useEventStore.getState().objectInstanceStatus.object1.node1).toEqual({
+            node: 'node1',
+            path: 'object1',
+            status: 'new',
+            value: 1
+        });
+    });
+
+    test('should not add duplicate configUpdates entries', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        act(() => {
+            setConfigUpdated([
+                {name: 'service1', node: 'node1'},
+            ]);
+        });
+
+        act(() => {
+            setConfigUpdated([
+                {name: 'service1', node: 'node1'},
+            ]);
+        });
+
+        expect(useEventStore.getState().configUpdates).toHaveLength(1);
+    });
+
+    test('should clear configUpdates using fullName match', () => {
+        const {setConfigUpdated, clearConfigUpdate} = useEventStore.getState();
+
+        act(() => {
+            setConfigUpdated([
+                {name: 'service1', node: 'node1'}
+            ]);
+        });
+
+        act(() => {
+            clearConfigUpdate('root/svc/service1');
+        });
+
+        expect(useEventStore.getState().configUpdates).toEqual([]);
+    });
+
+    test('should not update instanceConfig when path exists but node config is identical', () => {
+        const {setInstanceConfig} = useEventStore.getState();
+
+        act(() => {
+            setInstanceConfig('object1', 'node1', {a: 1});
+        });
+
+        const first = useEventStore.getState().instanceConfig;
+
+        act(() => {
+            setInstanceConfig('object1', 'node1', {a: 1});
+        });
+
+        const second = useEventStore.getState().instanceConfig;
+
+        expect(second).toBe(first);
+    });
+
+    test('should not update setObjectStatuses when shallowEqual true (REJECTED log)', () => {
+        const {setObjectStatuses} = useEventStore.getState();
+
+        const data = {obj1: {a: 1}};
+
+        act(() => {
+            setObjectStatuses(data);
+        });
+
+        logger.debug.mockClear();
+
+        act(() => {
+            setObjectStatuses(data);
+        });
+
+        expect(logger.debug).toHaveBeenCalledWith(
+            '⏭️ setObjectStatuses: REJECTED (no actual changes)',
+            expect.any(Object)
+        );
+    });
+
+    test('should not update setHeartbeatStatuses when shallowEqual true', () => {
+        const {setHeartbeatStatuses} = useEventStore.getState();
+
+        const data = {node1: {alive: true}};
+
+        act(() => {
+            setHeartbeatStatuses(data);
+        });
+
+        const first = useEventStore.getState().heartbeatStatus;
+
+        act(() => {
+            setHeartbeatStatuses(data);
+        });
+
+        const second = useEventStore.getState().heartbeatStatus;
+
+        expect(second).toBe(first);
+    });
+
+    test('should not update setInstanceMonitors when shallowEqual true', () => {
+        const {setInstanceMonitors} = useEventStore.getState();
+
+        const data = {obj1: {running: true}};
+
+        act(() => {
+            setInstanceMonitors(data);
+        });
+
+        const first = useEventStore.getState().instanceMonitor;
+
+        act(() => {
+            setInstanceMonitors(data);
+        });
+
+        const second = useEventStore.getState().instanceMonitor;
+
+        expect(second).toBe(first);
+    });
+
+    test('should not update setNodeStats when shallowEqual true (same reference)', () => {
+        const {setNodeStats} = useEventStore.getState();
+
+        const data = {node1: {cpu: 1}};
+
+        act(() => {
+            setNodeStats(data);
+        });
+
+        const first = useEventStore.getState().nodeStats;
+
+        act(() => {
+            setNodeStats(data);
+        });
+
+        const second = useEventStore.getState().nodeStats;
+
+        expect(second).toBe(first);
+    });
+
+    test('should return unchanged state in removeObject when nothing to delete', () => {
+        const {removeObject} = useEventStore.getState();
+
+        const before = useEventStore.getState();
+
+        act(() => {
+            removeObject('unknown');
+        });
+
+        const after = useEventStore.getState();
+
+        expect(after).toBe(before);
+    });
+
+    test('should skip adding configUpdates when computed name or node is missing', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        act(() => {
+            setConfigUpdated([
+                {name: '', node: 'node1'},
+                {name: 'svc', node: ''},
+            ]);
+        });
+
+        expect(useEventStore.getState().configUpdates).toEqual([]);
+    });
+
+    test('should handle JSON parse success but missing required fields', () => {
+        const {setConfigUpdated} = useEventStore.getState();
+
+        act(() => {
+            setConfigUpdated([
+                '{"foo":"bar"}'
+            ]);
+        });
+
+        expect(useEventStore.getState().configUpdates).toEqual([]);
+    });
+
+    test('should not update when setInstanceStatuses produces no changes (hasChanges false)', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        const data = {
+            obj1: {
+                node1: {status: 'ok'}
+            }
+        };
+
+        act(() => {
+            setInstanceStatuses(data);
+        });
+
+        const first = useEventStore.getState().objectInstanceStatus;
+
+        act(() => {
+            setInstanceStatuses(data);
+        });
+
+        const second = useEventStore.getState().objectInstanceStatus;
+
+        expect(second).toEqual(first);
+    });
+
+    test('should handle encap merge when existingData is undefined', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        act(() => {
+            setInstanceStatuses({
+                obj1: {
+                    node1: {
+                        encap: {
+                            c1: {resources: {cpu: 1}}
+                        }
+                    }
+                }
+            });
+        });
+
+        const state = useEventStore.getState();
+
+        expect(state.objectInstanceStatus.obj1.node1.encap.c1.resources).toEqual({cpu: 1});
+    });
+
+    test('should skip update when existingData and newStatus are shallow equal (continue branch)', () => {
+        const {setInstanceStatuses} = useEventStore.getState();
+
+        const data = {
+            object1: {
+                node1: {status: 'active'}
+            }
+        };
+
+        act(() => {
+            setInstanceStatuses(data);
+        });
+
+        const first = useEventStore.getState().objectInstanceStatus;
+
+        act(() => {
+            setInstanceStatuses({
+                object1: {
+                    node1: {status: 'active'}
+                }
+            });
+        });
+
+        const second = useEventStore.getState().objectInstanceStatus;
+
+        expect(second).toEqual(first);
+    });
 });

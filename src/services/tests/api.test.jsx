@@ -1,25 +1,20 @@
-import {fetchDaemonStatus} from "../api";
+import {fetchDaemonStatus, getResponseErrorMessage} from "../api";
 import {URL_CLUSTER_STATUS} from "../../config/apiPath";
 
-// Mock global fetch
 global.fetch = jest.fn();
 
-// Helper to create a mock Headers object
 const createHeaders = (contentType) => ({
     get: (key) => key === 'content-type' ? contentType : null
 });
 
-// Helper to create a mock Headers object without get method
 const createHeadersWithoutGet = () => ({});
 
 describe("fetchDaemonStatus", () => {
     const token = "fake-token";
 
     beforeEach(() => {
-        // Clear all mocks before each test
         jest.clearAllMocks();
 
-        // Mock AbortController for consistent testing
         global.AbortController = jest.fn(() => ({
             abort: jest.fn(),
             signal: {
@@ -30,7 +25,6 @@ describe("fetchDaemonStatus", () => {
             }
         }));
 
-        // Mock clearTimeout to avoid timer issues
         global.clearTimeout = jest.fn();
     });
 
@@ -60,7 +54,6 @@ describe("fetchDaemonStatus", () => {
             })
         );
 
-        // Verify signal is present
         const fetchCall = fetch.mock.calls[0];
         expect(fetchCall[1]).toHaveProperty('signal');
         expect(fetchCall[1].signal).toBeDefined();
@@ -161,7 +154,6 @@ describe("fetchDaemonStatus", () => {
             })
         );
 
-        // Verify signal is present
         const fetchCall = fetch.mock.calls[0];
         expect(fetchCall[1]).toHaveProperty('signal');
         expect(fetchCall[1].signal).toBeDefined();
@@ -197,17 +189,16 @@ describe("fetchDaemonStatus", () => {
 
         fetch.mockResolvedValueOnce({
             ok: true,
-            headers: createHeadersWithoutGet(), // Headers without get method
+            headers: createHeadersWithoutGet(),
             json: async () => mockData,
             text: async () => JSON.stringify(mockData),
         });
 
         const result = await fetchDaemonStatus(token);
-
         expect(result).toEqual(mockData);
     });
 
-    test("handles JSON content-type with invalid JSON response", async () => {
+    test("handles JSON content-type with invalid JSON response (outer catch)", async () => {
         fetch.mockResolvedValueOnce({
             ok: true,
             headers: createHeaders("application/json"),
@@ -217,8 +208,7 @@ describe("fetchDaemonStatus", () => {
             text: async () => "invalid json string",
         });
 
-        // Expect the call to succeed despite JSON parsing error
-        await expect(fetchDaemonStatus(token)).resolves.toBeDefined();
+        await expect(fetchDaemonStatus(token)).resolves.toBeNull();
     });
 
     test("handles response without json method", async () => {
@@ -227,13 +217,10 @@ describe("fetchDaemonStatus", () => {
         fetch.mockResolvedValueOnce({
             ok: true,
             headers: createHeaders("text/plain"),
-            // No json method
             text: async () => JSON.stringify(mockData),
         });
 
         const result = await fetchDaemonStatus(token);
-
-        // Should handle the case where response.json is not available
         expect(result).toBeDefined();
     });
 
@@ -244,12 +231,9 @@ describe("fetchDaemonStatus", () => {
             ok: true,
             headers: createHeaders("text/plain"),
             json: async () => mockData,
-            // No text method
         });
 
         const result = await fetchDaemonStatus(token);
-
-        // Should handle the case where response.text is not available
         expect(result).toEqual(mockData);
     });
 
@@ -300,7 +284,7 @@ describe("fetchDaemonStatus", () => {
             ok: false,
             status: 500,
             statusText: "Server Error",
-            headers: createHeaders("application/octet-stream"), // Unrecognized type
+            headers: createHeaders("application/octet-stream"),
             json: async () => {
                 throw new Error("No JSON");
             },
@@ -336,9 +320,9 @@ describe("fetchDaemonStatus", () => {
             body: mockErrorBody
         });
     });
+
     test("throws ApiError on request timeout", async () => {
         jest.useFakeTimers();
-        // Override AbortController mock to handle listeners properly
         const listeners = [];
         global.AbortController = jest.fn(() => ({
             abort: () => {
@@ -347,22 +331,18 @@ describe("fetchDaemonStatus", () => {
             signal: {
                 aborted: false,
                 addEventListener: (type, listener) => {
-                    if (type === 'abort') {
-                        listeners.push(listener);
-                    }
+                    if (type === 'abort') listeners.push(listener);
                 },
                 removeEventListener: (type, listener) => {
                     if (type === 'abort') {
                         const index = listeners.indexOf(listener);
-                        if (index > -1) {
-                            listeners.splice(index, 1);
-                        }
+                        if (index > -1) listeners.splice(index, 1);
                     }
                 },
                 dispatchEvent: jest.fn(),
             }
         }));
-        // Mock fetch to reject on abort
+
         fetch.mockImplementationOnce((url, options) => {
             return new Promise((resolve, reject) => {
                 const abortError = new Error('Operation aborted');
@@ -370,8 +350,9 @@ describe("fetchDaemonStatus", () => {
                 options.signal.addEventListener('abort', () => reject(abortError));
             });
         });
+
         const timeoutMs = 5000;
-        const promise = fetchDaemonStatus(token, { timeout: timeoutMs });
+        const promise = fetchDaemonStatus(token, {timeout: timeoutMs});
         jest.advanceTimersByTime(timeoutMs);
         await expect(promise).rejects.toMatchObject({
             name: 'ApiError',
@@ -380,13 +361,105 @@ describe("fetchDaemonStatus", () => {
         });
         jest.useRealTimers();
     });
+
     test("handles response without json and text methods", async () => {
         fetch.mockResolvedValueOnce({
             ok: true,
             headers: createHeaders("application/json"),
-            // No json or text methods
         });
         const result = await fetchDaemonStatus(token);
+        expect(result).toBeNull();
+    });
+
+    test("handles response with json missing and text throwing error", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            headers: createHeaders("text/plain"),
+            text: async () => {
+                throw new Error("Text read failed");
+            },
+        });
+
+        const result = await fetchDaemonStatus(token);
+        expect(result).toBeNull();
+    });
+});
+
+describe("getResponseErrorMessage", () => {
+    test("returns null when response is falsy", async () => {
+        const result = await getResponseErrorMessage(null);
+        expect(result).toBeNull();
+    });
+
+    test("returns null when response.text throws an error", async () => {
+        const response = {
+            text: async () => {
+                throw new Error("Failed to read text");
+            },
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBeNull();
+    });
+
+    test("returns error message from 'error' field in JSON", async () => {
+        const response = {
+            text: async () => JSON.stringify({error: "An error occurred"}),
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBe("An error occurred");
+    });
+
+    test("returns error message from 'detail' field in JSON", async () => {
+        const response = {
+            text: async () => JSON.stringify({detail: "Detailed error"}),
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBe("Detailed error");
+    });
+
+    test("returns error message from 'title' field in JSON", async () => {
+        const response = {
+            text: async () => JSON.stringify({title: "Error title"}),
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBe("Error title");
+    });
+
+    test("returns null when JSON is an empty object", async () => {
+        const response = {
+            text: async () => JSON.stringify({}),
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBeNull();
+    });
+
+    test("returns joined values when JSON has other fields", async () => {
+        const response = {
+            text: async () => JSON.stringify({foo: "bar", baz: "qux"}),
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBe("bar | qux");
+    });
+
+    test("returns text when response is not JSON", async () => {
+        const response = {
+            text: async () => "Plain text error",
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBe("Plain text error");
+    });
+
+    test("returns null when text is empty", async () => {
+        const response = {
+            text: async () => "",
+        };
+        const result = await getResponseErrorMessage(response);
+        expect(result).toBeNull();
+    });
+
+    test("handles response without text method", async () => {
+        const response = {};
+        const result = await getResponseErrorMessage(response);
         expect(result).toBeNull();
     });
 });

@@ -3,13 +3,22 @@ import {decodeToken as decodeTokenFromLogin, refreshToken as doRefreshToken} fro
 import {updateEventSourceToken} from '../eventSourceManager';
 import logger from '../utils/logger.js';
 
-const initialState = {
+const getLocalStorage = () => (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' ? window.localStorage : null);
+
+const baseInitialState = {
     user: null,
     isAuthenticated: false,
     authChoice: null,
     authInfo: null,
-    accessToken: localStorage.getItem('authToken') || null,
+    accessToken: null,
 };
+
+const getInitialState = () => ({
+    ...baseInitialState,
+    accessToken: typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+        ? localStorage.getItem('authToken')
+        : null,
+});
 
 export const Login = 'Login';
 export const Logout = 'Logout';
@@ -21,23 +30,28 @@ const authReducer = (state, action) => {
     switch (action.type) {
         case Login:
             return {...state, user: action.data, isAuthenticated: true};
-        case Logout:
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('tokenExpiration');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('refreshTokenExpiration');
+        case Logout: {
+            const browserStorage = getLocalStorage();
+            browserStorage?.removeItem('authToken');
+            browserStorage?.removeItem('tokenExpiration');
+            browserStorage?.removeItem('refreshToken');
+            browserStorage?.removeItem('refreshTokenExpiration');
             return {...state, user: null, isAuthenticated: false, accessToken: null};
-        case SetAccessToken:
+        }
+        case SetAccessToken: {
+            const browserStorage = getLocalStorage();
             if (action.data) {
-                localStorage.setItem('authToken', action.data);
+                browserStorage?.setItem('authToken', action.data);
                 // Notify EventSource manager about token update
                 updateEventSourceToken(action.data);
             } else {
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('tokenExpiration');
-                localStorage.removeItem('refreshToken');
-                localStorage.removeItem('refreshTokenExpiration');
+                browserStorage?.removeItem('authToken');
+                browserStorage?.removeItem('tokenExpiration');
+                browserStorage?.removeItem('refreshToken');
+                browserStorage?.removeItem('refreshTokenExpiration');
             }
+            return {...state, accessToken: action.data, isAuthenticated: !!action.data};
+        }
             return {...state, accessToken: action.data, isAuthenticated: !!action.data};
         case SetAuthInfo:
             return {...state, authInfo: action.data};
@@ -52,7 +66,7 @@ const AuthContext = createContext(null);
 const AuthDispatchContext = createContext(null);
 
 export const AuthProvider = ({children}) => {
-    const [auth, dispatch] = useReducer(authReducer, initialState);
+    const [auth, dispatch] = useReducer(authReducer, undefined, getInitialState);
     const refreshTimeout = useRef(null);
     const channel = useRef(null);
     const oidcUserManagerRef = useRef(null);
@@ -173,7 +187,9 @@ export const AuthProvider = ({children}) => {
 
     // Reschedule refresh when token changes
     useEffect(() => {
-        const token = auth.accessToken ?? localStorage.getItem('authToken');
+        const token = auth.accessToken ?? (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+            ? localStorage.getItem('authToken')
+            : null);
         if (auth.authChoice !== 'openid') {
             scheduleRefresh(token);
         }

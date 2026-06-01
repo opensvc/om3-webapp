@@ -2,6 +2,12 @@ import React, {createContext, useContext, useState, useRef, useEffect} from "rea
 import {UserManager, UserManagerSettings, Log} from "oidc-client-ts";
 import logger from "../utils/logger.js";
 
+type OidcLog = {
+    logger?: Console;
+    level?: number;
+    DEBUG?: number;
+};
+
 export interface OidcContextType {
     userManager: UserManager | null;
     recreateUserManager: (settings: UserManagerSettings) => void;
@@ -20,8 +26,11 @@ export const OidcProvider = ({children}: { children: React.ReactNode }) => {
         cleanupUserManager(userManagerRef.current);
         // Ensure oidc-client-ts has verbose logging during development
         try {
-            (Log as any).logger = console;
-            (Log as any).level = (Log as any).DEBUG;
+            const oidcLog = Log as unknown as OidcLog;
+            oidcLog.logger = console;
+            if (typeof oidcLog.DEBUG !== 'undefined') {
+                oidcLog.level = oidcLog.DEBUG;
+            }
         } catch (e) {
             logger.debug('Failed to configure oidc-client-ts Log:', e);
         }
@@ -67,19 +76,24 @@ export const useOidc = () => {
 };
 
 // Cleanup function to dispose of UserManager events
+const safeRemoveListener = (removeFn: ((callback: (...args: unknown[]) => void) => void) | undefined) => {
+    if (typeof removeFn !== 'function') return;
+    try {
+        removeFn(() => {
+        });
+    } catch (e) {
+        logger.debug('Error removing UserManager listener:', e);
+    }
+};
+
 export function cleanupUserManager(userManager: UserManager | null) {
     if (!userManager) return;
     logger.debug("Cleaning up UserManager events");
-    userManager.events.removeUserLoaded(() => {
-    });
-    userManager.events.removeUserUnloaded(() => {
-    });
-    userManager.events.removeAccessTokenExpired(() => {
-    });
-    userManager.events.removeAccessTokenExpiring(() => {
-    });
-    userManager.events.removeSilentRenewError(() => {
-    });
+    safeRemoveListener(userManager.events.removeUserLoaded);
+    safeRemoveListener(userManager.events.removeUserUnloaded);
+    safeRemoveListener(userManager.events.removeAccessTokenExpired);
+    safeRemoveListener(userManager.events.removeAccessTokenExpiring);
+    safeRemoveListener(userManager.events.removeSilentRenewError);
     userManager.clearStaleState()
         .catch(error => {
             logger.debug('Error during clearStaleState:', error);

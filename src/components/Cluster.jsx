@@ -235,41 +235,37 @@ const ClusterOverview = () => {
                 </Typography>
 
                 <Box sx={{
-                    display: 'flex',
-                    flexDirection: {xs: 'column', md: 'row'},
+                    display: 'grid',
+                    gridTemplateColumns: {xs: '1fr', md: '2fr 1fr'},
                     gap: 3,
                     alignItems: 'stretch'
                 }}>
                     <Box sx={{
-                        flex: 2,
                         display: 'grid',
                         gridTemplateColumns: {md: '1fr 1fr'},
                         gap: 3,
-                        minHeight: '100%'
+                        alignContent: 'start'
                     }}>
-                        <Box>
-                            <GridNodes {...gridNodesProps} />
-                        </Box>
-                        <Box>
-                            <GridObjects {...gridObjectsProps} />
-                        </Box>
-                        <Box>
-                            <GridHeartbeats {...gridHeartbeatsProps} />
-                        </Box>
-                        <Box>
-                            <GridPools {...gridPoolsProps} />
-                        </Box>
-                        <Box>
-                            <GridNetworks {...gridNetworksProps} />
-                        </Box>
+                        <GridNodes {...gridNodesProps} />
+                        <GridObjects {...gridObjectsProps} />
+                        <GridHeartbeats {...gridHeartbeatsProps} />
+                        <GridPools {...gridPoolsProps} />
+                        <GridNetworks {...gridNetworksProps} />
                     </Box>
 
-                    <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', gap: 3}}>
+                    <Box sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 3,
+                        height: '100%',
+                        justifyContent: 'flex-start'
+                    }}>
                         <GridNamespaces {...gridNamespacesProps} />
                         <GridKinds {...gridKindsProps} />
                     </Box>
                 </Box>
-                <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger" buttonLabel="Cluster Events"/>
+                <EventLogger eventTypes={CLUSTER_EVENT_TYPES} title="Cluster Events Logger"
+                             buttonLabel="Cluster Events"/>
             </Box>
         </Box>
     );

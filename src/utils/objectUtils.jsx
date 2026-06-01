@@ -1,3 +1,8 @@
+import React, {useCallback} from "react";
+import {TableCell, Box} from "@mui/material";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+
 const ALLOWED_ACTIONS_BY_KIND = {
     cfg: ["abort", "delete"],
     vol: ["abort", "delete", "freeze", "provision", "purge", "unfreeze", "unprovision"],
@@ -70,5 +75,38 @@ const isActionAllowedForSelection = (actionName, selectedObjects) => {
 
     return allowedActions.has(actionName);
 };
+
+export const SortableTableCell = React.memo(
+    ({column, label, currentSortColumn, sortDirection, onSort, align = "left"}) => {
+        const handleClick = useCallback(() => {
+            onSort(column);
+        }, [onSort, column]);
+
+        return (
+            <TableCell align={align} onClick={handleClick} sx={{cursor: "pointer"}}>
+                <Box
+                    sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: align === "center" ? "center" : "flex-start",
+                        gap: 0.5,
+                    }}
+                >
+                    <strong>{label}</strong>
+                    {currentSortColumn === column &&
+                        (sortDirection === "asc" ? (
+                            <KeyboardArrowUpIcon fontSize="small"/>
+                        ) : (
+                            <KeyboardArrowDownIcon fontSize="small"/>
+                        ))}
+                </Box>
+            </TableCell>
+        );
+    },
+    (prev, next) =>
+        prev.column === next.column &&
+        prev.currentSortColumn === next.currentSortColumn &&
+        prev.sortDirection === next.sortDirection
+);
 
 export {extractNamespace, extractKind, isActionAllowedForSelection, ALLOWED_ACTIONS_BY_KIND};

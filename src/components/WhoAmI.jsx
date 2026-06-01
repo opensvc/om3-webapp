@@ -8,11 +8,11 @@ import {
     Typography,
     Button,
     Box,
-    Grid,
 } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import {useTheme} from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import {FaSignOutAlt, FaServer, FaUser, FaLock, FaCode, FaMoon, FaSun} from "react-icons/fa";
+import {FaSignOutAlt, FaServer, FaUser, FaLock, FaMoon, FaSun} from "react-icons/fa";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useNavigate} from "react-router-dom";
@@ -229,12 +229,12 @@ const WhoAmI = () => {
     if (isMobile) {
         return (
             <Box sx={{p: 3}}>
-                <Grid container spacing={3} direction="column">
-                    <Grid item>{MyInfoCard}</Grid>
-                    <Grid item>{PermissionCard}</Grid>
-                    <Grid item>{ServerInfoCard}</Grid>
-                    <Grid item>{ActionButtons}</Grid>
-                </Grid>
+                <Grid2 container spacing={3} direction="column">
+                    <Grid2 item>{MyInfoCard}</Grid2>
+                    <Grid2 item>{PermissionCard}</Grid2>
+                    <Grid2 item>{ServerInfoCard}</Grid2>
+                    <Grid2 item>{ActionButtons}</Grid2>
+                </Grid2>
             </Box>
         );
     }

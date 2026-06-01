@@ -36,6 +36,8 @@ function filterScopes(allowedScopes) {
     return filteredScopes.join(" ");
 }
 
+const isBrowser = typeof window !== 'undefined' && typeof window.location !== 'undefined';
+
 async function oidcConfiguration(authInfo) {
     let scopesSupported = DEFAULT_SCOPES;
     if (!authInfo?.openid?.issuer) {
@@ -68,9 +70,15 @@ async function oidcConfiguration(authInfo) {
         return initData;
     }
 
-    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"));
+    const baseUrl = isBrowser
+        ? window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"))
+        : '';
 
     const finalScope = filterScopes(scopesSupported);
+    const userStore = isBrowser && typeof window.localStorage !== 'undefined'
+        ? new WebStorageStateStore({store: window.localStorage})
+        : undefined;
+
     const config = {
         ...initData,
         authority: authInfo.openid.issuer,
@@ -82,7 +90,7 @@ async function oidcConfiguration(authInfo) {
         // Explicitly control refresh token usage for SPAs. Set to true to use refresh tokens for silent renew.
         useRefreshToken: true,
         post_logout_redirect_uri: `${baseUrl}/`,
-        userStore: new WebStorageStateStore({store: window.localStorage}),
+        ...(userStore ? {userStore} : {}),
     };
     logger.debug("Final OIDC configuration:", config);
     return config;

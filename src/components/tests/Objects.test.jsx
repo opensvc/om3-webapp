@@ -200,7 +200,10 @@ describe('Objects Component', () => {
         const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3];
 
         if (expectedIcons.length === 0) {
-            expect(within(nodeCell).getByText('-')).toBeInTheDocument();
+            expect(within(nodeCell).queryByLabelText(/Node .+ is .+/)).toBeNull();
+            expect(within(nodeCell).queryByLabelText(/Node .+ has warning/)).toBeNull();
+            expect(within(nodeCell).queryByLabelText(/Node .+ is frozen/)).toBeNull();
+            expect(within(nodeCell).queryByLabelText(/Node .+ is not provisioned/)).toBeNull();
             return;
         }
 
@@ -1749,7 +1752,9 @@ describe('Objects Component', () => {
         const row = screen.getByRole('row', {name: /test-ns\/svc\/noavail/i});
         const cells = within(row).getAllByRole('cell');
         const nodeCell = cells[3];
-        expect(within(nodeCell).getByText('-')).toBeInTheDocument();
+        expect(within(nodeCell).queryByText('-')).not.toBeInTheDocument();
+        expect(within(nodeCell).queryByLabelText(/Node .+ is .+/)).not.toBeInTheDocument();
+        expect(within(nodeCell).queryByLabelText(/Node .+ has warning/)).not.toBeInTheDocument();
     });
 
     test('global state filter chip click toggles selection', async () => {

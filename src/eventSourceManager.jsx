@@ -632,7 +632,7 @@ const handleAuthError = (token, url) => {
     navigationService.redirectToAuth();
 };
 
-const handleReconnection = (url, token, filters) => {
+const handleReconnection = (url, _token, filters) => {
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && isPageActive) {
         reconnectAttempts++;
 

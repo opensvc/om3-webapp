@@ -220,22 +220,52 @@ describe('NodeCard Component', () => {
         expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
     });
 
-    test('shows not provisioned icon when instance is not provisioned', () => {
+    test('shows not provisioned icon when instance is not provisioned (false)', () => {
         const nodeData = {provisioned: false};
-        const parseProvisionedState = jest.fn(() => false);
 
         render(
             <MemoryRouter>
-                <NodeCard
-                    node="node1"
-                    nodeData={nodeData}
-                    parseProvisionedState={parseProvisionedState}
-                />
+                <NodeCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
         expect(screen.getByTestId('PriorityHighIcon')).toBeInTheDocument();
-        expect(parseProvisionedState).toHaveBeenCalledWith(false);
+    });
+
+    test('shows not provisioned icon when instance is not provisioned ("false")', () => {
+        const nodeData = {provisioned: "false"};
+
+        render(
+            <MemoryRouter>
+                <NodeCard node="node1" nodeData={nodeData}/>
+            </MemoryRouter>
+        );
+
+        expect(screen.getByTestId('PriorityHighIcon')).toBeInTheDocument();
+    });
+
+    test('does NOT show not provisioned icon when provisioned is "n/a"', () => {
+        const nodeData = {provisioned: "n/a"};
+
+        render(
+            <MemoryRouter>
+                <NodeCard node="node1" nodeData={nodeData}/>
+            </MemoryRouter>
+        );
+
+        expect(screen.queryByTestId('PriorityHighIcon')).not.toBeInTheDocument();
+    });
+
+    test('does NOT show not provisioned icon when provisioned is true', () => {
+        const nodeData = {provisioned: true};
+
+        render(
+            <MemoryRouter>
+                <NodeCard node="node1" nodeData={nodeData}/>
+            </MemoryRouter>
+        );
+
+        expect(screen.queryByTestId('PriorityHighIcon')).not.toBeInTheDocument();
     });
 
     test('displays node state when available', () => {

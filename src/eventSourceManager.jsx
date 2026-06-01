@@ -119,7 +119,7 @@ const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
         ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
         : validFilters;
 
-    return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
+    return `replay=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
 };
 
 // Get current token

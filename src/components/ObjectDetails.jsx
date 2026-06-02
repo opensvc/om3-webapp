@@ -31,7 +31,7 @@ import ActionDialogManager from "../components/ActionDialogManager";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
-import NodeCard from "./NodeCard";
+import InstanceCard from "./InstanceCard.jsx";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
@@ -797,7 +797,7 @@ const ObjectDetail = () => {
                             </Menu>
 
                             {nodesList.map(node => (
-                                <NodeCard
+                                <InstanceCard
                                     key={node}
                                     node={node}
                                     nodeData={memoizedObjectData[node] || {}}

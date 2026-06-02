@@ -14,7 +14,7 @@ import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, red} from "@mui/material/colors";
 import logger from '../utils/logger.js';
 
-const NodeCard = ({
+const InstanceCard = ({
                       node,
                       nodeData = {},
                       selectedNodes = [],
@@ -156,4 +156,4 @@ const NodeCard = ({
     );
 };
 
-export default NodeCard;
+export default InstanceCard;

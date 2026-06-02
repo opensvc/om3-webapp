@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import NodeCard from '../NodeCard';
+import InstanceCard from '../InstanceCard.jsx';
 import userEvent from '@testing-library/user-event';
 import {grey} from '@mui/material/colors';
 import logger from '../../utils/logger.js';
@@ -67,7 +67,7 @@ jest.mock('@mui/icons-material/MoreVert', () => () => <span data-testid="MoreVer
 jest.mock('@mui/icons-material/Article', () => () => <span data-testid="ArticleIcon"/>);
 jest.mock('@mui/icons-material/PriorityHigh', () => () => <span data-testid="PriorityHighIcon"/>);
 
-describe('NodeCard Component', () => {
+describe('InstanceCard Component', () => {
     const user = userEvent.setup();
 
     beforeEach(() => {
@@ -77,7 +77,7 @@ describe('NodeCard Component', () => {
     test('renders node name correctly', () => {
         render(
             <MemoryRouter>
-                <NodeCard node="node1"/>
+                <InstanceCard node="node1"/>
             </MemoryRouter>
         );
 
@@ -92,7 +92,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData}/>
+                <InstanceCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
@@ -104,7 +104,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" toggleNode={toggleNode}/>
+                <InstanceCard node="node1" toggleNode={toggleNode}/>
             </MemoryRouter>
         );
 
@@ -120,7 +120,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData} onOpenLogs={onOpenLogs}/>
+                <InstanceCard node="node1" nodeData={nodeData} onOpenLogs={onOpenLogs}/>
             </MemoryRouter>
         );
 
@@ -135,7 +135,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" onViewInstance={onViewInstance}/>
+                <InstanceCard node="node1" onViewInstance={onViewInstance}/>
             </MemoryRouter>
         );
 
@@ -150,7 +150,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" onViewInstance={onViewInstance}/>
+                <InstanceCard node="node1" onViewInstance={onViewInstance}/>
             </MemoryRouter>
         );
 
@@ -175,7 +175,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard
+                <InstanceCard
                     node="node1"
                     setCurrentNode={setCurrentNode}
                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
@@ -196,7 +196,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard
+                <InstanceCard
                     node="node1"
                     getColor={getColor}
                     getNodeState={getNodeState}
@@ -213,7 +213,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" getNodeState={getNodeState}/>
+                <InstanceCard node="node1" getNodeState={getNodeState}/>
             </MemoryRouter>
         );
 
@@ -225,7 +225,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData}/>
+                <InstanceCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
@@ -237,7 +237,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData}/>
+                <InstanceCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
@@ -249,7 +249,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData}/>
+                <InstanceCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
@@ -261,7 +261,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" nodeData={nodeData}/>
+                <InstanceCard node="node1" nodeData={nodeData}/>
             </MemoryRouter>
         );
 
@@ -273,7 +273,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" getNodeState={getNodeState}/>
+                <InstanceCard node="node1" getNodeState={getNodeState}/>
             </MemoryRouter>
         );
 
@@ -283,7 +283,7 @@ describe('NodeCard Component', () => {
     test('handles default functions gracefully', () => {
         render(
             <MemoryRouter>
-                <NodeCard node="node1"/>
+                <InstanceCard node="node1"/>
             </MemoryRouter>
         );
 
@@ -301,7 +301,7 @@ describe('NodeCard Component', () => {
     test('does not show view instance button when onViewInstance is not provided', () => {
         render(
             <MemoryRouter>
-                <NodeCard node="node1"/>
+                <InstanceCard node="node1"/>
             </MemoryRouter>
         );
 
@@ -313,7 +313,7 @@ describe('NodeCard Component', () => {
     test('handles null node prop gracefully', () => {
         render(
             <MemoryRouter>
-                <NodeCard node={null}/>
+                <InstanceCard node={null}/>
             </MemoryRouter>
         );
 
@@ -323,7 +323,7 @@ describe('NodeCard Component', () => {
     test('disables actions button when actionInProgress is true', () => {
         render(
             <MemoryRouter>
-                <NodeCard node="node1" actionInProgress={true}/>
+                <InstanceCard node="node1" actionInProgress={true}/>
             </MemoryRouter>
         );
 
@@ -337,7 +337,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard
+                <InstanceCard
                     node="node1"
                     nodeData={nodeData}
                     onOpenLogs={onOpenLogs}
@@ -356,7 +356,7 @@ describe('NodeCard Component', () => {
 
         render(
             <MemoryRouter>
-                <NodeCard node="node1" onOpenLogs={onOpenLogs}/>
+                <InstanceCard node="node1" onOpenLogs={onOpenLogs}/>
             </MemoryRouter>
         );
 

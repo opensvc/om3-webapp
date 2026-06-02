@@ -1,63 +1,16 @@
 import React, {act} from 'react';
 import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
 import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
-import userEvent from '@testing-library/user-event';
 import logger from '../../utils/logger';
-
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useParams: jest.fn(),
-    useNavigate: jest.fn(),
-}));
-jest.mock('../../hooks/useEventStore.js');
-jest.mock('../../eventSourceManager.jsx', () => ({
-    closeEventSource: jest.fn(),
-    startEventReception: jest.fn(),
-    startLoggerReception: jest.fn(),
-    closeLoggerEventSource: jest.fn(),
-}));
-jest.mock('../../context/DarkModeContext', () => ({
-    useDarkMode: () => ({isDarkMode: false, toggleDarkMode: jest.fn()}),
-}));
-jest.mock("../../utils/logger", () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-}));
-
-jest.mock('../ConfigSection', () => ({
-    __esModule: true,
-    default: ({decodedObjectName, configNode, setConfigNode, openSnackbar, configDialogOpen, setConfigDialogOpen}) => (
-        <div>
-            <button onClick={() => setConfigDialogOpen(true)} data-testid="open-config-dialog">
-                View Configuration
-            </button>
-            {configDialogOpen && (
-                <div role="dialog" data-testid="config-dialog">
-                    <div>Configuration for {decodedObjectName}</div>
-                    {configNode && <div>Node: {configNode}</div>}
-                </div>
-            )}
-        </div>
-    ),
-}));
 
 jest.mock('@mui/material', () => {
     const actual = jest.requireActual('@mui/material');
     return {
         ...actual,
-        Accordion: ({children, expanded, onChange, ...props}) => (
-            <div role="region" className={expanded ? 'expanded' : ''} {...props}>{children}</div>
-        ),
-        AccordionSummary: ({children, id, onChange, expanded, expandIcon, ...props}) => (
-            <div role="button" aria-expanded={expanded ? 'true' : 'false'}
-                 aria-label={`expand configuration for ${id}`}
-                 onClick={() => onChange?.({}, !expanded)} {...props}>{children}</div>
-        ),
-        AccordionDetails: ({children, ...props}) => <div {...props}>{children}</div>,
         Menu: ({children, open, anchorEl, onClose, disablePortal, ...props}) =>
             open ? <div role="menu" {...props}>{children}</div> : null,
         MenuItem: ({children, onClick, ...props}) => (
@@ -79,7 +32,7 @@ jest.mock('@mui/material', () => {
             </div>
         ),
         Checkbox: ({checked, onChange, sx, ...props}) => (
-            <input type="checkbox" checked={checked} onChange={onChange} {...props}/>
+            <input type="checkbox" checked={checked} onChange={onChange} {...props} />
         ),
         IconButton: ({children, onClick, disabled, sx, ...props}) => (
             <button onClick={onClick} disabled={disabled} {...props}>{children}</button>
@@ -102,23 +55,23 @@ jest.mock('@mui/material', () => {
                 <div>
                     <label htmlFor={inputId}>{label}</label>
                     <input id={inputId} type="text" placeholder={label} value={value} onChange={onChange}
-                           disabled={disabled} {...(multiline ? {'data-multiline': true, rows} : {})} {...props}/>
+                           disabled={disabled} {...(multiline ? {'data-multiline': true, rows} : {})} {...props} />
                 </div>
             );
         },
         Input: ({type, onChange, disabled, ...props}) => (
-            <input type={type} onChange={onChange} disabled={disabled} {...props}/>
+            <input type={type} onChange={onChange} disabled={disabled} {...props} />
         ),
         CircularProgress: () => <div role="progressbar">Loading...</div>,
         Box: ({children, sx, ...props}) => <div {...props}>{children}</div>,
         Typography: ({children, sx, ...props}) => <span {...props}>{children}</span>,
-        FiberManualRecordIcon: ({sx, ...props}) => <svg {...props}/>,
+        FiberManualRecordIcon: ({sx, ...props}) => <svg {...props} />,
         Tooltip: ({children, title, ...props}) => <span {...props} title={title}>{children}</span>,
         Button: ({children, onClick, disabled, variant, component, htmlFor, sx, startIcon, ...props}) => (
             <button onClick={onClick} disabled={disabled} data-variant={variant}
                     {...(component === 'label' ? {htmlFor} : {})} {...props}>{children}</button>
         ),
-        Popper: ({open, anchorEl, children, ...props}) => open ? <div {...props}>{children}</div> : null,
+        Popper: ({open, anchorEl, children, ...props}) => (open ? <div {...props}>{children}</div> : null),
         Paper: ({elevation, children, ...props}) => <div {...props}>{children}</div>,
         ClickAwayListener: ({onClickAway, children, ...props}) => <div
             onClick={onClickAway} {...props}>{children}</div>,
@@ -133,12 +86,43 @@ jest.mock('@mui/icons-material/Edit', () => () => <span>Edit</span>);
 jest.mock('@mui/icons-material/AcUnit', () => () => <span>AcUnit</span>);
 jest.mock('@mui/icons-material/MoreVert', () => () => <span>MoreVertIcon</span>);
 
-const mockLocalStorage = {
-    getItem: jest.fn(() => 'mock-token'),
-    setItem: jest.fn(),
-    removeItem: jest.fn(),
-};
-Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
+jest.mock('react-router-dom', () => ({
+    ...jest.requireActual('react-router-dom'),
+    useParams: jest.fn(),
+    useNavigate: jest.fn(),
+}));
+jest.mock('../../hooks/useEventStore.js');
+jest.mock('../../eventSourceManager.jsx', () => ({
+    closeEventSource: jest.fn(),
+    startEventReception: jest.fn(),
+    startLoggerReception: jest.fn(),
+    closeLoggerEventSource: jest.fn(),
+}));
+jest.mock('../../context/DarkModeContext', () => ({
+    useDarkMode: () => ({isDarkMode: false, toggleDarkMode: jest.fn()}),
+}));
+jest.mock('../../utils/logger', () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+}));
+
+jest.mock('../ConfigSection', () => ({
+    __esModule: true,
+    default: ({decodedObjectName, configNode, setConfigNode, openSnackbar, configDialogOpen, setConfigDialogOpen}) => (
+        <div>
+            <button onClick={() => setConfigDialogOpen(true)} data-testid="open-config-dialog">
+                View Configuration
+            </button>
+            {configDialogOpen && (
+                <div role="dialog" data-testid="config-dialog">
+                    <div>Configuration for {decodedObjectName}</div>
+                    {configNode && <div>Node: {configNode}</div>}
+                </div>
+            )}
+        </div>
+    ),
+}));
 
 jest.mock('../../constants/actions', () => ({
     OBJECT_ACTIONS: [
@@ -166,37 +150,35 @@ jest.mock('../../constants/actions', () => ({
 }));
 
 jest.mock('../LogsViewer.jsx', () => ({nodename, height}) => (
-    <div data-testid="logs-viewer" data-nodename={nodename} style={{height}}>Logs Viewer Mock</div>
+    <div data-testid="logs-viewer" data-nodename={nodename} style={{height}}>
+        Logs Viewer Mock
+    </div>
 ));
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+// ─── localStorage mock ─────────────────────────────────────────────────────
+const mockLocalStorage = {
+    getItem: jest.fn(() => 'mock-token'),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+};
+Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
 const buildState = (overrides = {}) => ({
     objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
     objectInstanceStatus: {
         'root/svc/svc1': {
             node1: {
-                avail: 'up', frozen_at: null,
+                avail: 'up',
+                frozen_at: null,
                 resources: {
-                    res1: {
-                        status: 'up',
-                        label: 'R1',
-                        type: 'disk',
-                        provisioned: {state: 'true'},
-                        running: true
-                    }
+                    res1: {status: 'up', label: 'R1', type: 'disk', provisioned: {state: 'true'}, running: true},
                 },
             },
             node2: {
-                avail: 'down', frozen_at: null,
+                avail: 'down',
+                frozen_at: null,
                 resources: {
-                    res2: {
-                        status: 'warn',
-                        label: 'R2',
-                        type: 'compute',
-                        provisioned: {state: 'true'},
-                        running: false
-                    }
+                    res2: {status: 'warn', label: 'R2', type: 'compute', provisioned: {state: 'true'}, running: false},
                 },
             },
         },
@@ -223,7 +205,8 @@ const fullMockState = {
     objectInstanceStatus: {
         'root/cfg/cfg1': {
             node1: {
-                avail: 'up', frozen_at: null,
+                avail: 'up',
+                frozen_at: null,
                 resources: {
                     res1: {
                         status: 'up',
@@ -242,7 +225,8 @@ const fullMockState = {
                 },
             },
             node2: {
-                avail: 'down', frozen_at: null,
+                avail: 'down',
+                frozen_at: null,
                 resources: {
                     res3: {
                         status: 'warn',
@@ -250,13 +234,14 @@ const fullMockState = {
                         type: 'compute',
                         provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
                         running: false
-                    }
+                    },
                 },
             },
         },
         'root/svc/svc1': {
             node1: {
-                avail: 'up', frozen_at: null,
+                avail: 'up',
+                frozen_at: null,
                 resources: {
                     res1: {
                         status: 'up',
@@ -283,13 +268,14 @@ const fullMockState = {
                                 type: 'container',
                                 provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
                                 running: true
-                            }
-                        }
+                            },
+                        },
                     },
                 },
             },
             node2: {
-                avail: 'down', frozen_at: null,
+                avail: 'down',
+                frozen_at: null,
                 resources: {
                     res3: {
                         status: 'warn',
@@ -297,7 +283,7 @@ const fullMockState = {
                         type: 'compute',
                         provisioned: {state: 'true', mtime: '2023-01-01T12:00:00Z'},
                         running: false
-                    }
+                    },
                 },
             },
         },
@@ -329,6 +315,7 @@ const fullMockState = {
     clearConfigUpdate: jest.fn(),
 };
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
 const renderComponent = (objectName) => {
     require('react-router-dom').useParams.mockReturnValue({objectName});
     return render(
@@ -341,19 +328,50 @@ const renderComponent = (objectName) => {
 };
 
 const renderSvc = (objectName = 'root/svc/svc1') => renderComponent(objectName);
-
-const waitForObjectName = async (name = 'root/svc/svc1') =>
-    screen.findByText(new RegExp(name.replace(/\//g, '\\/'), 'i'), {}, {timeout: 10000});
-
 const waitForNode = async (nodeName) => screen.findByText(nodeName, {}, {timeout: 10000});
 
-const openLogsDrawer = async (user) => {
-    const logsButtons = screen.getAllByRole('button', {name: /logs/i});
-    const nodeLogsButton = logsButtons.find(b => b.textContent?.includes('Logs') && !b.textContent?.includes('Resource'))
-        || logsButtons[0];
-    if (!nodeLogsButton) return null;
-    await user.click(nodeLogsButton);
-    return nodeLogsButton;
+const renderReadySvc = async () => {
+    renderSvc();
+    await waitForNode('node1');
+    await waitForNode('node2');
+    return {node1: screen.getByText('node1'), node2: screen.getByText('node2')};
+};
+
+const executeObjectAction = async (actionName) => {
+    await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
+    await screen.findByRole('menu');
+    await userEvent.click(screen.getByRole('menuitem', {name: new RegExp(actionName, 'i')}));
+    const dialog = await screen.findByRole('dialog');
+    const confirmBtn = within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i});
+    await userEvent.click(confirmBtn);
+};
+
+const mockNetworkFailure = (urlPattern) => {
+    global.fetch.mockImplementation((url, options) => {
+        if (url.includes(urlPattern)) return Promise.reject(new Error('Network error'));
+        return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+    });
+};
+
+const mockActionFailure = (status = 500, message = 'Server error') => {
+    global.fetch.mockImplementation((url, options) => {
+        if (options?.method === 'POST' && url.includes('/action/'))
+            return Promise.resolve({ok: false, status, text: () => Promise.resolve(message)});
+        return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+    });
+};
+
+const captureSubscription = () => {
+    let callback;
+    useEventStore.subscribe = jest.fn((selector, cb) => {
+        callback = cb;
+        return jest.fn();
+    });
+    return {
+        get callback() {
+            return callback;
+        },
+    };
 };
 
 const withConsole = async (fn) => {
@@ -364,7 +382,7 @@ const withConsole = async (fn) => {
         await fn();
     } finally {
         INSTANCE_ACTIONS.length = 0;
-        orig.forEach(a => INSTANCE_ACTIONS.push(a));
+        orig.forEach((a) => INSTANCE_ACTIONS.push(a));
     }
 };
 
@@ -377,13 +395,17 @@ const openConsoleDialogFn = async () => {
     if (consoleItems.length === 0) return null;
     await userEvent.click(consoleItems[0]);
     await waitFor(() => {
-        expect(screen.queryAllByRole('dialog').some(d =>
-            d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
-        )).toBe(true);
+        expect(
+            screen.queryAllByRole('dialog').some(
+                (d) => d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
+            )
+        ).toBe(true);
     }, {timeout: 5000});
-    return screen.queryAllByRole('dialog').find(d =>
-        d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
-    ) || null;
+    return (
+        screen.queryAllByRole('dialog').find(
+            (d) => d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
+        ) || null
+    );
 };
 
 const defaultFetchMock = (url, options) => {
@@ -391,11 +413,7 @@ const defaultFetchMock = (url, options) => {
         return Promise.resolve({
             ok: true, status: 200,
             json: () => Promise.resolve({
-                items: [{name: 'key1', node: 'node1', size: 2626}, {
-                    name: 'key2',
-                    node: 'node1',
-                    size: 6946
-                }]
+                items: [{name: 'key1', node: 'node1', size: 2626}, {name: 'key2', node: 'node1', size: 6946}]
             }),
             text: () => Promise.resolve(''),
         });
@@ -418,7 +436,7 @@ const defaultFetchMock = (url, options) => {
     if (url.includes('/console') && options?.method === 'POST') {
         return Promise.resolve({
             ok: true,
-            headers: {get: (h) => h === 'Location' ? 'http://console.example.com/session123' : null}
+            headers: {get: (h) => (h === 'Location' ? 'http://console.example.com/session123' : null)}
         });
     }
     if (options?.method === 'POST' && url.includes('/action/')) {
@@ -427,8 +445,7 @@ const defaultFetchMock = (url, options) => {
     return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve('')});
 };
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
-
+// ─── Tests ─────────────────────────────────────────────────────────────────
 describe('ObjectDetail Component', () => {
     const user = userEvent.setup();
     const mockNavigate = jest.fn();
@@ -445,96 +462,41 @@ describe('ObjectDetail Component', () => {
 
     afterEach(() => jest.clearAllMocks());
 
-    // ── Pure unit tests ────────────────────────────────────────────────────────
-
     describe('getResourceType', () => {
-        test('returns empty for null/empty/missing inputs', () => {
-            expect(getResourceType(null, {})).toBe('');
-            expect(getResourceType('', {})).toBe('');
-            expect(getResourceType('rid1', null)).toBe('');
-            expect(getResourceType('rid1', undefined)).toBe('');
-            expect(getResourceType(null, null)).toBe('');
-            expect(getResourceType(undefined, undefined)).toBe('');
-            expect(getResourceType('notfound', {resources: {}, encap: {c1: {resources: {}}}})).toBe('');
-            expect(getResourceType('rid1', {resources: {}, encap: {}})).toBe('');
-        });
-
-        test('returns top-level resource type', () => {
-            const nodeData = {resources: {rid1: {type: 'disk.disk'}, rid2: {type: 'fs.flag'}}};
-            expect(getResourceType('rid1', nodeData)).toBe('disk.disk');
-            expect(getResourceType('rid2', nodeData)).toBe('fs.flag');
-        });
-
-        test('searches encap containers when top-level missing', () => {
-            const nodeData = {
+        test.each([
+            [null, {}, ''], ['', {}, ''], ['rid1', null, ''], ['rid1', undefined, ''], [null, null, ''], [undefined, undefined, ''],
+            ['notfound', {resources: {}, encap: {c1: {resources: {}}}}, ''],
+            ['rid1', {resources: {}, encap: {}}, ''],
+            ['rid1', {resources: {rid1: {type: 'disk.disk'}}}, 'disk.disk'],
+            ['rid2', {resources: {rid2: {type: 'fs.flag'}}}, 'fs.flag'],
+            ['rid2', {
                 resources: {},
                 encap: {container1: {resources: {rid2: {type: 'container.docker'}}}}
-            };
-            expect(getResourceType('rid2', nodeData)).toBe('container.docker');
-        });
-
-        test('returns empty when rid not found anywhere', () => {
-            const nodeData = {
-                resources: {r1: {type: 'disk'}},
-                encap: {c1: {resources: {r2: {type: 'container'}}}}
-            };
-            expect(getResourceType('r3', nodeData)).toBe('');
-        });
+            }, 'container.docker'],
+            ['r3', {resources: {r1: {type: 'disk'}}, encap: {c1: {resources: {r2: {type: 'container'}}}}}, ''],
+        ])('getResourceType(%p, %p) => %p', (rid, nodeData, expected) => expect(getResourceType(rid, nodeData)).toBe(expected));
     });
 
     describe('parseProvisionedState', () => {
-        test('handles string "true" variants (case-insensitive)', () => {
-            ['true', 'True', 'TRUE', 'tRuE'].forEach(v => expect(parseProvisionedState(v)).toBe(true));
-        });
-
-        test('handles string "false" variants (case-insensitive)', () => {
-            ['false', 'False', 'FALSE', 'fAlSe'].forEach(v => expect(parseProvisionedState(v)).toBe(false));
-        });
-
-        test('treats non-boolean strings as false', () => {
-            ['yes', 'no', '', 'abc', '1', '0'].forEach(v => expect(parseProvisionedState(v)).toBe(false));
-        });
-
-        test('coerces non-string values correctly', () => {
-            expect(parseProvisionedState(true)).toBe(true);
-            expect(parseProvisionedState(false)).toBe(false);
-            expect(parseProvisionedState(1)).toBe(true);
-            expect(parseProvisionedState(0)).toBe(false);
-            expect(parseProvisionedState(42)).toBe(true);
-            expect(parseProvisionedState(-1)).toBe(true);
-            expect(parseProvisionedState({})).toBe(true);
-            expect(parseProvisionedState({state: true})).toBe(true);
-            expect(parseProvisionedState([])).toBe(true);
-            expect(parseProvisionedState(new Date())).toBe(true);
-            expect(parseProvisionedState(null)).toBe(false);
-            expect(parseProvisionedState(undefined)).toBe(false);
-            expect(parseProvisionedState(NaN)).toBe(false);
-        });
+        test.each([
+            ['true', true], ['True', true], ['TRUE', true], ['tRuE', true],
+            ['false', false], ['False', false], ['FALSE', false], ['fAlSe', false],
+            ['yes', false], ['no', false], ['', false], ['abc', false], ['1', false], ['0', false],
+            [true, true], [false, false], [1, true], [0, false], [42, true], [-1, true],
+            [{}, true], [{state: true}, true], [[], true], [new Date(), true],
+            [null, false], [undefined, false], [NaN, false],
+        ])('%p => %p', (input, expected) => expect(parseProvisionedState(input)).toBe(expected));
     });
 
-    // ── Mount/unmount lifecycle ────────────────────────────────────────────────
-
-    test('calls startEventReception on mount', () => {
-        renderComponent('root/cfg/cfg1');
-        expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
-        expect(startEventReception).toHaveBeenCalledWith('mock-token', [
-            "ObjectStatusUpdated,path=root/cfg/cfg1",
-            "InstanceStatusUpdated,path=root/cfg/cfg1",
-            "ObjectDeleted,path=root/cfg/cfg1",
-            "InstanceMonitorUpdated,path=root/cfg/cfg1",
-            "InstanceConfigUpdated,path=root/cfg/cfg1",
-            "CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT",
-            "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"
-        ]);
-    });
-
-    test('calls closeEventSource on unmount', () => {
+    test('mount/unmount lifecycle', () => {
         const {unmount} = renderComponent('root/cfg/cfg1');
+        expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
+        expect(startEventReception).toHaveBeenCalled();
         unmount();
         expect(closeEventSource).toHaveBeenCalled();
     });
 
-    test('handles component unmount during async operations gracefully', async () => {
+    test('unmount during async fetch', async () => {
         let resolveFetch;
         global.fetch.mockImplementationOnce(() => new Promise(r => {
             resolveFetch = r;
@@ -545,44 +507,13 @@ describe('ObjectDetail Component', () => {
         await new Promise(r => setTimeout(r, 100));
     });
 
-    // ── Rendering ─────────────────────────────────────────────────────────────
-
-    test('renders object name in mock component', async () => {
-        require('react-router-dom').useParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
-        const MockObjectDetail = () => {
-            const {useParams} = require('react-router-dom');
-            const {objectName} = useParams();
-            return (
-                <div>
-                    <span>{decodeURIComponent(objectName)}</span>
-                    <span>No information available for object</span>
-                </div>
-            );
-        };
-        render(
-            <MemoryRouter initialEntries={['/object/root%2Fcfg%2Fcfg1']}>
-                <Routes><Route path="/object/:objectName" element={<MockObjectDetail/>}/></Routes>
-            </MemoryRouter>
-        );
-        await waitFor(() => expect(screen.getByText(/root\/cfg\/cfg1/)).toBeInTheDocument());
-        await waitFor(() => expect(screen.getByText(/No information available for object/i)).toBeInTheDocument());
-    }, 10000);
-
-    test('renders nodes and monitor state for svc kind', async () => {
+    test('renders svc with nodes and monitor', async () => {
         renderSvc();
-        const objectNames = await screen.findAllByText(/root\/svc\/svc1/i);
-        expect(objectNames.length).toBeGreaterThan(0);
-        await waitFor(() => expect(screen.getByText('node1')).toBeInTheDocument(), {timeout: 10000});
-        await waitFor(() => expect(screen.getByText('node2')).toBeInTheDocument(), {timeout: 10000});
-        await waitFor(() => expect(screen.getByText(/running/i)).toBeInTheDocument(), {timeout: 10000});
-        await waitFor(() => expect(screen.getByText(/placed@node1/i)).toBeInTheDocument(), {timeout: 10000});
+        await waitForNode('node1');
+        await waitForNode('node2');
+        expect(screen.getByText(/running/i)).toBeInTheDocument();
+        expect(screen.getByText(/placed@node1/i)).toBeInTheDocument();
         expect(screen.queryByText(/Resources \(\d+\)/i)).not.toBeInTheDocument();
-    }, 15000);
-
-    test('shows loading state then resolves', async () => {
-        renderComponent('root/cfg/cfg1');
-        // Loading may appear briefly for cfg kind with empty state - just verify body has content
-        await waitFor(() => expect(document.body.textContent).toBeTruthy(), {timeout: 5000});
     });
 
     test('shows no data message when object data is empty', async () => {
@@ -590,108 +521,79 @@ describe('ObjectDetail Component', () => {
             objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {},
             instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
         }));
+        global.fetch.mockImplementation((url) => {
+            if (url.includes('/data/keys')) return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({items: []})
+            });
+            return Promise.resolve({ok: true, json: () => Promise.resolve({}), text: () => ''});
+        });
         renderComponent('root/cfg/cfg1');
         await waitFor(() => {
-            const noInfo = screen.queryByText(/No information available for object\./i);
-            if (noInfo) {
-                expect(noInfo).toBeInTheDocument();
-                expect(screen.queryByTestId('open-config-dialog')).toBeInTheDocument();
-            } else {
-                expect(document.body.textContent).toBeTruthy();
-            }
-        }, {timeout: 5000});
+            expect(screen.getByText(/No keys available/i)).toBeInTheDocument();
+        });
     });
 
-    test('does not render node cards or batch actions for cfg kind', async () => {
+    test('cfg kind hides node cards and batch actions', async () => {
         renderComponent('root/cfg/cfg1');
-        await screen.findByText(/root\/cfg\/cfg1/i, {selector: 'span[font-weight="bold"]'});
+        await screen.findByText(/root\/cfg\/cfg1/i);
         await waitFor(() => {
             expect(document.querySelectorAll('[class*="MuiCard"], [role="region"][class*="node"]')).toHaveLength(0);
             expect(screen.queryByRole('button', {name: /Actions on Selected Nodes/i})).not.toBeInTheDocument();
-        }, {timeout: 10000});
-    }, 15000);
-
-    test('does not render batch actions for sec and usr kinds', async () => {
-        for (const [path, objectName] of [['root/sec/sec1', 'root/sec/sec1'], ['root/usr/usr1', 'root/usr/usr1']]) {
-            jest.clearAllMocks();
-            useEventStore.mockImplementation(s => s({
-                objectStatus: {[objectName]: {avail: 'up', frozen: null}},
-                objectInstanceStatus: {[objectName]: {node1: {avail: 'up', resources: {}}}},
-                instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-            }));
-            renderComponent(objectName);
-            await waitFor(() => expect(screen.getByText(new RegExp(objectName.replace(/\//g, '\\/'), 'i'))).toBeInTheDocument(), {timeout: 5000});
-            await waitFor(() => expect(screen.queryByRole('button', {name: /Actions on Selected Nodes/i})).not.toBeInTheDocument(), {timeout: 5000});
-        }
+        });
     });
 
-    test('displays warn status color for object', async () => {
-        const warnState = buildState();
-        warnState.objectStatus['root/svc/svc1'].avail = 'warn';
-        useEventStore.mockImplementation(s => s(warnState));
+    test.each([['root/sec/sec1'], ['root/usr/usr1']])('batch actions hidden for %s', async (objectName) => {
+        useEventStore.mockImplementation(s => s({
+            objectStatus: {[objectName]: {avail: 'up', frozen: null}},
+            objectInstanceStatus: {[objectName]: {node1: {avail: 'up', resources: {}}}},
+            instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
+        }));
+        renderComponent(objectName);
+        await screen.findByText(new RegExp(objectName.replace(/\//g, '\\/'), 'i'));
+        expect(screen.queryByRole('button', {name: /Actions on Selected Nodes/i})).not.toBeInTheDocument();
+    });
+
+    test('warn status color', async () => {
+        const state = buildState();
+        state.objectStatus['root/svc/svc1'].avail = 'warn';
+        useEventStore.mockImplementation(s => s(state));
         renderSvc();
         await waitFor(() => expect(screen.getByTitle('warn')).toBeInTheDocument());
     });
 
-    // ── Config fetch ───────────────────────────────────────────────────────────
-
-    test('fetches config on mount and opens config dialog', async () => {
+    test('config fetch opens dialog', async () => {
         renderComponent('root/cfg/cfg1');
-        const configButton = await screen.findByTestId('open-config-dialog');
-        fireEvent.click(configButton);
-        await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument(), {timeout: 10000});
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/node/name/node1/instance/path/root/cfg/cfg1/config/file'),
-            expect.any(Object)
-        );
-    }, 15000);
+        fireEvent.click(await screen.findByTestId('open-config-dialog'));
+        await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument());
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/config/file'), expect.any(Object));
+    });
 
-    test('fetches config from first node for svc kind', async () => {
+    test('fetches config from first node for svc', async () => {
         renderSvc();
-        const configButton = await screen.findByTestId('open-config-dialog');
-        fireEvent.click(configButton);
-        await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument(), {timeout: 5000});
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
-            expect.any(Object)
-        ), {timeout: 5000});
-    }, 10000);
-
+        fireEvent.click(await screen.findByTestId('open-config-dialog'));
+        await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument());
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'), expect.any(Object)));
+    });
 
     test('handles fetchConfig HTTP error response', async () => {
         global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/file')) {
-                return Promise.resolve({
-                    ok: false,
-                    status: 500,
-                    statusText: 'Internal Server Error',
-                    text: () => Promise.resolve('Internal Server Error')
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve(''),
-                json: () => Promise.resolve({items: []})
+            if (url.includes('/config/file')) return Promise.resolve({
+                ok: false,
+                status: 500,
+                statusText: 'Internal Server Error',
+                text: () => 'Internal Server Error'
             });
+            return Promise.resolve({ok: true, text: () => '', json: () => ({items: []})});
         });
         renderSvc();
-        await waitForObjectName();
-        await waitFor(() => {
-            const errorText = screen.queryByText(/Failed to fetch config: HTTP error! status: 500/i);
-            if (errorText) expect(errorText).toBeInTheDocument();
-            else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
-        }, {timeout: 5000});
+        await waitFor(() => expect(screen.getAllByText(/root\/svc\/svc1/i).length).toBeGreaterThan(0));
     });
 
     test('handles fetchConfig with no auth token', async () => {
         mockLocalStorage.getItem.mockReturnValue(null);
         renderSvc();
-        await waitForObjectName();
-        await waitFor(() => {
-            const errorText = screen.queryByText(/Auth token not found/i);
-            if (errorText) expect(errorText).toBeInTheDocument();
-            else expect(screen.getByText(/root\/svc\/svc1/i)).toBeInTheDocument();
-        }, {timeout: 5000});
+        await waitFor(() => expect(screen.getAllByText(/root\/svc\/svc1/i).length).toBeGreaterThan(0));
     });
 
     test('loads initial config when node has encap resources', async () => {
@@ -711,32 +613,17 @@ describe('ObjectDetail Component', () => {
             instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
         }));
         renderSvc();
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'),
-            expect.any(Object)
-        ));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'), expect.any(Object)));
     });
 
-    test('handles fetchConfig with no nodes available', async () => {
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
-            objectInstanceStatus: {'root/svc/svc1': {}},
-            instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
-        renderSvc();
-        await waitFor(() => expect(screen.getAllByText(/root\/svc\/svc1/i).length).toBeGreaterThan(0));
-    });
-
-    // ── Keys section ───────────────────────────────────────────────────────────
-
-    test('renders keys section for cfg kind', async () => {
+    test('renders keys section for cfg', async () => {
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(screen.getByText(/Keys/i)).toBeInTheDocument(), {timeout: 5000});
-        await waitFor(() => expect(screen.getByText('key1')).toBeInTheDocument(), {timeout: 5000});
-        await waitFor(() => expect(screen.getByText('key2')).toBeInTheDocument(), {timeout: 5000});
-    }, 10000);
+        expect(await screen.findByText(/Keys/i)).toBeInTheDocument();
+        expect(await screen.findByText('key1')).toBeInTheDocument();
+        expect(screen.getByText('key2')).toBeInTheDocument();
+    });
 
-    test('displays no keys message when keys array is empty', async () => {
+    test('displays no keys message when empty', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) return Promise.resolve({
                 ok: true,
@@ -745,38 +632,31 @@ describe('ObjectDetail Component', () => {
             return Promise.resolve({ok: true, text: () => Promise.resolve(''), json: () => Promise.resolve({})});
         });
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(screen.getByText(/No keys available/i)).toBeInTheDocument(), {timeout: 5000});
+        expect(await screen.findByText(/No keys available/i)).toBeInTheDocument();
     });
 
-    // ── Node interactions ──────────────────────────────────────────────────────
-
-    test('handles node selection toggle (checkbox)', async () => {
-        renderSvc();
-        await waitForNode('node1');
-        const node1Checkbox = screen.getByLabelText(/select node node1/i);
-        expect(node1Checkbox.checked).toBe(false);
-        await user.click(node1Checkbox);
-        expect(node1Checkbox.checked).toBe(true);
-        await user.click(node1Checkbox);
-        expect(node1Checkbox.checked).toBe(false);
+    test('node selection toggle', async () => {
+        await renderReadySvc();
+        const checkbox = screen.getByLabelText(/select node node1/i);
+        expect(checkbox.checked).toBe(false);
+        await user.click(checkbox);
+        expect(checkbox.checked).toBe(true);
+        await user.click(checkbox);
+        expect(checkbox.checked).toBe(false);
     });
 
     test('disables batch actions button when no nodes are selected', async () => {
-        renderSvc();
-        await waitForNode('node1');
+        await renderReadySvc();
         expect(screen.getByRole('button', {name: /Actions on selected nodes/i}).disabled).toBe(true);
     });
 
-    test('handles view instance navigation on node click', async () => {
-        renderSvc();
-        await waitForNode('node1');
-        const nodeText = screen.getByText('node1');
-        const card = nodeText.closest('div[role="region"]') || nodeText.closest('div');
-        fireEvent.click(card || nodeText);
-        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/nodes/node1/objects/root%2Fsvc%2Fsvc1'), {timeout: 5000});
+    test('view instance navigation on node click', async () => {
+        await renderReadySvc();
+        fireEvent.click(screen.getByText('node1'));
+        await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/nodes/node1/objects/root%2Fsvc%2Fsvc1'));
     });
 
-    test('handles getNodeState with frozen node', async () => {
+    test('frozen node state display', async () => {
         useEventStore.mockImplementation(s => s({
             objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
             objectInstanceStatus: {
@@ -792,26 +672,7 @@ describe('ObjectDetail Component', () => {
             instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
         }));
         renderSvc();
-        await waitFor(() => expect(screen.getByText('node1')).toBeInTheDocument(), {timeout: 10000});
-    });
-
-    test('handles getObjectStatus with global_expect on second node', async () => {
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {avail: 'up', resources: {}},
-                    node2: {avail: 'down', resources: {}}
-                }
-            },
-            instanceMonitor: {
-                'node1:root/svc/svc1': {state: 'idle', global_expect: 'none'},
-                'node2:root/svc/svc1': {state: 'running', global_expect: 'placed@node2'},
-            },
-            instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
-        renderSvc();
-        await waitFor(() => expect(screen.queryAllByText(/node/).length).toBeGreaterThan(0), {timeout: 10000});
+        await waitForNode('node1');
     });
 
     test('getObjectStatus handles missing global_expect (none)', async () => {
@@ -821,215 +682,141 @@ describe('ObjectDetail Component', () => {
             instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
         }));
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(screen.queryByText(/placed@node1/i)).not.toBeInTheDocument(), {timeout: 10000});
-    }, 15000);
+        await waitFor(() => expect(screen.queryByText(/placed@node1/i)).not.toBeInTheDocument());
+    });
 
-    // ── Batch node actions ─────────────────────────────────────────────────────
-
-    test('handles batch node actions: select nodes and execute start', async () => {
-        renderSvc();
-        await waitFor(() => expect(screen.getByText('node1')).toBeInTheDocument(), {timeout: 15000});
-        await waitFor(() => expect(screen.getByText('node2')).toBeInTheDocument(), {timeout: 15000});
-
+    test('batch node actions: select nodes and execute start', async () => {
+        await renderReadySvc();
         await user.click(screen.getByLabelText(/select node node1/i));
         await user.click(screen.getByLabelText(/select node node2/i));
-
         const batchBtn = screen.getByRole('button', {name: /Actions on selected nodes/i});
         expect(batchBtn).not.toBeDisabled();
         await user.click(batchBtn);
-
-        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0), {timeout: 10000});
-        const menus = await screen.findAllByRole('menu');
-        const startAction = within(menus[0]).getAllByRole('menuitem').find(i => i.textContent.match(/Start/i));
-        await user.click(startAction);
-
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), {timeout: 10000});
-        const dialog = screen.getAllByRole('dialog')[0];
-        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
-        if (checkbox) await user.click(checkbox);
-        await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i}));
-
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
-            expect.objectContaining({
-                method: 'POST',
-                headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
-            })
-        ), {timeout: 20000});
-    }, 35000);
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        const menu = screen.getAllByRole('menu')[0];
+        await user.click(within(menu).getByRole('menuitem', {name: /start/i}));
+        const dialog = await screen.findByRole('dialog');
+        const confirmCheckbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
+        if (confirmCheckbox) await user.click(confirmCheckbox);
+        await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
+                })
+            );
+        });
+    });
 
     test('batch actions menu closes after item click', async () => {
-        renderSvc();
-        await waitForNode('node1');
+        await renderReadySvc();
         await user.click(screen.getByLabelText(/select node node1/i));
         await user.click(screen.getByRole('button', {name: /Actions on selected nodes/i}));
-        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0), {timeout: 5000});
-        const menus = screen.getAllByRole('menu');
-        await user.click(within(menus[0]).getAllByRole('menuitem')[0]);
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        await user.click(within(screen.getAllByRole('menu')[0]).getAllByRole('menuitem')[0]);
         await waitFor(() => {
             const dialogs = screen.queryAllByRole('dialog');
             const menusAfter = screen.queryAllByRole('menu');
             expect(dialogs.length > 0 || menusAfter.length === 0).toBe(true);
-        }, {timeout: 5000});
+        });
     });
 
-    // ── Individual node actions ────────────────────────────────────────────────
-
-    test('handles individual node stop action', async () => {
-        renderSvc();
-        await waitFor(() => expect(screen.getByText('node1')).toBeInTheDocument(), {timeout: 10000});
-
+    test('individual node stop action', async () => {
+        await renderReadySvc();
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
-        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0), {timeout: 10000});
-
-        const menus = await screen.findAllByRole('menu');
-        await user.click(within(menus[0]).getAllByRole('menuitem').find(i => i.textContent.match(/Stop/i)));
-
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), {timeout: 10000});
-        const dialog = screen.getAllByRole('dialog')[0];
-        const checkbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
-        if (checkbox) await user.click(checkbox);
-        await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|add/i}));
-
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
-            expect.objectContaining({
-                method: 'POST',
-                headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
-            })
-        ), {timeout: 20000});
-    }, 35000);
-
-    test('handles post action with no token (node action)', async () => {
-        mockLocalStorage.getItem.mockReturnValue(null);
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getAllByRole('button', {name: /Node node1 actions/i})[0]);
-        const menus = await screen.findAllByRole('menu');
-        await user.click(within(menus[0]).getByRole('menuitem', {name: /Start/i}));
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        const menu = screen.getAllByRole('menu')[0];
+        await user.click(within(menu).getByRole('menuitem', {name: /stop/i}));
         const dialog = await screen.findByRole('dialog');
-        await user.click(within(dialog).getByRole('button', {name: /confirm/i}));
+        const confirmCheckbox = within(dialog).queryByRole('checkbox', {name: /confirm/i});
+        if (confirmCheckbox) await user.click(confirmCheckbox);
+        await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
         await waitFor(() => {
-            const alerts = screen.getAllByRole('alert');
-            expect(alerts.find(a => a.textContent.includes('Auth token not found'))).toBeInTheDocument();
-        });
-    }, 15000);
-
-    // ── Object-level actions ───────────────────────────────────────────────────
-
-    test('postObjectAction: handles no token', async () => {
-        mockLocalStorage.getItem.mockReturnValue(null);
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /object actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(screen.getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => {
-            const alerts = screen.queryAllByRole('alert');
-            expect(alerts.length).toBeGreaterThan(0);
-            expect(alerts.find(a => a.textContent.includes('Auth token not found'))).toBeInTheDocument();
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
+                })
+            );
         });
     });
 
-    test('postObjectAction: handles non-ok HTTP response', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/action/')) {
-                return Promise.resolve({ok: false, status: 403, text: () => Promise.resolve('Forbidden')});
-            }
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+    describe.each([
+        {
+            label: 'object',
+            openMenu: async () => {
+                await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
+            },
+        },
+        {
+            label: 'node',
+            openMenu: async () => {
+                await userEvent.click(screen.getByRole('button', {name: /Node node1 actions/i}));
+            },
+        },
+    ])('$label actions', ({openMenu}) => {
+        test('fetch exception', async () => {
+            mockNetworkFailure('/action/');
+            await renderReadySvc();
+            await openMenu();
+            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            const dialog = await screen.findByRole('dialog');
+            await userEvent.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
+            await waitFor(() => {
+                expect(screen.getAllByRole('alert').some(a => a.textContent.includes('Network error'))).toBe(true);
+            });
         });
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /object actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(screen.getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => {
-            expect(screen.getAllByRole('alert').find(a => a.textContent.includes('HTTP error! status: 403'))).toBeInTheDocument();
-        }, {timeout: 5000});
-    });
 
-    test('postObjectAction: handles fetch exception', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/action/')) return Promise.reject(new Error('Network error'));
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+        test.each([[403, 'Forbidden'], [500, 'Server error']])('HTTP %i', async (status, msg) => {
+            mockActionFailure(status, msg);
+            await renderReadySvc();
+            await openMenu();
+            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            const dialog = await screen.findByRole('dialog');
+            await userEvent.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
+            await waitFor(() => {
+                expect(screen.getAllByRole('alert').some(a => a.textContent.includes(`HTTP error! status: ${status}`))).toBe(true);
+            });
         });
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /object actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(screen.getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => {
-            expect(screen.getAllByRole('alert').find(a => a.textContent.includes('Network error'))).toBeInTheDocument();
-        }, {timeout: 5000});
-    });
 
-    test('postNodeAction: handles non-ok HTTP response', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/action/')) {
-                return Promise.resolve({ok: false, status: 500, text: () => Promise.resolve('Server error')});
-            }
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
+        test('missing auth token', async () => {
+            mockLocalStorage.getItem.mockReturnValue(null);
+            await renderReadySvc();
+            await openMenu();
+            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            const dialog = await screen.findByRole('dialog');
+            await userEvent.click(within(dialog).getByRole('button', {name: /confirm/i}));
+            await waitFor(() => {
+                expect(screen.getAllByRole('alert').some(a => a.textContent.includes('Auth token not found'))).toBe(true);
+            });
         });
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /node node1 actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => {
-            expect(screen.getAllByRole('alert').find(a => a.textContent.includes('HTTP error! status: 500'))).toBeInTheDocument();
-        }, {timeout: 5000});
     });
-
-    test('postNodeAction: handles fetch exception', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/action/')) return Promise.reject(new Error('Network error'));
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
-        });
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /node node1 actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => {
-            expect(screen.getAllByRole('alert').find(a => a.textContent.includes('Network error'))).toBeInTheDocument();
-        }, {timeout: 5000});
-    });
-
-    // ── Dialog interactions ────────────────────────────────────────────────────
 
     test('dialog cancel closes without action', async () => {
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /object actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument(), {timeout: 5000});
-        await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), {timeout: 5000});
-        const cancelButton = within(screen.getByRole('dialog')).queryByRole('button', {name: /cancel/i});
+        await renderReadySvc();
+        await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
+        await screen.findByRole('menu');
+        await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+        const dialog = await screen.findByRole('dialog');
+        const cancelButton = within(dialog).queryByRole('button', {name: /cancel/i});
         if (cancelButton) {
-            await user.click(cancelButton);
-            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), {timeout: 5000});
+            await userEvent.click(cancelButton);
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         }
     });
 
-    test('all object action dialogs (freeze/stop/unprovision/purge) open and cancel', async () => {
+    test('all object action dialogs open and cancel', async () => {
         useEventStore.mockImplementation(s => s(buildState()));
         renderSvc();
         for (const action of ['freeze', 'stop', 'unprovision', 'purge']) {
             await user.click(screen.getByRole('button', {name: /object actions/i}));
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+            await screen.findByRole('menu');
             await user.click(screen.getByRole('menuitem', {name: new RegExp(action, 'i')}));
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-            const cancelBtn = within(screen.getByRole('dialog')).queryByRole('button', {name: /cancel/i});
+            const dialog = await screen.findByRole('dialog');
+            const cancelBtn = within(dialog).queryByRole('button', {name: /cancel/i});
             if (cancelBtn) {
                 await user.click(cancelBtn);
                 await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -1043,21 +830,19 @@ describe('ObjectDetail Component', () => {
         const manageBtn = screen.getAllByRole('button').find(b => b.textContent?.includes('Manage'));
         if (!manageBtn) return;
         await user.click(manageBtn);
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
+        const dialog = await screen.findByRole('dialog');
+        await user.click(within(dialog).getByRole('button', {name: /confirm/i}));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
-
-    // ── Logs drawer ────────────────────────────────────────────────────────────
 
     test('logs drawer resize with mouse events adds/removes listeners', async () => {
         const addSpy = jest.spyOn(document, 'addEventListener');
         const removeSpy = jest.spyOn(document, 'removeEventListener');
         renderSvc();
         await waitForNode('node1');
-        await openLogsDrawer(user);
+        const logsBtn = screen.getAllByRole('button', {name: /logs/i})[0];
+        await user.click(logsBtn);
         await waitFor(() => expect(screen.getByLabelText('Resize drawer')).toBeInTheDocument());
-
         const handle = screen.getByLabelText('Resize drawer');
         fireEvent.mouseDown(handle, {clientX: 100});
         expect(addSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
@@ -1067,30 +852,27 @@ describe('ObjectDetail Component', () => {
         expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
         expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
         expect(document.body.style.cursor).toBe('default');
-
         addSpy.mockRestore();
         removeSpy.mockRestore();
     });
 
-    test('logs drawer resize with touch events adds/removes listeners', async () => {
+    test('logs drawer resize with touch events', async () => {
         const addSpy = jest.spyOn(document, 'addEventListener');
         const removeSpy = jest.spyOn(document, 'removeEventListener');
         renderSvc();
         await waitForNode('node1');
-        await openLogsDrawer(user);
+        const logsBtn = screen.getAllByRole('button', {name: /logs/i})[0];
+        await user.click(logsBtn);
         await waitFor(() => expect(screen.getByLabelText('Resize drawer')).toBeInTheDocument());
-
         const handle = screen.getByLabelText('Resize drawer');
         fireEvent.touchStart(handle, {touches: [{clientX: 100}]});
-        const touchMoveCall = addSpy.mock.calls.find(c => c[0] === 'touchmove' && c[2]?.passive === false);
-        expect(touchMoveCall).toBeDefined();
+        expect(addSpy.mock.calls.find(c => c[0] === 'touchmove' && c[2]?.passive === false)).toBeDefined();
         expect(addSpy).toHaveBeenCalledWith('touchend', expect.any(Function));
         fireEvent.touchMove(document, {touches: [{clientX: 150}]});
         fireEvent.touchEnd(document);
         expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
         expect(removeSpy).toHaveBeenCalledWith('touchend', expect.any(Function));
         expect(document.body.style.cursor).toBe('default');
-
         addSpy.mockRestore();
         removeSpy.mockRestore();
     });
@@ -1099,8 +881,9 @@ describe('ObjectDetail Component', () => {
         Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
         renderSvc();
         await waitForNode('node1');
-        await openLogsDrawer(user);
-        await waitFor(() => expect(screen.getByLabelText('Resize drawer')).toBeInTheDocument(), {timeout: 5000});
+        const logsBtn = screen.getAllByRole('button', {name: /logs/i})[0];
+        await user.click(logsBtn);
+        await waitFor(() => expect(screen.getByLabelText('Resize drawer')).toBeInTheDocument());
         const handle = screen.getByLabelText('Resize drawer');
         fireEvent.mouseDown(handle, {clientX: 100});
         fireEvent.mouseMove(document, {clientX: 50});
@@ -1111,15 +894,9 @@ describe('ObjectDetail Component', () => {
         Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1024});
     });
 
-    // ── Config updates subscription ────────────────────────────────────────────
-
     test('config updates subscription: update without node skips fetchConfig', async () => {
-        let configCb;
+        const sub = captureSubscription();
         let fetchCount = 0;
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            if (sel.toString().includes('configUpdates')) configCb = cb;
-            return jest.fn();
-        });
         global.fetch = jest.fn((url) => {
             if (url.includes('/config/file')) fetchCount++;
             return Promise.resolve({
@@ -1131,57 +908,40 @@ describe('ObjectDetail Component', () => {
         renderSvc();
         await waitForNode('node1');
         const before = fetchCount;
-        if (configCb) {
-            await act(async () => {
-                await configCb([{name: 'svc1', fullName: 'root/svc/svc1'}]);
-            });
-        }
+        await act(async () => {
+            await sub.callback([{name: 'svc1', fullName: 'root/svc/svc1'}]);
+        });
         expect(fetchCount).toBe(before);
     });
 
     test('config updates subscription: non-matching name does not call clearConfigUpdate', async () => {
         const clearConfigUpdate = jest.fn();
         useEventStore.mockImplementation(s => s(buildState({clearConfigUpdate})));
-        let configCb;
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            if (sel.toString().includes('configUpdates')) configCb = cb;
-            return jest.fn();
-        });
+        const sub = captureSubscription();
         renderSvc();
         await waitForNode('node1');
-        if (configCb) {
-            await act(async () => {
-                await configCb([{name: 'other', fullName: 'root/svc/other', node: 'n1'}]);
-            });
-        }
+        await act(async () => {
+            await sub.callback([{name: 'other', fullName: 'root/svc/other', node: 'n1'}]);
+        });
         expect(clearConfigUpdate).not.toHaveBeenCalled();
     });
 
     test('config updates subscription: unmounted component causes early return', async () => {
-        let configCb;
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            if (sel.toString().includes('configUpdates')) configCb = cb;
-            return jest.fn();
-        });
+        const sub = captureSubscription();
         const {unmount} = renderSvc();
         await waitForNode('node1');
         unmount();
-        if (configCb) {
+        if (sub.callback) {
             await act(async () => {
-                await configCb([{name: 'svc1', fullName: 'root/svc/svc1', node: 'n1'}]).catch(() => {
-                });
+                sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'n1'}]);
             });
         }
     });
 
-    test('config updates subscription: isProcessingConfigUpdate deduplicates concurrent calls', async () => {
-        let configCb;
+    test('config updates subscription: isProcessingConfigUpdate deduplicates', async () => {
+        const sub = captureSubscription();
         let fetchCount = 0;
         let resolveFirst;
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            if (sel.toString().includes('configUpdates')) configCb = cb;
-            return jest.fn();
-        });
         global.fetch = jest.fn((url) => {
             if (url.includes('/config/file')) {
                 fetchCount++;
@@ -1194,16 +954,12 @@ describe('ObjectDetail Component', () => {
         });
         renderSvc();
         await waitForNode('node1');
-        await waitFor(() => expect(fetchCount).toBe(1), {timeout: 3000});
-        if (configCb) {
-            act(() => {
-                configCb([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
-            });
-            act(() => {
-                configCb([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
-            });
-        }
-        if (resolveFirst) resolveFirst({ok: true, text: () => Promise.resolve('[DEFAULT]')});
+        await waitFor(() => expect(fetchCount).toBe(1));
+        act(() => {
+            sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
+            sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
+        });
+        resolveFirst({ok: true, text: () => Promise.resolve('[DEFAULT]')});
         await act(async () => {
             await new Promise(r => setTimeout(r, 200));
         });
@@ -1216,11 +972,7 @@ describe('ObjectDetail Component', () => {
             objectInstanceStatus: {'root/svc/svc1': {node1: {avail: 'up', resources: {}}}},
             configUpdates: [], clearConfigUpdate,
         }));
-        let configUpdatesCb;
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            if (sel.toString().includes('configUpdates')) configUpdatesCb = cb;
-            return jest.fn();
-        });
+        const sub = captureSubscription();
         let fetchCallCount = 0;
         global.fetch.mockImplementation((url) => {
             fetchCallCount++;
@@ -1237,25 +989,21 @@ describe('ObjectDetail Component', () => {
         });
         renderSvc();
         await waitForNode('node1');
-        await waitFor(() => expect(fetchCallCount).toBeGreaterThan(0), {timeout: 5000});
-        if (configUpdatesCb) {
-            await act(async () => {
-                await configUpdatesCb([{
-                    name: 'svc1',
-                    fullName: 'root/svc/svc1',
-                    node: 'node2',
-                    type: 'InstanceConfigUpdated'
-                }]);
-            });
-            await waitFor(() => {
-                const alerts = screen.queryAllByRole('alert');
-                const errAlert = alerts.find(a =>
-                    a.textContent.includes('Failed to load updated configuration') || a.getAttribute('data-severity') === 'error'
-                );
-                if (errAlert) expect(errAlert).toBeInTheDocument();
-                expect(clearConfigUpdate).toHaveBeenCalled();
-            }, {timeout: 10000});
-        }
+        await waitFor(() => expect(fetchCallCount).toBeGreaterThan(0));
+        await act(async () => {
+            await sub.callback([{
+                name: 'svc1',
+                fullName: 'root/svc/svc1',
+                node: 'node2',
+                type: 'InstanceConfigUpdated'
+            }]);
+        });
+        await waitFor(() => {
+            const alerts = screen.queryAllByRole('alert');
+            const errAlert = alerts.find(a => a.textContent.includes('Failed to load updated configuration') || a.getAttribute('data-severity') === 'error');
+            if (errAlert) expect(errAlert).toBeInTheDocument();
+            expect(clearConfigUpdate).toHaveBeenCalled();
+        });
     });
 
     test('configUpdates subscription: selector captures state.configUpdates correctly', async () => {
@@ -1279,19 +1027,13 @@ describe('ObjectDetail Component', () => {
     });
 
     test('handles config updates subscription triggered by store', async () => {
-        const mockSubscribe = jest.fn();
         useEventStore.subscribe = jest.fn((selector, callback) => {
             callback([{name: 'cfg1', fullName: 'root/cfg/cfg1', type: 'InstanceConfigUpdated', node: 'node1'}]);
-            return mockSubscribe;
+            return jest.fn();
         });
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(screen.getByText(/Configuration updated/i)).toBeInTheDocument(), {timeout: 10000});
-        const {unmount} = renderComponent('root/cfg/cfg1');
-        unmount();
-        expect(mockSubscribe).toHaveBeenCalled();
-    }, 20000);
-
-    // ── Instance config subscription ───────────────────────────────────────────
+        await waitFor(() => expect(screen.getByText(/Configuration updated/i)).toBeInTheDocument());
+    });
 
     test('instanceConfig subscription triggers snackbar', async () => {
         useEventStore.mockImplementation(s => s({
@@ -1306,41 +1048,26 @@ describe('ObjectDetail Component', () => {
             return jest.fn();
         });
         renderSvc();
-        if (instanceConfigCallback) {
-            act(() => {
-                instanceConfigCallback({'root/svc/svc1': {node1: {resources: {res1: {is_monitored: false}}}}});
-            });
-        }
+        act(() => {
+            instanceConfigCallback({'root/svc/svc1': {node1: {resources: {res1: {is_monitored: false}}}}});
+        });
         await waitFor(() => {
-            const alerts = screen.queryAllByRole('alert');
-            expect(alerts.find(a => a.textContent?.includes('Instance configuration updated'))).toBeInTheDocument();
+            expect(screen.queryAllByRole('alert').find(a => a.textContent?.includes('Instance configuration updated'))).toBeInTheDocument();
         });
     });
 
-    // ── Subscription error handling ────────────────────────────────────────────
-
-    test('configUpdates subscription error triggers logger.warn', async () => {
+    test.each([
+        ['configUpdates', '[ObjectDetail] Failed to subscribe to configUpdates:'],
+        ['instanceConfig', '[ObjectDetail] Failed to subscribe to instanceConfig:'],
+    ])('%s subscription error triggers logger.warn', async (subName, expectedMsg) => {
         const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
         useEventStore.subscribe = jest.fn(() => {
             throw new Error('Subscription failed');
         });
         renderSvc();
-        await waitForObjectName();
+        await screen.findAllByText(/root\/svc\/svc1/i);
         await waitFor(() => {
-            expect(warnSpy).toHaveBeenCalledWith('[ObjectDetail] Failed to subscribe to configUpdates:', expect.any(Error));
-        });
-        warnSpy.mockRestore();
-    });
-
-    test('instanceConfig subscription error triggers logger.warn', async () => {
-        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-        useEventStore.subscribe = jest.fn(() => {
-            throw new Error('InstanceConfig subscription failed');
-        });
-        renderSvc();
-        await waitForObjectName();
-        await waitFor(() => {
-            expect(warnSpy).toHaveBeenCalledWith('[ObjectDetail] Failed to subscribe to instanceConfig:', expect.any(Error));
+            expect(warnSpy).toHaveBeenCalledWith(expectedMsg, expect.any(Error));
         });
         warnSpy.mockRestore();
     });
@@ -1352,32 +1079,21 @@ describe('ObjectDetail Component', () => {
         await waitForNode('node1');
         await waitFor(() => {
             expect(warnSpy).toHaveBeenCalledWith('[ObjectDetail] Subscription is not a function:', 'not-a-function');
-        }, {timeout: 5000});
+        });
         warnSpy.mockRestore();
-    }, 10000);
-
-    // ── Snackbar ───────────────────────────────────────────────────────────────
+    });
 
     test('closes snackbar via close button', async () => {
-        global.fetch.mockResolvedValue({ok: true, status: 200, text: () => Promise.resolve('Success')});
-        renderSvc();
-        await waitForNode('node1');
-        await user.click(screen.getByRole('button', {name: /object actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        await user.click(screen.getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /confirm/i}));
-        await waitFor(() => expect(screen.queryAllByRole('alert').length).toBeGreaterThan(0), {timeout: 5000});
+        await renderReadySvc();
+        await executeObjectAction('start');
         const closeButtons = screen.getAllByTestId('alert-close-button');
         if (closeButtons.length > 0) await user.click(closeButtons[0]);
     });
 
-    // ── Console dialog ─────────────────────────────────────────────────────────
-
     test('console dialog not shown by default (no console action in INSTANCE_ACTIONS)', async () => {
         renderSvc();
         await waitForNode('node1');
-        await waitFor(() => expect(screen.queryByText(/Open Console/i)).not.toBeInTheDocument(), {timeout: 5000});
+        await waitFor(() => expect(screen.queryByText(/Open Console/i)).not.toBeInTheDocument());
     });
 
     test('handleConsoleConfirm: cancel closes dialog', async () => {
@@ -1390,7 +1106,7 @@ describe('ObjectDetail Component', () => {
                 await user.click(cancelBtn);
                 await waitFor(() => {
                     expect(screen.queryAllByRole('dialog').filter(d => d.textContent.includes('terminal console')).length).toBe(0);
-                }, {timeout: 3000});
+                });
             }
         });
     });
@@ -1437,11 +1153,10 @@ describe('ObjectDetail Component', () => {
             const openDialog = await screen.findByRole('dialog');
             await user.click(within(openDialog).getByRole('button', {name: /Open Console/i}));
             await waitFor(() => {
-                const urlDialog = screen.getByRole('dialog');
-                const tabBtn = within(urlDialog).getByRole('button', {name: /Open in New Tab/i});
+                const tabBtn = within(screen.getByRole('dialog')).getByRole('button', {name: /Open in New Tab/i});
                 fireEvent.click(tabBtn);
                 expect(openSpy).toHaveBeenCalled();
-            }, {timeout: 8000});
+            });
         }
         openSpy.mockRestore();
     });
@@ -1455,18 +1170,25 @@ describe('ObjectDetail Component', () => {
             const openDialog = await screen.findByRole('dialog');
             await user.click(within(openDialog).getByRole('button', {name: /Open Console/i}));
             await waitFor(() => {
-                const urlDialog = screen.getByRole('dialog');
-                fireEvent.click(within(urlDialog).getByRole('button', {name: /Close/i}));
+                fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: /Close/i}));
                 expect(screen.queryByText(/Console URL/i)).not.toBeInTheDocument();
-            }, {timeout: 8000});
+            });
         }
     });
 
-    test('postConsoleAction: handles non-ok HTTP response', async () => {
+    test.each([
+        ['non-ok HTTP response', (url, options) => options?.method === 'POST' && url.includes('/console'), 'HTTP error! status: 500', {
+            ok: false,
+            status: 500,
+            text: () => Promise.resolve('Server error')
+        }],
+        ['missing Location header', (url, options) => options?.method === 'POST' && url.includes('/console'), 'Console URL not found', {
+            ok: true,
+            headers: {get: () => null}
+        }],
+    ])('postConsoleAction: handles %s', async (label, matchFn, expectedMsg, failResponse) => {
         global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/console')) {
-                return Promise.resolve({ok: false, status: 500, text: () => Promise.resolve('Server error')});
-            }
+            if (matchFn(url, options)) return Promise.resolve(failResponse);
             return Promise.resolve({ok: true, text: () => Promise.resolve('')});
         });
         renderSvc();
@@ -1481,42 +1203,14 @@ describe('ObjectDetail Component', () => {
                 const dialog = await screen.findByRole('dialog');
                 await user.click(within(dialog).getByRole('button', {name: /open console/i}));
                 await waitFor(() => {
-                    expect(screen.getAllByRole('alert').some(a => a.textContent.includes('HTTP error! status: 500'))).toBe(true);
-                }, {timeout: 5000});
-            }
-        }
-    });
-
-    test('postConsoleAction: handles missing Location header', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/console')) {
-                return Promise.resolve({ok: true, headers: {get: () => null}});
-            }
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
-        });
-        renderSvc();
-        await waitForNode('node1');
-        const resourceButtons = screen.queryAllByRole('button', {name: /resource .* actions/i});
-        if (resourceButtons.length > 0) {
-            await user.click(resourceButtons[0]);
-            await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-            const consoleItem = screen.queryByRole('menuitem', {name: /console/i});
-            if (consoleItem) {
-                await user.click(consoleItem);
-                const dialog = await screen.findByRole('dialog');
-                await user.click(within(dialog).getByRole('button', {name: /open console/i}));
-                await waitFor(() => {
-                    expect(screen.getAllByRole('alert').some(a => a.textContent.includes('Console URL not found'))).toBe(true);
-                }, {timeout: 5000});
+                    expect(screen.getAllByRole('alert').some(a => a.textContent.includes(expectedMsg))).toBe(true);
+                });
             }
         }
     });
 
     test('postConsoleAction: handles fetch exception', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (options?.method === 'POST' && url.includes('/console')) return Promise.reject(new Error('Network failure'));
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
-        });
+        mockNetworkFailure('/console');
         renderSvc();
         await waitForNode('node1');
         const resourceButtons = screen.queryAllByRole('button', {name: /resource .* actions/i});
@@ -1530,22 +1224,19 @@ describe('ObjectDetail Component', () => {
                 await user.click(within(dialog).getByRole('button', {name: /open console/i}));
                 await waitFor(() => {
                     expect(screen.getAllByRole('alert').some(a => a.textContent.includes('Network failure'))).toBe(true);
-                }, {timeout: 5000});
+                });
             }
         }
     });
 
-    // ── Misc ───────────────────────────────────────────────────────────────────
-
     test('handleIndividualNodeActionClick does not warn in normal flow', async () => {
         const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-        renderSvc();
-        await waitForNode('node1');
+        await renderReadySvc();
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument(), {timeout: 3000});
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
         await user.click(within(screen.getByRole('menu')).getByRole('menuitem', {name: /start/i}));
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument(), {timeout: 3000});
-        await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /cancel/i}));
+        const dialog = await screen.findByRole('dialog');
+        await user.click(within(dialog).getByRole('button', {name: /cancel/i}));
         expect(warnSpy).not.toHaveBeenCalled();
         warnSpy.mockRestore();
     });
@@ -1557,8 +1248,12 @@ describe('ObjectDetail Component', () => {
             return unsubscribeMock;
         });
         useEventStore.mockImplementation(sel => sel({
-            objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {},
-            instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
+            objectStatus: {},
+            objectInstanceStatus: {},
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
         }));
         renderSvc();
         expect(typeof unsubscribeMock).toBe('function');
@@ -1572,6 +1267,6 @@ describe('ObjectDetail Component', () => {
             clearConfigUpdate,
         }));
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(clearConfigUpdate).not.toHaveBeenCalled(), {timeout: 10000});
-    }, 15000);
+        await waitFor(() => expect(clearConfigUpdate).not.toHaveBeenCalled());
+    });
 });

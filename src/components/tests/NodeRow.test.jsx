@@ -26,7 +26,6 @@ jest.mock('../../constants/actions', () => ({
         {name: 'drain', icon: jest.fn(() => <span aria-label="Drain icon"/>)},
         {name: 'push/asset', icon: jest.fn(() => <span aria-label="Asset icon"/>)},
         {name: 'push/disk', icon: jest.fn(() => <span aria-label="Disk icon"/>)},
-        {name: 'push/patch', icon: jest.fn(() => <span aria-label="Patch icon"/>)},
         {name: 'push/pkg', icon: jest.fn(() => <span aria-label="Pkg icon"/>)},
         {name: 'scan/capabilities', icon: jest.fn(() => <span aria-label="Capabilities icon"/>)},
         {name: 'sysreport', icon: jest.fn(() => <span aria-label="Sysreport icon"/>)},

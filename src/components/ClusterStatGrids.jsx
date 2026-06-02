@@ -11,7 +11,6 @@ const ClickLoader = memo(({isLoading}) => (
 
 export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
-
     const handleClick = useCallback(() => {
         setIsLoading(true);
         prepareForNavigation();
@@ -22,13 +21,7 @@ export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
     }, [onClick]);
 
     const subtitle = useMemo(() => (
-        <Box sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 1,
-            width: '100%'
-        }}>
+        <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, width: '100%'}}>
             <Chip
                 label={`Frozen ${frozenCount}`}
                 size="small"
@@ -45,14 +38,7 @@ export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
         </Box>
     ), [frozenCount, isLoading, handleClick]);
 
-    return (
-        <StatCard
-            title="Nodes"
-            value={nodeCount}
-            subtitle={subtitle}
-            onClick={handleClick}
-        />
-    );
+    return <StatCard title="Nodes" value={nodeCount} subtitle={subtitle} onClick={handleClick}/>;
 });
 
 export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
@@ -79,7 +65,6 @@ export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
     const subtitle = useMemo(() => {
         const chips = [];
         const statuses = ['up', 'warn', 'down', 'unprovisioned'];
-
         for (const status of statuses) {
             const count = statusCount[status] || 0;
             if (count > 0) {
@@ -94,7 +79,6 @@ export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
                 );
             }
         }
-
         return (
             <Box sx={{display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap"}}>
                 {chips}
@@ -103,31 +87,15 @@ export const GridObjects = memo(({objectCount, statusCount, onClick}) => {
         );
     }, [statusCount, loadingStatus, handleChipClick]);
 
-    return (
-        <StatCard
-            title="Objects"
-            value={objectCount}
-            subtitle={subtitle}
-            onClick={handleCardClick}
-        />
-    );
+    return <StatCard title="Objects" value={objectCount} subtitle={subtitle} onClick={handleCardClick}/>;
 });
 
 const StatusChip = memo(({status, count, isLoading, onClick}) => {
-    const colors = {
-        up: 'green',
-        warn: 'orange',
-        down: 'red',
-        unprovisioned: 'red'
-    };
-
+    const colors = {up: 'green', warn: 'orange', down: 'red', unprovisioned: 'red'};
     const handleClick = useCallback((e) => {
         e.stopPropagation();
-        if (!isLoading) {
-            onClick();
-        }
+        if (!isLoading) onClick();
     }, [onClick, isLoading]);
-
     return (
         <Box sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
             <Chip
@@ -147,6 +115,7 @@ const StatusChip = memo(({status, count, isLoading, onClick}) => {
     );
 });
 
+// ==================== NAMESPACES ====================
 export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}) => {
     const [loadingNamespace, setLoadingNamespace] = useState('');
     const [isCardLoading, setIsCardLoading] = useState(false);
@@ -160,30 +129,26 @@ export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}
         }, 50);
     }, [onClick]);
 
-    const subtitle = useMemo(() => {
-        return (
-            <Box sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 1,
-                pt: 1,
-                maxHeight: '400px',
-                overflowY: 'auto',
-                justifyContent: 'flex-start'
-            }}>
-                {namespaceSubtitle.map(({namespace, status}) => (
-                    <NamespaceChip
-                        key={namespace}
-                        namespace={namespace}
-                        status={status}
-                        isLoading={loadingNamespace === namespace}
-                        onClick={onClick}
-                        onLoadingChange={setLoadingNamespace}
-                    />
-                ))}
-            </Box>
-        );
-    }, [namespaceSubtitle, loadingNamespace, onClick]);
+    const subtitle = useMemo(() => (
+        <Box sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            pt: 1,
+            justifyContent: 'flex-start'
+        }}>
+            {namespaceSubtitle.map(({namespace, status}) => (
+                <NamespaceChip
+                    key={namespace}
+                    namespace={namespace}
+                    status={status}
+                    isLoading={loadingNamespace === namespace}
+                    onClick={onClick}
+                    onLoadingChange={setLoadingNamespace}
+                />
+            ))}
+        </Box>
+    ), [namespaceSubtitle, loadingNamespace, onClick]);
 
     return (
         <StatCard
@@ -221,7 +186,6 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
     const statusElements = useMemo(() => {
         const elements = [];
         const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
-
         for (const stat of statusTypes) {
             const count = status[stat] || 0;
             if (count > 0) {
@@ -313,11 +277,8 @@ const NamespaceChip = memo(({namespace, status, isLoading, onClick, onLoadingCha
     );
 });
 
-export const GridHeartbeats = memo(({
-                                        heartbeatCount,
-                                        perHeartbeatStats = {},
-                                        onClick
-                                    }) => {
+// ==================== HEARTBEATS ====================
+export const GridHeartbeats = memo(({heartbeatCount, perHeartbeatStats = {}, onClick}) => {
     const [loadingId, setLoadingId] = useState('');
 
     const handleCardClick = useCallback(() => {
@@ -342,34 +303,20 @@ export const GridHeartbeats = memo(({
 
     const subtitle = useMemo(() => {
         const groups = new Map();
-
         for (const [fullId, {running, beating}] of Object.entries(perHeartbeatStats)) {
             if (running === 0 && beating === 0) continue;
-
             let baseId = fullId;
-            if (fullId.endsWith('.rx')) {
-                baseId = fullId.slice(0, -3);
-            } else if (fullId.endsWith('.tx')) {
-                baseId = fullId.slice(0, -3);
-            }
-
-            if (!groups.has(baseId)) {
-                groups.set(baseId, {total: 0, healthy: 0});
-            }
+            if (fullId.endsWith('.rx')) baseId = fullId.slice(0, -3);
+            else if (fullId.endsWith('.tx')) baseId = fullId.slice(0, -3);
+            if (!groups.has(baseId)) groups.set(baseId, {total: 0, healthy: 0});
             const group = groups.get(baseId);
             group.total += 1;
-
-            const isHealthy = running > 0 && beating === running;
-            if (isHealthy) {
-                group.healthy += 1;
-            }
+            if (running > 0 && beating === running) group.healthy += 1;
         }
-
         const chips = [];
         for (const [baseId, {total, healthy}] of groups.entries()) {
             const isHealthy = (total === healthy);
             const isLoading = loadingId === baseId;
-
             chips.push(
                 <Box key={baseId} sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
                     <Chip
@@ -388,34 +335,20 @@ export const GridHeartbeats = memo(({
                 </Box>
             );
         }
-
         return (
-            <Box sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "center",
-                gap: 1,
-                minHeight: "40px"
-            }}>
+            <Box sx={{display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, minHeight: "40px"}}>
                 {chips}
             </Box>
         );
     }, [perHeartbeatStats, loadingId, handleChipClick]);
 
-    return (
-        <StatCard
-            title="Heartbeats"
-            value={heartbeatCount}
-            subtitle={subtitle}
-            onClick={handleCardClick}
-            isLoading={loadingId === 'card'}
-        />
-    );
+    return <StatCard title="Heartbeats" value={heartbeatCount} subtitle={subtitle} onClick={handleCardClick}
+                     isLoading={loadingId === 'card'}/>;
 });
 
+// ==================== POOLS ====================
 export const GridPools = memo(({poolCount, pools, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
-
     const handleClick = useCallback(() => {
         setIsLoading(true);
         prepareForNavigation();
@@ -426,67 +359,36 @@ export const GridPools = memo(({poolCount, pools, onClick}) => {
     }, [onClick]);
 
     const subtitle = useMemo(() => {
-        if (!pools || pools.length === 0) {
-            return null;
-        }
-
+        if (!pools || pools.length === 0) return null;
         return (
-            <Box sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 1,
-                pt: 1,
-                maxHeight: '400px',
-                overflowY: 'auto',
-                justifyContent: 'flex-start'
-            }}>
+            <Box sx={{display: "flex", flexWrap: "wrap", gap: 1, justifyContent: 'flex-start'}}>
                 {pools.map((pool) => {
-                    const usagePercentage = pool.size && pool.used >= 0
-                        ? ((pool.used / pool.size) * 100).toFixed(1)
-                        : "N/A";
+                    const usagePercentage = pool.size && pool.used >= 0 ? ((pool.used / pool.size) * 100).toFixed(1) : "N/A";
                     const free = pool.size - pool.used;
                     const freePercent = pool.size ? (free / pool.size) * 100 : 100;
                     const isLowStorage = freePercent < 10;
-
                     return (
-                        <Box key={pool.name || Math.random()} sx={{
-                            position: 'relative',
-                            display: 'inline-flex',
-                            flexShrink: 0,
-                            margin: "4px"
-                        }}>
-                            <Chip
-                                label={`${pool.name || "Unnamed"} (${usagePercentage}% used)`}
-                                size="small"
-                                sx={{
-                                    backgroundColor: isLowStorage ? 'red' : 'default',
-                                    color: isLowStorage ? 'white' : 'inherit',
-                                    cursor: 'pointer',
-                                    minWidth: "fit-content",
-                                    px: 1.5
-                                }}
-                            />
-                        </Box>
+                        <Chip
+                            key={pool.name || Math.random()}
+                            label={`${pool.name || "Unnamed"} (${usagePercentage}% used)`}
+                            size="small"
+                            sx={{
+                                backgroundColor: isLowStorage ? 'red' : 'default',
+                                color: isLowStorage ? 'white' : 'inherit'
+                            }}
+                        />
                     );
                 })}
             </Box>
         );
     }, [pools]);
 
-    return (
-        <StatCard
-            title="Pools"
-            value={poolCount}
-            subtitle={subtitle}
-            onClick={handleClick}
-            isLoading={isLoading}
-        />
-    );
+    return <StatCard title="Pools" value={poolCount} subtitle={subtitle} onClick={handleClick} isLoading={isLoading}/>;
 });
 
+// ==================== NETWORKS ====================
 export const GridNetworks = memo(({networks, onClick}) => {
     const [isLoading, setIsLoading] = useState(false);
-
     const handleCardClick = useCallback(() => {
         setIsLoading(true);
         prepareForNavigation();
@@ -496,61 +398,33 @@ export const GridNetworks = memo(({networks, onClick}) => {
         }, 50);
     }, [onClick]);
 
-    const subtitle = useMemo(() => {
-        return (
-            <Box sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 1,
-                pt: 1,
-                maxHeight: '400px',
-                overflowY: 'auto',
-                justifyContent: 'flex-start'
-            }}>
-                {networks.map((network) => {
-                    const usagePercentage = network.size
-                        ? ((network.used / network.size) * 100).toFixed(1)
-                        : 0;
-                    const free = network.size - network.used;
-                    const freePercent = network.size ? (free / network.size) * 100 : 100;
-                    const isLowStorage = freePercent < 10;
+    const subtitle = useMemo(() => (
+        <Box sx={{display: "flex", flexWrap: "wrap", gap: 1, justifyContent: 'flex-start'}}>
+            {networks.map((network) => {
+                const usagePercentage = network.size ? ((network.used / network.size) * 100).toFixed(1) : 0;
+                const free = network.size - network.used;
+                const freePercent = network.size ? (free / network.size) * 100 : 100;
+                const isLowStorage = freePercent < 10;
+                return (
+                    <Chip
+                        key={network.name}
+                        label={`${network.name} (${usagePercentage}% used)`}
+                        size="small"
+                        sx={{
+                            backgroundColor: isLowStorage ? 'red' : 'default',
+                            color: isLowStorage ? 'white' : 'inherit'
+                        }}
+                    />
+                );
+            })}
+        </Box>
+    ), [networks]);
 
-                    return (
-                        <Box key={network.name} sx={{
-                            position: 'relative',
-                            display: 'inline-flex',
-                            flexShrink: 0,
-                            margin: "4px"
-                        }}>
-                            <Chip
-                                label={`${network.name} (${usagePercentage}% used)`}
-                                size="small"
-                                sx={{
-                                    backgroundColor: isLowStorage ? 'red' : 'default',
-                                    color: isLowStorage ? 'white' : 'inherit',
-                                    cursor: 'pointer',
-                                    minWidth: "fit-content",
-                                    px: 1.5
-                                }}
-                            />
-                        </Box>
-                    );
-                })}
-            </Box>
-        );
-    }, [networks]);
-
-    return (
-        <StatCard
-            title="Networks"
-            value={networks.length}
-            subtitle={subtitle}
-            onClick={handleCardClick}
-            isLoading={isLoading}
-        />
-    );
+    return <StatCard title="Networks" value={networks.length} subtitle={subtitle} onClick={handleCardClick}
+                     isLoading={isLoading}/>;
 });
 
+// ==================== KINDS ====================
 export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
     const [loadingKind, setLoadingKind] = useState('');
     const [isCardLoading, setIsCardLoading] = useState(false);
@@ -564,30 +438,26 @@ export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
         }, 50);
     }, [onClick]);
 
-    const subtitle = useMemo(() => {
-        return (
-            <Box sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 1,
-                pt: 1,
-                maxHeight: '400px',
-                overflowY: 'auto',
-                justifyContent: 'flex-start'
-            }}>
-                {kindSubtitle.map(({kind, status}) => (
-                    <KindChip
-                        key={kind}
-                        kind={kind}
-                        status={status}
-                        isLoading={loadingKind === kind}
-                        onClick={onClick}
-                        onLoadingChange={setLoadingKind}
-                    />
-                ))}
-            </Box>
-        );
-    }, [kindSubtitle, loadingKind, onClick]);
+    const subtitle = useMemo(() => (
+        <Box sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            pt: 1,
+            justifyContent: 'flex-start'
+        }}>
+            {kindSubtitle.map(({kind, status}) => (
+                <KindChip
+                    key={kind}
+                    kind={kind}
+                    status={status}
+                    isLoading={loadingKind === kind}
+                    onClick={onClick}
+                    onLoadingChange={setLoadingKind}
+                />
+            ))}
+        </Box>
+    ), [kindSubtitle, loadingKind, onClick]);
 
     return (
         <StatCard
@@ -625,7 +495,6 @@ const KindChip = memo(({kind, status, isLoading, onClick, onLoadingChange}) => {
     const statusElements = useMemo(() => {
         const elements = [];
         const statusTypes = ['up', 'warn', 'down', 'unprovisioned'];
-
         for (const stat of statusTypes) {
             const count = status[stat] || 0;
             if (count > 0) {

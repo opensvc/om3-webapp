@@ -10,45 +10,55 @@ const StatCard = memo(({title, value, subtitle, onClick, dynamicHeight = false, 
         <Paper
             elevation={3}
             sx={{
-                p: 3,
+                p: 2,
                 height: dynamicHeight ? 'auto' : '240px',
-                minHeight: '240px',
+                minHeight: dynamicHeight ? '240px' : undefined,
                 display: 'flex',
                 flexDirection: 'column',
                 cursor: onClick && !isLoading ? 'pointer' : 'default',
-                transition: 'box-shadow 0.3s, opacity 0.3s',
+                transition: 'box-shadow 0.3s',
                 '&:hover': onClick && !isLoading ? {boxShadow: 6} : {},
                 borderRadius: 2,
                 textAlign: 'center',
                 opacity: isLoading ? 0.7 : 1,
-                position: 'relative'
+                position: 'relative',
+                overflow: 'hidden'
             }}
             onClick={handleClick}
         >
             {isLoading && (
-                <Box sx={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8
-                }}>
+                <Box sx={{position: 'absolute', top: 8, right: 8}}>
                     <CircularProgress size={24}/>
                 </Box>
             )}
             <Typography variant="h6" gutterBottom>{title}</Typography>
-            <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center'}}>
-                {isLoading ? (
-                    <CircularProgress sx={{alignSelf: 'center'}}/>
-                ) : (
-                    <Typography variant="h3" color="primary">{value}</Typography>
-                )}
-            </Box>
+            <Typography variant="h3" color="primary" sx={{mb: 1}}>
+                {isLoading ? <CircularProgress/> : value}
+            </Typography>
             {subtitle && (
-                <Box onClick={(e) => e.stopPropagation()}>
-                    {typeof subtitle === 'string' ? (
-                        <Typography variant="body2">{subtitle}</Typography>
-                    ) : (
-                        subtitle
-                    )}
+                <Box
+                    sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'flex-end'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Box
+                        sx={{
+                            maxHeight: '100%',
+                            overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch'
+                        }}
+                    >
+                        {typeof subtitle === 'string' ? (
+                            <Typography variant="body2">{subtitle}</Typography>
+                        ) : (
+                            subtitle
+                        )}
+                    </Box>
                 </Box>
             )}
         </Paper>

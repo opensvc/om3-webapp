@@ -1,4 +1,4 @@
-import React, {forwardRef, useState} from "react";
+import React, {useState} from "react";
 import {
     Box,
     Typography,
@@ -14,17 +14,7 @@ import ArticleIcon from "@mui/icons-material/Article";
 import {grey, blue, red} from "@mui/material/colors";
 import logger from '../utils/logger.js';
 
-const BoxWithRef = forwardRef((props, ref) => (
-    <Box ref={ref} {...props} />
-));
-BoxWithRef.displayName = 'BoxWithRef';
-
-const IconButtonWithRef = forwardRef((props, ref) => (
-    <IconButton ref={ref} {...props} />
-));
-IconButtonWithRef.displayName = 'IconButtonWithRef';
-
-const NodeCard = ({
+const InstanceCard = ({
                       node,
                       nodeData = {},
                       selectedNodes = [],
@@ -32,10 +22,8 @@ const NodeCard = ({
                       actionInProgress = false,
                       setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
                       setCurrentNode = () => logger.warn("setCurrentNode not provided"),
-                      individualNodeMenuAnchorRef = null,
                       getColor = () => grey[500],
                       getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
-                      parseProvisionedState = (state) => !!state,
                       instanceName,
                       onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                       onViewInstance,
@@ -49,7 +37,7 @@ const NodeCard = ({
     }
 
     const {avail, frozen, state} = getNodeState(node);
-    const isInstanceNotProvisioned = nodeData?.provisioned !== undefined ? !parseProvisionedState(nodeData.provisioned) : false;
+    const isInstanceNotProvisioned = nodeData?.provisioned === false || nodeData?.provisioned === "false";
 
     const handleCardClick = (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
@@ -60,8 +48,14 @@ const NodeCard = ({
         }
     };
 
+    const handleMenuOpen = (e) => {
+        e.stopPropagation();
+        setCurrentNode(node);
+        setIndividualNodeMenuAnchor(e.currentTarget);
+    };
+
     return (
-        <BoxWithRef
+        <Box
             sx={{
                 mb: 2,
                 display: "flex",
@@ -83,7 +77,6 @@ const NodeCard = ({
             onClick={handleCardClick}
         >
             <Box sx={{display: "flex", alignItems: "center"}}>
-                {/* Bloc gauche : checkbox + nom */}
                 <Box sx={{display: "flex", alignItems: "center", gap: 1, flexWrap: 'wrap'}}>
                     <Box onClick={(e) => e.stopPropagation()} className="no-click">
                         <Checkbox
@@ -100,11 +93,7 @@ const NodeCard = ({
                             <Typography
                                 variant="body2"
                                 color="primary"
-                                sx={{
-                                    fontStyle: 'italic',
-                                    ml: 1,
-                                    opacity: 0.8
-                                }}
+                                sx={{fontStyle: 'italic', ml: 1, opacity: 0.8}}
                             >
                                 (view resources)
                             </Typography>
@@ -112,16 +101,7 @@ const NodeCard = ({
                     </Box>
                 </Box>
 
-                {/* Bloc central : freeze / not provisioned / state, juste avant logs+status */}
-                <Box
-                    sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1,
-                        ml: "auto", // pousse ce bloc + celui de droite à droite
-                    }}
-                    className="no-click"
-                >
+                <Box sx={{display: "flex", alignItems: "center", gap: 1, ml: "auto"}} className="no-click">
                     {frozen === "frozen" && (
                         <Tooltip title="frozen">
                             <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
@@ -138,17 +118,9 @@ const NodeCard = ({
                     {state && <Typography variant="caption">{state}</Typography>}
                 </Box>
 
-                {/* Bloc droite : logs + rond de status + bouton d’actions, fixes */}
-                <Box
-                    sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 2,
-                    }}
-                    className="no-click"
-                >
+                <Box sx={{display: "flex", alignItems: "center", gap: 2}} className="no-click">
                     <Tooltip title="View instance logs">
-                        <IconButtonWithRef
+                        <IconButton
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onOpenLogs(node, resolvedInstanceName);
@@ -157,7 +129,7 @@ const NodeCard = ({
                             aria-label={`View logs for instance ${resolvedInstanceName || node}`}
                         >
                             <ArticleIcon/>
-                        </IconButtonWithRef>
+                        </IconButton>
                     </Tooltip>
 
                     <Tooltip title={avail || "unknown"}>
@@ -169,25 +141,19 @@ const NodeCard = ({
                         />
                     </Tooltip>
 
-                    <IconButtonWithRef
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            e.persist();
-                            setCurrentNode(node);
-                            setIndividualNodeMenuAnchor(e.currentTarget);
-                        }}
+                    <IconButton
+                        onClick={handleMenuOpen}
                         disabled={actionInProgress}
                         aria-label={`Node ${node} actions`}
-                        ref={individualNodeMenuAnchorRef}
                     >
                         <Tooltip title="Actions">
                             <MoreVertIcon/>
                         </Tooltip>
-                    </IconButtonWithRef>
+                    </IconButton>
                 </Box>
             </Box>
-        </BoxWithRef>
+        </Box>
     );
 };
 
-export default NodeCard;
+export default InstanceCard;

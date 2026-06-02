@@ -5,23 +5,21 @@ import {
     Box,
     Button,
     CircularProgress,
-    ClickAwayListener,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
-    ListItemIcon,
-    ListItemText,
+    Menu,
     MenuItem,
-    Paper,
-    Popper,
-    Snackbar,
     Typography,
     Drawer,
     IconButton,
     TextField,
     useTheme,
     Grid,
+    Snackbar,
+    ListItemIcon,
+    ListItemText,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import {green, grey, orange, red} from "@mui/material/colors";
@@ -33,7 +31,7 @@ import ActionDialogManager from "../components/ActionDialogManager";
 import HeaderSection from "./HeaderSection";
 import ConfigSection from "./ConfigSection";
 import KeysSection from "./KeysSection";
-import NodeCard from "./NodeCard";
+import InstanceCard from "./InstanceCard.jsx";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
@@ -67,14 +65,13 @@ const ObjectDetail = () => {
     const decodedObjectName = decodeURIComponent(objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const navigate = useNavigate();
-
-    const objectStatus = useEventStore((s) => s.objectStatus);
-    const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
-    const instanceMonitor = useEventStore((s) => s.instanceMonitor);
-    const instanceConfig = useEventStore((s) => s.instanceConfig);
-    const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
-
     const theme = useTheme();
+
+    const objectStatus = useEventStore((s) => s.objectStatus[decodedObjectName]);
+    const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus[decodedObjectName]);
+    const instanceMonitor = useEventStore((s) => s.instanceMonitor);
+    const instanceConfig = useEventStore((s) => s.instanceConfig[decodedObjectName]);
+    const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
 
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState(null);
@@ -82,14 +79,11 @@ const ObjectDetail = () => {
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
     const [selectedNodes, setSelectedNodes] = useState([]);
-    const [nodesActionsAnchor, setNodesActionsAnchor] = useState(null);
-    const nodesActionsAnchorRef = useRef(null);
+    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
     const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(null);
-    const individualNodeMenuAnchorRef = useRef(null);
     const [currentNode, setCurrentNode] = useState(null);
 
     const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
-    const objectMenuAnchorRef = useRef(null);
     const [pendingAction, setPendingAction] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
 
@@ -137,13 +131,37 @@ const ObjectDetail = () => {
     const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
 
-    useEffect(() => {
-        isMounted.current = true;
-        return () => {
-            isMounted.current = false;
-            closeEventSource();
-        };
-    }, [decodedObjectName]);
+    const objectData = useMemo(() => {
+        const avail = objectStatus?.avail || "n/a";
+        const frozen = objectStatus?.frozen === "frozen" ? "frozen" : "unfrozen";
+        let globalExpect = null;
+        if (objectInstanceStatus) {
+            for (const node of Object.keys(objectInstanceStatus)) {
+                const monitorKey = `${node}:${decodedObjectName}`;
+                const monitor = instanceMonitor[monitorKey] || {};
+                if (monitor.global_expect && monitor.global_expect !== "none") {
+                    globalExpect = monitor.global_expect;
+                    break;
+                }
+            }
+        }
+        return {avail, frozen, globalExpect};
+    }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
+
+    const memoizedObjectData = useMemo(() => {
+        if (!objectInstanceStatus) return {};
+        const enhanced = {};
+        Object.keys(objectInstanceStatus).forEach(node => {
+            enhanced[node] = {
+                ...objectInstanceStatus[node],
+                instanceConfig: instanceConfig?.[node] || {resources: {}},
+                instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
+            };
+        });
+        return enhanced;
+    }, [objectInstanceStatus, instanceConfig, instanceMonitor, decodedObjectName]);
+
+    const nodesList = useMemo(() => Object.keys(memoizedObjectData), [memoizedObjectData]);
 
     const fetchInitialObjectData = useCallback(async () => {
         setInitialDataError(null);
@@ -177,36 +195,34 @@ const ObjectDetail = () => {
         }
     }, [decodedObjectName]);
 
+    useEffect(() => {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            const filters = objectEventTypes.map(type => {
+                if (["CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT", "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"].includes(type)) {
+                    return type;
+                } else {
+                    return `${type},path=${decodedObjectName}`;
+                }
+            });
+            startEventReception(token, filters);
+        }
+        return () => closeEventSource();
+    }, [decodedObjectName, objectEventTypes]);
+
+    useEffect(() => {
+        const hasData = objectInstanceStatus && Object.keys(objectInstanceStatus).length > 0;
+        if (!hasData) {
+            fetchInitialObjectData().finally(() => setInitialLoading(false));
+        } else {
+            setInitialLoading(false);
+        }
+    }, [objectInstanceStatus, fetchInitialObjectData]);
+
     const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
     }, []);
-
-    const closeSnackbar = useCallback(() => {
-        setSnackbar((s) => ({...s, open: false}));
-    }, []);
-
-    const openActionDialog = useCallback((action, context = null) => {
-        setPendingAction({action, ...(context ? context : {})});
-        setSeats(1);
-        setGreetTimeout("5s");
-        if (action === "console") {
-            setConsoleDialogOpen(true);
-        } else if (action === "freeze") {
-            setCheckboxes(DEFAULT_CHECKBOXES);
-            setConfirmDialogOpen(true);
-        } else if (action === "stop") {
-            setStopCheckbox(DEFAULT_STOP_CHECKBOX);
-            setStopDialogOpen(true);
-        } else if (action === "unprovision") {
-            setUnprovisionCheckboxes(DEFAULT_UNPROVISION_CHECKBOXES);
-            setUnprovisionDialogOpen(true);
-        } else if (action === "purge") {
-            setPurgeCheckboxes(DEFAULT_PURGE_CHECKBOXES);
-            setPurgeDialogOpen(true);
-        } else {
-            setSimpleDialogOpen(true);
-        }
-    }, []);
+    const closeSnackbar = useCallback(() => setSnackbar((s) => ({...s, open: false})), []);
 
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
@@ -329,57 +345,28 @@ const ObjectDetail = () => {
         }
     }, [decodedObjectName, configLoading]);
 
-    const getColor = useCallback((status) => {
-        if (status === "up" || status === true) return green[500];
-        if (status === "down" || status === false) return red[500];
-        if (status === "warn") return orange[500];
-        return grey[500];
-    }, []);
-
-    const getNodeState = useCallback((node) => {
-        const instanceStatus = objectInstanceStatus[decodedObjectName] || {};
-        const monitorKey = `${node}:${decodedObjectName}`;
-        const monitor = instanceMonitor[monitorKey] || {};
-        const avail = instanceStatus[node]?.avail || '';
-        const frozen = instanceStatus[node]?.frozen_at && instanceStatus[node]?.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen";
-        const state = monitor.state !== "idle" ? monitor.state : null;
-        return {avail, frozen, state};
-    }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
-
-    const getObjectStatus = useCallback(() => {
-        const obj = objectStatus[decodedObjectName] || {};
-        const avail = obj?.avail;
-        const frozen = obj?.frozen;
-        const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
-        let globalExpect = null;
-        for (const node of nodes) {
-            const monitorKey = `${node}:${decodedObjectName}`;
-            const monitor = instanceMonitor[monitorKey] || {};
-            if (monitor.global_expect && monitor.global_expect !== "none") {
-                globalExpect = monitor.global_expect;
-                break;
-            }
+    const openActionDialog = useCallback((action, context = null) => {
+        setPendingAction({action, ...(context ? context : {})});
+        setSeats(1);
+        setGreetTimeout("5s");
+        if (action === "console") {
+            setConsoleDialogOpen(true);
+        } else if (action === "freeze") {
+            setCheckboxes(DEFAULT_CHECKBOXES);
+            setConfirmDialogOpen(true);
+        } else if (action === "stop") {
+            setStopCheckbox(DEFAULT_STOP_CHECKBOX);
+            setStopDialogOpen(true);
+        } else if (action === "unprovision") {
+            setUnprovisionCheckboxes(DEFAULT_UNPROVISION_CHECKBOXES);
+            setUnprovisionDialogOpen(true);
+        } else if (action === "purge") {
+            setPurgeCheckboxes(DEFAULT_PURGE_CHECKBOXES);
+            setPurgeDialogOpen(true);
+        } else {
+            setSimpleDialogOpen(true);
         }
-        return {avail, frozen, globalExpect};
-    }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
-
-    const handleNodesActionsOpen = useCallback((e) => setNodesActionsAnchor(e.currentTarget), []);
-    const handleNodesActionsClose = useCallback(() => setNodesActionsAnchor(null), []);
-    const handleBatchNodeActionClick = useCallback((action) => {
-        openActionDialog(action, {batch: "nodes"});
-        handleNodesActionsClose();
-    }, [openActionDialog, handleNodesActionsClose]);
-
-    const handleIndividualNodeActionClick = useCallback((action) => {
-        if (!currentNode) return;
-        openActionDialog(action, {node: currentNode});
-        setIndividualNodeMenuAnchor(null);
-    }, [openActionDialog, currentNode]);
-
-    const handleObjectActionClick = useCallback((action) => {
-        openActionDialog(action);
-        setObjectMenuAnchor(null);
-    }, [openActionDialog]);
+    }, []);
 
     const handleDialogConfirm = useCallback(() => {
         if (!pendingAction || !pendingAction.action) {
@@ -428,6 +415,22 @@ const ObjectDetail = () => {
         setSelectedNodes(prev => prev.includes(node) ? prev.filter(n => n !== node) : [...prev, node]);
     }, []);
 
+    const handleBatchNodeActionClick = (action) => {
+        openActionDialog(action, {batch: "nodes"});
+        setActionsMenuAnchor(null);
+    };
+
+    const handleIndividualNodeActionClick = (action) => {
+        if (!currentNode) return;
+        openActionDialog(action, {node: currentNode});
+        setIndividualNodeMenuAnchor(null);
+    };
+
+    const handleObjectActionClick = (action) => {
+        openActionDialog(action);
+        setObjectMenuAnchor(null);
+    };
+
     const handleViewInstance = useCallback((node) => {
         navigate(`/nodes/${node}/objects/${encodeURIComponent(decodedObjectName)}`);
     }, [decodedObjectName, navigate]);
@@ -443,6 +446,22 @@ const ObjectDetail = () => {
         setSelectedNodeForLogs(null);
         setSelectedInstanceForLogs(null);
     }, []);
+
+    const getColor = useCallback((status) => {
+        if (status === "up" || status === true) return green[500];
+        if (status === "down" || status === false) return red[500];
+        if (status === "warn") return orange[500];
+        return grey[500];
+    }, []);
+
+    const getNodeState = useCallback((node) => {
+        const nodeStatus = objectInstanceStatus?.[node] || {};
+        const monitor = instanceMonitor[`${node}:${decodedObjectName}`] || {};
+        const avail = nodeStatus.avail || '';
+        const frozen = nodeStatus.frozen_at && nodeStatus.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen";
+        const state = monitor.state !== "idle" ? monitor.state : null;
+        return {avail, frozen, state};
+    }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     const startResizing = useCallback((e) => {
         e.preventDefault();
@@ -474,61 +493,28 @@ const ObjectDetail = () => {
         document.body.style.cursor = "ew-resize";
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
 
-    // SSE + initial data fetch
-    useEffect(() => {
-        const token = localStorage.getItem("authToken");
-        if (token) {
-            const filters = objectEventTypes.map(type => {
-                if (["CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT", "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"].includes(type)) {
-                    return type;
-                } else {
-                    return `${type},path=${decodedObjectName}`;
-                }
-            });
-            startEventReception(token, filters);
-        }
-        const hasData = objectInstanceStatus[decodedObjectName] && Object.keys(objectInstanceStatus[decodedObjectName]).length > 0;
-        if (!hasData) fetchInitialObjectData();
-        return () => closeEventSource();
-    }, [decodedObjectName, objectEventTypes, fetchInitialObjectData, objectInstanceStatus]);
-
-    // Initial config loading effect (restored with immediate false if data exists)
-    const objectData = objectInstanceStatus?.[decodedObjectName];
     useEffect(() => {
         const loadInitialConfig = async () => {
-            if (objectData) {
-                // If we already have instance data, we can stop the loading indicator immediately
-                setInitialLoading(false);
-                const nodes = Object.keys(objectInstanceStatus[decodedObjectName] || {});
+            if (objectInstanceStatus && Object.keys(objectInstanceStatus).length > 0) {
+                const nodes = Object.keys(objectInstanceStatus);
                 const initialNode = nodes.find((node) => {
-                    return objectData[node]?.encap && Object.values(objectData[node].encap).some(
+                    const nodeData = objectInstanceStatus[node];
+                    return nodeData?.encap && Object.values(nodeData.encap).some(
                         (container) => container.resources && Object.keys(container.resources).length > 0
                     );
                 }) || nodes[0];
                 if (initialNode) {
-                    try {
-                        await fetchConfig(initialNode);
-                    } catch (err) {
-                        setConfigError("Failed to load initial configuration.");
-                    }
-                } else {
-                    setConfigError("No nodes available to fetch configuration.");
+                    await fetchConfig(initialNode);
                 }
-            } else {
-                setConfigError("No object data available.");
-                setInitialLoading(false);
             }
         };
-        loadInitialConfig().catch(() => {
-        });
-    }, [decodedObjectName, objectData, objectInstanceStatus, fetchConfig]);
+        loadInitialConfig();
+    }, [objectInstanceStatus, fetchConfig]);
 
-    // Config updates effect
     useEffect(() => {
-        if (!isMounted.current) return;
-        let subscription;
+        let unsubscribe = null;
         try {
-            subscription = useEventStore.subscribe(
+            const maybeUnsubscribe = useEventStore.subscribe(
                 (state) => state.configUpdates,
                 async (updates) => {
                     if (!isMounted.current || isProcessingConfigUpdate.current) return;
@@ -552,24 +538,25 @@ const ObjectDetail = () => {
                 },
                 {fireImmediately: false}
             );
+            if (typeof maybeUnsubscribe === 'function') {
+                unsubscribe = maybeUnsubscribe;
+            } else {
+                logger.warn("[ObjectDetail] Subscription is not a function:", maybeUnsubscribe);
+            }
         } catch (err) {
             logger.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
         }
         return () => {
-            if (typeof subscription === 'function') subscription();
-            else if (subscription) logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            if (typeof unsubscribe === 'function') unsubscribe();
         };
     }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
 
-    // Instance config effect
     useEffect(() => {
-        if (!isMounted.current) return;
-        let subscription;
+        let unsubscribe = null;
         try {
-            subscription = useEventStore.subscribe(
+            const maybeUnsubscribe = useEventStore.subscribe(
                 (state) => state.instanceConfig,
                 (newConfig) => {
-                    if (!isMounted.current) return;
                     const config = newConfig[decodedObjectName];
                     if (config && configNode) {
                         setConfigDialogOpen(true);
@@ -577,30 +564,20 @@ const ObjectDetail = () => {
                     }
                 }
             );
+            if (typeof maybeUnsubscribe === 'function') {
+                unsubscribe = maybeUnsubscribe;
+            } else {
+                logger.warn("[ObjectDetail] Subscription is not a function:", maybeUnsubscribe);
+            }
         } catch (err) {
             logger.warn("[ObjectDetail] Failed to subscribe to instanceConfig:", err);
-            return;
         }
         return () => {
-            if (typeof subscription === 'function') subscription();
-            else if (subscription) logger.warn("[ObjectDetail] Subscription is not a function:", subscription);
+            if (typeof unsubscribe === 'function') unsubscribe();
         };
     }, [decodedObjectName, configNode, openSnackbar]);
 
-    const memoizedObjectData = useMemo(() => {
-        const enhanced = {};
-        const data = objectInstanceStatus?.[decodedObjectName] || {};
-        Object.keys(data).forEach(node => {
-            enhanced[node] = {
-                ...data[node],
-                instanceConfig: instanceConfig?.[decodedObjectName]?.[node] || {resources: {}},
-                instanceMonitor: instanceMonitor[`${node}:${decodedObjectName}`] || {resources: {}},
-            };
-        });
-        return enhanced;
-    }, [objectInstanceStatus, instanceConfig, instanceMonitor, decodedObjectName]);
-
-    const memoizedNodes = useMemo(() => Object.keys(memoizedObjectData), [memoizedObjectData]);
+    const showKeys = ["cfg", "sec"].includes(kind);
 
     if (initialLoading) {
         return (
@@ -611,13 +588,12 @@ const ObjectDetail = () => {
         );
     }
 
-    const showKeys = ["cfg", "sec"].includes(kind);
-    if (Object.keys(memoizedObjectData).length === 0) {
+    if (nodesList.length === 0 && !initialDataError) {
         return (
             <Box p={4}>
                 <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
                 <Typography align="center" color="textSecondary" fontSize="1.2rem">
-                    {initialDataError ? `Error loading object: ${initialDataError}` : "No information available for object."}
+                    No information available for object.
                 </Typography>
                 {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
                 <ConfigSection
@@ -647,7 +623,8 @@ const ObjectDetail = () => {
         }}>
             <Box sx={{
                 flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
-                overflow: "auto", boxSizing: "border-box",
+                overflow: "auto",
+                boxSizing: "border-box",
                 maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
                 transition: theme.transitions.create(["flex", "maxWidth"], {
                     easing: theme.transitions.easing.sharp,
@@ -670,14 +647,13 @@ const ObjectDetail = () => {
                         <Grid item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
-                                globalStatus={objectStatus[decodedObjectName]}
+                                globalStatus={objectStatus}
                                 actionInProgress={actionInProgress}
                                 objectMenuAnchor={objectMenuAnchor}
                                 setObjectMenuAnchor={setObjectMenuAnchor}
                                 handleObjectActionClick={handleObjectActionClick}
-                                getObjectStatus={getObjectStatus}
+                                getObjectStatus={() => objectData}
                                 getColor={getColor}
-                                objectMenuAnchorRef={objectMenuAnchorRef}
                             />
                         </Grid>
                         <Grid item xs={12} md={2}>
@@ -741,7 +717,8 @@ const ObjectDetail = () => {
                                            helperText="Number of simultaneous users allowed in the console"/>
                             </Box>
                             <TextField margin="dense" label="Greet Timeout" type="text" fullWidth variant="outlined"
-                                       value={greetTimeout} onChange={(e) => setGreetTimeout(e.target.value)}
+                                       value={greetTimeout}
+                                       onChange={(e) => setGreetTimeout(e.target.value)}
                                        helperText="Time to wait for console connection (e.g., 5s, 10s)"/>
                         </DialogContent>
                         <DialogActions>
@@ -751,15 +728,8 @@ const ObjectDetail = () => {
                     </Dialog>
 
                     <Dialog open={consoleUrlDialogOpen} onClose={() => setConsoleUrlDialogOpen(false)} maxWidth="sm"
-                            fullWidth sx={{
-                        '& .MuiDialog-paper': {
-                            minWidth: {xs: '90vw', sm: '500px'},
-                            maxWidth: '90vw',
-                            mx: {xs: 2, sm: 0},
-                            my: {xs: 2, sm: 0}
-                        }
-                    }}>
-                        <DialogTitle sx={{pb: 1, typography: {xs: 'h6', sm: 'h5'}}}>Console URL</DialogTitle>
+                            fullWidth>
+                        <DialogTitle>Console URL</DialogTitle>
                         <DialogContent>
                             <Box sx={{
                                 border: '1px solid #ccc',
@@ -784,7 +754,7 @@ const ObjectDetail = () => {
                             }}>
                                 <Button variant="outlined" size={window.innerWidth < 600 ? "small" : "medium"}
                                         onClick={() => {
-                                            if (currentConsoleUrl) navigator.clipboard.writeText(String(currentConsoleUrl)).catch(() => openSnackbar('Failed to copy URL', 'error'));
+                                            if (currentConsoleUrl) navigator.clipboard.writeText(String(currentConsoleUrl));
                                         }} disabled={!currentConsoleUrl}>Copy URL</Button>
                                 <Button variant="contained" size={window.innerWidth < 600 ? "small" : "medium"}
                                         onClick={() => {
@@ -792,9 +762,9 @@ const ObjectDetail = () => {
                                         }} disabled={!currentConsoleUrl}>Open in New Tab</Button>
                             </Box>
                         </DialogContent>
-                        <DialogActions sx={{px: {xs: 2, sm: 3}, pb: {xs: 2, sm: 1}}}><Button
-                            onClick={() => setConsoleUrlDialogOpen(false)}
-                            size={window.innerWidth < 600 ? "small" : "medium"}>Close</Button></DialogActions>
+                        <DialogActions>
+                            <Button onClick={() => setConsoleUrlDialogOpen(false)}>Close</Button>
+                        </DialogActions>
                     </Dialog>
 
                     {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
@@ -802,12 +772,32 @@ const ObjectDetail = () => {
                     {!["sec", "cfg", "usr"].includes(kind) && (
                         <>
                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                                <Button variant="outlined" onClick={handleNodesActionsOpen}
-                                        disabled={selectedNodes.length === 0} aria-label="Actions on selected nodes"
-                                        ref={nodesActionsAnchorRef}>Actions on Selected Nodes</Button>
+                                <Button
+                                    variant="outlined"
+                                    onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
+                                    disabled={selectedNodes.length === 0}
+                                >
+                                    Actions on Selected Nodes ({selectedNodes.length})
+                                </Button>
                             </Box>
-                            {memoizedNodes.map(node => (
-                                <NodeCard
+
+                            <Menu
+                                anchorEl={actionsMenuAnchor}
+                                open={Boolean(actionsMenuAnchor)}
+                                onClose={() => setActionsMenuAnchor(null)}
+                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                            >
+                                {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                    <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
+                                        <ListItemIcon>{icon}</ListItemIcon>
+                                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                    </MenuItem>
+                                ))}
+                            </Menu>
+
+                            {nodesList.map(node => (
+                                <InstanceCard
                                     key={node}
                                     node={node}
                                     nodeData={memoizedObjectData[node] || {}}
@@ -822,7 +812,6 @@ const ObjectDetail = () => {
                                     parseProvisionedState={parseProvisionedState}
                                     setPendingAction={setPendingAction}
                                     setSimpleDialogOpen={setSimpleDialogOpen}
-                                    individualNodeMenuAnchorRef={individualNodeMenuAnchorRef}
                                     namespace={namespace}
                                     kind={kind}
                                     instanceName={name}
@@ -830,46 +819,21 @@ const ObjectDetail = () => {
                                     onViewInstance={handleViewInstance}
                                 />
                             ))}
-                            <Popper open={Boolean(nodesActionsAnchor)} anchorEl={nodesActionsAnchor}
-                                    placement="bottom-end" disablePortal
-                                    modifiers={[{name: "offset", options: {offset: [0, 8]}}, {
-                                        name: "preventOverflow",
-                                        options: {boundariesElement: "viewport"}
-                                    }, {name: "flip", options: {enabled: true}}]} style={{zIndex: 1300}}>
-                                <ClickAwayListener onClickAway={handleNodesActionsClose}>
-                                    <Paper elevation={3} role="menu" aria-label="Batch node actions menu"
-                                           sx={{minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}}>
-                                        {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                            <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}
-                                                      role="menuitem"
-                                                      aria-label={name.charAt(0).toUpperCase() + name.slice(1)}>
-                                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                            </MenuItem>
-                                        ))}
-                                    </Paper>
-                                </ClickAwayListener>
-                            </Popper>
-                            <Popper open={Boolean(individualNodeMenuAnchor)} anchorEl={individualNodeMenuAnchor}
-                                    placement="bottom-end" disablePortal
-                                    modifiers={[{name: "offset", options: {offset: [0, 8]}}, {
-                                        name: "preventOverflow",
-                                        options: {boundariesElement: "viewport"}
-                                    }, {name: "flip", options: {enabled: true}}]} style={{zIndex: 1300}}>
-                                <ClickAwayListener onClickAway={() => setIndividualNodeMenuAnchor(null)}>
-                                    <Paper elevation={3} role="menu" aria-label={`Node ${currentNode} actions menu`}
-                                           sx={{minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"}}>
-                                        {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                            <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}
-                                                      role="menuitem"
-                                                      aria-label={name.charAt(0).toUpperCase() + name.slice(1)}>
-                                                <ListItemIcon sx={{minWidth: 40}}>{icon}</ListItemIcon>
-                                                <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                            </MenuItem>
-                                        ))}
-                                    </Paper>
-                                </ClickAwayListener>
-                            </Popper>
+
+                            <Menu
+                                anchorEl={individualNodeMenuAnchor}
+                                open={Boolean(individualNodeMenuAnchor)}
+                                onClose={() => setIndividualNodeMenuAnchor(null)}
+                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                            >
+                                {INSTANCE_ACTIONS.map(({name, icon}) => (
+                                    <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
+                                        <ListItemIcon>{icon}</ListItemIcon>
+                                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+                                    </MenuItem>
+                                ))}
+                            </Menu>
                         </>
                     )}
 
@@ -886,7 +850,7 @@ const ObjectDetail = () => {
             {logsDrawerOpen && selectedNodeForLogs && (
                 <Drawer anchor="right" open={logsDrawerOpen} variant="persistent" sx={{
                     "& .MuiDrawer-paper": {
-                        width: logsDrawerOpen ? `${drawerWidth}px` : 0,
+                        width: `${drawerWidth}px`,
                         maxWidth: "80vw",
                         p: 2,
                         boxSizing: "border-box",

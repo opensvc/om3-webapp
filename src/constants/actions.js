@@ -67,7 +67,6 @@ export const NODE_ACTIONS = [
     {name: "drain", icon: <WaterDrop sx={{fontSize: 24}}/>},
     {name: "asset", icon: <Inventory sx={{fontSize: 24}}/>},
     {name: "disk", icon: <Storage sx={{fontSize: 24}}/>},
-    {name: "patch", icon: <Extension sx={{fontSize: 24}}/>},
     {name: "pkg", icon: <Archive sx={{fontSize: 24}}/>},
     {name: "capabilities", icon: <Psychology sx={{fontSize: 24}}/>},
     {name: "sysreport", icon: <Description sx={{fontSize: 24}}/>},

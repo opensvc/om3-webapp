@@ -79,8 +79,7 @@ const useEventStore = create(
                     });
                     return {objectStatus};
                 }),
-
-            setInstanceStatuses: (instanceStatuses) =>
+            setInstanceStatuses: (instanceStatuses, replace = false) =>
                 set((state) => {
                     let hasChanges = false;
                     const newObjectInstanceStatus = {...state.objectInstanceStatus};
@@ -88,6 +87,34 @@ const useEventStore = create(
                     for (const path in instanceStatuses) {
                         if (!instanceStatuses.hasOwnProperty(path)) continue;
 
+                        const incomingNodes = instanceStatuses[path];
+                        if (replace) {
+                            const rebuilt = {};
+                            for (const node in incomingNodes) {
+                                if (!incomingNodes.hasOwnProperty(node)) continue;
+                                const newStatus = incomingNodes[node];
+                                if (newStatus?.encap) {
+                                    rebuilt[node] = {
+                                        node,
+                                        path,
+                                        ...newStatus,
+                                    };
+                                } else {
+                                    rebuilt[node] = {
+                                        node,
+                                        path,
+                                        ...newStatus,
+                                    };
+                                }
+                            }
+                            if (!shallowEqual(newObjectInstanceStatus[path], rebuilt)) {
+                                newObjectInstanceStatus[path] = rebuilt;
+                                hasChanges = true;
+                            }
+                            continue;
+                        }
+
+                        // Standard incremental merge (for SSE events)
                         if (!newObjectInstanceStatus[path]) {
                             newObjectInstanceStatus[path] = {};
                             hasChanges = true;
@@ -95,10 +122,10 @@ const useEventStore = create(
                             newObjectInstanceStatus[path] = {...newObjectInstanceStatus[path]};
                         }
 
-                        for (const node in instanceStatuses[path]) {
-                            if (!instanceStatuses[path].hasOwnProperty(node)) continue;
+                        for (const node in incomingNodes) {
+                            if (!incomingNodes.hasOwnProperty(node)) continue;
 
-                            const newStatus = instanceStatuses[path][node];
+                            const newStatus = incomingNodes[node];
                             const existingData = newObjectInstanceStatus[path][node];
 
                             if (existingData && shallowEqual(existingData, newStatus)) continue;

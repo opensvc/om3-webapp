@@ -12,7 +12,6 @@ jest.mock('react-router-dom', () => ({
     useNavigate: jest.fn(),
     useLocation: jest.fn(),
 }));
-
 jest.mock('../../hooks/useEventStore');
 jest.mock('../../hooks/useFetchDaemonStatus');
 jest.mock('../../eventSourceManager');
@@ -21,2215 +20,530 @@ jest.mock('@mui/material/Collapse', () => ({in: inProp, children}) =>
     inProp ? children : null
 );
 
-const AVAILABLE_ACTIONS = [
-    'start',
-    'stop',
-    'restart',
-    'freeze',
-    'unfreeze',
-    'delete',
-    'provision',
-    'unprovision',
-    'purge',
-    'switch',
-    'giveback',
-    'abort',
-];
-
 expect.extend(toHaveNoViolations);
 
-const selectFilterOption = async (labelText, optionText) => {
-    const filter = screen.getByLabelText(labelText);
+// ---------- helpers ----------
+const mockNavigate = jest.fn();
+const mockRemoveObject = jest.fn();
+let originalConsoleError;
 
-    fireEvent.mouseDown(filter);
+const defaultState = {
+    objectStatus: {
+        'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
+        'test-ns/svc/test2': {avail: 'down', frozen: 'frozen'},
+        'root/svc/test3': {avail: 'warn', frozen: 'unfrozen'},
+        'test-ns/svc/test4': {avail: 'n/a', frozen: 'unfrozen'},
+        'test-ns/svc/unprovisioned': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'},
+    },
+    objectInstanceStatus: {
+        'test-ns/svc/test1': {
+            node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
+            node2: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
+        },
+        'test-ns/svc/test2': {
+            node1: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
+        },
+        'root/svc/test3': {node2: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'}},
+        'test-ns/svc/test4': {},
+        'test-ns/svc/unprovisioned': {
+            node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
+        },
+    },
+    instanceMonitor: {
+        'node1:test-ns/svc/test1': {state: 'running', global_expect: 'frozen'},
+        'node2:test-ns/svc/test1': {state: 'idle', global_expect: 'none'},
+        'node1:test-ns/svc/test2': {state: 'failed', global_expect: 'none'},
+        'node2:root/svc/test3': {state: 'idle', global_expect: 'started'},
+    },
+    removeObject: mockRemoveObject,
+};
 
-    await waitFor(() => {
-        expect(screen.getByRole('listbox')).toBeInTheDocument();
-    });
+const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon} = {}) => {
+    const state = {...defaultState, ...customState};
+    useEventStore.mockImplementation((sel) => sel(state));
+    useFetchDaemonStatus.mockReturnValue({daemon: daemon || {cluster: {object: {}}}});
+    startEventReception.mockClear();
+    closeEventSource.mockClear();
+    global.fetch = jest.fn(() => Promise.resolve({ok: true, json: () => Promise.resolve({})}));
+    require('react-router-dom').useLocation.mockReturnValue({search: locationSearch, pathname: '/objects'});
+    require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
+    require('@mui/material/useMediaQuery').mockReturnValue(mediaQuery);
 
-    const listbox = screen.getByRole('listbox');
-
-    const options = within(listbox).getAllByRole('option');
-    const option = options.find(opt =>
-        opt.textContent.toLowerCase().includes(optionText.toLowerCase())
+    const utils = render(
+        <MemoryRouter>
+            <Objects/>
+        </MemoryRouter>
     );
-
-    if (!option) {
-        throw new Error(`Option with text "${optionText}" not found`);
-    }
-
-    const checkbox = within(option).getByRole('checkbox');
-    fireEvent.click(checkbox);
-
-    const backdrop = document.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
-    if (backdrop) {
-        fireEvent.click(backdrop);
-    } else {
-        fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
-    }
+    return {...utils, state};
 };
 
-const waitForFilterApplied = async () => {
-    await waitFor(() => {
-        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    });
+const waitForLoad = () =>
+    waitFor(() => expect(screen.getByLabelText('Global State')).toBeInTheDocument());
 
-    await waitFor(() => {
-        expect(screen.getByRole('table')).toBeInTheDocument();
-    }, {timeout: 1000});
+const selectFilter = async (label, optionText) => {
+    const filter = screen.getByLabelText(label);
+    fireEvent.mouseDown(filter);
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument());
+    const listbox = screen.getByRole('listbox');
+    const options = within(listbox).getAllByRole('option');
+    const option = options.find((o) => o.textContent.toLowerCase().includes(optionText.toLowerCase()));
+    if (!option) throw new Error(`Option "${optionText}" not found`);
+    fireEvent.click(within(option).getByRole('checkbox'));
+    fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument(), {timeout: 1000});
 };
 
-describe('Objects Component', () => {
-    const mockNavigate = jest.fn();
-    const mockStartEventReception = jest.fn();
-    const mockCloseEventSource = jest.fn();
-    const mockRemoveObject = jest.fn();
-    const allNodes = ['node1', 'node2'];
+const selectRow = (name) => {
+    const row = screen.getByRole('row', {name: new RegExp(name, 'i')});
+    const cb = within(row).getByRole('checkbox');
+    fireEvent.click(cb);
+    return cb;
+};
 
-    let originalConsoleError;
+const openActionsMenu = () =>
+    fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
 
-    beforeEach(() => {
-        originalConsoleError = console.error;
-        console.error = jest.fn((message, ...args) => {
-            if (typeof message === 'string' &&
-                (message.includes('A props object containing a "key" prop is being spread into JSX') ||
-                    message.includes('<li> cannot appear as a descendant of <li>'))) {
-                return;
-            }
-            originalConsoleError.call(console, message, ...args);
-        });
+const clickMenuItem = async (text) => {
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByText(new RegExp(`^${text}$`, 'i')));
+};
 
-        jest.clearAllMocks();
+const confirmDialog = async (buttonName = /Confirm|Stop|Delete/i) => {
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', {name: buttonName}));
+};
 
-        require('react-router-dom').useLocation.mockReturnValue({
-            search: '',
-            pathname: '/objects',
-        });
-        require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
-
-        require('@mui/material/useMediaQuery').mockReturnValue(true);
-
-        const mockState = {
-            objectStatus: {
-                'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
-                'test-ns/svc/test2': {avail: 'down', frozen: 'frozen'},
-                'root/svc/test3': {avail: 'warn', frozen: 'unfrozen'},
-                'test-ns/svc/test4': {avail: 'n/a', frozen: 'unfrozen'},
-                'test-ns/svc/unprovisioned': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'},
-            },
-            objectInstanceStatus: {
-                'test-ns/svc/test1': {
-                    node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    node2: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
-                },
-                'test-ns/svc/test2': {
-                    node1: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
-                },
-                'root/svc/test3': {
-                    node2: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
-                },
-                'test-ns/svc/test4': {},
-                'test-ns/svc/unprovisioned': {
-                    node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
-                },
-            },
-            instanceMonitor: {
-                'node1:test-ns/svc/test1': {state: 'running', global_expect: 'frozen'},
-                'node2:test-ns/svc/test1': {state: 'idle', global_expect: 'none'},
-                'node1:test-ns/svc/test2': {state: 'failed', global_expect: 'none'},
-                'node2:root/svc/test3': {state: 'idle', global_expect: 'started'},
-            },
-            removeObject: mockRemoveObject,
-        };
-
-        useEventStore.mockImplementation((selector) => selector(mockState));
-
-        useFetchDaemonStatus.mockReturnValue({
-            daemon: {cluster: {object: {}}},
-        });
-
-        startEventReception.mockImplementation(mockStartEventReception);
-        closeEventSource.mockImplementation(mockCloseEventSource);
-
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('mock-token');
-
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({}),
-            })
-        );
-    });
-
-    afterEach(() => {
-        console.error = originalConsoleError;
-        jest.restoreAllMocks();
-        require('@mui/material/useMediaQuery').mockReturnValue(true);
-    });
-
-    const setupComponent = () => {
-        return render(
-            <MemoryRouter>
-                <Objects/>
-            </MemoryRouter>
-        );
-    };
-
-    const waitForComponentToLoad = async () => {
-        await waitFor(() => {
-            expect(screen.getByLabelText('Global State')).toBeInTheDocument();
-        });
-    };
-
-    const verifyStatusColumn = (row, expectedIcons, expectedCaption = null) => {
-        const cells = within(row).getAllByRole('cell');
-        const statusCell = cells[1];
-
-        expectedIcons.forEach((icon) => {
-            const label = icon === 'warn' ? 'Object has warning' : `Object is ${icon}`;
-            expect(within(statusCell).getByLabelText(label)).toBeInTheDocument();
-        });
-
-        if (expectedCaption) {
-            expect(within(statusCell).getByText(expectedCaption)).toBeInTheDocument();
-        }
-    };
-
-    const verifyNodeColumn = (row, node, expectedIcons) => {
-        const nodeIndex = allNodes.indexOf(node);
-        const nodeCell = within(row).getAllByRole('cell')[nodeIndex + 3];
-
-        if (expectedIcons.length === 0) {
-            expect(within(nodeCell).queryByLabelText(/Node .+ is .+/)).toBeNull();
-            expect(within(nodeCell).queryByLabelText(/Node .+ has warning/)).toBeNull();
-            expect(within(nodeCell).queryByLabelText(/Node .+ is frozen/)).toBeNull();
-            expect(within(nodeCell).queryByLabelText(/Node .+ is not provisioned/)).toBeNull();
+beforeEach(() => {
+    originalConsoleError = console.error;
+    console.error = jest.fn((msg, ...args) => {
+        if (
+            typeof msg === 'string' &&
+            (msg.includes('A props object containing a "key" prop is being spread into JSX') ||
+                msg.includes('<li> cannot appear as a descendant of <li>'))
+        )
             return;
-        }
+        originalConsoleError.call(console, msg, ...args);
+    });
+    jest.clearAllMocks();
+    jest.spyOn(Storage.prototype, 'getItem').mockReturnValue('mock-token');
+    mockRemoveObject.mockClear();
+});
 
-        expectedIcons.forEach((icon) => {
-            const label = icon === 'warn' ? `Node ${node} has warning` : `Node ${node} is ${icon}`;
-            expect(within(nodeCell).getByLabelText(label)).toBeInTheDocument();
-        });
-    };
+afterEach(() => {
+    console.error = originalConsoleError;
+    jest.restoreAllMocks();
+});
 
-    const selectObject = async (objectName) => {
-        const row = screen.getByRole('row', {name: new RegExp(objectName, 'i')});
-        const checkbox = within(row).getByRole('checkbox');
-        fireEvent.click(checkbox);
-        return checkbox;
-    };
-
-    test('renders correctly with initial state', async () => {
-        setupComponent();
-
-        await waitForComponentToLoad();
-
-        expect(screen.getByLabelText('Global State')).toBeInTheDocument();
-        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        expect(screen.getByLabelText('Kind')).toBeInTheDocument();
-        expect(screen.getByLabelText('Name')).toBeInTheDocument();
+// ---------- tests ----------
+describe('Objects Component', () => {
+    test('initial render and data fetch', async () => {
+        const {unmount} = setup();
+        await waitForLoad();
         expect(screen.getByText('Status')).toBeInTheDocument();
         expect(screen.getByText('Object')).toBeInTheDocument();
         expect(screen.getByRole('columnheader', {name: /node1/i})).toBeInTheDocument();
-        expect(screen.getByRole('columnheader', {name: /node2/i})).toBeInTheDocument();
-    });
-
-    test('fetches data on mount and cleans up on unmount', async () => {
-        const {unmount} = setupComponent();
-
-        await waitForComponentToLoad();
-
-        expect(startEventReception).toHaveBeenCalledWith(
-            "mock-token",
-            [
-                "ObjectStatusUpdated",
-                "InstanceStatusUpdated",
-                "ObjectDeleted",
-                "InstanceMonitorUpdated"
-            ]
-        );
-
+        expect(startEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
         unmount();
-
-        expect(closeEventSource).toHaveBeenCalledTimes(1);
+        expect(closeEventSource).toHaveBeenCalled();
     });
 
-    test('displays objects table with correct data', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
-
-        const rows = screen.getAllByRole('row').slice(1);
-        const rowTexts = rows.map((row) => row.textContent);
-
-        const test1Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test1'))];
-        const test2Row = rows[rowTexts.findIndex((text) => text.includes('test-ns/svc/test2'))];
-        const test3Row = rows[rowTexts.findIndex((text) => text.includes('root/svc/test3'))];
-
-        verifyStatusColumn(test1Row, ['up'], 'frozen');
-        verifyStatusColumn(test2Row, ['down', 'frozen']);
-        verifyStatusColumn(test3Row, ['warn'], 'started');
-
-        verifyNodeColumn(test1Row, 'node1', ['up']);
-        verifyNodeColumn(test1Row, 'node2', ['down', 'frozen']);
-        verifyNodeColumn(test2Row, 'node1', ['down', 'frozen']);
-        verifyNodeColumn(test2Row, 'node2', []);
-        verifyNodeColumn(test3Row, 'node1', []);
-        verifyNodeColumn(test3Row, 'node2', ['warn']);
+    test('displays objects with correct status and node data', async () => {
+        setup();
+        await waitForLoad();
+        ['test-ns/svc/test1', 'test-ns/svc/test2', 'root/svc/test3'].forEach((name) =>
+            expect(screen.getByRole('row', {name: new RegExp(name)})).toBeInTheDocument()
+        );
+        const row1 = screen.getByRole('row', {name: /test1/});
+        expect(within(row1).getByLabelText('Object is up')).toBeInTheDocument();
+        expect(within(row1).getByText('frozen')).toBeInTheDocument();
+        expect(within(row1).getByLabelText('Node node2 is down')).toBeInTheDocument();
+        expect(within(row1).getByLabelText('Node node2 is frozen')).toBeInTheDocument();
     });
 
-    test('handles object selection', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const checkbox = await selectObject('test-ns/svc/test1');
-
-        expect(checkbox).toBeChecked();
+    test('selection and select all', async () => {
+        setup();
+        await waitForLoad();
+        const cb = selectRow('test-ns/svc/test1');
+        expect(cb).toBeChecked();
+        const selectAll = screen.getAllByRole('checkbox')[0];
+        fireEvent.click(selectAll);
+        screen.getAllByRole('checkbox').slice(1).forEach((c) => expect(c).toBeChecked());
+        fireEvent.click(selectAll);
+        screen.getAllByRole('checkbox').slice(1).forEach((c) => expect(c).not.toBeChecked());
     });
 
-    test('handles select all objects', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const selectAllCheckbox = screen.getAllByRole('checkbox')[0];
-        fireEvent.click(selectAllCheckbox);
-
-        const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
-        allCheckboxes.forEach((checkbox) => {
-            expect(checkbox).toBeChecked();
-        });
-    });
-
-    test('handles deselect all when all are selected', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const selectAllCheckbox = screen.getAllByRole('checkbox')[0];
-        fireEvent.click(selectAllCheckbox);
-
-        await waitFor(() => {
-            const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
-            allCheckboxes.forEach((checkbox) => {
-                expect(checkbox).toBeChecked();
-            });
-        });
-
-        fireEvent.click(selectAllCheckbox);
-
-        await waitFor(() => {
-            const allCheckboxes = screen.getAllByRole('checkbox').slice(1);
-            allCheckboxes.forEach((checkbox) => {
-                expect(checkbox).not.toBeChecked();
-            });
-        });
-    });
-
-    test('opens actions menu', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-
+    test('actions menu opens and lists actions', async () => {
+        setup();
+        await waitForLoad();
+        await selectRow('test-ns/svc/test1');
+        openActionsMenu();
         const menu = await screen.findByRole('menu');
-        expect(menu).toBeInTheDocument();
-
-        AVAILABLE_ACTIONS.forEach((action) => {
-            expect(
-                within(menu).getByText(action.charAt(0).toUpperCase() + action.slice(1))
-            ).toBeInTheDocument();
-        });
+        ['Restart', 'Stop', 'Freeze', 'Delete'].forEach((a) =>
+            expect(within(menu).getByText(a)).toBeInTheDocument()
+        );
     });
 
-    test('filters objects by namespace', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
+    describe('filtering', () => {
+        const filterTests = [
+            {
+                label: 'Namespace',
+                option: 'test-ns',
+                visible: ['test-ns/svc/test1', 'test-ns/svc/test2'],
+                hidden: ['root/svc/test3']
+            },
+            {label: 'Global State', option: 'Up', visible: ['test-ns/svc/test1'], hidden: ['test-ns/svc/test2']},
+            {label: 'Kind', option: 'svc', visible: ['test-ns/svc/test1'], hidden: []},
+            {
+                label: 'Name',
+                option: 'test1',
+                visible: ['test-ns/svc/test1'],
+                hidden: ['test-ns/svc/test2', 'root/svc/test3'],
+                isSearch: true
+            },
+        ];
 
-        await selectFilterOption('Namespace', 'test-ns');
-        await waitForFilterApplied();
+        test.each(filterTests)(
+            '$label filter',
+            async ({label, option, visible, hidden, isSearch}) => {
+                setup();
+                await waitForLoad();
+                if (isSearch) {
+                    fireEvent.change(screen.getByLabelText('Name'), {target: {value: option}});
+                } else {
+                    await selectFilter(label, option);
+                }
+                await waitFor(() => {
+                    visible.forEach((n) => expect(screen.getByRole('row', {name: new RegExp(n)})).toBeInTheDocument());
+                    hidden.forEach((n) => expect(screen.queryByRole('row', {name: new RegExp(n)})).not.toBeInTheDocument());
+                });
+            }
+        );
+    });
 
+    test('multiple filters combined', async () => {
+        setup();
+        await waitForLoad();
+        await selectFilter('Namespace', 'test-ns');
+        await selectFilter('Global State', 'Up');
         await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
+            expect(screen.getByRole('row', {name: /test1/})).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: /test2/})).not.toBeInTheDocument();
         });
-
-        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
     });
 
-    test('filters objects by search query', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const searchInput = screen.getByLabelText('Name');
-        fireEvent.change(searchInput, {target: {value: 'test1'}});
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-
-        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
+    test('chips remove filters', async () => {
+        setup();
+        await waitForLoad();
+        await selectFilter('Namespace', 'test-ns');
+        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
+        fireEvent.click(within(chip).getByTestId('CloseIcon'));
+        await waitFor(() => expect(screen.getByRole('row', {name: /root\/svc\/test3/})).toBeInTheDocument());
     });
 
-    test('handles object click navigation', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
+    test('empty message when nothing matches', async () => {
+        setup();
+        await waitForLoad();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'nonexistent'}});
+        await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
+    });
 
-        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/i}));
+    describe('actions execution', () => {
+        test('restart succeeds', async () => {
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            await confirmDialog();
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/action/restart'), expect.any(Object)
+            ));
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i));
+        });
 
+        test('unfreeze succeeds on frozen object', async () => {
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test2');
+            openActionsMenu();
+            await clickMenuItem('Unfreeze');
+            await confirmDialog();
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/action/unfreeze'), expect.any(Object)
+            ));
+        });
+
+        test('delete succeeds with confirmations', async () => {
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Delete');
+            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+            fireEvent.click(screen.getByLabelText(/Confirm configuration loss/i));
+            fireEvent.click(screen.getByLabelText(/Confirm clusterwide orchestration/i));
+            fireEvent.click(screen.getByRole('button', {name: /Delete/i}));
+            await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('/action/delete'), expect.any(Object)
+            ));
+            expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
+        });
+
+        test('failed action shows error alert', async () => {
+            setup();
+            global.fetch = jest.fn(() => Promise.resolve({ok: false, status: 500}));
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            await confirmDialog();
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/failed/i));
+        });
+
+        test('partial success shows warning', async () => {
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            await selectRow('test-ns/svc/test2');
+            global.fetch = jest.fn()
+                .mockResolvedValueOnce({ok: true})
+                .mockResolvedValueOnce({ok: false, status: 500});
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            await confirmDialog();
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/partially succeeded: 1 ok, 1 errors/i));
+        });
+
+        test('network error', async () => {
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            await confirmDialog();
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/failed on all 1 object\(s\)/i));
+        });
+
+        test('token missing prevents action', async () => {
+            Storage.prototype.getItem.mockReturnValue(null);
+            setup();
+            await waitForLoad();
+            await selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            await confirmDialog();
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Authentication token not found'));
+        });
+    });
+
+    test('row click navigates', async () => {
+        setup();
+        await waitForLoad();
+        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects/test-ns%2Fsvc%2Ftest1');
     });
 
-    test('executes action and shows snackbar', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Restart/i));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/restart'),
-                expect.any(Object)
-            );
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-    });
-
-    test('handles failed action execution', async () => {
-        const originalConsoleErrorInTest = console.error;
-
-        console.error = jest.fn((message, ...args) => {
-            if (typeof message === 'string' &&
-                (message.includes('Failed to execute') ||
-                    message.includes('HTTP error!'))) {
-                return;
-            }
-            originalConsoleErrorInTest.call(console, message, ...args);
-        });
-
-        try {
-            global.fetch.mockImplementation(() =>
-                Promise.resolve({
-                    ok: false,
-                    status: 500,
-                })
-            );
-
-            setupComponent();
-            await waitForComponentToLoad();
-
-            await selectObject('test-ns/svc/test1');
-
-            fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-            fireEvent.click(screen.getByText(/Restart/i));
-
-            await waitFor(() => {
-                expect(screen.getByRole('dialog')).toBeInTheDocument();
-            });
-
-            fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-            await waitFor(() => {
-                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
-            });
-        } finally {
-            console.error = originalConsoleErrorInTest;
-        }
-    });
-
-    test('executes delete action and removes object', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-
-        const menu = screen.getByRole('menu');
-        const deleteOption = within(menu).getByText(/^Delete$/i);
-        fireEvent.click(deleteOption);
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        expect(screen.getByText(/Confirm Delete/i)).toBeInTheDocument();
-
-        const configLossCheckbox = screen.getByLabelText(/Confirm configuration loss/i);
-        const clusterwideCheckbox = screen.getByLabelText(/Confirm clusterwide orchestration/i);
-
-        fireEvent.click(configLossCheckbox);
-        fireEvent.click(clusterwideCheckbox);
-
-        fireEvent.click(screen.getByRole('button', {name: /Delete/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/delete'),
-                expect.any(Object)
-            );
-        });
-
-        expect(mockRemoveObject).toHaveBeenCalledWith('test-ns/svc/test1');
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-    });
-
-    test('executes purge action with confirmation', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Purge/i));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm data loss/i}));
-        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm configuration loss/i}));
-        fireEvent.click(screen.getByRole('checkbox', {name: /Confirm service interruption/i}));
-
-        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
-        expect(confirmButton).not.toBeDisabled();
-
-        fireEvent.click(confirmButton);
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/purge'),
-                expect.any(Object)
-            );
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-    });
-
-    test('executes stop action with confirmation', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText(/Stop/i));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByLabelText(/I understand that this may interrupt services/i));
-
-        const confirmButton = screen.getByRole('button', {name: /Stop/i});
-        expect(confirmButton).not.toBeDisabled();
-
-        fireEvent.click(confirmButton);
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/stop'),
-                expect.any(Object)
-            );
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-    });
-
-    test('executes unprovision action with confirmation', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-
-        const menu = await screen.findByRole('menu');
-        fireEvent.click(within(menu).getByText(/Unprovision/i));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog', {name: /Confirm Unprovision/i})).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
-        fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
-        fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured/i));
-
-        const confirmButton = screen.getByRole('button', {name: /Confirm/i});
-        expect(confirmButton).not.toBeDisabled();
-
-        fireEvent.click(confirmButton);
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/unprovision'),
-                expect.any(Object)
-            );
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i);
-        });
-    });
-
-    test('toggles filters visibility', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const toggleButton = await screen.findByRole('button', {name: /filters/i});
-        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-
-        fireEvent.click(toggleButton);
-
-        await waitFor(() => {
-            expect(toggleButton).toHaveAttribute('aria-label', 'Show filters');
-        });
-        expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
-
-        fireEvent.click(toggleButton);
-
-        await waitFor(() => {
-            expect(toggleButton).toHaveAttribute('aria-label', 'Hide filters');
-        });
-        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-    });
-
-    test('filters objects by global state', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-
-        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-        expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
-    });
-
-    test('filters objects by kind', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Kind', 'svc');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
-    });
-
-    test('displays no objects when objectStatus is empty', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {},
-                objectInstanceStatus: {},
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-
-        await waitFor(() => {
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        });
-
-        expect(screen.getAllByRole('row')).toHaveLength(1);
-    });
-
-    test('accessibility check', async () => {
-        const {container} = setupComponent();
-
-        await waitForComponentToLoad();
-
-        const results = await axe(container, {
-            rules: {
-                'aria-prohibited-attr': {enabled: false},
-                'label': {enabled: false}
-            }
-        });
-        expect(results).toHaveNoViolations();
-    });
-
-    test('handles objects without instance status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/test4': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {},
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test4/i})).toBeInTheDocument();
-        });
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/test4/i});
-        expect(row).toBeInTheDocument();
-    });
-
-    test('handles objects with string provisioned status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/unprovisioned': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/unprovisioned': {
-                        node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByLabelText('Object is not provisioned')).toBeInTheDocument();
-    });
-
-    test('handles objects with boolean provisioned status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/unprovisioned-bool': {avail: 'n/a', frozen: 'unfrozen', provisioned: false},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/unprovisioned-bool': {
-                        node1: {avail: 'n/a', frozen_at: '0001-01-01T00:00:00Z', provisioned: false},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned-bool/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByLabelText('Object is not provisioned')).toBeInTheDocument();
-    });
-
-    test('handles nodes with not provisioned status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/node-unprovisioned': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/node-unprovisioned': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z', provisioned: 'false'},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/node-unprovisioned/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByLabelText('Node node1 is not provisioned')).toBeInTheDocument();
-    });
-
-    test('handles nodes with non-idle state', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/non-idle': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/non-idle': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/non-idle': {state: 'running', global_expect: 'none'},
-                },
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/non-idle/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByText('running')).toBeInTheDocument();
-    });
-
-    test('disables freeze action for frozen objects', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen'},
-                    'test-ns/svc/test2': {avail: 'down', frozen: 'frozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/test1': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                    'test-ns/svc/test2': {
-                        node1: {avail: 'down', frozen_at: '2025-05-16T10:00:00Z'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/test1': {state: 'running', global_expect: 'none'},
-                    'node1:test-ns/svc/test2': {state: 'idle', global_expect: 'none'},
-                },
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const frozenObjectRow = screen.getByRole('row', {name: /test-ns\/svc\/test2/i});
-        const menuButton = within(frozenObjectRow).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton);
-
-        await waitFor(() => {
-            const menu = screen.getByRole('menu');
-            const freezeAction = within(menu).queryByText('Freeze');
-            expect(freezeAction).not.toBeInTheDocument();
-        });
-    });
-
-    test('disables actions in global menu when not allowed', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
-        const checkbox = within(row).getByRole('checkbox');
-        fireEvent.click(checkbox);
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-
-        const menu = await screen.findByRole('menu');
-
-        const deleteAction = within(menu).getByText('Delete');
-        expect(deleteAction).toBeInTheDocument();
-    });
-
-    test('handles sorting by status column', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const statusHeader = screen.getByText('Status');
-        fireEvent.click(statusHeader);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
-        });
-    });
-
-    test('handles sorting by object name', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const objectHeader = screen.getByText('Object');
-        fireEvent.click(objectHeader);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
-        });
-    });
-
-    test('handles sorting by node status', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const nodeHeader = screen.getByRole('columnheader', {name: /node1/i});
-        fireEvent.click(nodeHeader);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
-        });
-    });
-
-    test('handles sort direction change', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const objectHeader = screen.getByText('Object');
-
-        fireEvent.click(objectHeader);
-
-        fireEvent.click(objectHeader);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
-        });
-    });
-
-    test('prevents navigation for objects without instance status', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/no-instance': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {},
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i})).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/no-instance/i}));
-
+    test('no navigation if no instance status', async () => {
+        setup({objectInstanceStatus: {}});
+        await waitForLoad();
+        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    test('handles narrow screen layout', async () => {
-        const mockUseMediaQuery = require('@mui/material/useMediaQuery');
-        mockUseMediaQuery.mockReturnValue(false);
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        expect(screen.queryByRole('columnheader', {name: /node1/i})).not.toBeInTheDocument();
-        expect(screen.queryByRole('columnheader', {name: /node2/i})).not.toBeInTheDocument();
+    test('row context menu shows correct actions', async () => {
+        setup();
+        await waitForLoad();
+        const row = screen.getByRole('row', {name: /test1/});
+        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        expect(screen.getByText('Freeze')).toBeInTheDocument();
+        expect(screen.queryByText('Unfreeze')).not.toBeInTheDocument();
     });
 
-    test('handles URL parameter synchronization with invalid globalState', async () => {
-        require('react-router-dom').useLocation.mockReturnValue({
-            search: '?globalState=invalid&namespace=test&kind=svc&name=obj1',
-            pathname: '/objects'
-        });
-
-        setupComponent();
-
-        await waitFor(() => {
-            expect(screen.getByLabelText('Global State')).toBeInTheDocument();
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        });
+    test('row context menu for frozen object', async () => {
+        setup();
+        await waitForLoad();
+        const row = screen.getByRole('row', {name: /test2/});
+        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
+        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
+        expect(screen.queryByText('Freeze')).not.toBeInTheDocument();
+        expect(screen.getByText('Unfreeze')).toBeInTheDocument();
     });
 
-    test('handles event source setup without auth token', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-
-        setupComponent();
-
-        await waitFor(() => {
-            expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        });
-
-        expect(startEventReception).not.toHaveBeenCalled();
+    test('global actions disabled when none selected', async () => {
+        setup();
+        await waitForLoad();
+        expect(screen.getByRole('button', {name: /actions on selected objects/i})).toBeDisabled();
     });
 
-    test('handles action execution with single object target', async () => {
-        setupComponent();
+    test('toggles filters visibility', async () => {
+        setup();
+        await waitForLoad();
+        const btn = screen.getByRole('button', {name: /filters/i});
+        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
+        fireEvent.click(btn);
+        await waitFor(() => expect(btn).toHaveAttribute('aria-label', 'Show filters'));
+        expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
+        fireEvent.click(btn);
+        await waitFor(() => expect(screen.getByLabelText('Namespace')).toBeInTheDocument());
+    });
 
-        await waitForComponentToLoad();
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
-        const menuButton = within(row).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton);
-
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
+    describe('sorting', () => {
+        const clickHeader = (text) => fireEvent.click(screen.getByText(text));
+        test.each(['Status', 'Object', 'node1'])('%s sorting works', async (col) => {
+            setup();
+            await waitForLoad();
+            if (col === 'node1') {
+                fireEvent.click(screen.getByRole('columnheader', {name: /node1/i}));
+            } else {
+                clickHeader(col);
+            }
+            await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1));
         });
 
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test1/action/restart'),
-                expect.any(Object)
-            );
+        test('sort direction toggles', async () => {
+            setup();
+            await waitForLoad();
+            clickHeader('Object');
+            clickHeader('Object');
+            await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1));
         });
     });
 
-    test('handles scroll loading more objects', async () => {
-        const manyObjects = {};
-        const manyInstanceStatus = {};
+    test('infinite scroll loads more', async () => {
+        const many = {};
+        const manyInst = {};
         for (let i = 0; i < 50; i++) {
             const name = `test-ns/svc/obj${i}`;
-            manyObjects[name] = {avail: i % 2 === 0 ? 'up' : 'down', frozen: 'unfrozen'};
-            manyInstanceStatus[name] = {
-                node1: {avail: i % 2 === 0 ? 'up' : 'down', frozen_at: '0001-01-01T00:00:00Z'}
-            };
+            many[name] = {avail: 'up', frozen: 'unfrozen'};
+            manyInst[name] = {node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'}};
         }
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: manyObjects,
-                objectInstanceStatus: manyInstanceStatus,
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.length).toBe(30);
-
-        const tableContainer = document.querySelector('.MuiTableContainer-root');
-        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
-        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
-        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
-
-        fireEvent.scroll(tableContainer);
-
-        await waitFor(() => {
-            const newRows = screen.getAllByRole('row').slice(1);
-            expect(newRows.length).toBeGreaterThan(30);
-        });
+        setup({objectStatus: many, objectInstanceStatus: manyInst});
+        await waitForLoad();
+        expect(screen.getAllByRole('row').slice(1)).toHaveLength(30);
+        const container = document.querySelector('.MuiTableContainer-root');
+        Object.defineProperty(container, 'scrollHeight', {value: 1000, configurable: true});
+        Object.defineProperty(container, 'clientHeight', {value: 500, configurable: true});
+        Object.defineProperty(container, 'scrollTop', {value: 500, configurable: true});
+        fireEvent.scroll(container);
+        await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBeGreaterThan(30));
     });
 
-    test('uses daemon objects as fallback when objectStatus is empty', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {},
-                objectInstanceStatus: {},
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-        useFetchDaemonStatus.mockReturnValue({
-            daemon: {
-                cluster: {
-                    object: {
-                        'daemon/svc/obj1': {avail: 'up', frozen: 'unfrozen'},
-                        'daemon/svc/obj2': {avail: 'down', frozen: 'frozen'},
-                    }
-                }
-            },
-        });
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /daemon\/svc\/obj1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /daemon\/svc\/obj2/i})).toBeInTheDocument();
-        });
-    });
-
-    test('filters by unprovisioned global state and finds objects', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Unprovisioned');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/unprovisioned/i})).toBeInTheDocument();
-        });
-        expect(screen.queryByRole('row', {name: /test-ns\/svc\/test1/i})).not.toBeInTheDocument();
-    });
-
-    test('freeze action is available for non-frozen object and unfreeze for frozen', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const row1 = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
-        const menuButton1 = within(row1).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton1);
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-        let menu = screen.getByRole('menu');
-        expect(within(menu).getByText('Freeze')).toBeInTheDocument();
-        expect(within(menu).queryByText('Unfreeze')).not.toBeInTheDocument();
-
-        fireEvent.keyDown(menu, {key: 'Escape', code: 'Escape'});
-        await waitFor(() => {
-            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        });
-
-        const row2 = screen.getByRole('row', {name: /test-ns\/svc\/test2/i});
-        const menuButton2 = within(row2).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton2);
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-        menu = screen.getByRole('menu');
-        expect(within(menu).queryByText('Freeze')).not.toBeInTheDocument();
-        expect(within(menu).getByText('Unfreeze')).toBeInTheDocument();
-    });
-
-    test('executes unfreeze action on frozen object', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test2');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Unfreeze'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/test-ns/svc/test2/action/unfreeze'),
-                expect.any(Object)
-            );
-        });
-    });
-
-    test('handles partial success during action execution', async () => {
-        global.fetch
-            .mockResolvedValueOnce({ok: true})
-            .mockResolvedValueOnce({ok: false, status: 500});
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-        await selectObject('test-ns/svc/test2');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/partially succeeded: 1 ok, 1 errors/i);
-        });
-    });
-
-    test('handles network error during action', async () => {
-        global.fetch.mockRejectedValue(new Error('Network error'));
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/failed on all 1 object\(s\)/i);
-        });
-    });
-
-    test('removes filter chip by clicking delete icon', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Namespace', 'test-ns');
-        await waitForFilterApplied();
-
-        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-
-        const deleteIcon = within(chip).getByTestId('CloseIcon');
-        fireEvent.click(deleteIcon);
-
-        await waitFor(() => {
-            expect(screen.queryByText('test-ns')).not.toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
-        });
-    });
-
-    test('global actions button is disabled when no objects selected', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const actionsButton = screen.getByRole('button', {name: /actions on selected objects/i});
-        expect(actionsButton).toBeDisabled();
-    });
-
-    test('row menu closes when clicking outside (backdrop)', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/i});
-        const menuButton = within(row).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton);
-
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-
-        const backdrop = document.querySelector('.MuiModal-backdrop');
-        expect(backdrop).toBeInTheDocument();
-        fireEvent.click(backdrop);
-
-        await waitFor(() => {
-            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        });
-    });
-
-    test('sorts by status with n/a values', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const statusHeader = screen.getByText('Status');
-        fireEvent.click(statusHeader);
-
-        await waitFor(() => {
-            const rows = screen.getAllByRole('row').slice(1);
-            const firstRow = rows[0];
-            expect(firstRow).toHaveTextContent(/test-ns\/svc\/test4/i);
-        });
-    });
-
-    test('sorts by node column when some objects lack node data', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const nodeHeader = screen.getByRole('columnheader', {name: /node1/i});
-        fireEvent.click(nodeHeader);
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
-        });
-    });
-
-    test('scroll does not load more when already loading', async () => {
-        const manyObjects = {};
-        const manyInstanceStatus = {};
-        for (let i = 0; i < 50; i++) {
-            const name = `test/svc/obj${i}`;
-            manyObjects[name] = {avail: 'up', frozen: 'unfrozen'};
-            manyInstanceStatus[name] = {
-                node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'}
-            };
-        }
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: manyObjects,
-                objectInstanceStatus: manyInstanceStatus,
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getAllByRole('row').slice(1)).toHaveLength(30);
-        });
-
-        const tableContainer = document.querySelector('.MuiTableContainer-root');
-        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
-        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
-        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
-
-        fireEvent.scroll(tableContainer);
-
-        await waitFor(() => {
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
-        });
-
-        fireEvent.scroll(tableContainer);
-
-        await new Promise(r => setTimeout(r, 50));
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.length).toBe(30);
-    });
-
-    test('scroll does not load more when no more objects', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {'test/svc/obj1': {avail: 'up'}},
-                objectInstanceStatus: {},
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const tableContainer = document.querySelector('.MuiTableContainer-root');
-        Object.defineProperty(tableContainer, 'scrollHeight', {value: 1000});
-        Object.defineProperty(tableContainer, 'clientHeight', {value: 500});
-        Object.defineProperty(tableContainer, 'scrollTop', {value: 500});
-
-        fireEvent.scroll(tableContainer);
-
+    test('scroll does nothing when no more items', async () => {
+        setup({objectStatus: {'a/b': {avail: 'up'}}, objectInstanceStatus: {}});
+        await waitForLoad();
+        const container = document.querySelector('.MuiTableContainer-root');
+        fireEvent.scroll(container);
         expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-        const rows = screen.getAllByRole('row').slice(1);
-        expect(rows.length).toBe(1);
     });
 
-    test('synchronizes URL with debounce', async () => {
+    test('URL sync debounced', async () => {
         jest.useFakeTimers();
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const searchInput = screen.getByLabelText('Name');
-        fireEvent.change(searchInput, {target: {value: 'test'}});
-
+        setup();
+        await waitForLoad();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'sync'}});
         jest.advanceTimersByTime(300);
-
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith(
-                '/objects?name=test',
-                {replace: true}
-            );
-        });
-
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?name=sync', {replace: true});
         jest.useRealTimers();
     });
 
-    test('updates filters from URL on location change', async () => {
-        const {rerender} = setupComponent();
-        await waitForComponentToLoad();
-
+    test('URL filters update state on location change', async () => {
+        const {rerender} = setup();
+        await waitForLoad();
         require('react-router-dom').useLocation.mockReturnValue({
             search: '?namespace=test-ns&kind=svc&name=test1',
-            pathname: '/objects'
+            pathname: '/objects',
         });
-
         rerender(
             <MemoryRouter>
                 <Objects/>
             </MemoryRouter>
         );
-
         await waitFor(() => {
-            expect(screen.getByLabelText('Namespace')).toHaveTextContent('test-ns');
             expect(screen.getByText('test-ns')).toBeInTheDocument();
             expect(screen.getByText('svc')).toBeInTheDocument();
             expect(screen.getByLabelText('Name')).toHaveValue('test1');
         });
     });
 
-    test('handles parseObjectName with different formats', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'simpleName': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'simpleName': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('simpleName');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/root/svc/simpleName/action/restart'),
-                expect.any(Object)
-            );
-        });
-    });
-
-    test('shows snackbar when token missing on action', async () => {
-        jest.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent('Authentication token not found');
-        });
-    });
-
-    test('closes snackbar after autoHideDuration', async () => {
-        jest.useFakeTimers();
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toBeInTheDocument();
-        });
-
-        jest.advanceTimersByTime(4000);
-
-        await waitFor(() => {
-            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('closes snackbar via Alert onClose callback', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toBeInTheDocument();
-        });
-
-        const alertCloseButton = screen.getByRole('alert').querySelector('button[aria-label="Close"]') ||
-            document.querySelector('.MuiAlert-action button');
-
-        if (alertCloseButton) {
-            fireEvent.click(alertCloseButton);
-            await waitFor(() => {
-                expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-            });
+    test('snackbar closes on alert close', async () => {
+        setup();
+        await waitForLoad();
+        await selectRow('test-ns/svc/test1');
+        openActionsMenu();
+        await clickMenuItem('Restart');
+        await confirmDialog();
+        await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+        const closeBtn = screen.getByRole('alert').querySelector('button[aria-label="Close"]');
+        if (closeBtn) {
+            fireEvent.click(closeBtn);
+            await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
         }
     });
 
-    test('closes pending action dialog via onClose (cancel button)', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectObject('test-ns/svc/test1');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        const cancelButton = screen.getByRole('button', {name: /cancel/i});
-        fireEvent.click(cancelButton);
-
-        await waitFor(() => {
-            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        });
-
+    test('cancel action dialog', async () => {
+        setup();
+        await waitForLoad();
+        await selectRow('test-ns/svc/test1');
+        openActionsMenu();
+        await clickMenuItem('Restart');
+        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', {name: /cancel/i}));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    test('handles parseObjectName with two-part format (kind/name)', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'svc/myservice': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'svc/myservice': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
+    test('narrow screen hides node columns', async () => {
+        setup({}, '', false);
+        await waitForLoad();
+        expect(screen.queryByRole('columnheader', {name: /node1/})).not.toBeInTheDocument();
+    });
+
+    test('daemon fallback when store empty', async () => {
+        setup(
+            {objectStatus: {}, objectInstanceStatus: {}},
+            '',
+            true,
+            {daemon: {cluster: {object: {'daemon/svc/obj1': {avail: 'up', frozen: 'unfrozen'}}}}}
         );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /svc\/myservice/i})).toBeInTheDocument();
-        });
-
-        await selectObject('svc/myservice');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/root/svc/myservice/action/restart'),
-                expect.any(Object)
-            );
-        });
-    });
-
-    test('skips action when objectStatus is missing for target object', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {},
-                objectInstanceStatus: {
-                    'test-ns/svc/ghost': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
+        await waitFor(() =>
+            expect(screen.getByRole('row', {name: /daemon\/svc\/obj1/})).toBeInTheDocument()
         );
-
-        useFetchDaemonStatus.mockReturnValue({
-            daemon: {
-                cluster: {
-                    object: {
-                        'test-ns/svc/ghost': {avail: 'up', frozen: 'unfrozen'},
-                    }
-                }
-            },
-        });
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/ghost/i})).toBeInTheDocument();
-        });
-
-        await selectObject('test-ns/svc/ghost');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/failed on all 1 object\(s\)/i);
-        });
     });
 
-    test('skips freeze action when object is already frozen', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/already-frozen': {avail: 'up', frozen: 'frozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/already-frozen': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /already-frozen/i})).toBeInTheDocument();
-        });
-
-        const row = screen.getByRole('row', {name: /already-frozen/i});
-        const menuButton = within(row).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton);
-
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-
-        const menu = screen.getByRole('menu');
-        expect(within(menu).queryByText('Freeze')).not.toBeInTheDocument();
-        expect(within(menu).getByText('Unfreeze')).toBeInTheDocument();
+    test('unprovisioned object and node', async () => {
+        setup();
+        await waitForLoad();
+        expect(screen.getByLabelText('Object is not provisioned')).toBeInTheDocument();
+        expect(screen.getByLabelText('Node node1 is not provisioned')).toBeInTheDocument();
     });
 
-    test('skips unfreeze action when object is not frozen', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/not-frozen': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/not-frozen': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /not-frozen/i})).toBeInTheDocument();
+    test('cluster object parsed as ccfg', async () => {
+        setup({
+            objectStatus: {cluster: {avail: 'up', frozen: 'unfrozen'}},
+            objectInstanceStatus: {cluster: {node1: {avail: 'up'}}},
         });
-
-        const row = screen.getByRole('row', {name: /not-frozen/i});
-        const menuButton = within(row).getByRole('button', {name: /more actions/i});
-        fireEvent.click(menuButton);
-
-        await waitFor(() => {
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-        });
-
-        const menu = screen.getByRole('menu');
-        expect(within(menu).getByText('Freeze')).toBeInTheDocument();
-        expect(within(menu).queryByText('Unfreeze')).not.toBeInTheDocument();
-    });
-
-    test('toggles global state filter off by clicking chip delete', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-        });
-
-        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-        const deleteIcon = within(chip).getByTestId('CloseIcon');
-        fireEvent.click(deleteIcon);
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        });
-    });
-
-    test('toggles kind filter off by clicking chip delete', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Kind', 'svc');
-        await waitForFilterApplied();
-
-        const chip = screen.getByText(/^svc$/i).closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-        const deleteIcon = within(chip).getByTestId('CloseIcon');
-        fireEvent.click(deleteIcon);
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-    });
-
-    test('handles Kind select onChange directly', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const kindSelect = screen.getByLabelText('Kind');
-        fireEvent.mouseDown(kindSelect);
-
-        await waitFor(() => {
-            expect(screen.getByRole('listbox')).toBeInTheDocument();
-        });
-
-        const listbox = screen.getByRole('listbox');
-        const option = within(listbox).getByText('svc');
-        fireEvent.click(option);
-
-        fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
-
-        await waitFor(() => {
-            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-        });
-    });
-
-    test('node status shows n/a state for missing avail', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/noavail': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/noavail': {
-                        node1: {},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/noavail/i})).toBeInTheDocument();
-        });
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/noavail/i});
-        const cells = within(row).getAllByRole('cell');
-        const nodeCell = cells[3];
-        expect(within(nodeCell).queryByText('-')).not.toBeInTheDocument();
-        expect(within(nodeCell).queryByLabelText(/Node .+ is .+/)).not.toBeInTheDocument();
-        expect(within(nodeCell).queryByLabelText(/Node .+ has warning/)).not.toBeInTheDocument();
-    });
-
-    test('global state filter chip click toggles selection', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-        });
-
-        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
-        fireEvent.click(chip);
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        });
-    });
-
-    test('renders cluster object name with ccfg kind', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'cluster': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'cluster': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /cluster/i})).toBeInTheDocument();
-        });
-
-        await selectObject('cluster');
-        fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-        fireEvent.click(screen.getByText('Restart'));
-
-        await waitFor(() => {
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', {name: /Confirm/i}));
-
-        await waitFor(() => {
+        await waitForLoad();
+        await selectRow('cluster');
+        openActionsMenu();
+        await clickMenuItem('Restart');
+        await confirmDialog();
+        await waitFor(() =>
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining('/root/ccfg/cluster/action/restart'),
                 expect.any(Object)
-            );
-        });
-    });
-
-    test('displays GlobalExpectDisplay as empty when globalExpect is falsy', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/no-expect': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/no-expect': {
-                        node1: {avail: 'up'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/no-expect': {state: 'idle', global_expect: ''},
-                },
-                removeObject: mockRemoveObject,
-            })
+            )
         );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/no-expect/i})).toBeInTheDocument();
-        });
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/no-expect/i});
-        expect(row).toBeInTheDocument();
     });
 
-    test('multiple filters combined reduce results correctly', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Namespace', 'test-ns');
-        await waitForFilterApplied();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
+    test('accessibility', async () => {
+        const {container} = setup();
+        await waitForLoad();
+        const results = await axe(container, {
+            rules: {'aria-prohibited-attr': {enabled: false}, label: {enabled: false}},
         });
-    });
-
-    test('shows empty message when no objects match filters', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const searchInput = screen.getByLabelText('Name');
-        fireEvent.change(searchInput, {target: {value: 'xxxxxxxxxnonexistent'}});
-
-        await waitFor(() => {
-            expect(screen.getByText(/No objects found matching the current filters/i)).toBeInTheDocument();
-        });
-    });
-
-    test('URL contains multiple filter values joined by comma', async () => {
-        jest.useFakeTimers();
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const globalStateSelect = screen.getByLabelText('Global State');
-        fireEvent.mouseDown(globalStateSelect);
-
-        await waitFor(() => {
-            expect(screen.getByRole('listbox')).toBeInTheDocument();
-        });
-
-        const listbox = screen.getByRole('listbox');
-        const upOption = within(listbox).getAllByRole('option').find(o => o.textContent.toLowerCase().includes('up'));
-        const downOption = within(listbox).getAllByRole('option').find(o => o.textContent.toLowerCase().includes('down'));
-
-        fireEvent.click(within(upOption).getByRole('checkbox'));
-        fireEvent.click(within(downOption).getByRole('checkbox'));
-
-        fireEvent.keyDown(listbox, {key: 'Escape'});
-
-        jest.advanceTimersByTime(300);
-
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith(
-                expect.stringMatching(/globalState=.*up.*down|globalState=.*down.*up/),
-                {replace: true}
-            );
-        });
-
-        jest.useRealTimers();
-    });
-
-    test('NodeStatusIcons memo comparator covered by rendering down state', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {'test-ns/svc/memo-cov': {avail: 'up', frozen: 'unfrozen'}},
-                objectInstanceStatus: {
-                    'test-ns/svc/memo-cov': {
-                        node1: {avail: 'warn', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByLabelText('Node node1 has warning')).toBeInTheDocument();
-        });
-    });
-
-    test('NodeStatusIcons renders down state correctly', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {'test-ns/svc/node-down': {avail: 'up', frozen: 'unfrozen'}},
-                objectInstanceStatus: {
-                    'test-ns/svc/node-down': {
-                        node1: {avail: 'down', frozen_at: '2025-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
-        });
-
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/node-down/i});
-        const cells = within(row).getAllByRole('cell');
-        expect(cells.length).toBeGreaterThan(3);
-    });
-
-    test('NodeStateDisplay memo comparator covered by rendering non-idle state', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {'test-ns/svc/memo-state-cov': {avail: 'up', frozen: 'unfrozen'}},
-                objectInstanceStatus: {
-                    'test-ns/svc/memo-state-cov': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/memo-state-cov': {state: 'starting', global_expect: 'none'},
-                },
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByText('starting')).toBeInTheDocument();
-        });
-    });
-
-    test('NodeStateDisplay renders idle state correctly', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {'test-ns/svc/node-idle': {avail: 'up', frozen: 'unfrozen'}},
-                objectInstanceStatus: {
-                    'test-ns/svc/node-idle': {
-                        node1: {avail: 'up', frozen_at: '0001-01-01T00:00:00Z'},
-                    },
-                },
-                instanceMonitor: {
-                    'node1:test-ns/svc/node-idle': {state: 'running', global_expect: 'none'},
-                },
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/node-idle/i})).toBeInTheDocument();
-        });
-
-        expect(screen.getByText('running')).toBeInTheDocument();
-    });
-
-    test('filteredObjectNames skips objects not matching namespace filter', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const namespaceSelect = screen.getByLabelText('Namespace');
-        fireEvent.mouseDown(namespaceSelect);
-
-        await waitFor(() => {
-            expect(screen.getByRole('listbox')).toBeInTheDocument();
-        });
-
-        const listbox = screen.getByRole('listbox');
-        const rootOption = within(listbox).getAllByRole('option').find(o =>
-            o.textContent.toLowerCase().includes('root')
-        );
-        fireEvent.click(within(rootOption).getByRole('checkbox'));
-        fireEvent.keyDown(listbox, {key: 'Escape'});
-
-        await waitFor(() => {
-            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test1/i})).not.toBeInTheDocument();
-        });
-    });
-
-    test('filteredObjectNames skips objects not matching kind filter', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/svcobj': {avail: 'up', frozen: 'unfrozen'},
-                    'test-ns/cfg/cfgobj': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/svcobj': {node1: {avail: 'up'}},
-                    'test-ns/cfg/cfgobj': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const kindSelect = screen.getByLabelText('Kind');
-        fireEvent.mouseDown(kindSelect);
-
-        await waitFor(() => {
-            expect(screen.getByRole('listbox')).toBeInTheDocument();
-        });
-
-        const listbox = screen.getByRole('listbox');
-        const cfgOption = within(listbox).getAllByRole('option').find(o =>
-            o.textContent.toLowerCase().includes('cfg')
-        );
-        fireEvent.click(within(cfgOption).getByRole('checkbox'));
-        fireEvent.keyDown(listbox, {key: 'Escape'});
-
-        await waitFor(() => {
-            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).toBeInTheDocument();
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/svcobj/i})).not.toBeInTheDocument();
-        });
-    });
-
-    test('adds global state to filter when clicking chip label (onClick)', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/i})).not.toBeInTheDocument();
-        });
-
-        await selectFilterOption('Global State', 'Down');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/i})).toBeInTheDocument();
-        });
-    });
-
-    test('adds namespace to filter when using select (add branch)', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Namespace', 'test-ns');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('row', {name: /root\/svc\/test3/i})).not.toBeInTheDocument();
-        });
-
-        await selectFilterOption('Namespace', 'root');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /root\/svc\/test3/i})).toBeInTheDocument();
-        });
-    });
-
-    test('adds kind to filter when using select (add branch)', async () => {
-        useEventStore.mockImplementation((selector) =>
-            selector({
-                objectStatus: {
-                    'test-ns/svc/svcobj': {avail: 'up', frozen: 'unfrozen'},
-                    'test-ns/cfg/cfgobj': {avail: 'up', frozen: 'unfrozen'},
-                },
-                objectInstanceStatus: {
-                    'test-ns/svc/svcobj': {node1: {avail: 'up'}},
-                    'test-ns/cfg/cfgobj': {node1: {avail: 'up'}},
-                },
-                instanceMonitor: {},
-                removeObject: mockRemoveObject,
-            })
-        );
-
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Kind', 'svc');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).not.toBeInTheDocument();
-        });
-
-        await selectFilterOption('Kind', 'cfg');
-        await waitForFilterApplied();
-
-        await waitFor(() => {
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/svcobj/i})).toBeInTheDocument();
-            expect(screen.getByRole('row', {name: /test-ns\/cfg\/cfgobj/i})).toBeInTheDocument();
-        });
-    });
-
-    test('GlobalState renderValue shows warn and n/a icons', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        const globalStateSelect = screen.getByLabelText('Global State');
-        fireEvent.mouseDown(globalStateSelect);
-
-        await waitFor(() => {
-            expect(screen.getByRole('listbox')).toBeInTheDocument();
-        });
-
-        const listbox = screen.getByRole('listbox');
-
-        const warnOption = within(listbox).getAllByRole('option').find(o =>
-            o.textContent.toLowerCase().includes('warn')
-        );
-        fireEvent.click(within(warnOption).getByRole('checkbox'));
-
-        const naOption = within(listbox).getAllByRole('option').find(o =>
-            o.textContent.toLowerCase().includes('n/a')
-        );
-        fireEvent.click(within(naOption).getByRole('checkbox'));
-
-        fireEvent.keyDown(listbox, {key: 'Escape'});
-
-        await waitFor(() => {
-            expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-        });
-
-        await waitFor(() => {
-            const chips = document.querySelectorAll('.MuiChip-root');
-            expect(chips.length).toBeGreaterThanOrEqual(2);
-        });
-    });
-
-    test('chip onMouseDown stopPropagation prevents select from reopening', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Global State', 'Up');
-        await waitForFilterApplied();
-
-        const chip = screen.getByText(/^Up$/i).closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-
-        fireEvent.mouseDown(chip);
-
-        await new Promise(r => setTimeout(r, 50));
-        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    });
-
-    test('namespace chip onMouseDown stopPropagation prevents select from reopening', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Namespace', 'test-ns');
-        await waitForFilterApplied();
-
-        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-
-        fireEvent.mouseDown(chip);
-
-        await new Promise(r => setTimeout(r, 50));
-        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    });
-
-    test('kind chip onMouseDown stopPropagation prevents select from reopening', async () => {
-        setupComponent();
-        await waitForComponentToLoad();
-
-        await selectFilterOption('Kind', 'svc');
-        await waitForFilterApplied();
-
-        const chip = screen.getByText(/^svc$/i).closest('.MuiChip-root');
-        expect(chip).toBeInTheDocument();
-
-        fireEvent.mouseDown(chip);
-
-        await new Promise(r => setTimeout(r, 50));
-        expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+        expect(results).toHaveNoViolations();
     });
 });

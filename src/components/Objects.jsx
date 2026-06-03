@@ -1185,6 +1185,7 @@ const Objects = () => {
                         </Box>
                     </Box>
 
+                    {/* Menu for row actions (per object) */}
                     <Menu
                         open={Boolean(rowMenuAnchor)}
                         anchorEl={rowMenuAnchor}
@@ -1199,6 +1200,7 @@ const Objects = () => {
                             horizontal: 'right',
                         }}
                         sx={{
+                            zIndex: 10000,
                             "& .MuiPaper-root": {
                                 minWidth: 200,
                                 boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
@@ -1245,6 +1247,7 @@ const Objects = () => {
                             horizontal: 'right',
                         }}
                         sx={{
+                            zIndex: 10000,
                             "& .MuiPaper-root": {
                                 minWidth: 200,
                                 boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"

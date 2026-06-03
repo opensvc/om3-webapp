@@ -265,7 +265,7 @@ const NodeRow = ({
                     onClose={() => onMenuClose(nodename)}
                     {...menuProps}
                 >
-                    {filteredMenuItems.map(({name, icon}) => (
+                    {filteredMenuItems.map(({name, icon, color}) => (
                         <MenuItem
                             key={name}
                             onClick={(e) => {
@@ -273,10 +273,17 @@ const NodeRow = ({
                                 onAction(nodename, name);
                                 onMenuClose(nodename);
                             }}
-                            sx={{display: "flex", alignItems: "center", gap: 1}}
+                            sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                                color: color === "red" ? "error.main" : "inherit",
+                            }}
                             aria-label={`${name} action`}
                         >
-                            <ListItemIcon>{icon}</ListItemIcon>
+                            <ListItemIcon sx={{ color: color === "red" ? "error.main" : "inherit" }}>
+                                {icon}
+                            </ListItemIcon>
                             <ListItemText>
                                 {name
                                     .split(" ")

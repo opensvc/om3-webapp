@@ -15,19 +15,19 @@ import {grey, blue, red} from "@mui/material/colors";
 import logger from '../utils/logger.js';
 
 const InstanceCard = ({
-                      node,
-                      nodeData = {},
-                      selectedNodes = [],
-                      toggleNode = () => logger.warn("toggleNode not provided"),
-                      actionInProgress = false,
-                      setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
-                      setCurrentNode = () => logger.warn("setCurrentNode not provided"),
-                      getColor = () => grey[500],
-                      getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
-                      instanceName,
-                      onOpenLogs = () => logger.warn("onOpenLogs not provided"),
-                      onViewInstance,
-                  }) => {
+                          node,
+                          nodeData = {},
+                          selectedNodes = [],
+                          toggleNode = () => logger.warn("toggleNode not provided"),
+                          actionInProgress = false,
+                          setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
+                          setCurrentNode = () => logger.warn("setCurrentNode not provided"),
+                          getColor = () => grey[500],
+                          getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
+                          instanceName,
+                          onOpenLogs = () => logger.warn("onOpenLogs not provided"),
+                          onViewInstance,
+                      }) => {
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name || node;
     const [isHovered, setIsHovered] = useState(false);
 

@@ -129,7 +129,7 @@ const HeaderSection = ({
                     <Popper open={Boolean(objectMenuAnchor)} anchorEl={objectMenuAnchor} {...popperProps()}>
                         <ClickAwayListener onClickAway={() => setObjectMenuAnchor(null)}>
                             <Paper elevation={3} role="menu">
-                                {OBJECT_ACTIONS.map(({name, icon}) => {
+                                {OBJECT_ACTIONS.map(({name, icon, color}) => {
                                     const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
                                     return (
                                         <MenuItem
@@ -140,13 +140,20 @@ const HeaderSection = ({
                                             }}
                                             disabled={!isAllowed || actionInProgress}
                                             sx={{
-                                                color: isAllowed ? 'inherit' : 'text.disabled',
+                                                color: isAllowed
+                                                    ? (color === "red" ? "error.main" : "inherit")
+                                                    : "text.disabled",
                                                 '&.Mui-disabled': {opacity: 0.5},
                                             }}
                                             aria-label={`Object ${name} action`}
                                         >
                                             <ListItemIcon
-                                                sx={{minWidth: 40, color: isAllowed ? 'inherit' : 'text.disabled'}}>
+                                                sx={{
+                                                    minWidth: 40,
+                                                    color: isAllowed
+                                                        ? (color === "red" ? "error.main" : "inherit")
+                                                        : "text.disabled"
+                                                }}>
                                                 {icon}
                                             </ListItemIcon>
                                             <ListItemText>

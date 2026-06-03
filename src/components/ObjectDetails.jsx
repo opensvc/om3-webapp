@@ -148,6 +148,11 @@ const ObjectDetail = () => {
         return {avail, frozen, globalExpect};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
+    const nodesList = useMemo(() => {
+        if (!objectInstanceStatus) return [];
+        return Object.keys(objectInstanceStatus);
+    }, [objectInstanceStatus]);
+
     const memoizedObjectData = useMemo(() => {
         if (!objectInstanceStatus) return {};
         const enhanced = {};
@@ -160,8 +165,6 @@ const ObjectDetail = () => {
         });
         return enhanced;
     }, [objectInstanceStatus, instanceConfig, instanceMonitor, decodedObjectName]);
-
-    const nodesList = useMemo(() => Object.keys(memoizedObjectData), [memoizedObjectData]);
 
     const fetchInitialObjectData = useCallback(async () => {
         setInitialDataError(null);
@@ -188,7 +191,11 @@ const ObjectDetail = () => {
 
             const store = useEventStore.getState();
             if (objectData) store.setObjectStatuses({[decodedObjectName]: objectData});
-            if (Object.keys(instancesData).length > 0) store.setInstanceStatuses({[decodedObjectName]: instancesData});
+            if (Object.keys(instancesData).length > 0) {
+                store.setInstanceStatuses({[decodedObjectName]: instancesData}, true);
+            } else {
+                store.setInstanceStatuses({[decodedObjectName]: {}}, true);
+            }
         } catch (err) {
             logger.error("Failed to fetch initial object data:", err);
             setInitialDataError(err.message);

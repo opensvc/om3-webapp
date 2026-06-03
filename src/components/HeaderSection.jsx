@@ -48,7 +48,7 @@ const HeaderSection = ({
             {name: "flip", options: {enabled: true}},
         ],
         sx: {
-            zIndex: 1300,
+            zIndex: 10000,
             "& .MuiPaper-root": {minWidth: 200, boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"},
         },
     });

@@ -794,6 +794,7 @@ const ObjectDetail = () => {
                                 onClose={() => setActionsMenuAnchor(null)}
                                 anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
                                 transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                                sx={{zIndex: 10000}}
                             >
                                 {INSTANCE_ACTIONS.map(({name, icon}) => (
                                     <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
@@ -833,6 +834,7 @@ const ObjectDetail = () => {
                                 onClose={() => setIndividualNodeMenuAnchor(null)}
                                 anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
                                 transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                                sx={{zIndex: 10000}}
                             >
                                 {INSTANCE_ACTIONS.map(({name, icon}) => (
                                     <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>

@@ -425,7 +425,10 @@ const NodesTable = () => {
                             vertical: "top",
                             horizontal: "right",
                         }}
-                        sx={menuSx}
+                        sx={{
+                            ...menuSx,
+                            zIndex: 10000,
+                        }}
                     >
                         {filteredMenuItems.map(({name, icon, color}) => (
                             <MenuItem

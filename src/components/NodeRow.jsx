@@ -264,6 +264,10 @@ const NodeRow = ({
                     open={Boolean(anchorEl)}
                     onClose={() => onMenuClose(nodename)}
                     {...menuProps}
+                    sx={{
+                        ...(menuProps.sx || {}),
+                        zIndex: 10000,
+                    }}
                 >
                     {filteredMenuItems.map(({name, icon, color}) => (
                         <MenuItem
@@ -281,7 +285,7 @@ const NodeRow = ({
                             }}
                             aria-label={`${name} action`}
                         >
-                            <ListItemIcon sx={{ color: color === "red" ? "error.main" : "inherit" }}>
+                            <ListItemIcon sx={{color: color === "red" ? "error.main" : "inherit"}}>
                                 {icon}
                             </ListItemIcon>
                             <ListItemText>

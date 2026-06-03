@@ -150,7 +150,7 @@ const ObjectDetail = () => {
 
     const nodesList = useMemo(() => {
         if (!objectInstanceStatus) return [];
-        return Object.keys(objectInstanceStatus);
+        return Object.keys(objectInstanceStatus).sort();
     }, [objectInstanceStatus]);
 
     const memoizedObjectData = useMemo(() => {

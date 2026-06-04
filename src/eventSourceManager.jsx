@@ -872,12 +872,12 @@ export const configureEventSource = (token, objectName = null, filters = DEFAULT
     currentEventSource = createEventSource(url, token, filters);
 };
 
-export const startEventReception = (token, filters = DEFAULT_FILTERS) => {
+export const startEventReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
         return;
     }
-    configureEventSource(token, null, filters);
+    configureEventSource(token, objectName, filters);
 };
 
 export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {

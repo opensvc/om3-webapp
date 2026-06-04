@@ -205,14 +205,7 @@ const ObjectDetail = () => {
     useEffect(() => {
         const token = localStorage.getItem("authToken");
         if (token) {
-            const filters = objectEventTypes.map(type => {
-                if (["CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT", "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"].includes(type)) {
-                    return type;
-                } else {
-                    return `${type},path=${decodedObjectName}`;
-                }
-            });
-            startEventReception(token, filters);
+            startEventReception(token, objectEventTypes, decodedObjectName);
         }
         return () => closeEventSource();
     }, [decodedObjectName, objectEventTypes]);

@@ -18,6 +18,7 @@ export const EVENT_TYPES = {
     OBJECT_DELETED: 'ObjectDeleted',
     INSTANCE_MONITOR_UPDATED: 'InstanceMonitorUpdated',
     INSTANCE_CONFIG_UPDATED: 'InstanceConfigUpdated',
+    INSTANCE_CONFIG_DELETED: 'InstanceConfigDeleted',
 };
 
 // Event Source connection event types (these are NOT API events)
@@ -39,6 +40,7 @@ const OBJECT_SPECIFIC_FILTERS = [
     EVENT_TYPES.OBJECT_DELETED,
     EVENT_TYPES.INSTANCE_MONITOR_UPDATED,
     EVENT_TYPES.INSTANCE_CONFIG_UPDATED,
+    EVENT_TYPES.INSTANCE_CONFIG_DELETED,
 ];
 
 // Global state
@@ -51,12 +53,12 @@ let flushTimeoutId = null;
 let eventCount = 0;
 let isFlushing = false;
 let lastFlushTime = 0;
-let needsFlush = false;  // Flag to indicate new events arrived during flush
+let needsFlush = false;
 
 // Safari-specific optimizations
-const SAFARI_BATCH_SIZE = 150; // Larger batches for Safari
-const SAFARI_FLUSH_DELAY = 100; // Longer delay for Safari to reduce thrashing
-const SAFARI_MIN_FLUSH_INTERVAL = 100; // Longer minimum interval for Safari
+const SAFARI_BATCH_SIZE = 150;
+const SAFARI_FLUSH_DELAY = 100;
+const SAFARI_MIN_FLUSH_INTERVAL = 100;
 
 // Performance optimizations
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -77,6 +79,7 @@ let buffers = {
     instanceMonitor: {},
     instanceConfig: {},
     configUpdated: new Set(),
+    instanceConfigDeleted: [],
 };
 
 // Deep equality check to detect actual changes
@@ -93,7 +96,6 @@ const isEqual = (a, b) => {
         const valA = a[key];
         const valB = b[key];
 
-        // Deep comparison for nested objects
         if (typeof valA === 'object' && typeof valB === 'object') {
             if (!isEqual(valA, valB)) return false;
         } else if (valA !== valB) {
@@ -103,9 +105,7 @@ const isEqual = (a, b) => {
     return true;
 };
 
-// Optimized create query string - ONLY include valid API events
-const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
-    // Filter out any non-API events (like connection events)
+const createQueryString = (filters = DEFAULT_FILTERS, objectName = null, useCache = true) => {
     const validFilters = filters.filter(f => Object.values(EVENT_TYPES).includes(f));
     if (validFilters.length < filters.length) {
         logger.warn(`Invalid filters detected: ${filters.filter(f => !validFilters.includes(f)).join(', ')}. Using only valid ones.`);
@@ -115,11 +115,17 @@ const createQueryString = (filters = DEFAULT_FILTERS, objectName = null) => {
         validFilters.push(...DEFAULT_FILTERS);
     }
 
-    const queryFilters = objectName
-        ? OBJECT_SPECIFIC_FILTERS.map(filter => `${filter},path=${encodeURIComponent(objectName)}`)
-        : validFilters;
+    let queryFilters;
+    if (objectName) {
+        queryFilters = OBJECT_SPECIFIC_FILTERS.map(
+            filter => `${encodeURIComponent(filter)},path=${encodeURIComponent(objectName)}`
+        );
+    } else {
+        queryFilters = validFilters.map(filter => encodeURIComponent(filter));
+    }
 
-    return `cache=true&${queryFilters.map(filter => `filter=${encodeURIComponent(filter)}`).join('&')}`;
+    const cacheParam = useCache ? 'cache=true' : 'cache=false';
+    return `${cacheParam}&${queryFilters.map(filter => `filter=${filter}`).join('&')}`;
 };
 
 // Get current token
@@ -138,9 +144,9 @@ const getAndClearBuffers = () => {
         instanceMonitor: buffers.instanceMonitor,
         instanceConfig: buffers.instanceConfig,
         configUpdated: buffers.configUpdated,
+        instanceConfigDeleted: buffers.instanceConfigDeleted,
     };
 
-    // Reset buffers with new objects
     buffers = {
         objectStatus: {},
         instanceStatus: {},
@@ -151,18 +157,17 @@ const getAndClearBuffers = () => {
         instanceMonitor: {},
         instanceConfig: {},
         configUpdated: new Set(),
+        instanceConfigDeleted: [],
     };
 
     return buffersToFlush;
 };
 
-// Safari-optimized flush using setTimeout instead of requestAnimationFrame
 const flushBuffers = () => {
     if (!isPageActive || isFlushing) return;
 
     const now = performance.now();
     if (now - lastFlushTime < MIN_FLUSH_INTERVAL) {
-        // Too soon, reschedule
         if (!flushTimeoutId) {
             flushTimeoutId = setTimeout(flushBuffers, MIN_FLUSH_INTERVAL - (now - lastFlushTime));
         }
@@ -171,19 +176,60 @@ const flushBuffers = () => {
 
     isFlushing = true;
     lastFlushTime = now;
-    needsFlush = false;  // Reset flag before starting flush
+    needsFlush = false;
 
-    // CRITICAL: Clear timeout ID to allow new events to schedule a fresh flush
     if (flushTimeoutId) {
         clearTimeout(flushTimeoutId);
         flushTimeoutId = null;
     }
 
     try {
-        // Get and clear buffers atomically BEFORE any async operations
         const buffersToFlush = getAndClearBuffers();
+        const pendingDeletes = useEventStore.getState().pendingDeletes || {};
 
-        // Count what needs updating
+        for (const path in buffersToFlush.instanceStatus) {
+            for (const node in buffersToFlush.instanceStatus[path]) {
+                const key = `${path}:${node}`;
+                if (pendingDeletes[key]) {
+                    delete buffersToFlush.instanceStatus[path][node];
+                }
+            }
+        }
+
+        for (const path in buffersToFlush.instanceConfig) {
+            for (const node in buffersToFlush.instanceConfig[path]) {
+                const key = `${path}:${node}`;
+                if (pendingDeletes[key]) {
+                    delete buffersToFlush.instanceConfig[path][node];
+                }
+            }
+        }
+
+        if (buffersToFlush.configUpdated && buffersToFlush.configUpdated.size > 0) {
+            const filtered = new Set();
+            for (const update of buffersToFlush.configUpdated) {
+                try {
+                    const parsed = JSON.parse(update);
+                    if (parsed.name && parsed.node) {
+                        let ignore = false;
+                        for (const key in pendingDeletes) {
+                            const [path, pendingNode] = key.split(':');
+                            if (pendingNode === parsed.node && path.includes(parsed.name)) {
+                                ignore = true;
+                                break;
+                            }
+                        }
+                        if (!ignore) filtered.add(update);
+                    } else {
+                        filtered.add(update);
+                    }
+                } catch {
+                    filtered.add(update);
+                }
+            }
+            buffersToFlush.configUpdated = filtered;
+        }
+
         const hasNodeStatus = Object.keys(buffersToFlush.nodeStatus).length > 0;
         const hasObjectStatus = Object.keys(buffersToFlush.objectStatus).length > 0;
         const hasHeartbeatStatus = Object.keys(buffersToFlush.heartbeatStatus).length > 0;
@@ -193,8 +239,8 @@ const flushBuffers = () => {
         const hasInstanceMonitor = Object.keys(buffersToFlush.instanceMonitor).length > 0;
         const hasInstanceConfig = Object.keys(buffersToFlush.instanceConfig).length > 0;
         const hasConfigUpdated = buffersToFlush.configUpdated.size > 0;
+        const hasInstanceConfigDeleted = buffersToFlush.instanceConfigDeleted.length > 0;
 
-        // Perform updates - get fresh store reference for each update
         if (hasObjectStatus) {
             const store = useEventStore.getState();
             const merged = {...store.objectStatus, ...buffersToFlush.objectStatus};
@@ -219,10 +265,8 @@ const flushBuffers = () => {
                 if (!mergedInst[obj]) {
                     mergedInst[obj] = {};
                 } else {
-                    // Create shallow copy to avoid mutating existing object
                     mergedInst[obj] = {...mergedInst[obj]};
                 }
-                // Merge new data with fresh object copy
                 mergedInst[obj] = {
                     ...mergedInst[obj],
                     ...buffersToFlush.instanceStatus[obj]
@@ -254,6 +298,14 @@ const flushBuffers = () => {
             const store = useEventStore.getState();
             store.setConfigUpdated([...buffersToFlush.configUpdated]);
         }
+        if (hasInstanceConfigDeleted) {
+            const store = useEventStore.getState();
+            for (const {path, node} of buffersToFlush.instanceConfigDeleted) {
+                logger.debug(`🗑️ Flushing InstanceConfigDeleted: path=${path} node=${node}`);
+                store.removeInstanceFromObject(path, node);
+                store.removePendingDelete(path, node);
+            }
+        }
 
         if (eventCount > 0) {
             logger.debug(`✅ Flushed ${eventCount} events`);
@@ -264,11 +316,9 @@ const flushBuffers = () => {
     } finally {
         isFlushing = false;
 
-        // CRITICAL: If new events arrived during flush, schedule another flush
         if (needsFlush && isPageActive) {
             logger.debug('⚡ New events arrived during flush, scheduling immediate re-flush');
             needsFlush = false;
-            // Schedule immediately for the next cycle
             if (eventCount > 0) {
                 setTimeout(flushBuffers, 0);
             }
@@ -276,11 +326,9 @@ const flushBuffers = () => {
     }
 };
 
-// Safari-optimized scheduling
 const scheduleFlush = () => {
     if (!isPageActive) return;
 
-    // If we're currently flushing, just mark that we need another flush
     if (isFlushing) {
         needsFlush = true;
         eventCount++;
@@ -290,7 +338,6 @@ const scheduleFlush = () => {
 
     eventCount++;
 
-    // For large batches, flush immediately
     if (eventCount >= BATCH_SIZE) {
         if (flushTimeoutId) {
             clearTimeout(flushTimeoutId);
@@ -304,7 +351,6 @@ const scheduleFlush = () => {
         return;
     }
 
-    // For first event, flush quickly but not immediately on Safari
     if (eventCount === 1) {
         if (!flushTimeoutId) {
             flushTimeoutId = setTimeout(() => {
@@ -315,7 +361,6 @@ const scheduleFlush = () => {
         return;
     }
 
-    // Otherwise use debouncing
     if (!flushTimeoutId) {
         flushTimeoutId = setTimeout(() => {
             flushTimeoutId = null;
@@ -326,7 +371,6 @@ const scheduleFlush = () => {
     }
 };
 
-// Navigation service
 const navigationService = {
     redirectToAuth: () => {
         window.dispatchEvent(new CustomEvent('om3:auth-redirect', {
@@ -335,7 +379,6 @@ const navigationService = {
     }
 };
 
-// Clear all buffers
 const clearBuffers = () => {
     buffers = {
         objectStatus: {},
@@ -347,6 +390,7 @@ const clearBuffers = () => {
         instanceMonitor: {},
         instanceConfig: {},
         configUpdated: new Set(),
+        instanceConfigDeleted: [],
     };
     if (flushTimeoutId) {
         clearTimeout(flushTimeoutId);
@@ -357,7 +401,10 @@ const clearBuffers = () => {
     needsFlush = false;
 };
 
-// Optimized event handler with reduced overhead
+export const clearEventBuffers = () => {
+    clearBuffers();
+};
+
 const addEventListener = (eventSource, eventType, handler) => {
     eventSource.addEventListener(eventType, (event) => {
         if (!isPageActive) return;
@@ -370,7 +417,6 @@ const addEventListener = (eventSource, eventType, handler) => {
     });
 };
 
-// Optimized buffer update - ALWAYS add to buffer, comparison happens at flush time
 const updateBuffer = (bufferName, key, value) => {
     if (bufferName === 'configUpdated') {
         buffers.configUpdated.add(value);
@@ -379,8 +425,14 @@ const updateBuffer = (bufferName, key, value) => {
         return;
     }
 
+    if (bufferName === 'instanceConfigDeleted') {
+        buffers.instanceConfigDeleted.push(value);
+        logger.debug(`📝 Buffer[instanceConfigDeleted]:`, value);
+        scheduleFlush();
+        return;
+    }
+
     if (bufferName === 'objectStatus') {
-        // CRITICAL: Merge with existing buffer data instead of replacing!
         const existing = buffers.objectStatus[key];
         buffers.objectStatus[key] = existing ? {...existing, ...value} : value;
         logger.debug(`📝 Buffer[objectStatus]: ${key}`, {
@@ -412,7 +464,6 @@ const updateBuffer = (bufferName, key, value) => {
         buffers.instanceMonitor[key] = existing ? {...existing, ...value} : value;
         logger.debug(`📝 Buffer[instanceMonitor]: ${key}`, value);
     } else {
-        // Generic: nodeStatus, nodeMonitor, nodeStats, heartbeatStatus
         const existing = buffers[bufferName][key];
         buffers[bufferName][key] = existing ? {...existing, ...value} : value;
         logger.debug(`📝 Buffer[${bufferName}]: ${key}`, value);
@@ -483,7 +534,7 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         updateBuffer('nodeStatus', data.node, data.node_status);
                     }
                     break;
-                case EVENT_TYPES.OBJECT_STATUS_UPDATED:
+                case EVENT_TYPES.OBJECT_STATUS_UPDATED: {
                     const name = data.path || data.labels?.path;
                     if (name && data.object_status) {
                         logger.debug('📩 OBJECT_STATUS_UPDATED event:', {
@@ -500,13 +551,15 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         });
                     }
                     break;
-                case EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED:
+                }
+                case EVENT_TYPES.DAEMON_HEARTBEAT_UPDATED: {
                     const nodeName = data.node || data.labels?.node;
                     if (nodeName && data.heartbeat !== undefined) {
                         updateBuffer('heartbeatStatus', nodeName, data.heartbeat);
                     }
                     break;
-                case EVENT_TYPES.OBJECT_DELETED:
+                }
+                case EVENT_TYPES.OBJECT_DELETED: {
                     const objectName = data.path || data.labels?.path;
                     if (objectName) {
                         logger.debug('📩 Received ObjectDeleted event:', JSON.stringify({path: objectName}));
@@ -519,7 +572,8 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         logger.warn('⚠️ ObjectDeleted event missing objectName:', data);
                     }
                     break;
-                case EVENT_TYPES.INSTANCE_STATUS_UPDATED:
+                }
+                case EVENT_TYPES.INSTANCE_STATUS_UPDATED: {
                     const instName = data.path || data.labels?.path;
                     if (instName && data.node && data.instance_status) {
                         logger.debug('📩 INSTANCE_STATUS_UPDATED event:', {
@@ -538,6 +592,7 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         });
                     }
                     break;
+                }
                 case EVENT_TYPES.NODE_MONITOR_UPDATED:
                     if (data.node && data.node_monitor) {
                         updateBuffer('nodeMonitor', data.node, data.node_monitor);
@@ -554,7 +609,7 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         updateBuffer('instanceMonitor', key, data.instance_monitor);
                     }
                     break;
-                case EVENT_TYPES.INSTANCE_CONFIG_UPDATED:
+                case EVENT_TYPES.INSTANCE_CONFIG_UPDATED: {
                     const configName = data.path || data.labels?.path;
                     if (configName && data.node) {
                         if (data.instance_config) {
@@ -565,6 +620,18 @@ export const createEventSource = (url, token, filters = DEFAULT_FILTERS) => {
                         logger.warn('⚠️ InstanceConfigUpdated event missing name or node:', data);
                     }
                     break;
+                }
+                case EVENT_TYPES.INSTANCE_CONFIG_DELETED: {
+                    const deletedPath = data.path || data.labels?.path;
+                    const deletedNode = data.node || data.labels?.node;
+                    if (deletedPath && deletedNode) {
+                        logger.debug('📩 InstanceConfigDeleted event:', {path: deletedPath, node: deletedNode});
+                        updateBuffer('instanceConfigDeleted', null, {path: deletedPath, node: deletedNode});
+                    } else {
+                        logger.warn('⚠️ InstanceConfigDeleted event missing path or node:', data);
+                    }
+                    break;
+                }
             }
             useEventLogStore.getState().addEventLog(eventType, data);
         });
@@ -798,7 +865,6 @@ export const updateEventSourceToken = (newToken) => {
     }
 };
 
-// Update Logger EventSource token
 export const updateLoggerEventSourceToken = (newToken) => {
     if (!newToken) return;
 
@@ -860,24 +926,24 @@ export const closeLoggerEventSource = () => {
     }
 };
 
-export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {
+export const configureEventSource = (token, objectName = null, filters = DEFAULT_FILTERS, useCache = true) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
         return;
     }
 
-    const queryString = createQueryString(filters, objectName);
+    const queryString = createQueryString(filters, objectName, useCache);
     const url = `${URL_NODE_EVENT}?${queryString}`;
     closeEventSource();
     currentEventSource = createEventSource(url, token, filters);
 };
 
-export const startEventReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
+export const startEventReception = (token, filters = DEFAULT_FILTERS, objectName = null, useCache = true) => {
     if (!token) {
         logger.error('❌ No token provided for SSE!');
         return;
     }
-    configureEventSource(token, objectName, filters);
+    configureEventSource(token, objectName, filters, useCache);
 };
 
 export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {

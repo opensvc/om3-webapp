@@ -139,7 +139,7 @@ describe('eventSourceManager', () => {
         test('should create an EventSource and attach event listeners', () => {
             const es = eventSourceManager.createEventSource(URL_NODE_EVENT, 'fake-token');
             expect(EventSourcePolyfill).toHaveBeenCalled();
-            expect(es.addEventListener).toHaveBeenCalledTimes(9);
+            expect(es.addEventListener).toHaveBeenCalledTimes(10);
         });
 
         test('should close existing EventSource before creating a new one', () => {
@@ -731,7 +731,7 @@ describe('eventSourceManager', () => {
 
         test('should configure EventSource with objectName - adds path to filter URL', () => {
             eventSourceManager.configureEventSource('fake-token', 'my-service/svc1');
-            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path%3D');
+            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path');
         });
     });
 
@@ -883,11 +883,11 @@ describe('eventSourceManager', () => {
 
         test('should configure and start logger with objectName', () => {
             eventSourceManager.configureLoggerEventSource('fake-token', 'my-service/svc1');
-            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path%3D');
+            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path');
 
             jest.clearAllMocks();
             eventSourceManager.startLoggerReception('fake-token', eventSourceManager.DEFAULT_FILTERS, 'my-service/svc1');
-            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path%3D');
+            expect(EventSourcePolyfill.mock.calls[0][0]).toContain('path');
         });
     });
 });

@@ -29,7 +29,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 
-const useConfig = (decodedObjectName, configNode, setConfigNode) => {
+const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger) => {
     const initialState = {
         data: null,
         loading: false,
@@ -43,20 +43,23 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
                 return {...state, loading: false, data: action.payload};
             case "FETCH_ERROR":
                 return {...state, loading: false, error: action.payload};
+            case "RESET":
+                return initialState;
             default:
                 return state;
         }
     };
     const [state, dispatch] = useReducer(reducer, initialState);
     const lastFetch = useRef({});
-    const fetchConfig = useCallback(async (node) => {
+
+    const fetchConfig = useCallback(async (node, forceBypassThrottle = false) => {
         if (!node) {
-            dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
+            dispatch({type: "RESET"});
             return;
         }
         const key = `${decodedObjectName}:${node}`;
         const now = Date.now();
-        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
+        if (!forceBypassThrottle && lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
         lastFetch.current[key] = now;
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
         const token = localStorage.getItem("authToken") || "";
@@ -78,13 +81,26 @@ const useConfig = (decodedObjectName, configNode, setConfigNode) => {
             dispatch({type: "FETCH_ERROR", payload: `Failed to fetch config: ${err.message}`});
         }
     }, [decodedObjectName, setConfigNode]);
+
     useEffect(() => {
         if (configNode) {
             fetchConfig(configNode);
         } else {
-            dispatch({type: "FETCH_ERROR", payload: "No node available to fetch configuration."});
+            dispatch({type: "RESET"});
         }
     }, [configNode, decodedObjectName, fetchConfig]);
+
+    // Force re-fetch when refreshTrigger bumps (external config change via SSE)
+    const prevRefreshTrigger = useRef(refreshTrigger);
+    useEffect(() => {
+        if (refreshTrigger === prevRefreshTrigger.current) return;
+        prevRefreshTrigger.current = refreshTrigger;
+        if (configNode) {
+            // Bypass throttle so the fresh content is fetched immediately
+            fetchConfig(configNode, true);
+        }
+    }, [refreshTrigger, configNode, fetchConfig]);
+
     return {...state, fetchConfig};
 };
 
@@ -589,7 +605,8 @@ const ConfigSection = ({
                            setConfigNode,
                            openSnackbar,
                            configDialogOpen,
-                           setConfigDialogOpen
+                           setConfigDialogOpen,
+                           configRefreshTrigger = 0,
                        }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
@@ -597,7 +614,8 @@ const ConfigSection = ({
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
-        setConfigNode
+        setConfigNode,
+        configRefreshTrigger,
     );
     const {
         data: keywordsData,
@@ -661,7 +679,7 @@ const ConfigSection = ({
             }
             openSnackbar("Configuration updated successfully");
             if (configNode) {
-                await fetchConfig(configNode);
+                await fetchConfig(configNode, true);
                 setConfigDialogOpen(true);
             }
         } catch (err) {
@@ -728,7 +746,7 @@ const ConfigSection = ({
         if (successCount > 0) {
             openSnackbar(`Successfully added ${successCount} parameter(s)`, "success");
             if (configNode) {
-                await fetchConfig(configNode);
+                await fetchConfig(configNode, true);
                 await fetchExistingParams();
                 setConfigDialogOpen(true);
             }
@@ -773,7 +791,7 @@ const ConfigSection = ({
         if (successCount > 0) {
             openSnackbar(`Successfully unset ${successCount} parameter(s)`, "success");
             if (configNode) {
-                await fetchConfig(configNode);
+                await fetchConfig(configNode, true);
                 await fetchExistingParams();
                 setConfigDialogOpen(true);
             }
@@ -812,7 +830,7 @@ const ConfigSection = ({
         if (successCount > 0) {
             openSnackbar(`Successfully deleted ${successCount} section(s)`, "success");
             if (configNode) {
-                await fetchConfig(configNode);
+                await fetchConfig(configNode, true);
                 await fetchExistingParams();
                 setConfigDialogOpen(true);
             }
@@ -840,7 +858,7 @@ const ConfigSection = ({
 
     return (
         <Box sx={{mb: 2, width: "100%", display: 'flex', justifyContent: 'flex-end'}}>
-            <Box sx={{ width: '100%', overflow: 'hidden' }}>
+            <Box sx={{width: '100%', overflow: 'hidden'}}>
                 <Button
                     variant="contained"
                     size="small"
@@ -897,9 +915,14 @@ const ConfigSection = ({
                                 </IconButton>
                             </Tooltip>
                         </Box>
+                        {!configNode && !configLoading && !configError && (
+                            <Typography color="textSecondary" variant="body2">
+                                No instance selected to view configuration.
+                            </Typography>
+                        )}
                         {configLoading && <CircularProgress size={24}/>}
                         {configError && <Alert severity="error" sx={{mb: 2}}>{configError}</Alert>}
-                        {!configLoading && !configError && configData === null && (
+                        {!configLoading && !configError && configData === null && configNode && (
                             <Typography color="textSecondary" variant="body2">No configuration available.</Typography>
                         )}
                         {!configLoading && !configError && configData !== null && (

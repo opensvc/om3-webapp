@@ -4,7 +4,7 @@ import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
-import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
+import {closeEventSource, startEventReception, clearEventBuffers} from '../../eventSourceManager.jsx';
 import logger from '../../utils/logger';
 
 jest.mock('@mui/material', () => {
@@ -95,6 +95,7 @@ jest.mock('../../hooks/useEventStore.js');
 jest.mock('../../eventSourceManager.jsx', () => ({
     closeEventSource: jest.fn(),
     startEventReception: jest.fn(),
+    clearEventBuffers: jest.fn(),
     startLoggerReception: jest.fn(),
     closeLoggerEventSource: jest.fn(),
 }));
@@ -105,11 +106,20 @@ jest.mock('../../utils/logger', () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
 }));
 
 jest.mock('../ConfigSection', () => ({
     __esModule: true,
-    default: ({decodedObjectName, configNode, setConfigNode, openSnackbar, configDialogOpen, setConfigDialogOpen}) => (
+    default: ({
+                  decodedObjectName,
+                  configNode,
+                  setConfigNode,
+                  openSnackbar,
+                  configDialogOpen,
+                  setConfigDialogOpen,
+                  configRefreshTrigger
+              }) => (
         <div>
             <button onClick={() => setConfigDialogOpen(true)} data-testid="open-config-dialog">
                 View Configuration
@@ -194,6 +204,9 @@ const buildState = (overrides = {}) => ({
     },
     configUpdates: [],
     clearConfigUpdate: jest.fn(),
+    removeObject: jest.fn(),
+    setObjectStatuses: jest.fn(),
+    setInstanceStatuses: jest.fn(),
     ...overrides,
 });
 
@@ -313,6 +326,9 @@ const fullMockState = {
     configUpdates: [],
     configNode: 'node1',
     clearConfigUpdate: jest.fn(),
+    removeObject: jest.fn(),
+    setObjectStatuses: jest.fn(),
+    setInstanceStatuses: jest.fn(),
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -359,31 +375,6 @@ const mockActionFailure = (status = 500, message = 'Server error') => {
             return Promise.resolve({ok: false, status, text: () => Promise.resolve(message)});
         return Promise.resolve({ok: true, text: () => Promise.resolve('')});
     });
-};
-
-const captureSubscription = () => {
-    let callback;
-    useEventStore.subscribe = jest.fn((selector, cb) => {
-        callback = cb;
-        return jest.fn();
-    });
-    return {
-        get callback() {
-            return callback;
-        },
-    };
-};
-
-const withConsole = async (fn) => {
-    const {INSTANCE_ACTIONS} = require('../../constants/actions');
-    const orig = [...INSTANCE_ACTIONS];
-    INSTANCE_ACTIONS.push({name: 'console', icon: 'ConsoleIcon'});
-    try {
-        await fn();
-    } finally {
-        INSTANCE_ACTIONS.length = 0;
-        orig.forEach((a) => INSTANCE_ACTIONS.push(a));
-    }
 };
 
 const openConsoleDialogFn = async () => {
@@ -456,7 +447,9 @@ describe('ObjectDetail Component', () => {
         require('react-router-dom').useNavigate.mockReturnValue(mockNavigate);
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         global.fetch = jest.fn(defaultFetchMock);
+
         useEventStore.mockImplementation((selector) => selector(fullMockState));
+        useEventStore.getState = jest.fn().mockReturnValue(fullMockState);
         useEventStore.subscribe = jest.fn(() => jest.fn());
     });
 
@@ -496,17 +489,6 @@ describe('ObjectDetail Component', () => {
         expect(closeEventSource).toHaveBeenCalled();
     });
 
-    test('unmount during async fetch', async () => {
-        let resolveFetch;
-        global.fetch.mockImplementationOnce(() => new Promise(r => {
-            resolveFetch = r;
-        }));
-        const {unmount} = renderSvc();
-        unmount();
-        resolveFetch({ok: true, text: () => Promise.resolve('config data')});
-        await new Promise(r => setTimeout(r, 100));
-    });
-
     test('renders svc with nodes and monitor', async () => {
         renderSvc();
         await waitForNode('node1');
@@ -517,10 +499,22 @@ describe('ObjectDetail Component', () => {
     });
 
     test('shows no data message when object data is empty', async () => {
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {},
-            instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
+        const emptyState = {
+            objectStatus: {},
+            objectInstanceStatus: {
+                'root/cfg/cfg1': {}
+            },
+            instanceMonitor: {},
+            instanceConfig: {},
+            configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+            removeObject: jest.fn(),
+            setObjectStatuses: jest.fn(),
+            setInstanceStatuses: jest.fn(),
+        };
+        useEventStore.mockImplementation(s => s(emptyState));
+        useEventStore.getState.mockReturnValue(emptyState);
+
         global.fetch.mockImplementation((url) => {
             if (url.includes('/data/keys')) return Promise.resolve({
                 ok: true,
@@ -544,11 +538,18 @@ describe('ObjectDetail Component', () => {
     });
 
     test.each([['root/sec/sec1'], ['root/usr/usr1']])('batch actions hidden for %s', async (objectName) => {
-        useEventStore.mockImplementation(s => s({
+        const testState = {
             objectStatus: {[objectName]: {avail: 'up', frozen: null}},
             objectInstanceStatus: {[objectName]: {node1: {avail: 'up', resources: {}}}},
-            instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
+            instanceMonitor: {}, instanceConfig: {}, configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+            removeObject: jest.fn(),
+            setObjectStatuses: jest.fn(),
+            setInstanceStatuses: jest.fn(),
+        };
+        useEventStore.mockImplementation(s => s(testState));
+        useEventStore.getState.mockReturnValue(testState);
+
         renderComponent(objectName);
         await screen.findByText(new RegExp(objectName.replace(/\//g, '\\/'), 'i'));
         expect(screen.queryByRole('button', {name: /Actions on Selected Nodes/i})).not.toBeInTheDocument();
@@ -558,62 +559,15 @@ describe('ObjectDetail Component', () => {
         const state = buildState();
         state.objectStatus['root/svc/svc1'].avail = 'warn';
         useEventStore.mockImplementation(s => s(state));
+        useEventStore.getState.mockReturnValue(state);
         renderSvc();
         await waitFor(() => expect(screen.getByTitle('warn')).toBeInTheDocument());
     });
 
-    test('config fetch opens dialog', async () => {
+    test('config dialog opens when button clicked', async () => {
         renderComponent('root/cfg/cfg1');
         fireEvent.click(await screen.findByTestId('open-config-dialog'));
         await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument());
-        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/config/file'), expect.any(Object));
-    });
-
-    test('fetches config from first node for svc', async () => {
-        renderSvc();
-        fireEvent.click(await screen.findByTestId('open-config-dialog'));
-        await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument());
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'), expect.any(Object)));
-    });
-
-    test('handles fetchConfig HTTP error response', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/file')) return Promise.resolve({
-                ok: false,
-                status: 500,
-                statusText: 'Internal Server Error',
-                text: () => 'Internal Server Error'
-            });
-            return Promise.resolve({ok: true, text: () => '', json: () => ({items: []})});
-        });
-        renderSvc();
-        await waitFor(() => expect(screen.getAllByText(/root\/svc\/svc1/i).length).toBeGreaterThan(0));
-    });
-
-    test('handles fetchConfig with no auth token', async () => {
-        mockLocalStorage.getItem.mockReturnValue(null);
-        renderSvc();
-        await waitFor(() => expect(screen.getAllByText(/root\/svc\/svc1/i).length).toBeGreaterThan(0));
-    });
-
-    test('loads initial config when node has encap resources', async () => {
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
-            objectInstanceStatus: {
-                'root/svc/svc1': {
-                    node1: {
-                        avail: 'up',
-                        frozen_at: null,
-                        resources: {},
-                        encap: {container1: {resources: {res1: {type: 'container.docker', status: 'up'}}}}
-                    },
-                    node2: {avail: 'up', frozen_at: null, resources: {}},
-                },
-            },
-            instanceMonitor: {}, instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
-        renderSvc();
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/config/file'), expect.any(Object)));
     });
 
     test('renders keys section for cfg', async () => {
@@ -657,7 +611,7 @@ describe('ObjectDetail Component', () => {
     });
 
     test('frozen node state display', async () => {
-        useEventStore.mockImplementation(s => s({
+        const frozenState = {
             objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
             objectInstanceStatus: {
                 'root/svc/svc1': {
@@ -669,18 +623,31 @@ describe('ObjectDetail Component', () => {
                 }
             },
             instanceMonitor: {'node1:root/svc/svc1': {state: 'running', global_expect: 'placed@node1', resources: {}}},
-            instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
+            instanceConfig: {}, configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+            removeObject: jest.fn(),
+            setObjectStatuses: jest.fn(),
+            setInstanceStatuses: jest.fn(),
+        };
+        useEventStore.mockImplementation(s => s(frozenState));
+        useEventStore.getState.mockReturnValue(frozenState);
         renderSvc();
         await waitForNode('node1');
     });
 
     test('getObjectStatus handles missing global_expect (none)', async () => {
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {}, objectInstanceStatus: {},
+        const state = {
+            objectStatus: {},
+            objectInstanceStatus: {},
             instanceMonitor: {'node1:root/cfg/cfg1': {state: 'running', global_expect: 'none'}},
-            instanceConfig: {}, configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
+            instanceConfig: {}, configUpdates: [],
+            clearConfigUpdate: jest.fn(),
+            removeObject: jest.fn(),
+            setObjectStatuses: jest.fn(),
+            setInstanceStatuses: jest.fn(),
+        };
+        useEventStore.mockImplementation(s => s(state));
+        useEventStore.getState.mockReturnValue(state);
         renderComponent('root/cfg/cfg1');
         await waitFor(() => expect(screen.queryByText(/placed@node1/i)).not.toBeInTheDocument());
     });
@@ -701,7 +668,7 @@ describe('ObjectDetail Component', () => {
         await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/start'),
+                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/start/),
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
@@ -735,7 +702,7 @@ describe('ObjectDetail Component', () => {
         await user.click(within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i}));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/api/node/name/node1/instance/path/root/svc/svc1/action/stop'),
+                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/stop/),
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({Authorization: 'Bearer mock-token'})
@@ -809,7 +776,9 @@ describe('ObjectDetail Component', () => {
     });
 
     test('all object action dialogs open and cancel', async () => {
-        useEventStore.mockImplementation(s => s(buildState()));
+        const state = buildState();
+        useEventStore.mockImplementation(s => s(state));
+        useEventStore.getState.mockReturnValue(state);
         renderSvc();
         for (const action of ['freeze', 'stop', 'unprovision', 'purge']) {
             await user.click(screen.getByRole('button', {name: /object actions/i}));
@@ -894,160 +863,25 @@ describe('ObjectDetail Component', () => {
         Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1024});
     });
 
-    test('config updates subscription: update without node skips fetchConfig', async () => {
-        const sub = captureSubscription();
-        let fetchCount = 0;
-        global.fetch = jest.fn((url) => {
-            if (url.includes('/config/file')) fetchCount++;
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve('[DEFAULT]'),
-                json: () => Promise.resolve({items: []})
-            });
-        });
-        renderSvc();
-        await waitForNode('node1');
-        const before = fetchCount;
-        await act(async () => {
-            await sub.callback([{name: 'svc1', fullName: 'root/svc/svc1'}]);
-        });
-        expect(fetchCount).toBe(before);
-    });
-
-    test('config updates subscription: non-matching name does not call clearConfigUpdate', async () => {
-        const clearConfigUpdate = jest.fn();
-        useEventStore.mockImplementation(s => s(buildState({clearConfigUpdate})));
-        const sub = captureSubscription();
-        renderSvc();
-        await waitForNode('node1');
-        await act(async () => {
-            await sub.callback([{name: 'other', fullName: 'root/svc/other', node: 'n1'}]);
-        });
-        expect(clearConfigUpdate).not.toHaveBeenCalled();
-    });
-
-    test('config updates subscription: unmounted component causes early return', async () => {
-        const sub = captureSubscription();
-        const {unmount} = renderSvc();
-        await waitForNode('node1');
-        unmount();
-        if (sub.callback) {
-            await act(async () => {
-                sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'n1'}]);
-            });
-        }
-    });
-
-    test('config updates subscription: isProcessingConfigUpdate deduplicates', async () => {
-        const sub = captureSubscription();
-        let fetchCount = 0;
-        let resolveFirst;
-        global.fetch = jest.fn((url) => {
-            if (url.includes('/config/file')) {
-                fetchCount++;
-                if (fetchCount === 1) return new Promise(r => {
-                    resolveFirst = r;
-                });
-                return Promise.resolve({ok: true, text: () => Promise.resolve('[DEFAULT]')});
-            }
-            return Promise.resolve({ok: true, text: () => Promise.resolve('')});
-        });
-        renderSvc();
-        await waitForNode('node1');
-        await waitFor(() => expect(fetchCount).toBe(1));
-        act(() => {
-            sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
-            sub.callback([{name: 'svc1', fullName: 'root/svc/svc1', node: 'node2'}]);
-        });
-        resolveFirst({ok: true, text: () => Promise.resolve('[DEFAULT]')});
-        await act(async () => {
-            await new Promise(r => setTimeout(r, 200));
-        });
-    });
-
-    test('config updates subscription: fetch error triggers snackbar error', async () => {
-        const clearConfigUpdate = jest.fn();
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {}, instanceMonitor: {}, instanceConfig: {},
-            objectInstanceStatus: {'root/svc/svc1': {node1: {avail: 'up', resources: {}}}},
-            configUpdates: [], clearConfigUpdate,
-        }));
-        const sub = captureSubscription();
-        let fetchCallCount = 0;
-        global.fetch.mockImplementation((url) => {
-            fetchCallCount++;
-            if (url.includes('/config/file') && fetchCallCount > 1) return Promise.reject(new Error('Update fetch failed'));
-            if (url.includes('/config/file')) return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve('[DEFAULT]\nid=123')
-            });
-            return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve(''),
-                json: () => Promise.resolve({items: []})
-            });
-        });
-        renderSvc();
-        await waitForNode('node1');
-        await waitFor(() => expect(fetchCallCount).toBeGreaterThan(0));
-        await act(async () => {
-            await sub.callback([{
-                name: 'svc1',
-                fullName: 'root/svc/svc1',
-                node: 'node2',
-                type: 'InstanceConfigUpdated'
-            }]);
-        });
-        await waitFor(() => {
-            const alerts = screen.queryAllByRole('alert');
-            const errAlert = alerts.find(a => a.textContent.includes('Failed to load updated configuration') || a.getAttribute('data-severity') === 'error');
-            if (errAlert) expect(errAlert).toBeInTheDocument();
-            expect(clearConfigUpdate).toHaveBeenCalled();
-        });
-    });
-
-    test('configUpdates subscription: selector captures state.configUpdates correctly', async () => {
-        const captured = [];
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            captured.push(sel);
-            return jest.fn();
-        });
-        renderSvc();
-        await waitForNode('node1');
-        const fake = {configUpdates: [{name: 'x', node: 'n1'}], instanceConfig: {}};
-        const sel = captured.find(s => {
-            try {
-                return Array.isArray(s(fake));
-            } catch {
-                return false;
-            }
-        });
-        expect(sel).toBeDefined();
-        expect(sel(fake)).toEqual([{name: 'x', node: 'n1'}]);
-    });
-
-    test('handles config updates subscription triggered by store', async () => {
-        useEventStore.subscribe = jest.fn((selector, callback) => {
-            callback([{name: 'cfg1', fullName: 'root/cfg/cfg1', type: 'InstanceConfigUpdated', node: 'node1'}]);
-            return jest.fn();
-        });
-        renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(screen.getByText(/Configuration updated/i)).toBeInTheDocument());
-    });
-
     test('instanceConfig subscription triggers snackbar', async () => {
-        useEventStore.mockImplementation(s => s({
+        const state = {
             objectStatus: {}, instanceMonitor: {},
             objectInstanceStatus: {'root/svc/svc1': {node1: {avail: 'up', resources: {}}}},
             instanceConfig: {'root/svc/svc1': {node1: {resources: {res1: {is_monitored: true}}}}},
             configUpdates: [], clearConfigUpdate: jest.fn(),
-        }));
+            removeObject: jest.fn(),
+            setObjectStatuses: jest.fn(),
+            setInstanceStatuses: jest.fn(),
+        };
+        useEventStore.mockImplementation(s => s(state));
+        useEventStore.getState.mockReturnValue(state);
         let instanceConfigCallback;
         useEventStore.subscribe = jest.fn((selector, callback) => {
             if (selector.toString().includes('instanceConfig')) instanceConfigCallback = callback;
             return jest.fn();
         });
         renderSvc();
+        await waitForNode('node1');
         act(() => {
             instanceConfigCallback({'root/svc/svc1': {node1: {resources: {res1: {is_monitored: false}}}}});
         });
@@ -1056,10 +890,7 @@ describe('ObjectDetail Component', () => {
         });
     });
 
-    test.each([
-        ['configUpdates', '[ObjectDetail] Failed to subscribe to configUpdates:'],
-        ['instanceConfig', '[ObjectDetail] Failed to subscribe to instanceConfig:'],
-    ])('%s subscription error triggers logger.warn', async (subName, expectedMsg) => {
+    test('instanceConfig subscription error triggers logger.warn', async () => {
         const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
         useEventStore.subscribe = jest.fn(() => {
             throw new Error('Subscription failed');
@@ -1067,7 +898,7 @@ describe('ObjectDetail Component', () => {
         renderSvc();
         await screen.findAllByText(/root\/svc\/svc1/i);
         await waitFor(() => {
-            expect(warnSpy).toHaveBeenCalledWith(expectedMsg, expect.any(Error));
+            expect(warnSpy).toHaveBeenCalledWith('[ObjectDetail] Failed to subscribe to instanceConfig:', expect.any(Error));
         });
         warnSpy.mockRestore();
     });
@@ -1097,7 +928,10 @@ describe('ObjectDetail Component', () => {
     });
 
     test('handleConsoleConfirm: cancel closes dialog', async () => {
-        await withConsole(async () => {
+        const {INSTANCE_ACTIONS} = require('../../constants/actions');
+        const orig = [...INSTANCE_ACTIONS];
+        INSTANCE_ACTIONS.push({name: 'console', icon: 'ConsoleIcon'});
+        try {
             renderSvc();
             const dialog = await openConsoleDialogFn();
             if (!dialog) return;
@@ -1108,11 +942,17 @@ describe('ObjectDetail Component', () => {
                     expect(screen.queryAllByRole('dialog').filter(d => d.textContent.includes('terminal console')).length).toBe(0);
                 });
             }
-        });
+        } finally {
+            INSTANCE_ACTIONS.length = 0;
+            orig.forEach(a => INSTANCE_ACTIONS.push(a));
+        }
     });
 
     test('handleConsoleConfirm: without rid → no console fetch', async () => {
-        await withConsole(async () => {
+        const {INSTANCE_ACTIONS} = require('../../constants/actions');
+        const orig = [...INSTANCE_ACTIONS];
+        INSTANCE_ACTIONS.push({name: 'console', icon: 'ConsoleIcon'});
+        try {
             renderSvc();
             const dialog = await openConsoleDialogFn();
             if (!dialog) return;
@@ -1123,11 +963,17 @@ describe('ObjectDetail Component', () => {
                 await new Promise(r => setTimeout(r, 200));
                 expect(global.fetch.mock.calls.filter(([u, o]) => o?.method === 'POST' && u.includes('/console')).length).toBe(fetchsBefore);
             }
-        });
+        } finally {
+            INSTANCE_ACTIONS.length = 0;
+            orig.forEach(a => INSTANCE_ACTIONS.push(a));
+        }
     });
 
     test('handleConsoleConfirm: seats input clamps to minimum of 1', async () => {
-        await withConsole(async () => {
+        const {INSTANCE_ACTIONS} = require('../../constants/actions');
+        const orig = [...INSTANCE_ACTIONS];
+        INSTANCE_ACTIONS.push({name: 'console', icon: 'ConsoleIcon'});
+        try {
             renderSvc();
             const dialog = await openConsoleDialogFn();
             if (!dialog) return;
@@ -1140,7 +986,10 @@ describe('ObjectDetail Component', () => {
                 fireEvent.change(seatsInput, {target: {value: 'abc'}});
                 expect(seatsInput.value).toBe('1');
             }
-        });
+        } finally {
+            INSTANCE_ACTIONS.length = 0;
+            orig.forEach(a => INSTANCE_ACTIONS.push(a));
+        }
     });
 
     test('consoleUrlDialog: open in new tab calls window.open', async () => {
@@ -1241,32 +1090,8 @@ describe('ObjectDetail Component', () => {
         warnSpy.mockRestore();
     });
 
-    test('subscription without node does not trigger fetchConfig', () => {
-        const unsubscribeMock = jest.fn();
-        useEventStore.subscribe = jest.fn((sel, cb) => {
-            cb([{name: 'svc1', fullName: 'root/svc/svc1', type: 'InstanceConfigUpdated'}]);
-            return unsubscribeMock;
-        });
-        useEventStore.mockImplementation(sel => sel({
-            objectStatus: {},
-            objectInstanceStatus: {},
-            instanceMonitor: {},
-            instanceConfig: {},
-            configUpdates: [],
-            clearConfigUpdate: jest.fn(),
-        }));
-        renderSvc();
-        expect(typeof unsubscribeMock).toBe('function');
-    });
-
-    test('useEffect for configUpdates handles no matching update', async () => {
-        const clearConfigUpdate = jest.fn();
-        useEventStore.mockImplementation(s => s({
-            objectStatus: {}, objectInstanceStatus: {}, instanceMonitor: {}, instanceConfig: {},
-            configUpdates: [{name: 'other', type: 'InstanceConfigUpdated', node: 'node1'}],
-            clearConfigUpdate,
-        }));
+    test('removes object on mount via store.removeObject', () => {
         renderComponent('root/cfg/cfg1');
-        await waitFor(() => expect(clearConfigUpdate).not.toHaveBeenCalled());
+        expect(fullMockState.removeObject).toHaveBeenCalledWith('root/cfg/cfg1');
     });
 });

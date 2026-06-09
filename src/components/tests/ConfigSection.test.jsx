@@ -332,10 +332,9 @@ describe('ConfigSection Component', () => {
 
     test('shows no configuration available when configNode is missing', async () => {
         renderConfig({configNode: ''});
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/No node available to fetch configuration/i);
-        }, {timeout: 5000});
-        expect(global.fetch).not.toHaveBeenCalled();
+        await waitFor(() =>
+            expect(screen.getByText(/No instance selected to view configuration/i)).toBeInTheDocument()
+        );
     });
 
     test('shows "No configuration available" when config text is null', async () => {

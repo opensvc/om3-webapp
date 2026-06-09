@@ -16,12 +16,9 @@ const parseObjectPath = (objName) => {
 const shallowEqual = (obj1, obj2) => {
     if (obj1 === obj2) return true;
     if (!obj1 || !obj2) return false;
-
     const keys1 = Object.keys(obj1);
     const keys2 = Object.keys(obj2);
-
     if (keys1.length !== keys2.length) return false;
-
     for (let i = 0; i < keys1.length; i++) {
         const key = keys1[i];
         if (obj1[key] !== obj2[key]) return false;
@@ -41,6 +38,16 @@ const useEventStore = create(
             instanceMonitor: {},
             instanceConfig: {},
             configUpdates: [],
+            pendingDeletes: {},
+
+            removePendingDelete: (objectPath, node) => {
+                const key = `${objectPath}:${node}`;
+                set((state) => {
+                    const newPending = {...state.pendingDeletes};
+                    delete newPending[key];
+                    return {pendingDeletes: newPending};
+                });
+            },
 
             removeObject: (objectName) =>
                 set((state) => {
@@ -49,19 +56,47 @@ const useEventStore = create(
                         !state.instanceConfig[objectName]) {
                         return state;
                     }
-
                     const newObjectStatus = {...state.objectStatus};
                     const newObjectInstanceStatus = {...state.objectInstanceStatus};
                     const newInstanceConfig = {...state.instanceConfig};
-
                     delete newObjectStatus[objectName];
                     delete newObjectInstanceStatus[objectName];
                     delete newInstanceConfig[objectName];
-
                     return {
                         objectStatus: newObjectStatus,
                         objectInstanceStatus: newObjectInstanceStatus,
                         instanceConfig: newInstanceConfig,
+                    };
+                }),
+
+            removeInstanceFromObject: (objectPath, node) =>
+                set((state) => {
+                    logger.debug(`🗑️ removeInstanceFromObject: path=${objectPath} node=${node}`);
+                    const newObjectInstanceStatus = {...state.objectInstanceStatus};
+                    const newInstanceConfig = {...state.instanceConfig};
+                    const newInstanceMonitor = {...state.instanceMonitor};
+                    let hasChanges = false;
+
+                    if (newObjectInstanceStatus[objectPath] && newObjectInstanceStatus[objectPath][node]) {
+                        newObjectInstanceStatus[objectPath] = {...newObjectInstanceStatus[objectPath]};
+                        delete newObjectInstanceStatus[objectPath][node];
+                        hasChanges = true;
+                    }
+                    if (newInstanceConfig[objectPath] && newInstanceConfig[objectPath][node]) {
+                        newInstanceConfig[objectPath] = {...newInstanceConfig[objectPath]};
+                        delete newInstanceConfig[objectPath][node];
+                        hasChanges = true;
+                    }
+                    const monitorKey = `${node}:${objectPath}`;
+                    if (newInstanceMonitor[monitorKey]) {
+                        delete newInstanceMonitor[monitorKey];
+                        hasChanges = true;
+                    }
+                    if (!hasChanges) return state;
+                    return {
+                        objectInstanceStatus: newObjectInstanceStatus,
+                        instanceConfig: newInstanceConfig,
+                        instanceMonitor: newInstanceMonitor,
                     };
                 }),
 
@@ -79,33 +114,20 @@ const useEventStore = create(
                     });
                     return {objectStatus};
                 }),
+
             setInstanceStatuses: (instanceStatuses, replace = false) =>
                 set((state) => {
                     let hasChanges = false;
                     const newObjectInstanceStatus = {...state.objectInstanceStatus};
-
                     for (const path in instanceStatuses) {
                         if (!instanceStatuses.hasOwnProperty(path)) continue;
-
                         const incomingNodes = instanceStatuses[path];
                         if (replace) {
                             const rebuilt = {};
                             for (const node in incomingNodes) {
                                 if (!incomingNodes.hasOwnProperty(node)) continue;
                                 const newStatus = incomingNodes[node];
-                                if (newStatus?.encap) {
-                                    rebuilt[node] = {
-                                        node,
-                                        path,
-                                        ...newStatus,
-                                    };
-                                } else {
-                                    rebuilt[node] = {
-                                        node,
-                                        path,
-                                        ...newStatus,
-                                    };
-                                }
+                                rebuilt[node] = {node, path, ...newStatus};
                             }
                             if (!shallowEqual(newObjectInstanceStatus[path], rebuilt)) {
                                 newObjectInstanceStatus[path] = rebuilt;
@@ -113,29 +135,21 @@ const useEventStore = create(
                             }
                             continue;
                         }
-
-                        // Standard incremental merge (for SSE events)
                         if (!newObjectInstanceStatus[path]) {
                             newObjectInstanceStatus[path] = {};
                             hasChanges = true;
                         } else {
                             newObjectInstanceStatus[path] = {...newObjectInstanceStatus[path]};
                         }
-
                         for (const node in incomingNodes) {
                             if (!incomingNodes.hasOwnProperty(node)) continue;
-
                             const newStatus = incomingNodes[node];
                             const existingData = newObjectInstanceStatus[path][node];
-
                             if (existingData && shallowEqual(existingData, newStatus)) continue;
-
                             hasChanges = true;
-
                             if (newStatus?.encap) {
                                 const existingEncap = existingData?.encap || {};
                                 const mergedEncap = {...existingEncap};
-
                                 for (const containerId in newStatus.encap) {
                                     if (newStatus.encap.hasOwnProperty(containerId)) {
                                         const existingContainer = existingEncap[containerId] || {};
@@ -149,73 +163,35 @@ const useEventStore = create(
                                         };
                                     }
                                 }
-
-                                newObjectInstanceStatus[path][node] = {
-                                    node,
-                                    path,
-                                    ...newStatus,
-                                    encap: mergedEncap,
-                                };
+                                newObjectInstanceStatus[path][node] = {node, path, ...newStatus, encap: mergedEncap};
                             } else {
-                                newObjectInstanceStatus[path][node] = {
-                                    node,
-                                    path,
-                                    ...existingData,
-                                    ...newStatus,
-                                };
+                                newObjectInstanceStatus[path][node] = {node, path, ...existingData, ...newStatus};
                             }
                         }
                     }
-
                     if (!hasChanges) return state;
                     return {objectInstanceStatus: newObjectInstanceStatus};
                 }),
 
             setNodeStatuses: (nodeStatus) =>
-                set((state) => {
-                    if (shallowEqual(state.nodeStatus, nodeStatus)) {
-                        return state;
-                    }
-                    return {nodeStatus};
-                }),
+                set((state) => shallowEqual(state.nodeStatus, nodeStatus) ? state : {nodeStatus}),
 
             setNodeMonitors: (nodeMonitor) =>
-                set((state) => {
-                    if (shallowEqual(state.nodeMonitor, nodeMonitor)) {
-                        return state;
-                    }
-                    return {nodeMonitor};
-                }),
+                set((state) => shallowEqual(state.nodeMonitor, nodeMonitor) ? state : {nodeMonitor}),
 
             setNodeStats: (nodeStats) =>
-                set((state) => {
-                    if (shallowEqual(state.nodeStats, nodeStats)) {
-                        return state;
-                    }
-                    return {nodeStats};
-                }),
+                set((state) => shallowEqual(state.nodeStats, nodeStats) ? state : {nodeStats}),
 
             setHeartbeatStatuses: (heartbeatStatus) =>
-                set((state) => {
-                    if (shallowEqual(state.heartbeatStatus, heartbeatStatus)) {
-                        return state;
-                    }
-                    return {heartbeatStatus};
-                }),
+                set((state) => shallowEqual(state.heartbeatStatus, heartbeatStatus) ? state : {heartbeatStatus}),
 
             setInstanceMonitors: (instanceMonitor) =>
-                set((state) => {
-                    if (shallowEqual(state.instanceMonitor, instanceMonitor)) {
-                        return state;
-                    }
-                    return {instanceMonitor};
-                }),
+                set((state) => shallowEqual(state.instanceMonitor, instanceMonitor) ? state : {instanceMonitor}),
 
             setInstanceConfig: (path, node, config) =>
                 set((state) => {
-                    if (state.instanceConfig[path]?.[node] && shallowEqual(state.instanceConfig[path][node], config)) {
+                    if (state.instanceConfig[path]?.[node] && shallowEqual(state.instanceConfig[path][node], config))
                         return state;
-                    }
                     const newInstanceConfig = {...state.instanceConfig};
                     if (!newInstanceConfig[path]) newInstanceConfig[path] = {};
                     newInstanceConfig[path] = {...newInstanceConfig[path], [node]: config};
@@ -228,10 +204,8 @@ const useEventStore = create(
                     existingState.configUpdates.map((u) => `${u.fullName}:${u.node}`)
                 );
                 const newUpdates = [];
-
                 for (const update of updates) {
                     let name, fullName, node;
-
                     if (typeof update === "object" && update !== null) {
                         if (update.name && update.node) {
                             name = update.name;
@@ -245,33 +219,26 @@ const useEventStore = create(
                             const kind = name === "cluster" ? "ccfg" : "svc";
                             fullName = `${namespace}/${kind}/${name}`;
                             node = update.data?.node || "";
-                        } else {
-                            continue;
-                        }
+                        } else continue;
                     } else if (typeof update === "string") {
                         try {
                             const parsed = JSON.parse(update);
                             if (parsed && parsed.name && parsed.node) {
                                 name = parsed.name;
-                                const namespace = "root";
-                                const kind = name === "cluster" ? "ccfg" : "svc";
+                                const {namespace, kind} = parseObjectPath(name);
                                 fullName = `${namespace}/${kind}/${name}`;
                                 node = parsed.node;
-                            } else {
-                                continue;
-                            }
+                            } else continue;
                         } catch (e) {
                             logger.warn("[useEventStore] Invalid JSON in setConfigUpdated:", update);
                             continue;
                         }
                     }
-
                     if (name && node && !existingKeys.has(`${fullName}:${node}`)) {
                         newUpdates.push({name, fullName, node});
                         existingKeys.add(`${fullName}:${node}`);
                     }
                 }
-
                 if (newUpdates.length > 0) {
                     set((state) => ({
                         configUpdates: [...state.configUpdates, ...newUpdates]

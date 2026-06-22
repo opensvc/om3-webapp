@@ -935,10 +935,10 @@ const Objects = () => {
         if (!currentObject) return [];
         const objectData = objectStatus[currentObject];
         return OBJECT_ACTIONS.filter(
-            ({name}) =>
-                isActionAllowedForSelection(name, [currentObject]) &&
-                (name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
-                (name !== "unfreeze" || objectData?.frozen === "frozen")
+            (action) =>
+                isActionAllowedForSelection(action.name, [currentObject]) &&
+                (action.name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
+                (action.name !== "unfreeze" || objectData?.frozen === "frozen")
         );
     }, [currentObject, objectStatus]);
 
@@ -1185,6 +1185,7 @@ const Objects = () => {
                         </Box>
                     </Box>
 
+                    {/* Menu for row actions (per object) */}
                     <Menu
                         open={Boolean(rowMenuAnchor)}
                         anchorEl={rowMenuAnchor}
@@ -1199,26 +1200,37 @@ const Objects = () => {
                             horizontal: 'right',
                         }}
                         sx={{
+                            zIndex: 10000,
                             "& .MuiPaper-root": {
                                 minWidth: 200,
                                 boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
                             }
                         }}
                     >
-                        {filteredRowActions.map(({name, icon}) => (
-                            <MenuItem
-                                key={name}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleActionClick(name, true, currentObject);
-                                }}
-                                sx={{display: "flex", alignItems: "center", gap: 1}}
-                                aria-label={`${name} action for object ${currentObject}`}
-                            >
-                                <ListItemIcon>{icon}</ListItemIcon>
-                                {name.charAt(0).toUpperCase() + name.slice(1)}
-                            </MenuItem>
-                        ))}
+                        {filteredRowActions.map((action) => {
+                            const {name, icon, color} = action;
+                            return (
+                                <MenuItem
+                                    key={name}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleActionClick(name, true, currentObject);
+                                    }}
+                                    sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 1,
+                                        color: color === "red" ? "error.main" : "inherit",
+                                    }}
+                                    aria-label={`${name} action for object ${currentObject}`}
+                                >
+                                    <ListItemIcon sx={{color: color === "red" ? "error.main" : "inherit"}}>
+                                        {icon}
+                                    </ListItemIcon>
+                                    {name.charAt(0).toUpperCase() + name.slice(1)}
+                                </MenuItem>
+                            );
+                        })}
                     </Menu>
 
                     {/* Menu for global actions */}
@@ -1235,13 +1247,15 @@ const Objects = () => {
                             horizontal: 'right',
                         }}
                         sx={{
+                            zIndex: 10000,
                             "& .MuiPaper-root": {
                                 minWidth: 200,
                                 boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"
                             }
                         }}
                     >
-                        {OBJECT_ACTIONS.map(({name, icon}) => {
+                        {OBJECT_ACTIONS.map((action) => {
+                            const {name, icon, color} = action;
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (
                                 <MenuItem
@@ -1249,12 +1263,18 @@ const Objects = () => {
                                     onClick={() => handleActionClick(name)}
                                     disabled={!isAllowed}
                                     sx={{
-                                        color: isAllowed ? "inherit" : "text.disabled",
+                                        color: isAllowed
+                                            ? (color === "red" ? "error.main" : "inherit")
+                                            : "text.disabled",
                                         "&.Mui-disabled": {opacity: 0.5}
                                     }}
                                     aria-label={`${name} action for selected objects`}
                                 >
-                                    <ListItemIcon sx={{color: isAllowed ? "inherit" : "text.disabled"}}>
+                                    <ListItemIcon sx={{
+                                        color: isAllowed
+                                            ? (color === "red" ? "error.main" : "inherit")
+                                            : "text.disabled"
+                                    }}>
                                         {icon}
                                     </ListItemIcon>
                                     <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>

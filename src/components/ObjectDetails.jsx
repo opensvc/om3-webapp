@@ -73,10 +73,9 @@ const ObjectDetail = () => {
     const instanceConfig = useEventStore((s) => s.instanceConfig[decodedObjectName]);
     const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
 
-    const [configLoading, setConfigLoading] = useState(false);
-    const [configError, setConfigError] = useState(null);
     const [configNode, setConfigNode] = useState(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
+    const [configRefreshTrigger, setConfigRefreshTrigger] = useState(0);
 
     const [selectedNodes, setSelectedNodes] = useState([]);
     const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
@@ -120,6 +119,7 @@ const ObjectDetail = () => {
         "ObjectDeleted",
         "InstanceMonitorUpdated",
         "InstanceConfigUpdated",
+        "InstanceConfigDeleted",
         "CONNECTION_OPENED",
         "CONNECTION_ERROR",
         "RECONNECTION_ATTEMPT",
@@ -127,9 +127,10 @@ const ObjectDetail = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    const lastFetch = useRef({});
-    const isProcessingConfigUpdate = useRef(false);
     const isMounted = useRef(true);
+    const fallbackTimer = useRef(null);
+    const hasFallbackFired = useRef(false);
+    const [fallbackCompleted, setFallbackCompleted] = useState(false);
 
     const objectData = useMemo(() => {
         const avail = objectStatus?.avail || "n/a";
@@ -148,6 +149,11 @@ const ObjectDetail = () => {
         return {avail, frozen, globalExpect};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
+    const nodesList = useMemo(() => {
+        if (!objectInstanceStatus) return [];
+        return Object.keys(objectInstanceStatus).sort();
+    }, [objectInstanceStatus]);
+
     const memoizedObjectData = useMemo(() => {
         if (!objectInstanceStatus) return {};
         const enhanced = {};
@@ -161,63 +167,126 @@ const ObjectDetail = () => {
         return enhanced;
     }, [objectInstanceStatus, instanceConfig, instanceMonitor, decodedObjectName]);
 
-    const nodesList = useMemo(() => Object.keys(memoizedObjectData), [memoizedObjectData]);
+    const fetchFallbackData = useCallback(async () => {
+        if (hasFallbackFired.current) return;
+        hasFallbackFired.current = true;
 
-    const fetchInitialObjectData = useCallback(async () => {
-        setInitialDataError(null);
         const token = localStorage.getItem("authToken");
         if (!token) {
             setInitialDataError("Auth token not found");
+            setInitialLoading(false);
+            setFallbackCompleted(true);
             return;
         }
+
+        const {namespace, kind, name: objName} = parseObjectPath(decodedObjectName);
+        const encodedNamespace = encodeURIComponent(namespace);
+        const encodedKind = encodeURIComponent(kind);
+        const encodedName = encodeURIComponent(objName);
+
         try {
-            const {namespace, kind, name: objName} = parseObjectPath(decodedObjectName);
-            const objRes = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${objName}`, {
-                headers: {Authorization: `Bearer ${token}`},
-                cache: "no-cache",
-            });
+            const objRes = await fetch(
+                `${URL_OBJECT}/${encodedNamespace}/${encodedKind}/${encodedName}`,
+                {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
+            );
             let objectData = null;
             if (objRes.ok) objectData = await objRes.json();
 
-            const instRes = await fetch(`${URL_NODE}/all/instance/path/${namespace}/${kind}/${objName}`, {
-                headers: {Authorization: `Bearer ${token}`},
-                cache: "no-cache",
-            });
+            const instRes = await fetch(
+                `${URL_NODE}/all/instance/path/${encodedNamespace}/${encodedKind}/${encodedName}`,
+                {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}
+            );
             let instancesData = {};
             if (instRes.ok) instancesData = await instRes.json();
 
-            const store = useEventStore.getState();
-            if (objectData) store.setObjectStatuses({[decodedObjectName]: objectData});
-            if (Object.keys(instancesData).length > 0) store.setInstanceStatuses({[decodedObjectName]: instancesData});
+            const currentState = useEventStore.getState();
+            const hasInstances = currentState.objectInstanceStatus[decodedObjectName] &&
+                Object.keys(currentState.objectInstanceStatus[decodedObjectName]).length > 0;
+
+            if (!hasInstances) {
+                if (objectData) currentState.setObjectStatuses({[decodedObjectName]: objectData});
+                if (instancesData) {
+                    currentState.setInstanceStatuses({[decodedObjectName]: instancesData}, true);
+                } else {
+                    currentState.setInstanceStatuses({[decodedObjectName]: {}}, true);
+                }
+            }
         } catch (err) {
-            logger.error("Failed to fetch initial object data:", err);
+            logger.error("Fallback fetch failed:", err);
             setInitialDataError(err.message);
+        } finally {
+            setInitialLoading(false);
+            setFallbackCompleted(true);
         }
     }, [decodedObjectName]);
 
     useEffect(() => {
+        useEventStore.getState().removeObject(decodedObjectName);
+        setInitialLoading(true);
+        setInitialDataError(null);
+        setFallbackCompleted(false);
+        hasFallbackFired.current = false;
+        setConfigNode(null);
+
         const token = localStorage.getItem("authToken");
         if (token) {
-            const filters = objectEventTypes.map(type => {
-                if (["CONNECTION_OPENED", "CONNECTION_ERROR", "RECONNECTION_ATTEMPT", "MAX_RECONNECTIONS_REACHED", "CONNECTION_CLOSED"].includes(type)) {
-                    return type;
-                } else {
-                    return `${type},path=${decodedObjectName}`;
-                }
-            });
-            startEventReception(token, filters);
+            startEventReception(token, objectEventTypes, decodedObjectName);
         }
-        return () => closeEventSource();
-    }, [decodedObjectName, objectEventTypes]);
+
+        fallbackTimer.current = setTimeout(() => {
+            fetchFallbackData();
+        }, 5000);
+
+        return () => {
+            clearTimeout(fallbackTimer.current);
+            closeEventSource();
+        };
+    }, [decodedObjectName, objectEventTypes, fetchFallbackData]);
 
     useEffect(() => {
-        const hasData = objectInstanceStatus && Object.keys(objectInstanceStatus).length > 0;
-        if (!hasData) {
-            fetchInitialObjectData().finally(() => setInitialLoading(false));
-        } else {
+        if (initialLoading && (objectInstanceStatus !== undefined || fallbackCompleted)) {
             setInitialLoading(false);
+            if (fallbackTimer.current) {
+                clearTimeout(fallbackTimer.current);
+                fallbackTimer.current = null;
+            }
+            hasFallbackFired.current = true;
         }
-    }, [objectInstanceStatus, fetchInitialObjectData]);
+    }, [initialLoading, objectInstanceStatus, fallbackCompleted]);
+
+    useEffect(() => {
+        if (configNode || !objectInstanceStatus) return;
+        const nodes = Object.keys(objectInstanceStatus);
+        if (nodes.length === 0) return;
+        const best = nodes.find((node) => {
+            const nodeData = objectInstanceStatus[node];
+            return nodeData?.encap && Object.values(nodeData.encap).some(
+                (container) => container.resources && Object.keys(container.resources).length > 0
+            );
+        }) || nodes[0];
+        setConfigNode(best);
+    }, [objectInstanceStatus, configNode]);
+
+    useEffect(() => {
+        if (!configNode || !objectInstanceStatus) return;
+        const currentNodes = Object.keys(objectInstanceStatus);
+        if (currentNodes.length === 0) {
+            setConfigNode(null);
+            setConfigDialogOpen(false);
+            return;
+        }
+        if (!currentNodes.includes(configNode)) {
+            logger.debug(`[ObjectDetail] configNode "${configNode}" removed, switching to "${currentNodes[0]}"`);
+            setConfigNode(currentNodes[0]);
+        }
+    }, [objectInstanceStatus, configNode]);
+
+    const prevInstanceConfigRef = useRef(instanceConfig);
+    useEffect(() => {
+        if (instanceConfig === prevInstanceConfigRef.current) return;
+        prevInstanceConfigRef.current = instanceConfig;
+        setConfigRefreshTrigger((n) => n + 1);
+    }, [instanceConfig]);
 
     const openSnackbar = useCallback((msg, sev = "success") => {
         setSnackbar({open: true, message: msg, severity: sev});
@@ -226,7 +295,7 @@ const ObjectDetail = () => {
 
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
-        return `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+        return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
     }, []);
 
     const postConsoleAction = useCallback(async ({node, rid, seats = 1, greet_timeout = "5s"}) => {
@@ -238,7 +307,7 @@ const ObjectDetail = () => {
         setActionInProgress(true);
         openSnackbar(`Opening console for resource ${rid}...`, "info");
         const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greet_timeout)}`;
+        const url = `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/console?rid=${encodeURIComponent(rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greet_timeout)}`;
         try {
             const response = await fetch(url, {
                 method: "POST",
@@ -269,7 +338,7 @@ const ObjectDetail = () => {
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
-        const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
+        const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
@@ -305,45 +374,6 @@ const ObjectDetail = () => {
             setActionInProgress(false);
         }
     }, [decodedObjectName, openSnackbar, postActionUrl]);
-
-    const fetchConfig = useCallback(async (node) => {
-        if (!node || !decodedObjectName) {
-            setConfigError("No node or object available to fetch configuration.");
-            return;
-        }
-        const key = `${decodedObjectName}:${node}`;
-        const now = Date.now();
-        if (lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
-        lastFetch.current[key] = now;
-        if (configLoading) return;
-
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            setConfigError("Auth token not found.");
-            return;
-        }
-        setConfigLoading(true);
-        setConfigError(null);
-        setConfigNode(node);
-        const url = `${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`;
-        try {
-            const fetchResponse = await Promise.race([
-                fetch(url, {headers: {Authorization: `Bearer ${token}`}, cache: "no-cache"}),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Fetch config timeout")), 10000)),
-            ]);
-            if (!fetchResponse.ok) {
-                setConfigError(`Failed to fetch config: HTTP error! status: ${fetchResponse.status}`);
-                return;
-            }
-            const text = await fetchResponse.text();
-            if (isMounted.current) return text;
-        } catch (err) {
-            if (isMounted.current) setConfigError(err.message);
-        } finally {
-            if (isMounted.current) setConfigLoading(false);
-        }
-    }, [decodedObjectName, configLoading]);
 
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
@@ -494,64 +524,6 @@ const ObjectDetail = () => {
     }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
 
     useEffect(() => {
-        const loadInitialConfig = async () => {
-            if (objectInstanceStatus && Object.keys(objectInstanceStatus).length > 0) {
-                const nodes = Object.keys(objectInstanceStatus);
-                const initialNode = nodes.find((node) => {
-                    const nodeData = objectInstanceStatus[node];
-                    return nodeData?.encap && Object.values(nodeData.encap).some(
-                        (container) => container.resources && Object.keys(container.resources).length > 0
-                    );
-                }) || nodes[0];
-                if (initialNode) {
-                    await fetchConfig(initialNode);
-                }
-            }
-        };
-        loadInitialConfig();
-    }, [objectInstanceStatus, fetchConfig]);
-
-    useEffect(() => {
-        let unsubscribe = null;
-        try {
-            const maybeUnsubscribe = useEventStore.subscribe(
-                (state) => state.configUpdates,
-                async (updates) => {
-                    if (!isMounted.current || isProcessingConfigUpdate.current) return;
-                    isProcessingConfigUpdate.current = true;
-                    try {
-                        const {name} = parseObjectPath(decodedObjectName);
-                        const matchingUpdate = updates.find(
-                            (u) => (u.name === name || u.fullName === decodedObjectName) && u.node
-                        );
-                        if (matchingUpdate && matchingUpdate.node) {
-                            await fetchConfig(matchingUpdate.node);
-                            setConfigDialogOpen(true);
-                            openSnackbar("Configuration updated", "info");
-                            clearConfigUpdate(decodedObjectName);
-                        }
-                    } catch (err) {
-                        openSnackbar("Failed to load updated configuration", "error");
-                    } finally {
-                        isProcessingConfigUpdate.current = false;
-                    }
-                },
-                {fireImmediately: false}
-            );
-            if (typeof maybeUnsubscribe === 'function') {
-                unsubscribe = maybeUnsubscribe;
-            } else {
-                logger.warn("[ObjectDetail] Subscription is not a function:", maybeUnsubscribe);
-            }
-        } catch (err) {
-            logger.warn("[ObjectDetail] Failed to subscribe to configUpdates:", err);
-        }
-        return () => {
-            if (typeof unsubscribe === 'function') unsubscribe();
-        };
-    }, [decodedObjectName, clearConfigUpdate, fetchConfig, openSnackbar]);
-
-    useEffect(() => {
         let unsubscribe = null;
         try {
             const maybeUnsubscribe = useEventStore.subscribe(
@@ -559,7 +531,6 @@ const ObjectDetail = () => {
                 (newConfig) => {
                     const config = newConfig[decodedObjectName];
                     if (config && configNode) {
-                        setConfigDialogOpen(true);
                         openSnackbar("Instance configuration updated", "info");
                     }
                 }
@@ -603,8 +574,8 @@ const ObjectDetail = () => {
                     openSnackbar={openSnackbar}
                     configDialogOpen={configDialogOpen}
                     setConfigDialogOpen={setConfigDialogOpen}
+                    configRefreshTrigger={configRefreshTrigger}
                 />
-                {configError && <Alert severity="error" sx={{mt: 2}}>{configError}</Alert>}
             </Box>
         );
     }
@@ -664,6 +635,7 @@ const ObjectDetail = () => {
                                 openSnackbar={openSnackbar}
                                 configDialogOpen={configDialogOpen}
                                 setConfigDialogOpen={setConfigDialogOpen}
+                                configRefreshTrigger={configRefreshTrigger}
                             />
                         </Grid>
                     </Grid>
@@ -732,17 +704,11 @@ const ObjectDetail = () => {
                         <DialogTitle>Console URL</DialogTitle>
                         <DialogContent>
                             <Box sx={{
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                padding: {xs: '8px 10px', sm: '12px 14px'},
-                                backgroundColor: '#f5f5f5',
-                                marginBottom: 2,
-                                overflow: 'auto',
-                                maxHeight: '100px',
-                                fontFamily: 'monospace',
-                                fontSize: {xs: '0.75rem', sm: '0.875rem'},
-                                wordBreak: 'break-all',
-                                whiteSpace: 'pre-wrap'
+                                border: '1px solid #ccc', borderRadius: '4px',
+                                padding: {xs: '8px 10px', sm: '12px 14px'}, backgroundColor: '#f5f5f5',
+                                marginBottom: 2, overflow: 'auto', maxHeight: '100px',
+                                fontFamily: 'monospace', fontSize: {xs: '0.75rem', sm: '0.875rem'},
+                                wordBreak: 'break-all', whiteSpace: 'pre-wrap'
                             }}>
                                 {currentConsoleUrl ? String(currentConsoleUrl) : 'No URL available'}
                             </Box>
@@ -755,11 +721,13 @@ const ObjectDetail = () => {
                                 <Button variant="outlined" size={window.innerWidth < 600 ? "small" : "medium"}
                                         onClick={() => {
                                             if (currentConsoleUrl) navigator.clipboard.writeText(String(currentConsoleUrl));
-                                        }} disabled={!currentConsoleUrl}>Copy URL</Button>
+                                        }}
+                                        disabled={!currentConsoleUrl}>Copy URL</Button>
                                 <Button variant="contained" size={window.innerWidth < 600 ? "small" : "medium"}
                                         onClick={() => {
                                             if (currentConsoleUrl) window.open(String(currentConsoleUrl), '_blank', 'noopener,noreferrer');
-                                        }} disabled={!currentConsoleUrl}>Open in New Tab</Button>
+                                        }}
+                                        disabled={!currentConsoleUrl}>Open in New Tab</Button>
                             </Box>
                         </DialogContent>
                         <DialogActions>
@@ -772,22 +740,15 @@ const ObjectDetail = () => {
                     {!["sec", "cfg", "usr"].includes(kind) && (
                         <>
                             <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                                <Button
-                                    variant="outlined"
-                                    onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
-                                    disabled={selectedNodes.length === 0}
-                                >
+                                <Button variant="outlined" onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
+                                        disabled={selectedNodes.length === 0}>
                                     Actions on Selected Nodes ({selectedNodes.length})
                                 </Button>
                             </Box>
-
-                            <Menu
-                                anchorEl={actionsMenuAnchor}
-                                open={Boolean(actionsMenuAnchor)}
-                                onClose={() => setActionsMenuAnchor(null)}
-                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
-                            >
+                            <Menu anchorEl={actionsMenuAnchor} open={Boolean(actionsMenuAnchor)}
+                                  onClose={() => setActionsMenuAnchor(null)}
+                                  anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                  transformOrigin={{vertical: 'top', horizontal: 'right'}} sx={{zIndex: 10000}}>
                                 {INSTANCE_ACTIONS.map(({name, icon}) => (
                                     <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
                                         <ListItemIcon>{icon}</ListItemIcon>
@@ -795,7 +756,6 @@ const ObjectDetail = () => {
                                     </MenuItem>
                                 ))}
                             </Menu>
-
                             {nodesList.map(node => (
                                 <InstanceCard
                                     key={node}
@@ -819,14 +779,10 @@ const ObjectDetail = () => {
                                     onViewInstance={handleViewInstance}
                                 />
                             ))}
-
-                            <Menu
-                                anchorEl={individualNodeMenuAnchor}
-                                open={Boolean(individualNodeMenuAnchor)}
-                                onClose={() => setIndividualNodeMenuAnchor(null)}
-                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
-                            >
+                            <Menu anchorEl={individualNodeMenuAnchor} open={Boolean(individualNodeMenuAnchor)}
+                                  onClose={() => setIndividualNodeMenuAnchor(null)}
+                                  anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                  transformOrigin={{vertical: 'top', horizontal: 'right'}} sx={{zIndex: 10000}}>
                                 {INSTANCE_ACTIONS.map(({name, icon}) => (
                                     <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
                                         <ListItemIcon>{icon}</ListItemIcon>
@@ -836,8 +792,6 @@ const ObjectDetail = () => {
                             </Menu>
                         </>
                     )}
-
-                    {configError && <Alert severity="error" sx={{mt: 2}}>{configError}</Alert>}
 
                     <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={closeSnackbar}
                               anchorOrigin={{vertical: "bottom", horizontal: "center"}}>
@@ -850,15 +804,9 @@ const ObjectDetail = () => {
             {logsDrawerOpen && selectedNodeForLogs && (
                 <Drawer anchor="right" open={logsDrawerOpen} variant="persistent" sx={{
                     "& .MuiDrawer-paper": {
-                        width: `${drawerWidth}px`,
-                        maxWidth: "80vw",
-                        p: 2,
-                        boxSizing: "border-box",
-                        backgroundColor: theme.palette.background.paper,
-                        top: 0,
-                        height: "100vh",
-                        overflow: "auto",
-                        borderLeft: `1px solid ${theme.palette.divider}`,
+                        width: `${drawerWidth}px`, maxWidth: "80vw", p: 2, boxSizing: "border-box",
+                        backgroundColor: theme.palette.background.paper, top: 0, height: "100vh",
+                        overflow: "auto", borderLeft: `1px solid ${theme.palette.divider}`,
                         transition: theme.transitions.create("width", {
                             easing: theme.transitions.easing.sharp,
                             duration: theme.transitions.duration.enteringScreen
@@ -866,19 +814,14 @@ const ObjectDetail = () => {
                     }
                 }}>
                     <Box sx={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "6px",
-                        height: "100%",
-                        cursor: "ew-resize",
-                        bgcolor: theme.palette.grey[300],
-                        "&:hover": {bgcolor: theme.palette.primary.light},
-                        transition: "background-color 0.2s"
+                        position: "absolute", top: 0, left: 0, width: "6px", height: "100%",
+                        cursor: "ew-resize", bgcolor: theme.palette.grey[300],
+                        "&:hover": {bgcolor: theme.palette.primary.light}, transition: "background-color 0.2s"
                     }} onMouseDown={startResizing} onTouchStart={startResizing} aria-label="Resize drawer"/>
                     <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                        <Typography
-                            variant="h6">{selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}</Typography>
+                        <Typography variant="h6">
+                            {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
+                        </Typography>
                         <IconButton onClick={handleCloseLogsDrawer}><CloseIcon/></IconButton>
                     </Box>
                     <LogsViewer nodename={selectedNodeForLogs} type={selectedInstanceForLogs ? "instance" : "node"}

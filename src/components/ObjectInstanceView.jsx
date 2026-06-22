@@ -927,7 +927,7 @@ const ObjectInstanceView = () => {
                 open={Boolean(instanceMenuAnchor)}
                 anchorEl={instanceMenuAnchor}
                 placement="bottom-end"
-                sx={{zIndex: 1400}}
+                sx={{zIndex: 10000}}
             >
                 <ClickAwayListener onClickAway={() => setInstanceMenuAnchor(null)}>
                     <Paper sx={{minWidth: 200, boxShadow: 3}}>
@@ -951,7 +951,7 @@ const ObjectInstanceView = () => {
                 open={Boolean(resourceMenuAnchor)}
                 anchorEl={resourceMenuAnchor}
                 placement="bottom-end"
-                sx={{zIndex: 1300}}
+                sx={{zIndex: 10000}}
             >
                 <ClickAwayListener onClickAway={() => setResourceMenuAnchor(null)}>
                     <Paper sx={{minWidth: 200, boxShadow: 3}}>

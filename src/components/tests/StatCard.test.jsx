@@ -68,8 +68,9 @@ describe('StatCard Component', () => {
     });
 
     test('does not call onClick when not provided', () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-        render(<StatCard title="Test" value="42" />);
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        render(<StatCard title="Test" value="42"/>);
         // eslint-disable-next-line testing-library/no-node-access
         const card = screen.getByText('Test').closest('div');
         fireEvent.click(card);
@@ -78,14 +79,14 @@ describe('StatCard Component', () => {
     });
 
     test('does not have pointer cursor when onClick is not provided', () => {
-        render(<StatCard title="Test" value="42" />);
+        render(<StatCard title="Test" value="42"/>);
         // eslint-disable-next-line testing-library/no-node-access
         const paper = screen.getByText('Test').closest('div');
         expect(paper).toHaveStyle('cursor: default');
     });
 
     test('has pointer cursor when onClick is provided', () => {
-        render(<StatCard title="Test" value="42" onClick={mockOnClick} />);
+        render(<StatCard title="Test" value="42" onClick={mockOnClick}/>);
         // eslint-disable-next-line testing-library/no-node-access
         const paper = screen.getByText('Test').closest('div');
         expect(paper).toHaveStyle('cursor: pointer');
@@ -112,7 +113,7 @@ describe('StatCard Component', () => {
     });
 
     test('renders without onClick and without dynamicHeight', () => {
-        render(<StatCard title="Test" value="42" />);
+        render(<StatCard title="Test" value="42"/>);
         expect(screen.getByText('Test')).toBeInTheDocument();
         expect(screen.getByText('42')).toBeInTheDocument();
     });

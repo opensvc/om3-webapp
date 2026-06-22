@@ -425,9 +425,12 @@ const NodesTable = () => {
                             vertical: "top",
                             horizontal: "right",
                         }}
-                        sx={menuSx}
+                        sx={{
+                            ...menuSx,
+                            zIndex: 10000,
+                        }}
                     >
-                        {filteredMenuItems.map(({name, icon}) => (
+                        {filteredMenuItems.map(({name, icon, color}) => (
                             <MenuItem
                                 key={name}
                                 onClick={() => handleAction(name)}
@@ -435,9 +438,12 @@ const NodesTable = () => {
                                     display: "flex",
                                     alignItems: "center",
                                     gap: 1,
+                                    color: color === "red" ? "error.main" : "inherit",
                                 }}
                             >
-                                <ListItemIcon>{icon}</ListItemIcon>
+                                <ListItemIcon sx={{color: color === "red" ? "error.main" : "inherit"}}>
+                                    {icon}
+                                </ListItemIcon>
                                 <ListItemText>
                                     {name
                                         .split(" ")

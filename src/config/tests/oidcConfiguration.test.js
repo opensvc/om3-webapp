@@ -7,6 +7,10 @@ const mockLocation = {
 };
 const originalWindow = global.window;
 
+jest.mock("oidc-client-ts", () => ({
+    WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
+}));
+
 describe('oidcConfiguration (browser environment)', () => {
     beforeAll(() => {
         Object.defineProperty(window, 'location', {
@@ -32,11 +36,6 @@ describe('oidcConfiguration (browser environment)', () => {
         console.debug = jest.fn();
         console.info = jest.fn();
     });
-
-    // Mock WebStorageStateStore
-    jest.mock("oidc-client-ts", () => ({
-        WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
-    }));
 
     test('returns default configuration when authInfo is missing', async () => {
         const result = await oidcConfiguration(null);
@@ -100,10 +99,10 @@ describe('oidcConfiguration (browser environment)', () => {
             monitorSession: true,
             authority: 'https://auth.example.com',
             scope: 'openid profile',
-            redirect_uri: 'https://example.com/app/subpath/auth-callback',
-            silent_redirect_uri: 'https://example.com/app/subpath/silent-renew',
+            redirect_uri: 'https://example.com/auth-callback',
+            silent_redirect_uri: 'https://example.com/silent-renew',
             useRefreshToken: true,
-            post_logout_redirect_uri: 'https://example.com/app/subpath/',
+            post_logout_redirect_uri: 'https://example.com/',
             userStore: expect.any(Object),
         });
     });
@@ -126,10 +125,10 @@ describe('oidcConfiguration (browser environment)', () => {
             monitorSession: true,
             authority: 'https://auth.example.com',
             scope: 'openid profile email offline_access opensvc:om3 opensvc:om3:root opensvc:om3:guest opensvc:badscope',
-            redirect_uri: 'https://example.com/app/subpath/auth-callback',
-            silent_redirect_uri: 'https://example.com/app/subpath/silent-renew',
+            redirect_uri: 'https://example.com/auth-callback',
+            silent_redirect_uri: 'https://example.com/silent-renew',
             useRefreshToken: true,
-            post_logout_redirect_uri: 'https://example.com/app/subpath/',
+            post_logout_redirect_uri: 'https://example.com/',
             userStore: expect.any(Object),
         });
     });
@@ -167,7 +166,7 @@ describe('oidcConfiguration (browser environment)', () => {
         const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
         fetch.mockResolvedValueOnce({
             ok: true,
-            json: async () => ({scopes_supported: []}), // Tableau vide
+            json: async () => ({scopes_supported: []}),
         });
 
         const result = await oidcConfiguration(authInfo);
@@ -197,6 +196,123 @@ describe('oidcConfiguration (browser environment)', () => {
         const result = await oidcConfiguration(authInfo);
         expect(result.scope).toBe('');
         expect(console.warn).not.toHaveBeenCalledWith('No allowed scopes provided, using default scopes');
+    });
+
+    test('falls back to default config when issuer uses HTTP (non-localhost)', async () => {
+        const authInfo = {openid: {issuer: 'http://example.com', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.warn).toHaveBeenCalledWith(
+            "OIDC Configuration fallback: issuer URL failed validation. Falling back to default configuration."
+        );
+        // The inner warning from isSafeIssuerUrl is also logged
+        expect(console.warn).toHaveBeenCalledWith(
+            expect.stringContaining("Issuer URL must use HTTPS (or HTTP for localhost). Got: http:")
+        );
+    });
+
+    test('falls back to default config when issuer URL contains credentials', async () => {
+        const authInfo = {openid: {issuer: 'https://user:pass@auth.example.com', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.warn).toHaveBeenCalledWith(
+            "OIDC Configuration fallback: issuer URL failed validation. Falling back to default configuration."
+        );
+        expect(console.warn).toHaveBeenCalledWith("Issuer URL must not contain credentials.");
+    });
+
+    test('falls back to default config when issuer is a public IPv4 address', async () => {
+        const authInfo = {openid: {issuer: 'https://8.8.8.8', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.warn).toHaveBeenCalledWith(
+            "OIDC Configuration fallback: issuer URL failed validation. Falling back to default configuration."
+        );
+        expect(console.warn).toHaveBeenCalledWith(
+            "Issuer URL must use a domain name, not an IP address."
+        );
+    });
+
+    test('falls back to default config when issuer is a private IPv4 address', async () => {
+        const authInfo = {openid: {issuer: 'https://192.168.1.1', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.warn).toHaveBeenCalledWith(
+            "OIDC Configuration fallback: issuer URL failed validation. Falling back to default configuration."
+        );
+        expect(console.warn).toHaveBeenCalledWith(
+            "Issuer URL must not point to a private or loopback IP address."
+        );
+    });
+
+    test('falls back to default config when issuer is an IPv6 address', async () => {
+        const authInfo = {openid: {issuer: 'https://[::1]', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.warn).toHaveBeenCalledWith(
+            "OIDC Configuration fallback: issuer URL failed validation. Falling back to default configuration."
+        );
+        expect(console.warn).toHaveBeenCalledWith("Issuer URL must not be an IPv6 address.");
+    });
+
+    test('falls back to default config when URL has protocol but no host (e.g., mailto:)', async () => {
+        const authInfo = {openid: {issuer: 'mailto:test@example.com', client_id: 'test-client'}};
+        const result = await oidcConfiguration(authInfo);
+        expect(result).toEqual({
+            client_id: 'om3',
+            response_type: 'code',
+            accessTokenExpiringNotificationTimeInSeconds: 30,
+            automaticSilentRenew: true,
+            monitorSession: true,
+        });
+        expect(console.error).toHaveBeenCalledWith("Malformed URI: missing protocol or host");
+    });
+
+    test('uses "/ui" base path when pathname starts with /ui', async () => {
+        // Override pathname for this test
+        window.location.pathname = '/ui/dashboard';
+        const authInfo = {openid: {issuer: 'https://auth.example.com', client_id: 'test-client'}};
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({scopes_supported: ['openid']}),
+        });
+
+        const result = await oidcConfiguration(authInfo);
+        expect(result.redirect_uri).toBe('https://example.com/ui/auth-callback');
+        expect(result.silent_redirect_uri).toBe('https://example.com/ui/silent-renew');
+        expect(result.post_logout_redirect_uri).toBe('https://example.com/ui/');
+        // Restore pathname to avoid affecting other tests
+        window.location.pathname = mockLocation.pathname;
     });
 });
 
@@ -242,7 +358,6 @@ describe('oidcConfiguration (non-browser environment)', () => {
             silent_redirect_uri: '/silent-renew',
             useRefreshToken: true,
             post_logout_redirect_uri: '/',
-            // userStore absent car isBrowser false
         });
         expect(result.userStore).toBeUndefined();
     });

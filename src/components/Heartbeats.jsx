@@ -114,7 +114,6 @@ const HeartbeatRow = React.memo(({row, isSingleNode}) => {
 const Heartbeats = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const isMounted = useRef(true);
     const eventStarted = useRef(false);
     const tableContainerRef = useRef(null);
     const theme = useTheme();
@@ -169,8 +168,6 @@ const Heartbeats = () => {
     // Update URL when filters change
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (!isMounted.current) return;
-
             const currentParams = new URLSearchParams(location.search);
             const currentStatus = currentParams.get("status") || "all";
             const currentNode = currentParams.get("node") || "all";
@@ -313,20 +310,16 @@ const Heartbeats = () => {
                 const cleanedId = stream.id.replace(/^hb#/, "");
 
                 if (Object.keys(peers).length === 0 && stream.state === "stopped") {
-                    const cachedPeers = cachedStream.peers || {};
-                    const firstPeerKey = Object.keys(cachedPeers)[0];
-                    const firstPeer = cachedPeers[firstPeerKey];
-
                     rows.push({
                         id: cleanedId,
                         node: node,
                         peer: "N/A",
-                        type: stream.type || cachedStream.type || "N/A",
-                        desc: firstPeer?.desc || "N/A",
+                        type: stream.type || "N/A",
+                        desc: "N/A",
                         isBeating: false,
-                        changedAt: firstPeer?.changed_at || "N/A",
-                        lastBeatingAt: firstPeer?.last_beating_at || "N/A",
-                        state: stream.state || "unknown",
+                        changedAt: "N/A",
+                        lastBeatingAt: "N/A",
+                        state: stream.state,
                     });
                 } else {
                     const peerEntries = Object.entries(peers);
@@ -422,8 +415,6 @@ const Heartbeats = () => {
         if (loading) return;
 
         const container = tableContainerRef.current;
-        if (!container) return;
-
         const {scrollTop, scrollHeight, clientHeight} = container;
         const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
 
@@ -447,12 +438,6 @@ const Heartbeats = () => {
     useEffect(() => {
         setVisibleCount(30);
     }, [filteredRows]);
-
-    useEffect(() => {
-        return () => {
-            isMounted.current = false;
-        };
-    }, []);
 
     const columns = [
         {label: "RUNNING", key: "state", align: "center"},

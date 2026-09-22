@@ -92,13 +92,13 @@ const isTokenValid = (token) => {
 };
 
 // Component to handle OIDC initialization
-const OidcInitializer = ({children}) => {
+const OidcInitializer = ({children, authInfo}) => {
     const location = useLocation();
     const {userManager, recreateUserManager, isInitialized} = useOidc();
     const authDispatch = useAuthDispatch();
     const auth = useAuth();
-    const authInfo = useAuthInfo();
     const navigate = useNavigate();
+    const resumeCheckTimer = useRef(null); // debounce timer
 
     const handleTokenExpired = useCallback(() => {
         logger.warn('Access token expired, redirecting to /ui/auth-choice');
@@ -240,19 +240,31 @@ const OidcInitializer = ({children}) => {
             }
         };
 
+        const debouncedCheck = () => {
+            if (resumeCheckTimer.current) {
+                clearTimeout(resumeCheckTimer.current);
+            }
+            resumeCheckTimer.current = setTimeout(handleCheckAuthOnResume, 500);
+        };
+
         const visibilityHandler = () => {
             if (document.visibilityState === 'visible') {
-                setTimeout(handleCheckAuthOnResume, 500);
+                debouncedCheck();
             }
         };
         const focusHandler = () => {
-            setTimeout(handleCheckAuthOnResume, 500);
+            debouncedCheck();
         };
+
         document.addEventListener('visibilitychange', visibilityHandler);
         window.addEventListener('focus', focusHandler);
+
         return () => {
             document.removeEventListener('visibilitychange', visibilityHandler);
             window.removeEventListener('focus', focusHandler);
+            if (resumeCheckTimer.current) {
+                clearTimeout(resumeCheckTimer.current);
+            }
         };
     }, [navigate, userManager, onUserRefreshed, location.pathname]);
 
@@ -293,44 +305,13 @@ const App = () => {
     const location = useLocation();
     const mainRef = useRef(null);
 
-    useEffect(() => {
-        // Use bracket notation to avoid "unresolved variable overflow" warnings
-        const htmlStyle = document.documentElement.style;
-        const bodyStyle = document.body.style;
-        const root = document.getElementById('root');
-        const rootStyle = root?.style;
-
-        const originalHtmlOverflow = htmlStyle['overflow'];
-        const originalBodyOverflow = bodyStyle['overflow'];
-        const originalRootOverflow = rootStyle?.['overflow'];
-
-        htmlStyle['overflow'] = 'hidden';
-        bodyStyle['overflow'] = 'hidden';
-        if (rootStyle) rootStyle['overflow'] = 'hidden';
-
-        return () => {
-            htmlStyle['overflow'] = originalHtmlOverflow;
-            bodyStyle['overflow'] = originalBodyOverflow;
-            if (rootStyle) rootStyle['overflow'] = originalRootOverflow;
-        };
-    }, []);
+    const authInfo = useAuthInfo();
 
     useEffect(() => {
-        const mainElement = mainRef.current;
-        if (!mainElement) return;
-
-        const adjustScroll = () => {
-        };
-        adjustScroll();
-        window.addEventListener('resize', adjustScroll);
-        return () => window.removeEventListener('resize', adjustScroll);
-    }, []);
-
-    useEffect(() => {
-        prepareForNavigation();
         if (mainRef.current) {
             mainRef.current.scrollTop = 0;
         }
+        prepareForNavigation();
     }, [location]);
 
     useEffect(() => {
@@ -342,14 +323,33 @@ const App = () => {
         return () => window.removeEventListener("storage", checkTokenChange);
     }, []);
 
+    const appContainerStyle = {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        backgroundColor: 'background.default',
+    };
+
+    const mainStyle = {
+        flex: 1,
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        width: '100%',
+    };
+
     return (
         <AuthProvider>
             <OidcProvider>
-                <OidcInitializer>
+                <OidcInitializer authInfo={authInfo}>
                     <DynamicThemeProvider>
-                        <div id="app-root-container">
+                        <div id="app-root-container" style={appContainerStyle}>
                             <NavBar/>
-                            <main id="app-scroll-container" ref={mainRef}>
+                            <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
                                 <Suspense fallback={<Loading/>}>
                                     <Routes>
                                         <Route path="/" element={<Navigate to="/cluster" replace/>}/>
@@ -372,7 +372,7 @@ const App = () => {
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                        <Route path="/auth-choice" element={<AuthChoice/>}/>
+                                        <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
                                         <Route path="/auth/login" element={<Login/>}/>
                                         <Route path="*" element={<Navigate to="/"/>}/>
                                     </Routes>

@@ -20,6 +20,11 @@ export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
         }, 50);
     }, [onClick]);
 
+    const handleChipClick = useCallback((e) => {
+        e.stopPropagation();
+        handleClick();
+    }, [handleClick]);
+
     const subtitle = useMemo(() => (
         <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, width: '100%'}}>
             <Chip
@@ -31,12 +36,12 @@ export const GridNodes = memo(({nodeCount, frozenCount, onClick}) => {
                     cursor: isLoading ? 'default' : 'pointer',
                     opacity: isLoading ? 0.7 : 1,
                 }}
-                onClick={handleClick}
+                onClick={handleChipClick}
                 disabled={isLoading}
             />
             <ClickLoader isLoading={isLoading}/>
         </Box>
-    ), [frozenCount, isLoading, handleClick]);
+    ), [frozenCount, isLoading, handleChipClick]);
 
     return <StatCard title="Nodes" value={nodeCount} subtitle={subtitle} onClick={handleClick}/>;
 });
@@ -157,6 +162,8 @@ export const GridNamespaces = memo(({namespaceCount, namespaceSubtitle, onClick}
             subtitle={subtitle}
             onClick={handleCardClick}
             isLoading={isCardLoading}
+            dynamicHeight={true}
+            maxSubtitleHeight={220}
         />
     );
 });
@@ -290,7 +297,7 @@ export const GridHeartbeats = memo(({heartbeatCount, perHeartbeatStats = {}, onC
         }, 50);
     }, [onClick]);
 
-    const handleChipClick = useCallback((baseId) => (e) => {
+    const handleChipClick = useCallback((baseId, e) => {
         e.stopPropagation();
         if (loadingId) return;
         setLoadingId(baseId);
@@ -299,7 +306,7 @@ export const GridHeartbeats = memo(({heartbeatCount, perHeartbeatStats = {}, onC
             onClick(null, null, baseId);
             setLoadingId('');
         }, 50);
-    }, [onClick, loadingId]);
+    }, [loadingId, onClick]);
 
     const subtitle = useMemo(() => {
         const groups = new Map();
@@ -328,7 +335,7 @@ export const GridHeartbeats = memo(({heartbeatCount, perHeartbeatStats = {}, onC
                             cursor: isLoading ? 'default' : 'pointer',
                             opacity: isLoading ? 0.7 : 1,
                         }}
-                        onClick={handleChipClick(baseId)}
+                        onClick={(e) => handleChipClick(baseId, e)}
                         disabled={isLoading}
                     />
                     {isLoading && <CircularProgress size={12}/>}
@@ -466,6 +473,8 @@ export const GridKinds = memo(({kindCount, kindSubtitle, onClick}) => {
             subtitle={subtitle}
             onClick={handleCardClick}
             isLoading={isCardLoading}
+            dynamicHeight={true}
+            maxSubtitleHeight={220}
         />
     );
 });

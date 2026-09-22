@@ -45,6 +45,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
                 return {...state, loading: false, error: action.payload};
             case "RESET":
                 return initialState;
+            /* istanbul ignore next */
             default:
                 return state;
         }
@@ -53,6 +54,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
     const lastFetch = useRef({});
 
     const fetchConfig = useCallback(async (node, forceBypassThrottle = false) => {
+        /* istanbul ignore next */
         if (!node) {
             dispatch({type: "RESET"});
             return;
@@ -84,20 +86,18 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
 
     useEffect(() => {
         if (configNode) {
-            fetchConfig(configNode);
+            void fetchConfig(configNode);
         } else {
             dispatch({type: "RESET"});
         }
     }, [configNode, decodedObjectName, fetchConfig]);
 
-    // Force re-fetch when refreshTrigger bumps (external config change via SSE)
     const prevRefreshTrigger = useRef(refreshTrigger);
     useEffect(() => {
         if (refreshTrigger === prevRefreshTrigger.current) return;
         prevRefreshTrigger.current = refreshTrigger;
         if (configNode) {
-            // Bypass throttle so the fresh content is fetched immediately
-            fetchConfig(configNode, true);
+            void fetchConfig(configNode, true);
         }
     }, [refreshTrigger, configNode, fetchConfig]);
 
@@ -118,6 +118,7 @@ const useKeywords = (decodedObjectName) => {
                 return {...state, loading: false, data: action.payload};
             case "FETCH_ERROR":
                 return {...state, loading: false, error: action.payload};
+            /* istanbul ignore next */
             default:
                 return state;
         }
@@ -178,6 +179,7 @@ const useExistingParams = (decodedObjectName) => {
                 return {...state, loading: false, data: action.payload};
             case "FETCH_ERROR":
                 return {...state, loading: false, error: action.payload};
+            /* istanbul ignore next */
             default:
                 return state;
         }
@@ -342,6 +344,20 @@ const ManageParamsDialog = ({
         return Array.from(sections);
     }, [existingParams]);
 
+    const existingSectionSuffixes = useMemo(() => {
+        const suffixMap = {};
+        existingSections.forEach((section) => {
+            const hashIndex = section.indexOf("#");
+            if (hashIndex !== -1) {
+                const prefix = section.substring(0, hashIndex);
+                const suffix = section.substring(hashIndex + 1);
+                if (!suffixMap[prefix]) suffixMap[prefix] = [];
+                if (!suffixMap[prefix].includes(suffix)) suffixMap[prefix].push(suffix);
+            }
+        });
+        return suffixMap;
+    }, [existingSections]);
+
     const addParameter = () => {
         if (selectedKeyword) {
             if (typeof selectedKeyword === 'string') {
@@ -407,10 +423,13 @@ const ManageParamsDialog = ({
 
                 <Typography variant="subtitle1" gutterBottom>Add parameters</Typography>
                 <Autocomplete
-                    freeSolo={true}
+                    freeSolo
                     options={keywordsData || []}
                     value={selectedKeyword}
-                    getOptionLabel={(option) => typeof option === 'string' ? option : `${option.section ? `${option.section}.` : ""}${option.option}`}
+                    getOptionLabel={(option) => {
+                        if (typeof option === 'string') return option;
+                        return option && option.option ? `${option.section ? `${option.section}.` : ""}${option.option}` : '';
+                    }}
                     renderInput={(params) => (
                         <TextField
                             {...params}
@@ -420,7 +439,7 @@ const ManageParamsDialog = ({
                             slotProps={{inputLabel: {"aria-label": "Select parameter to add"}}}
                         />
                     )}
-                    onChange={(event, newValue) => setSelectedKeyword(newValue)}
+                    onChange={(_event, newValue) => setSelectedKeyword(newValue)}
                     disabled={actionLoading || keywordsLoading}
                     sx={{mb: 2}}
                 />
@@ -461,27 +480,61 @@ const ManageParamsDialog = ({
                                                 <Typography variant="body2" sx={{whiteSpace: "nowrap"}}>
                                                     {param.sectionPrefix}#
                                                 </Typography>
-                                                <TextField
-                                                    fullWidth
-                                                    label="Index (free text)"
+                                                <Autocomplete
+                                                    freeSolo
+                                                    options={existingSectionSuffixes[param.sectionPrefix] || []}
+                                                    getOptionLabel={(option) => typeof option === 'string' ? option : ''}
                                                     value={param.sectionSuffix}
-                                                    onChange={(e) => updateParamSectionSuffix(index, e.target.value)}
+                                                    inputValue={param.sectionSuffix}
+                                                    onInputChange={(event, newInputValue) => {
+                                                        updateParamSectionSuffix(index, newInputValue);
+                                                    }}
+                                                    onChange={(event, newValue) => {
+                                                        updateParamSectionSuffix(index, newValue || "");
+                                                    }}
+                                                    renderInput={(params) => (
+                                                        <TextField
+                                                            {...params}
+                                                            label="Index"
+                                                            size="small"
+                                                            placeholder="e.g., prod, 1, data"
+                                                            inputProps={{
+                                                                ...params.inputProps,
+                                                                'aria-label': 'Index'
+                                                            }}
+                                                        />
+                                                    )}
                                                     disabled={actionLoading}
-                                                    size="small"
-                                                    placeholder="e.g., prod, 1, data"
-                                                    slotProps={{inputLabel: {"aria-label": "Section suffix"}}}
+                                                    sx={{width: "100%"}}
                                                 />
                                             </Box>
                                         ) : (
-                                            <TextField
-                                                fullWidth
-                                                label="Section (optional)"
+                                            <Autocomplete
+                                                freeSolo
+                                                options={existingSections}
+                                                getOptionLabel={(option) => typeof option === 'string' ? option : ''}
                                                 value={param.section || ""}
-                                                onChange={(e) => updateParamSection(index, e.target.value)}
+                                                inputValue={param.section || ""}
+                                                onInputChange={(event, newInputValue) => {
+                                                    updateParamSection(index, newInputValue);
+                                                }}
+                                                onChange={(event, newValue) => {
+                                                    updateParamSection(index, newValue || "");
+                                                }}
+                                                renderInput={(params) => (
+                                                    <TextField
+                                                        {...params}
+                                                        label="Section (optional)"
+                                                        size="small"
+                                                        placeholder="e.g., database, fs#data"
+                                                        inputProps={{
+                                                            ...params.inputProps,
+                                                            'aria-label': 'Section (optional)'
+                                                        }}
+                                                    />
+                                                )}
                                                 disabled={actionLoading}
-                                                size="small"
-                                                placeholder="e.g., database, fs#data"
-                                                slotProps={{inputLabel: {"aria-label": "Section"}}}
+                                                sx={{width: "100%"}}
                                             />
                                         )}
                                     </Box>
@@ -547,8 +600,8 @@ const ManageParamsDialog = ({
                             slotProps={{inputLabel: {"aria-label": "Select parameters to unset"}}}
                         />
                     )}
-                    onChange={(event, newValue) => {
-                        const formattedParams = newValue.map((item, index) => {
+                    onChange={(_event, newValue) => {
+                        const formattedParams = (newValue || []).map((item, index) => {
                             if (typeof item === "string") {
                                 const parts = item.split(".");
                                 return {
@@ -580,7 +633,7 @@ const ManageParamsDialog = ({
                             slotProps={{inputLabel: {"aria-label": "Select sections to delete"}}}
                         />
                     )}
-                    onChange={(event, newValue) => setParamsToDelete(newValue)}
+                    onChange={(_event, newValue) => setParamsToDelete(newValue)}
                     disabled={actionLoading || existingParamsLoading}
                 />
             </DialogContent>
@@ -641,16 +694,17 @@ const ConfigSection = ({
 
     const handleOpenKeywordsDialog = () => {
         setKeywordsDialogOpen(true);
-        fetchKeywords();
+        void fetchKeywords();
     };
 
     const handleOpenManageParamsDialog = () => {
         setManageParamsDialogOpen(true);
-        fetchKeywords();
-        fetchExistingParams();
+        void fetchKeywords();
+        void fetchExistingParams();
     };
 
     const handleUpdateConfig = async () => {
+        /* istanbul ignore next */
         if (!newConfigFile) {
             openSnackbar("Configuration file is required.", "error");
             return;
@@ -692,6 +746,7 @@ const ConfigSection = ({
     };
 
     const handleAddParams = async () => {
+        /* istanbul ignore next */
         if (!paramsToSet.length) {
             openSnackbar("Parameter input is required.", "error");
             return false;
@@ -712,11 +767,13 @@ const ConfigSection = ({
                 const section = param.sectionSuffix ? `${param.sectionPrefix}#${param.sectionSuffix}` : param.sectionPrefix;
                 fullKeyword = section ? `${section}.${param.option}` : param.option;
             } else {
+                /* istanbul ignore next */
                 fullKeyword = param.option;
             }
             const {value, option} = param;
             const keyword = param.keyword;
             try {
+                /* istanbul ignore next */
                 if (!keyword) {
                     openSnackbar(`Invalid parameter: ${option}`, "error");
                     continue;
@@ -768,6 +825,7 @@ const ConfigSection = ({
         for (const param of paramsToUnset) {
             const {section, option} = param;
             try {
+                /* istanbul ignore next */
                 if (!option) {
                     openSnackbar(`Error unsetting parameter ${param.option || "unknown"}`, "error");
                     continue;

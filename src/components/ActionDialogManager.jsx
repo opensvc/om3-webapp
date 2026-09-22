@@ -21,17 +21,17 @@ import {
 import logger from '../utils/logger.js';
 
 // ConsoleDialog component for ActionDialogManager
-const ConsoleDialog = ({
-                           open,
-                           onClose,
-                           onConfirm,
-                           seats,
-                           setSeats,
-                           greetTimeout,
-                           setGreetTimeout,
-                           disabled,
-                           pendingAction
-                       }) => (
+export const ConsoleDialog = ({
+                                  open,
+                                  onClose,
+                                  onConfirm,
+                                  seats,
+                                  setSeats,
+                                  greetTimeout,
+                                  setGreetTimeout,
+                                  disabled,
+                                  pendingAction
+                              }) => (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
         <DialogTitle>Open Console</DialogTitle>
         <DialogContent>
@@ -92,7 +92,7 @@ const ConsoleDialog = ({
         </DialogActions>
     </Dialog>
 );
-const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled, cancelDisabled}) => {
+export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled, cancelDisabled}) => {
     const dialogTitle = typeof action === 'string' && action
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
         : 'Confirm Action';
@@ -415,10 +415,17 @@ const ActionDialogManager = ({
             setLastAction(action);
         }
     }, [pendingAction, supportedActions, onClose, lastAction]);
-    if (!pendingAction || !pendingAction.action) return null;
+
+    // Garde cohérente avec useEffect : rejeter les pendingAction invalides
+    // et les actions non supportées.
+    if (!pendingAction || typeof pendingAction.action !== 'string' || !pendingAction.action) {
+        return null;
+    }
     const action = pendingAction.action.toLowerCase();
+    if (!supportedActions.includes(action)) {
+        return null;
+    }
     const config = dialogConfig[action] || dialogConfig.simpleConfirm;
-    if (!config) return null;
     const Component = config.component;
     const props = {...config.props, open: true, disabled: false};
     return <Component key={action} {...props} />;

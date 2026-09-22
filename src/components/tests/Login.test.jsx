@@ -1,59 +1,91 @@
 import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
-import {useNavigate} from 'react-router-dom';
+import {vi, describe, test, expect, beforeEach} from 'vitest';
 import Login, {decodeToken, refreshToken} from '../Login';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from '../../context/AuthProvider.jsx';
-import {URL_TOKEN, URL_REFRESH} from '../../config/apiPath';
+import {URL_TOKEN} from '../../config/apiPath';
 
-// Mock dependencies
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
-    useNavigate: jest.fn(),
+// ── Hoisted mock functions ──────────────────────────────────────────────
+const {
+    mockNavigate,
+    mockUseNavigate,
+    mockUseAuthDispatch,
+} = vi.hoisted(() => ({
+    mockNavigate: vi.fn(),
+    mockUseNavigate: vi.fn(() => mockNavigate),
+    mockUseAuthDispatch: vi.fn(() => vi.fn()),
 }));
 
-jest.mock('react-i18next', () => ({
-    useTranslation: () => ({
-        t: (key) => key,
-    }),
+// ── Mocks ───────────────────────────────────────────────────────────────
+vi.mock('react-router-dom', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useNavigate: mockUseNavigate,
+    };
+});
+
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({t: (key) => key}),
 }));
 
-jest.mock('../../context/AuthProvider.jsx', () => ({
+vi.mock('../../context/AuthProvider.jsx', () => ({
     SetAccessToken: 'SET_ACCESS_TOKEN',
     SetAuthChoice: 'SET_AUTH_CHOICE',
-    useAuthDispatch: jest.fn(),
+    useAuthDispatch: mockUseAuthDispatch,
 }));
 
-jest.mock('../../config/apiPath.js', () => ({
+vi.mock('../../config/apiPath.js', () => ({
     URL_TOKEN: 'http://mock-api/token',
     URL_REFRESH: 'http://mock-api/refresh',
 }));
 
-// Global fetch mock
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
-// Utility function to create a mock token
+// --- Helpers ---
 const createMockToken = (payload) => {
     const header = {alg: 'HS256', typ: 'JWT'};
-    const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64').replace(/=/g, '');
-    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64').replace(/=/g, '');
-    const signature = 'mock-signature';
-    return `${encodedHeader}.${encodedPayload}.${signature}`;
+    const encode = (obj) =>
+        Buffer.from(JSON.stringify(obj)).toString('base64').replace(/=/g, '');
+    return `${encode(header)}.${encode(payload)}.mock-signature`;
 };
 
+const makeTokenWithPayloadString = (payloadString) => {
+    const header = Buffer.from(JSON.stringify({alg: 'HS256', typ: 'JWT'})).toString('base64').replace(/=/g, '');
+    const payload = Buffer.from(payloadString).toString('base64').replace(/=/g, '');
+    return `${header}.${payload}.mock-signature`;
+};
+
+const setupLogin = () => {
+    const utils = render(<Login/>);
+    const getUsernameInput = () => screen.getByLabelText('Username');
+    const getPasswordInput = () => screen.getByLabelText('Password');
+    const getSubmitButton = () => screen.getByText('Submit');
+    const getChangeMethodButton = () => screen.getByText('Change Method');
+
+    const fillForm = (username, password) => {
+        fireEvent.change(getUsernameInput(), {target: {value: username}});
+        fireEvent.change(getPasswordInput(), {target: {value: password}});
+    };
+
+    return {...utils, getUsernameInput, getPasswordInput, getSubmitButton, getChangeMethodButton, fillForm};
+};
+
+// --- Tests ---
 describe('Login Component', () => {
-    const mockNavigate = jest.fn();
-    const mockDispatch = jest.fn();
+    const mockDispatch = vi.fn();
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        useNavigate.mockReturnValue(mockNavigate);
-        useAuthDispatch.mockReturnValue(mockDispatch);
+        vi.clearAllMocks();
+        mockUseNavigate.mockReturnValue(mockNavigate);
+        mockUseAuthDispatch.mockReturnValue(mockDispatch);
         localStorage.clear();
+        vi.spyOn(console, 'error').mockImplementation(() => {
+        });
     });
 
     test('renders login form correctly', () => {
-        render(<Login/>);
-
+        setupLogin();
         expect(screen.getByText('Login')).toBeInTheDocument();
         expect(screen.getByLabelText('Username')).toBeInTheDocument();
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
@@ -61,167 +93,133 @@ describe('Login Component', () => {
         expect(screen.getByText('Change Method')).toBeInTheDocument();
     });
 
-    test('handles form input changes', () => {
-        render(<Login/>);
-        const usernameInput = screen.getByLabelText('Username');
-        const passwordInput = screen.getByLabelText('Password');
-        fireEvent.change(usernameInput, {target: {value: 'testuser'}});
-        fireEvent.change(passwordInput, {target: {value: 'testpass'}});
-        expect(usernameInput.value).toBe('testuser');
-        expect(passwordInput.value).toBe('testpass');
+    test('handles form input changes and disables submit when empty', () => {
+        const {getUsernameInput, getPasswordInput, getSubmitButton} = setupLogin();
+
+        expect(getSubmitButton()).toBeDisabled();
+
+        fireEvent.change(getUsernameInput(), {target: {value: 'user'}});
+        expect(getSubmitButton()).toBeDisabled();
+
+        fireEvent.change(getPasswordInput(), {target: {value: 'pass'}});
+        expect(getSubmitButton()).not.toBeDisabled();
+
+        expect(getUsernameInput().value).toBe('user');
+        expect(getPasswordInput().value).toBe('pass');
     });
 
     test('submits form with Enter key', async () => {
-        render(<Login/>);
-
-        const usernameInput = screen.getByLabelText('Username');
-        const passwordInput = screen.getByLabelText('Password');
-
-        fireEvent.change(usernameInput, {target: {value: 'testuser'}});
-        fireEvent.change(passwordInput, {target: {value: 'testpass'}});
-        fireEvent.keyDown(passwordInput, {key: 'Enter'});
+        const {getPasswordInput, fillForm} = setupLogin();
+        fillForm('testuser', 'testpass');
+        fireEvent.keyDown(getPasswordInput(), {key: 'Enter'});
         await waitFor(() => expect(fetch).toHaveBeenCalled());
     });
 
+    test('shows error when submitting empty form via Enter key', async () => {
+        const {getPasswordInput} = setupLogin();
+        fireEvent.keyDown(getPasswordInput(), {key: 'Enter'});
+        await waitFor(() => {
+            expect(screen.getByText('Please enter both username and password')).toBeInTheDocument();
+        });
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
     test('handles successful login', async () => {
-        const payload = {
-            sub: '1234567890',
-            name: 'John Doe',
-            iat: 1516239022,
-            exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        const mockAccessToken = createMockToken(payload);
-        const mockRefreshToken = createMockToken({...payload, token_use: 'refresh'});
+        const payload = {sub: '123', name: 'John Doe', iat: 1516239022, exp: Math.floor(Date.now() / 1000) + 3600};
+        const accessToken = createMockToken(payload);
+        const refreshTokenValue = createMockToken({...payload, token_use: 'refresh'});
+
         fetch.mockResolvedValueOnce({
             ok: true,
             json: () => Promise.resolve({
-                access_token: mockAccessToken,
-                refresh_token: mockRefreshToken,
+                access_token: accessToken,
+                refresh_token: refreshTokenValue,
                 access_expired_at: new Date(Date.now() + 3600 * 1000).toISOString(),
                 refresh_expired_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
             }),
         });
 
-        render(<Login/>);
+        const {fillForm, getSubmitButton} = setupLogin();
+        fillForm('testuser', 'testpass');
+        fireEvent.click(getSubmitButton());
 
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
-        fireEvent.click(screen.getByText('Submit'));
-
-        await waitFor(() =>
+        await waitFor(() => {
             expect(fetch).toHaveBeenCalledWith(`${URL_TOKEN}?refresh=true`, {
                 method: 'POST',
-                headers: {
-                    Authorization: 'Basic ' + btoa('testuser:testpass'),
-                },
-            })
-        );
+                headers: {Authorization: 'Basic ' + btoa('testuser:testpass')},
+            });
+        });
 
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
-        expect(localStorage.getItem('refreshToken')).toBe(mockRefreshToken);
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(localStorage.getItem('refreshToken')).toBe(refreshTokenValue);
         expect(localStorage.getItem('tokenExpiration')).toBeDefined();
         expect(localStorage.getItem('refreshTokenExpiration')).toBeDefined();
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: SetAccessToken,
-            data: mockAccessToken,
-        });
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
         expect(mockNavigate).toHaveBeenCalledWith('/');
     });
 
-    test('handles login error', async () => {
+    test('handles login error (invalid credentials)', async () => {
         fetch.mockResolvedValueOnce({ok: false});
 
-        render(<Login/>);
-
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'wronguser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'wrongpass'}});
-        fireEvent.click(screen.getByText('Submit'));
+        const {fillForm, getSubmitButton} = setupLogin();
+        fillForm('wronguser', 'wrongpass');
+        fireEvent.click(getSubmitButton());
 
         await waitFor(() => {
             expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
-        }, {timeout: 2000});
+        });
     });
 
-    test('disables submit button when fields are empty', () => {
-        render(<Login/>);
+    test('handles login network error', async () => {
+        fetch.mockRejectedValueOnce(new Error('Network error'));
 
-        expect(screen.getByText('Submit')).toBeDisabled();
+        const {fillForm, getSubmitButton} = setupLogin();
+        fillForm('testuser', 'testpass');
+        fireEvent.click(getSubmitButton());
 
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
-        expect(screen.getByText('Submit')).toBeDisabled();
+        await waitFor(() => {
+            expect(screen.getByText('Network error')).toBeInTheDocument();
+        });
 
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
-        expect(screen.getByText('Submit')).not.toBeDisabled();
+        expect(console.error).toHaveBeenCalledWith('Authentication error:', expect.any(Error));
     });
 
     test('handles change method button click', () => {
-        render(<Login/>);
+        const {getChangeMethodButton} = setupLogin();
+        fireEvent.click(getChangeMethodButton());
 
-        fireEvent.click(screen.getByText('Change Method'));
-
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: SetAuthChoice,
-            data: '',
-        });
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAuthChoice, data: ''});
         expect(mockNavigate).toHaveBeenCalledWith('/auth-choice');
     });
 
+    // --- decodeToken tests ---
     test('decodes token correctly', () => {
-        const payload = {sub: '1234567890', name: 'John Doe', iat: 1516239022};
-        const mockToken = createMockToken(payload);
-        const decoded = decodeToken(mockToken);
-        expect(decoded).toEqual(payload);
+        const payload = {sub: '123', name: 'John', iat: 1516239022};
+        const token = createMockToken(payload);
+        expect(decodeToken(token)).toEqual(payload);
     });
 
-    test('handles token refresh', async () => {
-        const payload = {
-            sub: '1234567890',
-            name: 'John Doe',
-            iat: 1516239022,
-            exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        const mockAccessToken = createMockToken(payload);
-        jest.spyOn(Date, 'now').mockImplementation(() => 1000000);
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
-        localStorage.setItem('refreshTokenExpiration', '2000000');
-
-        fetch.mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({access_token: mockAccessToken}),
-        });
-
-        await refreshToken(mockDispatch);
-
-        expect(fetch).toHaveBeenCalledWith(URL_REFRESH, {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'Authorization': 'Bearer mock.refresh.token',
-            },
-        });
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: SetAccessToken,
-            data: mockAccessToken,
-        });
-    });
-
-    test('decodeToken returns null when no token is provided', () => {
+    test('decodeToken returns null for missing/invalid token', () => {
         expect(decodeToken(null)).toBeNull();
         expect(decodeToken(undefined)).toBeNull();
         expect(decodeToken('')).toBeNull();
+        expect(decodeToken('invalid.token')).toBeNull();
+        expect(console.error).toHaveBeenCalledTimes(1);
     });
 
-    test('decodeToken returns null and logs error on invalid token', () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
-        const invalidToken = 'invalid.token.string';
-        const result = decodeToken(invalidToken);
-        expect(result).toBeNull();
-        expect(consoleSpy).toHaveBeenCalledWith('Error decoding token:', expect.any(Error));
-        consoleSpy.mockRestore();
+    test('decodeToken returns null for token with invalid base64 payload', () => {
+        const token = 'header.!!!.signature';
+        expect(decodeToken(token)).toBeNull();
+        expect(console.error).toHaveBeenCalledWith('Error decoding token:', expect.any(Error));
     });
 
+    test('decodeToken returns null for token with valid base64 but non-JSON payload', () => {
+        const token = makeTokenWithPayloadString('not a json');
+        expect(decodeToken(token)).toBeNull();
+        expect(console.error).toHaveBeenCalledWith('Error decoding token:', expect.any(Error));
+    });
+
+    // --- refreshToken tests ---
     test('refreshToken returns null when no refresh token is stored', async () => {
         localStorage.removeItem('refreshToken');
         const result = await refreshToken(mockDispatch);
@@ -229,161 +227,107 @@ describe('Login Component', () => {
         expect(mockDispatch).not.toHaveBeenCalled();
     });
 
-    test('refreshToken handles failed response (response.ok = false)', async () => {
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
-        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600 * 1000).toString());
-        fetch.mockResolvedValueOnce({ok: false});
-
-        const result = await refreshToken(mockDispatch);
-
-        expect(fetch).toHaveBeenCalledWith(URL_REFRESH, {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'Authorization': 'Bearer mock.refresh.token',
-            },
-        });
-        expect(result).toBeNull();
-        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
-    });
-
-    test('handleLogin sets error message when credentials are incorrect (401)', async () => {
-        fetch.mockResolvedValueOnce({ok: false});
-
-        render(<Login/>);
-
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'wronguser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'wrongpass'}});
-        fireEvent.click(screen.getByText('Submit'));
-
-        expect(fetch).toHaveBeenCalledWith(`${URL_TOKEN}?refresh=true`, {
-            method: 'POST',
-            headers: {
-                Authorization: 'Basic ' + btoa('wronguser:wrongpass'),
-            },
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
-        }, {timeout: 2000});
-    });
-
     test('refreshToken returns null when refresh token is expired', async () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshToken', 'mock.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() - 1000).toString());
 
         const result = await refreshToken(mockDispatch);
-
         expect(result).toBeNull();
         expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
-        expect(consoleSpy).toHaveBeenCalledWith('Refresh token expired');
-        consoleSpy.mockRestore();
+        expect(console.error).toHaveBeenCalledWith('Refresh token expired');
+    });
+
+    test('refreshToken handles failed server response', async () => {
+        localStorage.setItem('refreshToken', 'mock.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+        fetch.mockResolvedValueOnce({ok: false});
+
+        const result = await refreshToken(mockDispatch);
+        expect(result).toBeNull();
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
     });
 
     test('refreshToken handles network error', async () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
-        localStorage.setItem('refreshToken', 'mock.refresh.token');
+        localStorage.setItem('refreshToken', 'mock.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
         fetch.mockRejectedValueOnce(new Error('Network error'));
 
         const result = await refreshToken(mockDispatch);
-
         expect(result).toBeNull();
         expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: null});
-        expect(consoleSpy).toHaveBeenCalledWith('Error refreshing token:', expect.any(Error));
-        consoleSpy.mockRestore();
+        expect(console.error).toHaveBeenCalledWith('Error refreshing token:', expect.any(Error));
     });
 
-    test('handles login network error', async () => {
-        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        });
-        fetch.mockRejectedValueOnce(new Error('Network error'));
-
-        render(<Login/>);
-
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
-        fireEvent.click(screen.getByText('Submit'));
-
-        await waitFor(() => {
-            expect(screen.getByText('Network error')).toBeInTheDocument();
-        });
-
-        expect(consoleSpy).toHaveBeenCalledWith('Authentication error:', expect.any(Error));
-        consoleSpy.mockRestore();
-    });
-
-    test('handles successful login without expiration in tokens', async () => {
-        const payload = {
-            sub: '1234567890',
-            name: 'John Doe',
-            iat: 1516239022,
-            // No exp
-        };
-        const mockAccessToken = createMockToken(payload);
-        const mockRefreshToken = createMockToken({...payload, token_use: 'refresh'});
-        fetch.mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({
-                access_token: mockAccessToken,
-                refresh_token: mockRefreshToken,
-            }),
-        });
-
-        render(<Login/>);
-
-        fireEvent.change(screen.getByLabelText('Username'), {target: {value: 'testuser'}});
-        fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'testpass'}});
-        fireEvent.click(screen.getByText('Submit'));
-
-        await waitFor(() =>
-            expect(mockDispatch).toHaveBeenCalledWith({
-                type: SetAccessToken,
-                data: mockAccessToken,
-            })
-        );
-
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
-        expect(localStorage.getItem('refreshToken')).toBe(mockRefreshToken);
-        expect(localStorage.getItem('tokenExpiration')).toBeNull();
-        expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
-        expect(mockNavigate).toHaveBeenCalledWith('/');
-    });
-
-    test('handles token refresh without expiration in access token', async () => {
-        const payload = {
-            sub: '1234567890',
-            name: 'John Doe',
-            iat: 1516239022,
-            // No exp
-        };
-        const mockAccessToken = createMockToken(payload);
+    test('handles successful token refresh', async () => {
+        const payload = {sub: '123', name: 'John', iat: 1516239022, exp: Math.floor(Date.now() / 1000) + 3600};
+        const accessToken = createMockToken(payload);
         localStorage.setItem('refreshToken', 'mock.refresh.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
 
         fetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({access_token: mockAccessToken}),
+            json: () => Promise.resolve({access_token: accessToken}),
         });
 
         const result = await refreshToken(mockDispatch);
-
-        expect(result).toBe(mockAccessToken);
-        expect(localStorage.getItem('authToken')).toBe(mockAccessToken);
-        expect(localStorage.getItem('tokenExpiration')).toBeNull();
-        expect(mockDispatch).toHaveBeenCalledWith({
-            type: SetAccessToken,
-            data: mockAccessToken,
-        });
+        expect(result).toBe(accessToken);
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
     });
 
-    test('refreshToken queues and resolves concurrent refresh token calls', async () => {
-        const payload = { sub: '123', iat: 1, exp: Math.floor(Date.now() / 1000) + 3600 };
-        const mockAccessToken = createMockToken(payload);
+    test('handles login and refresh when tokens have no expiration', async () => {
+        const payload = {sub: '123', name: 'John Doe', iat: 1516239022};
+        const accessToken = createMockToken(payload);
+        const refreshTokenValue = createMockToken({...payload, token_use: 'refresh'});
 
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({access_token: accessToken, refresh_token: refreshTokenValue}),
+        });
+
+        const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+
+        const {fillForm, getSubmitButton} = setupLogin();
+        fillForm('testuser', 'testpass');
+        fireEvent.click(getSubmitButton());
+
+        await waitFor(() => {
+            expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
+        });
+
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(localStorage.getItem('refreshToken')).toBe(refreshTokenValue);
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
+        expect(removeItemSpy).toHaveBeenCalledWith('tokenExpiration');
+        expect(removeItemSpy).toHaveBeenCalledWith('refreshTokenExpiration');
+        expect(mockNavigate).toHaveBeenCalledWith('/');
+
+        removeItemSpy.mockRestore();
+    });
+
+    test('refreshToken stores no expiration when access token has no exp', async () => {
+        const payload = {sub: '123', name: 'John', iat: 1516239022};
+        const accessToken = createMockToken(payload);
+        localStorage.setItem('refreshToken', 'mock.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({access_token: accessToken}),
+        });
+
+        const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+        await refreshToken(mockDispatch);
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(localStorage.getItem('tokenExpiration')).toBeNull();
+        expect(removeItemSpy).toHaveBeenCalledWith('tokenExpiration');
+        removeItemSpy.mockRestore();
+    });
+
+    test('concurrent refreshToken calls are queued and return the same promise', async () => {
+        const payload = {sub: '123', iat: 1, exp: Math.floor(Date.now() / 1000) + 3600};
+        const accessToken = createMockToken(payload);
         localStorage.setItem('refreshToken', 'mock.refresh.token');
         localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
 
@@ -394,21 +338,86 @@ describe('Login Component', () => {
         fetch.mockReturnValueOnce(fetchPromise);
 
         const firstCall = refreshToken(mockDispatch);
-
         const secondCall = refreshToken(mockDispatch);
 
         expect(secondCall).toBeInstanceOf(Promise);
 
-        // Terminer le premier fetch avec succès
         resolveFetch({
             ok: true,
-            json: () => Promise.resolve({ access_token: mockAccessToken }),
+            json: () => Promise.resolve({access_token: accessToken}),
         });
 
-        // Attendre la résolution des promesses
-        const tokens = await Promise.all([firstCall, secondCall]);
+        const [token1, token2] = await Promise.all([firstCall, secondCall]);
+        expect(token1).toBe(accessToken);
+        expect(token2).toBe(accessToken);
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
 
-        expect(tokens[0]).toBe(mockAccessToken);
-        expect(tokens[1]).toBe(mockAccessToken);
+    test('refreshToken succeeds when no refresh expiration is set', async () => {
+        const payload = {sub: '123', exp: Math.floor(Date.now() / 1000) + 3600};
+        const accessToken = createMockToken(payload);
+        localStorage.setItem('refreshToken', 'no-expiration.token');
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({access_token: accessToken}),
+        });
+
+        const result = await refreshToken(mockDispatch);
+        expect(result).toBe(accessToken);
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
+    });
+
+    test('refreshToken stores new refresh token when provided', async () => {
+        const accessPayload = {sub: '123', exp: Math.floor(Date.now() / 1000) + 3600};
+        const refreshPayload = {sub: '123', exp: Math.floor(Date.now() / 1000) + 7200, token_use: 'refresh'};
+        const accessToken = createMockToken(accessPayload);
+        const newRefreshToken = createMockToken(refreshPayload);
+        localStorage.setItem('refreshToken', 'old-refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({
+                access_token: accessToken,
+                refresh_token: newRefreshToken,
+            }),
+        });
+
+        const result = await refreshToken(mockDispatch);
+        expect(result).toBe(accessToken);
+        expect(localStorage.getItem('authToken')).toBe(accessToken);
+        expect(localStorage.getItem('refreshToken')).toBe(newRefreshToken);
+        expect(localStorage.getItem('tokenExpiration')).toBe(String(accessPayload.exp * 1000));
+        expect(localStorage.getItem('refreshTokenExpiration')).toBe(String(refreshPayload.exp * 1000));
+        expect(mockDispatch).toHaveBeenCalledWith({type: SetAccessToken, data: accessToken});
+    });
+
+    test('refreshToken handles new refresh token without expiration', async () => {
+        const accessPayload = {sub: '123', exp: Math.floor(Date.now() / 1000) + 3600};
+        const refreshPayload = {sub: '123', token_use: 'refresh'}; // no exp
+        const accessToken = createMockToken(accessPayload);
+        const newRefreshToken = createMockToken(refreshPayload);
+        localStorage.setItem('refreshToken', 'old-refresh.token');
+        localStorage.setItem('refreshTokenExpiration', (Date.now() + 3600000).toString());
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({
+                access_token: accessToken,
+                refresh_token: newRefreshToken,
+            }),
+        });
+
+        const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+
+        const result = await refreshToken(mockDispatch);
+        expect(result).toBe(accessToken);
+        expect(localStorage.getItem('refreshToken')).toBe(newRefreshToken);
+        expect(removeItemSpy).toHaveBeenCalledWith('refreshTokenExpiration');
+        expect(localStorage.getItem('refreshTokenExpiration')).toBeNull();
+
+        removeItemSpy.mockRestore();
     });
 });

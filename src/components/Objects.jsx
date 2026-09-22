@@ -331,7 +331,7 @@ const TableRowComponent = React.memo(({
     }, []);
 
     return (
-        <TableRow onClick={handleRowClick} sx={{cursor: "pointer"}}>
+        <TableRow onClick={handleRowClick} hover sx={{cursor: "pointer"}}>
             <TableCell sx={{
                 padding: "16px 0px 16px 16px",
                 minWidth: "60px",
@@ -944,7 +944,7 @@ const Objects = () => {
 
     return (
         <Box sx={{
-            height: "100vh",
+            height: "100%",
             bgcolor: "background.default",
             display: "flex",
             flexDirection: "column",
@@ -1000,7 +1000,7 @@ const Objects = () => {
                             )}
                         </Box>
 
-                        <Collapse in={showFilters} sx={{width: '100%'}}>
+                        <Collapse in={!isMobile || showFilters} unmountOnExit sx={{width: '100%'}}>
                             <Grid container spacing={2} sx={{mb: 2}}>
                                 <Grid item xs={12} sm={6} md={4} lg={3}>
                                     <FormControl fullWidth size={isMobile ? "small" : "medium"}>

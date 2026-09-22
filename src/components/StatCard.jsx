@@ -1,7 +1,15 @@
 import React, {memo} from 'react';
 import {Paper, Typography, Box, CircularProgress} from "@mui/material";
 
-const StatCard = memo(({title, value, subtitle, onClick, dynamicHeight = false, isLoading = false}) => {
+const StatCard = memo(({
+                           title,
+                           value,
+                           subtitle,
+                           onClick,
+                           dynamicHeight = false,
+                           isLoading = false,
+                           maxSubtitleHeight = 160
+                       }) => {
     const handleClick = (e) => {
         if (onClick && !isLoading) onClick(e);
     };
@@ -9,21 +17,26 @@ const StatCard = memo(({title, value, subtitle, onClick, dynamicHeight = false, 
     return (
         <Paper
             elevation={3}
-            sx={{
+            sx={(theme) => ({
                 p: 2,
                 height: dynamicHeight ? 'auto' : '240px',
-                minHeight: dynamicHeight ? '240px' : undefined,
+                minHeight: dynamicHeight ? '120px' : undefined,
                 display: 'flex',
                 flexDirection: 'column',
                 cursor: onClick && !isLoading ? 'pointer' : 'default',
-                transition: 'box-shadow 0.3s',
-                '&:hover': onClick && !isLoading ? {boxShadow: 6} : {},
+                transition: 'box-shadow 0.3s ease, background-color 0.3s ease, border-color 0.3s ease',
+                border: '2px solid transparent',
+                '&:hover': onClick && !isLoading ? {
+                    boxShadow: theme.shadows[12],
+                    backgroundColor: theme.palette.action.hover,
+                    borderColor: theme.palette.primary.main,
+                } : {},
                 borderRadius: 2,
                 textAlign: 'center',
                 opacity: isLoading ? 0.7 : 1,
                 position: 'relative',
                 overflow: 'hidden'
-            }}
+            })}
             onClick={handleClick}
         >
             {isLoading && (
@@ -38,19 +51,29 @@ const StatCard = memo(({title, value, subtitle, onClick, dynamicHeight = false, 
             {subtitle && (
                 <Box
                     sx={{
-                        flex: 1,
+                        flex: dynamicHeight ? 'none' : 1,
                         minHeight: 0,
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'flex-end'
                     }}
-                    onClick={(e) => e.stopPropagation()}
                 >
                     <Box
                         sx={{
-                            maxHeight: '100%',
+                            maxHeight: dynamicHeight ? `${maxSubtitleHeight}px` : '100%',
                             overflowY: 'auto',
-                            WebkitOverflowScrolling: 'touch'
+                            WebkitOverflowScrolling: 'touch',
+                            pr: 0.5,
+                            '&::-webkit-scrollbar': {
+                                width: '4px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                                background: 'transparent',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                                background: 'rgba(0,0,0,0.2)',
+                                borderRadius: '2px',
+                            },
                         }}
                     >
                         {typeof subtitle === 'string' ? (

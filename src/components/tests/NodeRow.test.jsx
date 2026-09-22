@@ -3,7 +3,6 @@ import {render, screen, fireEvent, within} from '@testing-library/react';
 import NodeRow from '../NodeRow';
 import '@testing-library/jest-dom';
 
-// Keep mocks for Wifi / AcUnit
 jest.mock('@mui/icons-material', () => {
     const Wifi = (props) => <span {...props} aria-label="Daemon node indicator"/>;
     const AcUnit = (props) => <span {...props} aria-label="Frozen indicator"/>;
@@ -35,21 +34,9 @@ jest.mock('../../constants/actions', () => ({
 describe('NodeRow Component', () => {
     const defaultProps = {
         nodename: 'node1',
-        stats: {
-            score: 85,
-            load_15m: 1.5,
-            mem_avail: 60,
-            swap_avail: 75,
-        },
-        status: {
-            frozen_at: null,
-            agent: 'v1.2.3',
-            booted_at: null,
-        },
-        monitor: {
-            state: 'running',
-            updated_at: null,
-        },
+        stats: {score: 85, load_15m: 1.5, mem_avail: 60, swap_avail: 75},
+        status: {frozen_at: null, agent: 'v1.2.3', booted_at: null},
+        monitor: {state: 'running', updated_at: null},
         isSelected: false,
         daemonNodename: 'node2',
         onSelect: jest.fn(),
@@ -151,7 +138,6 @@ describe('NodeRow Component', () => {
 
     test('renders LinearProgress with correct value and color for load_15m', () => {
         render(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
-        // eslint-disable-next-line testing-library/no-node-access
         const progress = within(screen.getByText('5').closest('td')).getByRole('progressbar');
         expect(progress).toHaveAttribute('aria-valuenow', '100');
         expect(progress).toHaveClass('MuiLinearProgress-colorError');
@@ -159,7 +145,6 @@ describe('NodeRow Component', () => {
 
     test('renders LinearProgress with correct value and color for mem_avail', () => {
         render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
-        // eslint-disable-next-line testing-library/no-node-access
         const progress = within(screen.getByText('10%').closest('td')).getByRole('progressbar');
         expect(progress).toHaveAttribute('aria-valuenow', '10');
         expect(progress).toHaveClass('MuiLinearProgress-colorError');
@@ -175,7 +160,6 @@ describe('NodeRow Component', () => {
     test('calls onAction and onMenuClose when menu item is clicked', async () => {
         const anchorEl = document.createElement('div');
         render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-
         const menu = await screen.findByRole('menu', {}, {timeout: 3000});
         const item = within(menu).getByRole('menuitem', {name: /Freeze action/i});
         fireEvent.click(item);
@@ -188,18 +172,12 @@ describe('NodeRow Component', () => {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
             configurable: true,
         });
-
         render(<NodeRow {...defaultProps} />);
-
         const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
         expect(menuButton).toBeInTheDocument();
-
-        // Mock getBoundingClientRect to trigger calculation
         menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-
-        fireEvent.click(menuButton); // triggers handleMenuOpen
+        fireEvent.click(menuButton);
         jest.runAllTimers();
-
         expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
     });
 
@@ -231,11 +209,9 @@ describe('NodeRow Component', () => {
     test('onMenuClose is triggered when menu is closed via onClose prop', async () => {
         const anchorEl = document.createElement('div');
         render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-
         const menu = await screen.findByRole('menu', {}, {timeout: 3000});
         fireEvent.keyDown(menu, {key: 'Escape'});
         expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
-
         fireEvent.click(document.body);
         expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
     });
@@ -246,56 +222,51 @@ describe('NodeRow Component', () => {
     });
 
     test('filters menu items correctly when node is frozen', () => {
-        render(
-            <NodeRow
-                {...defaultProps}
-                status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}
-            />
-        );
-
-        // When frozen, freeze action should not be available
+        render(<NodeRow {...defaultProps} status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}/>);
         const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
         fireEvent.click(menuButton);
-
         expect(defaultProps.onMenuOpen).toHaveBeenCalled();
     });
 
     test('filters menu items correctly when node is not frozen', () => {
-        render(
-            <NodeRow
-                {...defaultProps}
-                status={{frozen_at: null, agent: 'v1.2.3'}}
-            />
-        );
-
-        // When not frozen, unfreeze action should not be available
+        render(<NodeRow {...defaultProps} status={{frozen_at: null, agent: 'v1.2.3'}}/>);
         const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
         fireEvent.click(menuButton);
-
         expect(defaultProps.onMenuOpen).toHaveBeenCalled();
     });
 
     describe('booted_at column', () => {
-
         test('renders formatted date when booted_at is valid', () => {
-            render(
-                <NodeRow
-                    {...defaultProps}
-                    status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}
-                />
-            );
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}/>);
             expect(screen.getByText('2h ago')).toBeInTheDocument();
         });
 
         test('renders tooltip with full date when booted_at is valid', () => {
-            render(
-                <NodeRow
-                    {...defaultProps}
-                    status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}
-                />
-            );
-
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}/>);
             expect(screen.getByText('2h ago')).toBeInTheDocument();
+        });
+
+        test('renders "Xd ago" when booted_at is within 7 days', () => {
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '2022-12-30T12:00:00Z'}}/>);
+            expect(screen.getByText('2d ago')).toBeInTheDocument();
+        });
+
+        test('renders locale date when booted_at is older than 7 days', () => {
+            const oldDate = '2022-12-24T12:00:00Z';
+            const expectedDateString = new Date(oldDate).toLocaleDateString();
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: oldDate}}/>);
+            expect(screen.getByText(expectedDateString)).toBeInTheDocument();
+        });
+
+        test('renders "Just now" when booted_at is less than a minute ago', () => {
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '2023-01-01T11:59:30Z'}}/>);
+            expect(screen.getByText('Just now')).toBeInTheDocument();
+        });
+
+        test('renders "-" when booted_at equals the zero-value date', () => {
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '0001-01-01T00:00:00Z'}}/>);
+            const cells = screen.getAllByRole('cell');
+            expect(cells[8]).toHaveTextContent('-');
         });
     });
 
@@ -306,13 +277,35 @@ describe('NodeRow Component', () => {
         });
 
         test('renders formatted date when updated_at is valid', () => {
-            render(
-                <NodeRow
-                    {...defaultProps}
-                    monitor={{...defaultProps.monitor, updated_at: '2023-01-01T11:30:00Z'}}
-                />
-            );
+            render(<NodeRow {...defaultProps}
+                            monitor={{...defaultProps.monitor, updated_at: '2023-01-01T11:30:00Z'}}/>);
             expect(screen.getByText('30m ago')).toBeInTheDocument();
+        });
+
+        test('renders "Xd ago" when updated_at is within 7 days', () => {
+            render(<NodeRow {...defaultProps}
+                            monitor={{...defaultProps.monitor, updated_at: '2022-12-30T12:00:00Z'}}/>);
+            expect(screen.getByText('2d ago')).toBeInTheDocument();
+        });
+
+        test('renders locale date when updated_at is older than 7 days', () => {
+            const oldDate = '2022-12-24T12:00:00Z';
+            const expectedDateString = new Date(oldDate).toLocaleDateString();
+            render(<NodeRow {...defaultProps} monitor={{...defaultProps.monitor, updated_at: oldDate}}/>);
+            expect(screen.getByText(expectedDateString)).toBeInTheDocument();
+        });
+
+        test('renders "Just now" when updated_at is less than a minute ago', () => {
+            render(<NodeRow {...defaultProps}
+                            monitor={{...defaultProps.monitor, updated_at: '2023-01-01T11:59:30Z'}}/>);
+            expect(screen.getByText('Just now')).toBeInTheDocument();
+        });
+
+        test('renders "-" when updated_at equals the zero-value date', () => {
+            render(<NodeRow {...defaultProps}
+                            monitor={{...defaultProps.monitor, updated_at: '0001-01-01T00:00:00Z'}}/>);
+            const cells = screen.getAllByRole('cell');
+            expect(cells[9]).toHaveTextContent('-');
         });
     });
 
@@ -326,11 +319,8 @@ describe('NodeRow Component', () => {
     test('handles zoom level calculation correctly', () => {
         const originalDevicePixelRatio = window.devicePixelRatio;
         Object.defineProperty(window, 'devicePixelRatio', {value: 2, configurable: true});
-
         render(<NodeRow {...defaultProps} />);
-
         expect(window.devicePixelRatio).toBe(2);
-
         Object.defineProperty(window, 'devicePixelRatio', {value: originalDevicePixelRatio});
     });
 
@@ -339,19 +329,15 @@ describe('NodeRow Component', () => {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
             configurable: true,
         });
-
         render(<NodeRow {...defaultProps} />);
-
         expect(screen.getByText('node1')).toBeInTheDocument();
     });
 
     test('renders load_15m progress bar with different colors based on value', () => {
         const {rerender} = render(<NodeRow {...defaultProps} stats={{load_15m: 1}}/>);
         expect(screen.getByText('1')).toBeInTheDocument();
-
         rerender(<NodeRow {...defaultProps} stats={{load_15m: 3}}/>);
         expect(screen.getByText('3')).toBeInTheDocument();
-
         rerender(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
         expect(screen.getByText('5')).toBeInTheDocument();
     });
@@ -361,7 +347,6 @@ describe('NodeRow Component', () => {
         expect(screen.getByText('10%')).toBeInTheDocument();
         rerender(<NodeRow {...defaultProps} stats={{mem_avail: 30}}/>);
         expect(screen.getByText('30%')).toBeInTheDocument();
-
         rerender(<NodeRow {...defaultProps} stats={{mem_avail: 80}}/>);
         expect(screen.getByText('80%')).toBeInTheDocument();
     });
@@ -371,21 +356,15 @@ describe('NodeRow Component', () => {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
             configurable: true,
         });
-
-        // Mock window scroll properties
         Object.defineProperty(window, 'scrollY', {value: 100, configurable: true});
         Object.defineProperty(window, 'pageYOffset', {value: 100, configurable: true});
         Object.defineProperty(window, 'scrollX', {value: 50, configurable: true});
         Object.defineProperty(window, 'pageXOffset', {value: 50, configurable: true});
-
         render(<NodeRow {...defaultProps} />);
-
         const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
         menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-
         fireEvent.click(menuButton);
         jest.runAllTimers();
-
         expect(defaultProps.onMenuOpen).toHaveBeenCalled();
     });
 
@@ -394,66 +373,77 @@ describe('NodeRow Component', () => {
             value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
             configurable: true,
         });
-
-        // Temporarily remove scroll properties
         const originalScrollY = window.scrollY;
         const originalPageYOffset = window.pageYOffset;
         const originalScrollX = window.scrollX;
         const originalPageXOffset = window.pageXOffset;
-
-        Object.defineProperty(window, 'scrollY', {
-            configurable: true,
-            writable: true,
-            value: undefined,
-        });
-        Object.defineProperty(window, 'pageYOffset', {
-            configurable: true,
-            writable: true,
-            value: undefined,
-        });
-        Object.defineProperty(window, 'scrollX', {
-            configurable: true,
-            writable: true,
-            value: undefined,
-        });
-        Object.defineProperty(window, 'pageXOffset', {
-            configurable: true,
-            writable: true,
-            value: undefined,
-        });
-
+        Object.defineProperty(window, 'scrollY', {configurable: true, writable: true, value: undefined});
+        Object.defineProperty(window, 'pageYOffset', {configurable: true, writable: true, value: undefined});
+        Object.defineProperty(window, 'scrollX', {configurable: true, writable: true, value: undefined});
+        Object.defineProperty(window, 'pageXOffset', {configurable: true, writable: true, value: undefined});
         try {
             render(<NodeRow {...defaultProps} />);
-
             const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
             menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-
             fireEvent.click(menuButton);
             jest.runAllTimers();
-
             expect(defaultProps.onMenuOpen).toHaveBeenCalled();
         } finally {
-            // Restore original properties
-            Object.defineProperty(window, 'scrollY', {
-                configurable: true,
-                writable: true,
-                value: originalScrollY,
-            });
+            Object.defineProperty(window, 'scrollY', {configurable: true, writable: true, value: originalScrollY});
             Object.defineProperty(window, 'pageYOffset', {
                 configurable: true,
                 writable: true,
-                value: originalPageYOffset,
+                value: originalPageYOffset
             });
-            Object.defineProperty(window, 'scrollX', {
-                configurable: true,
-                writable: true,
-                value: originalScrollX,
-            });
+            Object.defineProperty(window, 'scrollX', {configurable: true, writable: true, value: originalScrollX});
             Object.defineProperty(window, 'pageXOffset', {
                 configurable: true,
                 writable: true,
-                value: originalPageXOffset,
+                value: originalPageXOffset
             });
         }
+    });
+
+    test('renders "-" when nodename is empty', () => {
+        render(<NodeRow {...defaultProps} nodename=""/>);
+        const cells = screen.getAllByRole('cell');
+        expect(cells[1]).toHaveTextContent('-');
+    });
+
+    test('does not call onMenuOpen when anchorEl is already set', () => {
+        const anchorEl = document.createElement('div');
+        const {container} = render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
+        const menuButton = container.querySelector('button[aria-label="More actions for node node1"]');
+        expect(menuButton).not.toBeNull();
+        fireEvent.click(menuButton);
+        expect(defaultProps.onMenuOpen).not.toHaveBeenCalled();
+    });
+
+    test('uses fallback zoom level when devicePixelRatio is undefined', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
+            configurable: true,
+        });
+        const originalDevicePixelRatio = window.devicePixelRatio;
+        Object.defineProperty(window, 'devicePixelRatio', {value: undefined, configurable: true});
+        render(<NodeRow {...defaultProps} />);
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
+        fireEvent.click(menuButton);
+        jest.runAllTimers();
+        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+        Object.defineProperty(window, 'devicePixelRatio', {value: originalDevicePixelRatio, configurable: true});
+    });
+
+    test('calculateMenuPosition returns early when component is unmounted', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
+            configurable: true,
+        });
+        const {unmount} = render(<NodeRow {...defaultProps} />);
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        fireEvent.click(menuButton);
+        unmount();
+        jest.runAllTimers();
     });
 });

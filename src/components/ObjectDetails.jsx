@@ -12,10 +12,10 @@ import {
     Menu,
     MenuItem,
     Typography,
-    Drawer,
     IconButton,
     TextField,
     useTheme,
+    useMediaQuery,
     Grid,
     Snackbar,
     ListItemIcon,
@@ -66,24 +66,24 @@ const ObjectDetail = () => {
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const navigate = useNavigate();
     const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const objectStatus = useEventStore((s) => s.objectStatus[decodedObjectName]);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus[decodedObjectName]);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
     const instanceConfig = useEventStore((s) => s.instanceConfig[decodedObjectName]);
-    const clearConfigUpdate = useEventStore((s) => s.clearConfigUpdate);
 
-    const [configNode, setConfigNode] = useState(null);
+    const [configNode, setConfigNode] = useState(/** @type {string | null} */ (null));
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
     const [configRefreshTrigger, setConfigRefreshTrigger] = useState(0);
 
-    const [selectedNodes, setSelectedNodes] = useState([]);
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(null);
-    const [currentNode, setCurrentNode] = useState(null);
+    const [selectedNodes, setSelectedNodes] = useState(/** @type {string[]} */ ([]));
+    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
+    const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
+    const [currentNode, setCurrentNode] = useState(/** @type {string | null} */ (null));
 
-    const [objectMenuAnchor, setObjectMenuAnchor] = useState(null);
-    const [pendingAction, setPendingAction] = useState(null);
+    const [objectMenuAnchor, setObjectMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
+    const [pendingAction, setPendingAction] = useState(/** @type {any} */ (null));
     const [actionInProgress, setActionInProgress] = useState(false);
 
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -93,7 +93,7 @@ const ObjectDetail = () => {
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
     const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
     const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
-    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(null);
+    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(/** @type {string | null} */ (null));
 
     const [seats, setSeats] = useState(1);
     const [greetTimeout, setGreetTimeout] = useState("5s");
@@ -104,14 +104,20 @@ const ObjectDetail = () => {
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
     const [initialLoading, setInitialLoading] = useState(true);
-    const [initialDataError, setInitialDataError] = useState(null);
+    const [initialDataError, setInitialDataError] = useState(/** @type {string | null} */ (null));
 
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
-    const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(null);
+    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(/** @type {string | null} */ (null));
+    const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(/** @type {string | null} */ (null));
     const [drawerWidth, setDrawerWidth] = useState(600);
     const minDrawerWidth = 300;
     const maxDrawerWidth = window.innerWidth * 0.8;
+
+    const [isResizing, setIsResizing] = useState(false);
+    const startXRef = useRef(0);
+    const startWidthRef = useRef(0);
+    const isDraggingRef = useRef(false);
+    const resizeHandleRef = useRef(/** @type {HTMLElement | null} */ (null));
 
     const objectEventTypes = useMemo(() => [
         "ObjectStatusUpdated",
@@ -127,10 +133,11 @@ const ObjectDetail = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    const isMounted = useRef(true);
-    const fallbackTimer = useRef(null);
+    const fallbackTimer = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
     const hasFallbackFired = useRef(false);
     const [fallbackCompleted, setFallbackCompleted] = useState(false);
+
+    const appBarHeight = `calc(${theme.mixins.toolbar.minHeight || 64}px + env(safe-area-inset-top, 0px))`;
 
     const objectData = useMemo(() => {
         const avail = objectStatus?.avail || "n/a";
@@ -234,11 +241,13 @@ const ObjectDetail = () => {
         }
 
         fallbackTimer.current = setTimeout(() => {
-            fetchFallbackData();
+            fetchFallbackData().catch((err) => {
+                logger.error("[ObjectDetail] fetchFallbackData failed:", err);
+            });
         }, 5000);
 
         return () => {
-            clearTimeout(fallbackTimer.current);
+            if (fallbackTimer.current) clearTimeout(fallbackTimer.current);
             closeEventSource();
         };
     }, [decodedObjectName, objectEventTypes, fetchFallbackData]);
@@ -409,14 +418,20 @@ const ObjectDetail = () => {
             return;
         }
         if (pendingAction.batch === "nodes") {
-            selectedNodes.forEach(node => node && postNodeAction({node, action: pendingAction.action}).catch(() => {
-            }));
+            selectedNodes.forEach(node => {
+                if (!node) return;
+                postNodeAction({node, action: pendingAction.action}).catch((err) => {
+                    logger.error("[ObjectDetail] postNodeAction failed:", err);
+                });
+            });
             setSelectedNodes([]);
         } else if (pendingAction.node && !pendingAction.rid) {
-            postNodeAction({node: pendingAction.node, action: pendingAction.action}).catch(() => {
+            postNodeAction({node: pendingAction.node, action: pendingAction.action}).catch((err) => {
+                logger.error("[ObjectDetail] postNodeAction failed:", err);
             });
         } else {
-            postObjectAction({action: pendingAction.action}).catch(() => {
+            postObjectAction({action: pendingAction.action}).catch((err) => {
+                logger.error("[ObjectDetail] postObjectAction failed:", err);
             });
         }
         setPendingAction(null);
@@ -434,7 +449,8 @@ const ObjectDetail = () => {
                 rid: pendingAction.rid,
                 seats,
                 greet_timeout: greetTimeout
-            }).catch(() => {
+            }).catch((err) => {
+                logger.error("[ObjectDetail] postConsoleAction failed:", err);
             });
         }
         setConsoleDialogOpen(false);
@@ -493,35 +509,95 @@ const ObjectDetail = () => {
         return {avail, frozen, state};
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
-    const startResizing = useCallback((e) => {
+    const filterActionsForNode = useCallback((actions, node) => {
+        const {frozen} = getNodeState(node);
+        return actions.filter(({name}) => {
+            if (name === 'freeze') return frozen !== 'frozen';
+            if (name === 'unfreeze') return frozen === 'frozen';
+            return true;
+        });
+    }, [getNodeState]);
+
+    const filterActionsForMultipleNodes = useCallback((actions, nodes) => {
+        if (!nodes || nodes.length === 0) return actions;
+        const states = nodes.map(node => getNodeState(node).frozen);
+        const allFrozen = states.every(f => f === 'frozen');
+        const allUnfrozen = states.every(f => f !== 'frozen');
+        return actions.filter(({name}) => {
+            if (name === 'freeze') return !allFrozen;
+            if (name === 'unfreeze') return !allUnfrozen;
+            return true;
+        });
+    }, [getNodeState]);
+
+    const individualFilteredActions = useMemo(() => {
+        if (!currentNode) return INSTANCE_ACTIONS;
+        return filterActionsForNode(INSTANCE_ACTIONS, currentNode);
+    }, [currentNode, filterActionsForNode]);
+
+    const batchFilteredActions = useMemo(() => {
+        return filterActionsForMultipleNodes(INSTANCE_ACTIONS, selectedNodes);
+    }, [selectedNodes, filterActionsForMultipleNodes]);
+
+    // Resize handlers (EventLogger style)
+    const handleResizeStart = useCallback((e) => {
         e.preventDefault();
-        const isTouch = e.type === 'touchstart';
-        const startX = isTouch ? e.touches[0].clientX : e.clientX;
-        const startWidth = drawerWidth;
-        const doResize = (moveEvent) => {
-            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
-            const newWidth = startWidth + (startX - currentX);
-            if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) setDrawerWidth(newWidth);
-        };
-        const stopResize = () => {
-            if (isTouch) {
-                document.removeEventListener("touchmove", doResize);
-                document.removeEventListener("touchend", stopResize);
-            } else {
-                document.removeEventListener("mousemove", doResize);
-                document.removeEventListener("mouseup", stopResize);
-            }
-            document.body.style.cursor = "default";
-        };
-        if (isTouch) {
-            document.addEventListener("touchmove", doResize, {passive: false});
-            document.addEventListener("touchend", stopResize);
-        } else {
-            document.addEventListener("mousemove", doResize);
-            document.addEventListener("mouseup", stopResize);
-        }
+        e.stopPropagation();
+        isDraggingRef.current = true;
+        setIsResizing(true);
+        startXRef.current = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        startWidthRef.current = drawerWidth;
+        document.body.style.userSelect = 'none';
+        document.body.style.touchAction = 'none';
+        document.body.style.overflow = 'hidden';
         document.body.style.cursor = "ew-resize";
-    }, [drawerWidth, minDrawerWidth, maxDrawerWidth]);
+    }, [drawerWidth]);
+
+    const handleResizeMove = useCallback((e) => {
+        if (!isDraggingRef.current) return;
+        e.preventDefault();
+        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        const deltaX = startXRef.current - clientX;
+        const newWidth = startWidthRef.current + deltaX;
+        if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
+            setDrawerWidth(newWidth);
+        }
+    }, [minDrawerWidth, maxDrawerWidth]);
+
+    const handleResizeEnd = useCallback(() => {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false;
+        setIsResizing(false);
+        document.body.style.userSelect = '';
+        document.body.style.touchAction = '';
+        document.body.style.overflow = '';
+        document.body.style.cursor = "default";
+    }, []);
+
+    // Attach global listeners during resize
+    useEffect(() => {
+        if (isResizing) {
+            const onMouseMove = (e) => handleResizeMove(e);
+            const onTouchMove = (e) => handleResizeMove(e);
+            const onMouseUp = () => handleResizeEnd();
+            const onTouchEnd = () => handleResizeEnd();
+            const onTouchCancel = () => handleResizeEnd();
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('touchmove', onTouchMove, {passive: false});
+            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('touchend', onTouchEnd);
+            document.addEventListener('touchcancel', onTouchCancel);
+
+            return () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                document.removeEventListener('touchend', onTouchEnd);
+                document.removeEventListener('touchcancel', onTouchCancel);
+            };
+        }
+    }, [isResizing, handleResizeMove, handleResizeEnd]);
 
     useEffect(() => {
         let unsubscribe = null;
@@ -645,7 +721,11 @@ const ObjectDetail = () => {
                             pendingAction={pendingAction}
                             handleConfirm={handleDialogConfirm}
                             target={`object ${decodedObjectName}`}
-                            supportedActions={pendingAction?.batch === "nodes" ? INSTANCE_ACTIONS.map(a => a.name) : OBJECT_ACTIONS.map(a => a.name)}
+                            supportedActions={
+                                pendingAction?.batch === "nodes" || pendingAction?.node
+                                    ? INSTANCE_ACTIONS.map(a => a.name)
+                                    : OBJECT_ACTIONS.map(a => a.name)
+                            }
                             onClose={() => {
                                 setPendingAction(null);
                                 setConfirmDialogOpen(false);
@@ -671,7 +751,7 @@ const ObjectDetail = () => {
                     )}
 
                     <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
-                            fullWidth>
+                            fullWidth fullScreen={isMobile}>
                         <DialogTitle>Open Console</DialogTitle>
                         <DialogContent>
                             <Typography variant="body1" sx={{mb: 2}}>This will open a terminal console for the selected
@@ -700,7 +780,7 @@ const ObjectDetail = () => {
                     </Dialog>
 
                     <Dialog open={consoleUrlDialogOpen} onClose={() => setConsoleUrlDialogOpen(false)} maxWidth="sm"
-                            fullWidth>
+                            fullWidth fullScreen={isMobile}>
                         <DialogTitle>Console URL</DialogTitle>
                         <DialogContent>
                             <Box sx={{
@@ -720,7 +800,11 @@ const ObjectDetail = () => {
                             }}>
                                 <Button variant="outlined" size={window.innerWidth < 600 ? "small" : "medium"}
                                         onClick={() => {
-                                            if (currentConsoleUrl) navigator.clipboard.writeText(String(currentConsoleUrl));
+                                            if (currentConsoleUrl) {
+                                                navigator.clipboard.writeText(String(currentConsoleUrl)).catch((err) => {
+                                                    logger.error("[ObjectDetail] Failed to copy console URL:", err);
+                                                });
+                                            }
                                         }}
                                         disabled={!currentConsoleUrl}>Copy URL</Button>
                                 <Button variant="contained" size={window.innerWidth < 600 ? "small" : "medium"}
@@ -745,17 +829,36 @@ const ObjectDetail = () => {
                                     Actions on Selected Nodes ({selectedNodes.length})
                                 </Button>
                             </Box>
-                            <Menu anchorEl={actionsMenuAnchor} open={Boolean(actionsMenuAnchor)}
-                                  onClose={() => setActionsMenuAnchor(null)}
-                                  anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                                  transformOrigin={{vertical: 'top', horizontal: 'right'}} sx={{zIndex: 10000}}>
-                                {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                    <MenuItem key={name} onClick={() => handleBatchNodeActionClick(name)}>
-                                        <ListItemIcon>{icon}</ListItemIcon>
-                                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+
+                            <Menu
+                                anchorEl={actionsMenuAnchor}
+                                open={Boolean(actionsMenuAnchor)}
+                                onClose={() => setActionsMenuAnchor(null)}
+                            >
+                                {batchFilteredActions.map(({name, icon, color}) => (
+                                    <MenuItem
+                                        key={name}
+                                        onClick={() => handleBatchNodeActionClick(name)}
+                                        disabled={actionInProgress}
+                                        sx={{
+                                            color: color === "red" ? "error.main" : "inherit",
+                                            '&.Mui-disabled': {opacity: 0.5},
+                                        }}
+                                    >
+                                        <ListItemIcon
+                                            sx={{
+                                                minWidth: 40,
+                                                color: color === "red" ? "error.main" : "inherit"
+                                            }}>
+                                            {icon}
+                                        </ListItemIcon>
+                                        <ListItemText>
+                                            {name.charAt(0).toUpperCase() + name.slice(1)}
+                                        </ListItemText>
                                     </MenuItem>
                                 ))}
                             </Menu>
+
                             {nodesList.map(node => (
                                 <InstanceCard
                                     key={node}
@@ -766,7 +869,6 @@ const ObjectDetail = () => {
                                     actionInProgress={actionInProgress}
                                     setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
                                     setCurrentNode={setCurrentNode}
-                                    handleIndividualNodeActionClick={handleIndividualNodeActionClick}
                                     getColor={getColor}
                                     getNodeState={getNodeState}
                                     parseProvisionedState={parseProvisionedState}
@@ -779,14 +881,32 @@ const ObjectDetail = () => {
                                     onViewInstance={handleViewInstance}
                                 />
                             ))}
-                            <Menu anchorEl={individualNodeMenuAnchor} open={Boolean(individualNodeMenuAnchor)}
-                                  onClose={() => setIndividualNodeMenuAnchor(null)}
-                                  anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                                  transformOrigin={{vertical: 'top', horizontal: 'right'}} sx={{zIndex: 10000}}>
-                                {INSTANCE_ACTIONS.map(({name, icon}) => (
-                                    <MenuItem key={name} onClick={() => handleIndividualNodeActionClick(name)}>
-                                        <ListItemIcon>{icon}</ListItemIcon>
-                                        <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
+
+                            <Menu
+                                anchorEl={individualNodeMenuAnchor}
+                                open={Boolean(individualNodeMenuAnchor)}
+                                onClose={() => setIndividualNodeMenuAnchor(null)}
+                            >
+                                {individualFilteredActions.map(({name, icon, color}) => (
+                                    <MenuItem
+                                        key={name}
+                                        onClick={() => handleIndividualNodeActionClick(name)}
+                                        disabled={actionInProgress}
+                                        sx={{
+                                            color: color === "red" ? "error.main" : "inherit",
+                                            '&.Mui-disabled': {opacity: 0.5},
+                                        }}
+                                    >
+                                        <ListItemIcon
+                                            sx={{
+                                                minWidth: 40,
+                                                color: color === "red" ? "error.main" : "inherit"
+                                            }}>
+                                            {icon}
+                                        </ListItemIcon>
+                                        <ListItemText>
+                                            {name.charAt(0).toUpperCase() + name.slice(1)}
+                                        </ListItemText>
                                     </MenuItem>
                                 ))}
                             </Menu>
@@ -802,32 +922,73 @@ const ObjectDetail = () => {
             </Box>
 
             {logsDrawerOpen && selectedNodeForLogs && (
-                <Drawer anchor="right" open={logsDrawerOpen} variant="persistent" sx={{
-                    "& .MuiDrawer-paper": {
-                        width: `${drawerWidth}px`, maxWidth: "80vw", p: 2, boxSizing: "border-box",
-                        backgroundColor: theme.palette.background.paper, top: 0, height: "100vh",
-                        overflow: "auto", borderLeft: `1px solid ${theme.palette.divider}`,
+                <Box
+                    role="complementary"
+                    data-width={`${drawerWidth}px`}
+                    sx={{
+                        position: "fixed",
+                        top: appBarHeight,
+                        right: 0,
+                        width: `${drawerWidth}px`,
+                        maxWidth: "80vw",
+                        height: `calc(100% - ${appBarHeight})`,
+                        backgroundColor: theme.palette.background.paper,
+                        borderLeft: `1px solid ${theme.palette.divider}`,
+                        zIndex: 1200,
+                        display: "flex",
+                        flexDirection: "column",
+                        overflow: "hidden",
+                        boxShadow: theme.shadows[3],
                         transition: theme.transitions.create("width", {
                             easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.enteringScreen
-                        })
-                    }
-                }}>
-                    <Box sx={{
-                        position: "absolute", top: 0, left: 0, width: "6px", height: "100%",
-                        cursor: "ew-resize", bgcolor: theme.palette.grey[300],
-                        "&:hover": {bgcolor: theme.palette.primary.light}, transition: "background-color 0.2s"
-                    }} onMouseDown={startResizing} onTouchStart={startResizing} aria-label="Resize drawer"/>
-                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                            duration: theme.transitions.duration.enteringScreen,
+                        }),
+                    }}
+                >
+                    <Box
+                        ref={resizeHandleRef}
+                        onMouseDown={handleResizeStart}
+                        onTouchStart={handleResizeStart}
+                        sx={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "8px",
+                            height: "100%",
+                            cursor: "ew-resize",
+                            bgcolor: theme.palette.grey[300],
+                            zIndex: 10,
+                            touchAction: "none",
+                            userSelect: "none",
+                            WebkitUserSelect: "none",
+                            "&:hover": {
+                                bgcolor: theme.palette.primary.light,
+                            },
+                            "&:active": {
+                                bgcolor: theme.palette.primary.main,
+                            },
+                        }}
+                        aria-label="Resize drawer"
+                    />
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, pb: 1}}>
                         <Typography variant="h6">
                             {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
                         </Typography>
-                        <IconButton onClick={handleCloseLogsDrawer}><CloseIcon/></IconButton>
+                        <IconButton onClick={handleCloseLogsDrawer} size="large">
+                            <CloseIcon/>
+                        </IconButton>
                     </Box>
-                    <LogsViewer nodename={selectedNodeForLogs} type={selectedInstanceForLogs ? "instance" : "node"}
-                                namespace={namespace} kind={kind} instanceName={selectedInstanceForLogs}
-                                height="calc(100vh - 100px)"/>
-                </Drawer>
+                    <Box sx={{flexGrow: 1, overflow: "hidden", position: "relative"}}>
+                        <LogsViewer
+                            nodename={selectedNodeForLogs}
+                            type={selectedInstanceForLogs ? "instance" : "node"}
+                            namespace={namespace}
+                            kind={kind}
+                            instanceName={selectedInstanceForLogs}
+                            height="100%"
+                        />
+                    </Box>
+                </Box>
             )}
 
             <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}

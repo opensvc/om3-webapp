@@ -38,6 +38,9 @@ import EventLogger from "../components/EventLogger";
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
+// Actions that target the node daemon (…/daemon/action/<x>)
+const DAEMON_ACTIONS = ["stop", "restart daemon"];
+
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
@@ -227,8 +230,9 @@ const NodesTable = () => {
     };
 
     const postActionUrl = (node, action) => {
-        if (action === "restart daemon") {
-            return `${URL_NODE}/${node}/daemon/action/restart`;
+        if (DAEMON_ACTIONS.includes(action)) {
+            const daemonAction = action === "restart daemon" ? "restart" : action;
+            return `${URL_NODE}/${node}/daemon/action/${daemonAction}`;
         }
         return `${URL_NODE}/${node}/action/${action}`;
     };

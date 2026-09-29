@@ -416,8 +416,6 @@ const ActionDialogManager = ({
         }
     }, [pendingAction, supportedActions, onClose, lastAction]);
 
-    // Garde cohérente avec useEffect : rejeter les pendingAction invalides
-    // et les actions non supportées.
     if (!pendingAction || typeof pendingAction.action !== 'string' || !pendingAction.action) {
         return null;
     }

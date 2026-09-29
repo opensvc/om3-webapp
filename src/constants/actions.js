@@ -57,7 +57,6 @@ export const RESOURCE_ACTIONS = [
 ];
 
 export const NODE_ACTIONS = [
-    {name: "start", icon: <PlayArrow sx={{fontSize: 24}}/>},
     {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
     {name: "restart daemon", icon: <RestartAlt sx={{fontSize: 24}}/>},
     {name: "freeze", icon: <AcUnit sx={{fontSize: 24}}/>},

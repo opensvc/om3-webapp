@@ -319,13 +319,13 @@ describe('NodesTable', () => {
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
             await waitFor(() =>
                 expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/daemon/action/restart'),
+                    expect.stringMatching(/\/daemon\/action\/restart$/),
                     expect.objectContaining({method: 'POST'})
                 )
             );
         });
 
-        test('correct URL for standard action via menu', async () => {
+        test('correct URL for daemon stop via menu', async () => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
             const checkboxes = await screen.findAllByRole('checkbox');
@@ -337,7 +337,52 @@ describe('NodesTable', () => {
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
             await waitFor(() =>
                 expect(global.fetch).toHaveBeenCalledWith(
-                    expect.stringContaining('/action/stop'),
+                    expect.stringMatching(/\/daemon\/action\/stop$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test('correct URL for node-level freeze via menu', async () => {
+            global.fetch = vi.fn().mockResolvedValue({ok: true});
+            renderWithRouter(<NodesTable/>);
+            const checkboxes = await screen.findAllByRole('checkbox');
+            fireEvent.click(checkboxes[1]);
+            const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
+            await waitFor(() => expect(actionsBtn).toBeEnabled());
+            fireEvent.click(actionsBtn);
+            fireEvent.click(await screen.findByRole('menuitem', {name: /^Freeze$/i}));
+            fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(/\/action\/freeze$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test.each([
+            ['Asset', /\/action\/push\/asset$/],
+            ['Disk', /\/action\/push\/disk$/],
+            ['Pkg', /\/action\/push\/pkg$/],
+            ['Capabilities', /\/action\/scan\/capabilities$/],
+            ['Sysreport', /\/action\/sysreport$/],
+            ['Drain', /\/action\/drain$/],
+            ['Abort', /\/action\/abort$/],
+            ['Clear', /\/action\/clear$/],
+        ])('correct URL for %s', async (label, urlPattern) => {
+            global.fetch = vi.fn().mockResolvedValue({ok: true});
+            renderWithRouter(<NodesTable/>);
+            const checkboxes = await screen.findAllByRole('checkbox');
+            fireEvent.click(checkboxes[1]);
+            const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
+            await waitFor(() => expect(actionsBtn).toBeEnabled());
+            fireEvent.click(actionsBtn);
+            fireEvent.click(await screen.findByRole('menuitem', {name: new RegExp(`^${label}$`, 'i')}));
+            fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(urlPattern),
                     expect.any(Object)
                 )
             );
@@ -608,107 +653,104 @@ describe('NodesTable', () => {
         renderWithRouter(<NodesTable/>);
         expect(screen.getByText('node-1')).toBeInTheDocument();
     });
+    test('calculateMenuPosition with valid anchorRef (Safari)', async () => {
+        const origGetRect = Element.prototype.getBoundingClientRect;
+        const origScrollY = window.scrollY;
+        const origScrollX = window.scrollX;
+        const origDevicePixelRatio = window.devicePixelRatio;
+        const origUserAgent = navigator.userAgent;
 
-    describe('additional branch coverage', () => {
-        test('calculateMenuPosition with valid anchorRef (Safari)', async () => {
-            const origGetRect = Element.prototype.getBoundingClientRect;
-            const origScrollY = window.scrollY;
-            const origScrollX = window.scrollX;
-            const origDevicePixelRatio = window.devicePixelRatio;
-            const origUserAgent = navigator.userAgent;
+        Object.defineProperty(navigator, 'userAgent', {
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15',
+            configurable: true,
+        });
+        Object.defineProperty(window, 'devicePixelRatio', {
+            value: 2,
+            configurable: true,
+        });
+        Element.prototype.getBoundingClientRect = vi.fn(() => ({
+            bottom: 100,
+            right: 200,
+            top: 50,
+            left: 150,
+            width: 50,
+            height: 30,
+        }));
+        Object.defineProperty(window, 'scrollY', {value: 20, writable: true, configurable: true});
+        Object.defineProperty(window, 'scrollX', {value: 10, writable: true, configurable: true});
 
-            Object.defineProperty(navigator, 'userAgent', {
-                value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15',
-                configurable: true,
-            });
-            Object.defineProperty(window, 'devicePixelRatio', {
-                value: 2,
-                configurable: true,
-            });
-            Element.prototype.getBoundingClientRect = vi.fn(() => ({
-                bottom: 100,
-                right: 200,
-                top: 50,
-                left: 150,
-                width: 50,
-                height: 30,
-            }));
-            Object.defineProperty(window, 'scrollY', {value: 20, writable: true, configurable: true});
-            Object.defineProperty(window, 'scrollX', {value: 10, writable: true, configurable: true});
+        vi.resetModules();
+        const {default: NodesTableSafari} = await import('../NodesTable.jsx');
 
-            vi.resetModules();
-            const {default: NodesTableSafari} = await import('../NodesTable.jsx');
+        renderWithRouter(<NodesTableSafari/>);
 
-            renderWithRouter(<NodesTableSafari/>);
+        const checkboxes = await screen.findAllByRole('checkbox');
+        fireEvent.click(checkboxes[1]);
+        const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
+        await waitFor(() => expect(actionsBtn).toBeEnabled());
+        fireEvent.click(actionsBtn);
 
-            const checkboxes = await screen.findAllByRole('checkbox');
-            fireEvent.click(checkboxes[1]);
-            const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
-            await waitFor(() => expect(actionsBtn).toBeEnabled());
-            fireEvent.click(actionsBtn);
-
-            await act(async () => {
-                await new Promise(resolve => setTimeout(resolve, 20));
-            });
-
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-
-            Element.prototype.getBoundingClientRect = origGetRect;
-            Object.defineProperty(window, 'scrollY', {value: origScrollY, writable: true, configurable: true});
-            Object.defineProperty(window, 'scrollX', {value: origScrollX, writable: true, configurable: true});
-            Object.defineProperty(navigator, 'userAgent', {value: origUserAgent, configurable: true});
-            Object.defineProperty(window, 'devicePixelRatio', {value: origDevicePixelRatio, configurable: true});
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 20));
         });
 
-        test.each([
-            ['State', 'node-1', 'node-2'],
-            ['Score', 'node-1', 'node-3'],
-            ['Load (15m)', 'node-2', 'node-3'],
-            ['Mem Avail', 'node-2', 'node-3'],
-            ['Swap Avail', 'node-2', 'node-3'],
-            ['Version', 'node-3', 'node-1'],
-            ['Booted At', 'node-3', 'node-1'],
-            ['Updated At', 'node-1', 'node-3'],
-        ])('descending sort by %s', async (header, expectedFirst, expectedLast) => {
-            renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText(header));
-            fireEvent.click(screen.getByText(header));
-            await waitFor(() => {
-                const rows = screen.getAllByTestId(/row-/);
-                expect(rows[0]).toHaveTextContent(expectedFirst);
-                expect(rows[2]).toHaveTextContent(expectedLast);
-            });
-        });
+        expect(screen.getByRole('menu')).toBeInTheDocument();
 
-        test('sort by booted_at with missing booted_at', async () => {
-            setStore({
-                nodeStatus: {
-                    'node-1': {state: 'idle', frozen_at: null, agent: 'v1.0', booted_at: '2023-01-01T00:00:00Z'},
-                    'node-2': {state: 'busy', frozen_at: null, agent: 'v2.0', booted_at: '2023-01-02T00:00:00Z'},
-                    'node-3': {state: 'idle', frozen_at: null, agent: 'v3.0'},
-                },
-                nodeStats: {},
-                nodeMonitor: {},
-            });
-            renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Booted At'));
-            await waitFor(() => {
-                const rows = screen.getAllByTestId(/row-/);
-                expect(rows[0]).toHaveTextContent('node-3');
-                expect(rows[1]).toHaveTextContent('node-1');
-                expect(rows[2]).toHaveTextContent('node-2');
-            });
-        });
+        Element.prototype.getBoundingClientRect = origGetRect;
+        Object.defineProperty(window, 'scrollY', {value: origScrollY, writable: true, configurable: true});
+        Object.defineProperty(window, 'scrollX', {value: origScrollX, writable: true, configurable: true});
+        Object.defineProperty(navigator, 'userAgent', {value: origUserAgent, configurable: true});
+        Object.defineProperty(window, 'devicePixelRatio', {value: origDevicePixelRatio, configurable: true});
+    });
 
-        test('sort by updated_at with missing updated_at', async () => {
-            renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Updated At'));
-            await waitFor(() => {
-                const rows = screen.getAllByTestId(/row-/);
-                expect(rows[0]).toHaveTextContent('node-3');
-                expect(rows[1]).toHaveTextContent('node-2');
-                expect(rows[2]).toHaveTextContent('node-1');
-            });
+    test.each([
+        ['State', 'node-1', 'node-2'],
+        ['Score', 'node-1', 'node-3'],
+        ['Load (15m)', 'node-2', 'node-3'],
+        ['Mem Avail', 'node-2', 'node-3'],
+        ['Swap Avail', 'node-2', 'node-3'],
+        ['Version', 'node-3', 'node-1'],
+        ['Booted At', 'node-3', 'node-1'],
+        ['Updated At', 'node-1', 'node-3'],
+    ])('descending sort by %s', async (header, expectedFirst, expectedLast) => {
+        renderWithRouter(<NodesTable/>);
+        fireEvent.click(screen.getByText(header));
+        fireEvent.click(screen.getByText(header));
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent(expectedFirst);
+            expect(rows[2]).toHaveTextContent(expectedLast);
+        });
+    });
+
+    test('sort by booted_at with missing booted_at', async () => {
+        setStore({
+            nodeStatus: {
+                'node-1': {state: 'idle', frozen_at: null, agent: 'v1.0', booted_at: '2023-01-01T00:00:00Z'},
+                'node-2': {state: 'busy', frozen_at: null, agent: 'v2.0', booted_at: '2023-01-02T00:00:00Z'},
+                'node-3': {state: 'idle', frozen_at: null, agent: 'v3.0'},
+            },
+            nodeStats: {},
+            nodeMonitor: {},
+        });
+        renderWithRouter(<NodesTable/>);
+        fireEvent.click(screen.getByText('Booted At'));
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-3');
+            expect(rows[1]).toHaveTextContent('node-1');
+            expect(rows[2]).toHaveTextContent('node-2');
+        });
+    });
+
+    test('sort by updated_at with missing updated_at', async () => {
+        renderWithRouter(<NodesTable/>);
+        fireEvent.click(screen.getByText('Updated At'));
+        await waitFor(() => {
+            const rows = screen.getAllByTestId(/row-/);
+            expect(rows[0]).toHaveTextContent('node-3');
+            expect(rows[1]).toHaveTextContent('node-2');
+            expect(rows[2]).toHaveTextContent('node-1');
         });
     });
 });

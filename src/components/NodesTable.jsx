@@ -38,9 +38,6 @@ import EventLogger from "../components/EventLogger";
 // Safari detection
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-// Actions that target the node daemon (…/daemon/action/<x>)
-const DAEMON_ACTIONS = ["stop", "restart daemon"];
-
 const NodesTable = () => {
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
@@ -83,7 +80,6 @@ const NodesTable = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    // Hauteur de la barre de navigation (AppBar) avec safe area
     const appBarHeight = `calc(${theme.mixins.toolbar.minHeight || 64}px + env(safe-area-inset-top, 0px))`;
 
     const getZoomLevel = () => {
@@ -230,11 +226,9 @@ const NodesTable = () => {
     };
 
     const postActionUrl = (node, action) => {
-        if (DAEMON_ACTIONS.includes(action)) {
-            const daemonAction = action === "restart daemon" ? "restart" : action;
-            return `${URL_NODE}/${node}/daemon/action/${daemonAction}`;
-        }
-        return `${URL_NODE}/${node}/action/${action}`;
+        const def = NODE_ACTIONS.find((a) => a.name === action);
+        const endpoint = def?.endpoint ?? `action/${action}`;
+        return `${URL_NODE}/${node}/${endpoint}`;
     };
 
     const handleDialogConfirm = async (action) => {

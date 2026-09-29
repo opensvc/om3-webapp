@@ -15,7 +15,6 @@ import {
     WaterDrop,
     Inventory,
     Storage,
-    Extension,
     Archive,
     Psychology,
     Description,
@@ -57,21 +56,19 @@ export const RESOURCE_ACTIONS = [
 ];
 
 export const NODE_ACTIONS = [
-    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>},
-    {name: "restart daemon", icon: <RestartAlt sx={{fontSize: 24}}/>},
-    {name: "freeze", icon: <AcUnit sx={{fontSize: 24}}/>},
-    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>},
-    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>},
-    {name: "clear", icon: <CleaningServices sx={{fontSize: 24}}/>},
-    {name: "drain", icon: <WaterDrop sx={{fontSize: 24}}/>},
-    {name: "asset", icon: <Inventory sx={{fontSize: 24}}/>},
-    {name: "disk", icon: <Storage sx={{fontSize: 24}}/>},
-    {name: "pkg", icon: <Archive sx={{fontSize: 24}}/>},
-    {name: "capabilities", icon: <Psychology sx={{fontSize: 24}}/>},
-    {name: "sysreport", icon: <Description sx={{fontSize: 24}}/>},
-    {name: "provision", icon: <Settings sx={{fontSize: 24}}/>},
-    {name: "unprovision", icon: <Block sx={{fontSize: 24}}/>},
-    {name: "switch", icon: <SwapHoriz sx={{fontSize: 24}}/>},
-    {name: "giveback", icon: <Undo sx={{fontSize: 24}}/>},
-    {name: "delete", icon: <Delete sx={{fontSize: 24}}/>, color: "red"},
+    // Daemon-level actions
+    {name: "stop", icon: <Stop sx={{fontSize: 24}}/>, endpoint: "daemon/action/stop", color: "red"},
+    {name: "restart daemon", icon: <RestartAlt sx={{fontSize: 24}}/>, endpoint: "daemon/action/restart"},
+
+    // Node-level actions
+    {name: "freeze", icon: <AcUnit sx={{fontSize: 24}}/>, endpoint: "action/freeze"},
+    {name: "unfreeze", icon: <LockOpen sx={{fontSize: 24}}/>, endpoint: "action/unfreeze"},
+    {name: "abort", icon: <Cancel sx={{fontSize: 24}}/>, endpoint: "action/abort"},
+    {name: "clear", icon: <CleaningServices sx={{fontSize: 24}}/>, endpoint: "action/clear"},
+    {name: "drain", icon: <WaterDrop sx={{fontSize: 24}}/>, endpoint: "action/drain"},
+    {name: "asset", icon: <Inventory sx={{fontSize: 24}}/>, endpoint: "action/push/asset"},
+    {name: "disk", icon: <Storage sx={{fontSize: 24}}/>, endpoint: "action/push/disk"},
+    {name: "pkg", icon: <Archive sx={{fontSize: 24}}/>, endpoint: "action/push/pkg"},
+    {name: "capabilities", icon: <Psychology sx={{fontSize: 24}}/>, endpoint: "action/scan/capabilities"},
+    {name: "sysreport", icon: <Description sx={{fontSize: 24}}/>, endpoint: "action/sysreport"},
 ];

@@ -5,17 +5,11 @@ import {
     Box,
     Button,
     CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
     Menu,
     MenuItem,
     Typography,
     IconButton,
-    TextField,
     useTheme,
-    useMediaQuery,
     Grid,
     Snackbar,
     ListItemIcon,
@@ -66,7 +60,6 @@ const ObjectDetail = () => {
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const navigate = useNavigate();
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const objectStatus = useEventStore((s) => s.objectStatus[decodedObjectName]);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus[decodedObjectName]);
@@ -91,12 +84,6 @@ const ObjectDetail = () => {
     const [unprovisionDialogOpen, setUnprovisionDialogOpen] = useState(false);
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
     const [simpleDialogOpen, setSimpleDialogOpen] = useState(false);
-    const [consoleDialogOpen, setConsoleDialogOpen] = useState(false);
-    const [consoleUrlDialogOpen, setConsoleUrlDialogOpen] = useState(false);
-    const [currentConsoleUrl, setCurrentConsoleUrl] = useState(/** @type {string | null} */ (null));
-
-    const [seats, setSeats] = useState(1);
-    const [greetTimeout, setGreetTimeout] = useState("5s");
     const [checkboxes, setCheckboxes] = useState(DEFAULT_CHECKBOXES);
     const [stopCheckbox, setStopCheckbox] = useState(DEFAULT_STOP_CHECKBOX);
     const [unprovisionCheckboxes, setUnprovisionCheckboxes] = useState(DEFAULT_UNPROVISION_CHECKBOXES);
@@ -307,41 +294,6 @@ const ObjectDetail = () => {
         return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
     }, []);
 
-    const postConsoleAction = useCallback(async ({node, rid, seats = 1, greet_timeout = "5s"}) => {
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-            openSnackbar("Auth token not found.", "error");
-            return;
-        }
-        setActionInProgress(true);
-        openSnackbar(`Opening console for resource ${rid}...`, "info");
-        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-        const url = `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/console?rid=${encodeURIComponent(rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greet_timeout)}`;
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
-            });
-            if (!response.ok) {
-                const serverError = await getResponseErrorMessage(response);
-                openSnackbar(`Failed to open console: HTTP error! status: ${response.status}${serverError ? ` - ${serverError}` : ""}`, "error");
-                return;
-            }
-            const consoleUrl = response.headers.get('Location');
-            if (consoleUrl) {
-                setCurrentConsoleUrl(consoleUrl);
-                setConsoleUrlDialogOpen(true);
-                openSnackbar(`Console URL retrieved for resource '${rid}'`);
-            } else {
-                openSnackbar('Failed to open console: Console URL not found in response', "error");
-            }
-        } catch (err) {
-            openSnackbar(`Failed to open console: ${err.message}`, "error");
-        } finally {
-            setActionInProgress(false);
-        }
-    }, [decodedObjectName, openSnackbar]);
-
     const postObjectAction = useCallback(async ({action}) => {
         const token = localStorage.getItem("authToken");
         if (!token) return openSnackbar("Auth token not found.", "error");
@@ -386,11 +338,7 @@ const ObjectDetail = () => {
 
     const openActionDialog = useCallback((action, context = null) => {
         setPendingAction({action, ...(context ? context : {})});
-        setSeats(1);
-        setGreetTimeout("5s");
-        if (action === "console") {
-            setConsoleDialogOpen(true);
-        } else if (action === "freeze") {
+        if (action === "freeze") {
             setCheckboxes(DEFAULT_CHECKBOXES);
             setConfirmDialogOpen(true);
         } else if (action === "stop") {
@@ -441,21 +389,6 @@ const ObjectDetail = () => {
         setPurgeDialogOpen(false);
         setSimpleDialogOpen(false);
     }, [pendingAction, selectedNodes, postNodeAction, postObjectAction]);
-
-    const handleConsoleConfirm = useCallback(() => {
-        if (pendingAction && pendingAction.action === "console" && pendingAction.node && pendingAction.rid) {
-            postConsoleAction({
-                node: pendingAction.node,
-                rid: pendingAction.rid,
-                seats,
-                greet_timeout: greetTimeout
-            }).catch((err) => {
-                logger.error("[ObjectDetail] postConsoleAction failed:", err);
-            });
-        }
-        setConsoleDialogOpen(false);
-        setPendingAction(null);
-    }, [pendingAction, seats, greetTimeout, postConsoleAction]);
 
     const toggleNode = useCallback((node) => {
         setSelectedNodes(prev => prev.includes(node) ? prev.filter(n => n !== node) : [...prev, node]);
@@ -716,7 +649,7 @@ const ObjectDetail = () => {
                         </Grid>
                     </Grid>
 
-                    {pendingAction && pendingAction.action !== "console" && (
+                    {pendingAction && (
                         <ActionDialogManager
                             pendingAction={pendingAction}
                             handleConfirm={handleDialogConfirm}
@@ -749,75 +682,6 @@ const ObjectDetail = () => {
                             setPurgeCheckboxes={setPurgeCheckboxes}
                         />
                     )}
-
-                    <Dialog open={consoleDialogOpen} onClose={() => setConsoleDialogOpen(false)} maxWidth="sm"
-                            fullWidth fullScreen={isMobile}>
-                        <DialogTitle>Open Console</DialogTitle>
-                        <DialogContent>
-                            <Typography variant="body1" sx={{mb: 2}}>This will open a terminal console for the selected
-                                resource.</Typography>
-                            {pendingAction?.rid && <Typography variant="body2" color="primary" sx={{
-                                mb: 2,
-                                fontWeight: 'bold'
-                            }}>Resource: {pendingAction.rid}</Typography>}
-                            {pendingAction?.node && <Typography variant="body2" color="text.secondary"
-                                                                sx={{mb: 2}}>Node: {pendingAction.node}</Typography>}
-                            <Box sx={{mb: 2}}>
-                                <TextField autoFocus margin="dense" label="Number of Seats" type="number" fullWidth
-                                           variant="outlined" value={seats}
-                                           onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
-                                           helperText="Number of simultaneous users allowed in the console"/>
-                            </Box>
-                            <TextField margin="dense" label="Greet Timeout" type="text" fullWidth variant="outlined"
-                                       value={greetTimeout}
-                                       onChange={(e) => setGreetTimeout(e.target.value)}
-                                       helperText="Time to wait for console connection (e.g., 5s, 10s)"/>
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setConsoleDialogOpen(false)}>Cancel</Button>
-                            <Button onClick={handleConsoleConfirm}>Open Console</Button>
-                        </DialogActions>
-                    </Dialog>
-
-                    <Dialog open={consoleUrlDialogOpen} onClose={() => setConsoleUrlDialogOpen(false)} maxWidth="sm"
-                            fullWidth fullScreen={isMobile}>
-                        <DialogTitle>Console URL</DialogTitle>
-                        <DialogContent>
-                            <Box sx={{
-                                border: '1px solid #ccc', borderRadius: '4px',
-                                padding: {xs: '8px 10px', sm: '12px 14px'}, backgroundColor: '#f5f5f5',
-                                marginBottom: 2, overflow: 'auto', maxHeight: '100px',
-                                fontFamily: 'monospace', fontSize: {xs: '0.75rem', sm: '0.875rem'},
-                                wordBreak: 'break-all', whiteSpace: 'pre-wrap'
-                            }}>
-                                {currentConsoleUrl ? String(currentConsoleUrl) : 'No URL available'}
-                            </Box>
-                            <Box sx={{
-                                display: 'flex',
-                                gap: 2,
-                                flexWrap: 'wrap',
-                                justifyContent: {xs: 'center', sm: 'flex-start'}
-                            }}>
-                                <Button variant="outlined" size={window.innerWidth < 600 ? "small" : "medium"}
-                                        onClick={() => {
-                                            if (currentConsoleUrl) {
-                                                navigator.clipboard.writeText(String(currentConsoleUrl)).catch((err) => {
-                                                    logger.error("[ObjectDetail] Failed to copy console URL:", err);
-                                                });
-                                            }
-                                        }}
-                                        disabled={!currentConsoleUrl}>Copy URL</Button>
-                                <Button variant="contained" size={window.innerWidth < 600 ? "small" : "medium"}
-                                        onClick={() => {
-                                            if (currentConsoleUrl) window.open(String(currentConsoleUrl), '_blank', 'noopener,noreferrer');
-                                        }}
-                                        disabled={!currentConsoleUrl}>Open in New Tab</Button>
-                            </Box>
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setConsoleUrlDialogOpen(false)}>Close</Button>
-                        </DialogActions>
-                    </Dialog>
 
                     {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
 

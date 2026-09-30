@@ -63,6 +63,22 @@ vi.mock('../ActionDialogs', () => ({
             </div>
         ) : null
     ),
+    ShutdownDialog: vi.fn((props) =>
+        props.open ? (
+            <div data-testid="shutdown-dialog">
+                <button onClick={props.onClose}>Cancel</button>
+                <button onClick={props.onConfirm} disabled={props.disabled}>Confirm</button>
+                <input type="checkbox" checked={props.checkboxes.instancesDown}
+                       onChange={(e) => props.setCheckboxes({...props.checkboxes, instancesDown: e.target.checked})}
+                       data-testid="shutdown-instancesDown-checkbox"/>
+                <input type="checkbox" checked={props.checkboxes.peerTakeover}
+                       onChange={(e) => props.setCheckboxes({...props.checkboxes, peerTakeover: e.target.checked})}
+                       data-testid="shutdown-peerTakeover-checkbox"/>
+                <span>{props.pendingAction?.action}</span>
+                <span>{props.target}</span>
+            </div>
+        ) : null
+    ),
     UnprovisionDialog: vi.fn((props) =>
         props.open ? (
             <div data-testid="unprovision-dialog">
@@ -159,7 +175,7 @@ describe('ActionDialogManager', () => {
         handleConfirm: vi.fn(),
         target: 'test-target',
         supportedActions: [
-            'freeze', 'stop', 'unprovision', 'purge',
+            'freeze', 'stop', 'shutdown', 'unprovision', 'purge',
             'delete', 'switch', 'giveback', 'console', 'other',
         ],
         onClose: vi.fn(),
@@ -241,6 +257,12 @@ describe('ActionDialogManager', () => {
         expect(dialog).toBeInTheDocument();
     });
 
+    test('opens ShutdownDialog when pendingAction is shutdown', async () => {
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
+        const dialog = await screen.findByTestId('shutdown-dialog');
+        expect(dialog).toBeInTheDocument();
+    });
+
     test('opens SimpleConfirmDialog for unknown action', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
         expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
@@ -260,6 +282,31 @@ describe('ActionDialogManager', () => {
         fireEvent.click(checkbox);
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('freeze');
+    });
+
+    test('handles shutdown checkboxes properly', async () => {
+        render(
+            <ActionDialogManager
+                {...defaultProps}
+                pendingAction={{action: 'shutdown', node: 'test-node'}}
+            />
+        );
+        const instancesDownCheckbox = await screen.findByTestId('shutdown-instancesDown-checkbox');
+        const peerTakeoverCheckbox = await screen.findByTestId('shutdown-peerTakeover-checkbox');
+        fireEvent.click(instancesDownCheckbox);
+        fireEvent.click(peerTakeoverCheckbox);
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('shutdown');
+    });
+
+    test('handles invalid setCheckboxes value for shutdown', async () => {
+        const {ShutdownDialog} = await import('../ActionDialogs');
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
+        await screen.findByTestId('shutdown-dialog');
+        const mockCall = ShutdownDialog.mock.calls[0];
+        expect(mockCall[0].setCheckboxes).toBeDefined();
+        mockCall[0].setCheckboxes(null);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for shutdown received invalid value:', null);
     });
 
     test('handles unprovision checkboxes properly', async () => {
@@ -397,6 +444,17 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('purge');
     });
 
+    test('covers setCheckboxes branches for shutdown', async () => {
+        const {ShutdownDialog} = await import('../ActionDialogs');
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
+        await screen.findByTestId('shutdown-dialog');
+        const setCheckboxes = ShutdownDialog.mock.calls[ShutdownDialog.mock.calls.length - 1][0].setCheckboxes;
+        setCheckboxes((prev) => ({...prev, instancesDown: true, extra: true}));
+        setCheckboxes({peerTakeover: true, invalidKey: false});
+        setCheckboxes(42);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for shutdown received invalid value:', 42);
+    });
+
     test('covers setCheckboxes branches for unprovision', async () => {
         const {UnprovisionDialog} = await import('../ActionDialogs');
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'unprovision'}}/>);
@@ -449,6 +507,7 @@ describe('ActionDialogManager', () => {
     const dialogCases = [
         {action: 'freeze', checkbox: 'freeze-checkbox', dialog: 'freeze-dialog'},
         {action: 'stop', checkbox: 'stop-checkbox', dialog: 'stop-dialog'},
+        {action: 'shutdown', checkbox: 'shutdown-instancesDown-checkbox', dialog: 'shutdown-dialog'},
         {action: 'unprovision', checkbox: 'unprovision-dataLoss-checkbox', dialog: 'unprovision-dialog'},
         {action: 'purge', checkbox: 'purge-dataLoss-checkbox', dialog: 'purge-dialog'},
         {action: 'delete', checkbox: 'delete-configLoss-checkbox', dialog: 'delete-dialog'},

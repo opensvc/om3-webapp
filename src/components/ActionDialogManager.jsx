@@ -12,6 +12,7 @@ import {
 import {
     FreezeDialog,
     StopDialog,
+    ShutdownDialog,
     UnprovisionDialog,
     PurgeDialog,
     DeleteDialog,
@@ -92,6 +93,7 @@ export const ConsoleDialog = ({
         </DialogActions>
     </Dialog>
 );
+
 export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled, cancelDisabled}) => {
     const dialogTitle = typeof action === 'string' && action
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
@@ -121,6 +123,7 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, d
         </Dialog>
     );
 };
+
 const ActionDialogManager = ({
                                  pendingAction,
                                  handleConfirm,
@@ -137,6 +140,7 @@ const ActionDialogManager = ({
     const [checkboxState, setCheckboxState] = useState({
         freeze: false,
         stop: false,
+        shutdown: {instancesDown: false, peerTakeover: false},
         unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
         purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
         "delete": {configLoss: false, clusterwide: false},
@@ -146,6 +150,7 @@ const ActionDialogManager = ({
         simpleConfirm: false,
     });
     const [lastAction, setLastAction] = useState(null);
+
     const dialogConfig = useMemo(() => ({
         freeze: {
             component: FreezeDialog,
@@ -178,6 +183,43 @@ const ActionDialogManager = ({
                 checked: checkboxState.stop,
                 setChecked: (value) => {
                     setCheckboxState((prev) => ({...prev, stop: value}));
+                },
+                pendingAction,
+                target,
+            },
+        },
+        shutdown: {
+            component: ShutdownDialog,
+            props: {
+                onClose: () => {
+                    if (onClose) onClose();
+                },
+                onConfirm: () => {
+                    handleConfirm(pendingAction?.action);
+                    if (onClose) onClose();
+                },
+                checkboxes: checkboxState.shutdown,
+                setCheckboxes: (value) => {
+                    let updates;
+                    if (typeof value === 'function') {
+                        updates = value(checkboxState.shutdown);
+                    } else if (typeof value === 'object' && value !== null) {
+                        updates = value;
+                    } else {
+                        logger.error('setCheckboxes for shutdown received invalid value:', value);
+                        return;
+                    }
+                    const validKeys = ['instancesDown', 'peerTakeover'];
+                    const validUpdates = Object.keys(updates).reduce((acc, key) => {
+                        if (validKeys.includes(key)) {
+                            acc[key] = updates[key];
+                        }
+                        return acc;
+                    }, {});
+                    setCheckboxState((prev) => ({
+                        ...prev,
+                        shutdown: {...prev.shutdown, ...validUpdates},
+                    }));
                 },
                 pendingAction,
                 target,
@@ -365,6 +407,7 @@ const ActionDialogManager = ({
             },
         },
     }), [checkboxState, handleConfirm, pendingAction, target, onClose, seats, setSeats, greetTimeout, setGreetTimeout]);
+
     useEffect(() => {
         if (pendingAction === null) {
             setLastAction(null);
@@ -391,6 +434,10 @@ const ActionDialogManager = ({
             const initCheckbox = {
                 freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
                 stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
+                shutdown: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    shutdown: {instancesDown: false, peerTakeover: false},
+                })),
                 unprovision: () => setCheckboxState((prev) => ({
                     ...prev,
                     unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},

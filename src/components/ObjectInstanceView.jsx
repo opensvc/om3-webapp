@@ -529,17 +529,18 @@ const ObjectInstanceView = () => {
         try {
             let url;
             let message;
+            const endpoint = INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? action;
 
             if (pendingAction.rid) {
                 if (action === "console") {
                     url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/console?rid=${encodeURIComponent(pendingAction.rid)}&seats=${seats}&greet_timeout=${encodeURIComponent(greetTimeout)}`;
                     message = `Opening console for resource ${pendingAction.rid}...`;
                 } else {
-                    url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/action/${action}?rid=${encodeURIComponent(pendingAction.rid)}`;
+                    url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/action/${endpoint}?rid=${encodeURIComponent(pendingAction.rid)}`;
                     message = `Executing ${action} on resource ${pendingAction.rid}...`;
                 }
             } else {
-                url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/action/${action}`;
+                url = `${URL_NODE}/${nodeName}/instance/path/${namespace}/${kind}/${name}/action/${endpoint}`;
                 message = `Executing ${action} on instance...`;
             }
 

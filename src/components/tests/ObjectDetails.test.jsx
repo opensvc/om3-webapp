@@ -174,18 +174,22 @@ vi.mock('../ConfigSection', () => ({
 
 vi.mock('../../constants/actions', () => ({
     OBJECT_ACTIONS: [
-        {name: 'start', icon: 'StartIcon'},
-        {name: 'stop', icon: 'StopIcon'},
-        {name: 'freeze', icon: 'FreezeIcon'},
-        {name: 'unprovision', icon: 'UnprovisionIcon'},
-        {name: 'purge', icon: 'PurgeIcon'},
+        {name: 'start', icon: 'StartIcon', endpoint: 'action/start'},
+        {name: 'stop', icon: 'StopIcon', endpoint: 'action/stop'},
+        {name: 'freeze', icon: 'FreezeIcon', endpoint: 'action/freeze'},
+        {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'action/unprovision'},
+        {name: 'purge', icon: 'PurgeIcon', endpoint: 'action/purge'},
+        {name: 'enable', icon: 'EnableIcon', endpoint: 'enable', kinds: ['svc']},
+        {name: 'disable', icon: 'DisableIcon', endpoint: 'disable', kinds: ['svc'], color: 'red'},
     ],
     INSTANCE_ACTIONS: [
-        {name: 'start', icon: 'StartIcon'},
-        {name: 'stop', icon: 'StopIcon'},
-        {name: 'freeze', icon: 'FreezeIcon'},
-        {name: 'unprovision', icon: 'UnprovisionIcon'},
-        {name: 'purge', icon: 'PurgeIcon'},
+        {name: 'start', icon: 'StartIcon', endpoint: 'start'},
+        {name: 'stop', icon: 'StopIcon', endpoint: 'stop'},
+        {name: 'freeze', icon: 'FreezeIcon', endpoint: 'freeze'},
+        {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'unprovision'},
+        {name: 'purge', icon: 'PurgeIcon', endpoint: 'purge'},
+        {name: 'start standby', icon: 'StartStandbyIcon', endpoint: 'startstandby'},
+        {name: 'pg reset', icon: 'PgResetIcon', endpoint: 'pg/reset'},
     ],
     RESOURCE_ACTIONS: [
         {name: 'start', icon: 'StartIcon'},
@@ -361,12 +365,12 @@ const fullMockState = {
         'node1:root/cfg/cfg1': {
             state: 'running',
             global_expect: 'placed@node1',
-            resources: {res1: {restart: {remaining: 0}}},
+            resources: {res1: {restart: {remaining: 0}}}
         },
         'node1:root/svc/svc1': {
             state: 'running',
             global_expect: 'placed@node1',
-            resources: {res1: {restart: {remaining: 0}}},
+            resources: {res1: {restart: {remaining: 0}}}
         },
         'node2:root/svc/svc1': {state: 'idle', global_expect: 'none', resources: {res3: {restart: {remaining: 0}}}},
     },
@@ -413,11 +417,21 @@ const setStoreState = (state) => {
 };
 
 // ── Action helpers ────────────────────────────────────────────────────────
+const getMenuItemByLabel = (label, menu = null) => {
+    const scope = menu ? within(menu) : screen;
+    return scope.getByText(new RegExp(`^${label}$`));
+};
+
+const queryMenuItemByLabel = (label, menu = null) => {
+    const scope = menu ? within(menu) : screen;
+    return scope.queryByText(new RegExp(`^${label}$`));
+};
+
 const confirmDialog = async (dialog) => {
     const cb = within(dialog).queryByRole('checkbox', {name: /confirm/i});
     if (cb) await userEvent.click(cb);
     await userEvent.click(
-        within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i})
+        within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|stop|delete/i})
     );
 };
 
@@ -454,7 +468,7 @@ const openConsoleDialogFn = async () => {
     await userEvent.click(screen.getByRole('button', {name: /Node node1 actions/i}));
     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0), {timeout: 3000});
     const menus = screen.getAllByRole('menu');
-    const consoleItems = within(menus[menus.length - 1]).queryAllByRole('menuitem', {name: /console/i});
+    const consoleItems = within(menus[menus.length - 1]).queryAllByText(/^Console$/i);
     if (consoleItems.length === 0) return null;
     await userEvent.click(consoleItems[0]);
     await waitFor(() => {
@@ -498,7 +512,7 @@ const findAndOpenResourceConsoleDialog = async (candidateFinders) => {
     await userEvent.click(trigger);
     const menus = screen.queryAllByRole('menu');
     const consoleItem = menus.length
-        ? within(menus[menus.length - 1]).queryByRole('menuitem', {name: /console/i})
+        ? within(menus[menus.length - 1]).queryByText(/^Console$/i)
         : null;
     if (!consoleItem) return null;
     await userEvent.click(consoleItem);
@@ -793,15 +807,49 @@ describe('ObjectDetail Component', () => {
         expect(batchBtn).not.toBeDisabled();
         await user.click(batchBtn);
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-        await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+        await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
         await confirmDialog(await screen.findByRole('dialog'));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/start/),
+                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/start$/),
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
                 })
+            );
+        });
+    });
+
+    test('instance action "start standby" uses its endpoint (startstandby)', async () => {
+        await renderReadySvc();
+        await user.click(screen.getByLabelText(/select node node1/i));
+        const batchBtn = screen.getByRole('button', {name: /Actions on selected nodes/i});
+        await waitFor(() => expect(batchBtn).not.toBeDisabled());
+        await user.click(batchBtn);
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        await user.click(getMenuItemByLabel('Start standby', screen.getAllByRole('menu')[0]));
+        await confirmDialog(await screen.findByRole('dialog'));
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/action\/startstandby$/),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('instance action "pg reset" uses its endpoint (pg/reset)', async () => {
+        await renderReadySvc();
+        await user.click(screen.getByLabelText(/select node node1/i));
+        const batchBtn = screen.getByRole('button', {name: /Actions on selected nodes/i});
+        await waitFor(() => expect(batchBtn).not.toBeDisabled());
+        await user.click(batchBtn);
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        await user.click(getMenuItemByLabel('Pg reset', screen.getAllByRole('menu')[0]));
+        await confirmDialog(await screen.findByRole('dialog'));
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/action\/pg\/reset$/),
+                expect.any(Object)
             );
         });
     });
@@ -811,11 +859,11 @@ describe('ObjectDetail Component', () => {
         await renderReadySvc();
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-        await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /stop/i}));
+        await user.click(getMenuItemByLabel('Stop', screen.getAllByRole('menu')[0]));
         await confirmDialog(await screen.findByRole('dialog'));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/stop/),
+                expect.stringMatching(/\/api\/node\/name\/node1\/instance\/path\/root(%2F|\/)svc(%2F|\/)svc1\/action\/stop$/),
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
@@ -836,7 +884,7 @@ describe('ObjectDetail Component', () => {
             mockNetworkFailure('/action/');
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await screen.findByRole('dialog'));
             await waitFor(() =>
                 expect(screen.getAllByRole('alert').some((a) => a.textContent.includes('Network error'))).toBe(true)
@@ -847,7 +895,7 @@ describe('ObjectDetail Component', () => {
             mockActionFailure(status, msg);
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await screen.findByRole('dialog'));
             await waitFor(() =>
                 expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`HTTP error! status: ${status}`))).toBe(true)
@@ -858,7 +906,7 @@ describe('ObjectDetail Component', () => {
             mockLocalStorage.getItem.mockReturnValue(null);
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             const dialog = await screen.findByRole('dialog');
             await userEvent.click(within(dialog).getByRole('button', {name: /confirm/i}));
             await waitFor(() =>
@@ -878,7 +926,7 @@ describe('ObjectDetail Component', () => {
                     await user.click(screen.getByLabelText(/select node node2/i));
                     await user.click(screen.getByRole('button', {name: /Actions on selected nodes/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
                 },
             ],
             [
@@ -887,7 +935,7 @@ describe('ObjectDetail Component', () => {
                 async () => {
                     await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
                 },
             ],
             [
@@ -896,7 +944,7 @@ describe('ObjectDetail Component', () => {
                 async () => {
                     await user.click(screen.getByRole('button', {name: /object actions/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(screen.getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
                 },
             ],
         ])('%s action rejection is logged via logger.error', async (label, fnName, triggerAction) => {
@@ -926,7 +974,8 @@ describe('ObjectDetail Component', () => {
         for (const action of ['start', 'freeze', 'stop', 'unprovision', 'purge']) {
             await user.click(screen.getByRole('button', {name: /object actions/i}));
             await screen.findByRole('menu');
-            await user.click(screen.getByRole('menuitem', {name: new RegExp(action, 'i')}));
+            const label = action.charAt(0).toUpperCase() + action.slice(1);
+            await user.click(getMenuItemByLabel(label));
             const dialog = await screen.findByRole('dialog');
             const cancelBtn = within(dialog).queryByRole('button', {name: /cancel/i});
             if (cancelBtn) {
@@ -934,6 +983,34 @@ describe('ObjectDetail Component', () => {
                 await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
             }
         }
+    });
+
+    test('object enable uses the object-path endpoint (no /action prefix)', async () => {
+        await renderReadySvc();
+        await user.click(screen.getByRole('button', {name: /object actions/i}));
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        await user.click(getMenuItemByLabel('Enable'));
+        await confirmDialog(await screen.findByRole('dialog'));
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1\/enable$/),
+                expect.any(Object)
+            );
+        });
+    });
+
+    test('object disable uses the object-path endpoint (no /action prefix)', async () => {
+        await renderReadySvc();
+        await user.click(screen.getByRole('button', {name: /object actions/i}));
+        await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
+        await user.click(getMenuItemByLabel('Disable'));
+        await confirmDialog(await screen.findByRole('dialog'));
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1\/disable$/),
+                expect.any(Object)
+            );
+        });
     });
 
     test('closes manage params dialog on submit', async () => {
@@ -951,7 +1028,7 @@ describe('ObjectDetail Component', () => {
         await renderReadySvc();
         await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
         await screen.findByRole('menu');
-        await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+        await userEvent.click(getMenuItemByLabel('Start'));
         await confirmDialog(await screen.findByRole('dialog'));
         const closeButtons = screen.getAllByTestId('alert-close-button');
         if (closeButtons.length > 0) await user.click(closeButtons[0]);
@@ -1224,8 +1301,8 @@ describe('ObjectDetail Component', () => {
         await user.click(screen.getByRole('button', {name: /Actions on selected nodes/i}));
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
         const menu = screen.getAllByRole('menu')[0];
-        expect(!!within(menu).queryByRole('menuitem', {name: /^freeze/i})).toBe(expectFreeze);
-        if (expectStart) expect(within(menu).queryByRole('menuitem', {name: /start/i})).toBeTruthy();
+        expect(!!queryMenuItemByLabel('Freeze', menu)).toBe(expectFreeze);
+        if (expectStart) expect(queryMenuItemByLabel('Start', menu)).toBeTruthy();
     });
 
     // ── Console dialog ───────────────────────────────────────────────────
@@ -1256,7 +1333,7 @@ describe('ObjectDetail Component', () => {
             await waitForNode('node1');
             await userEvent.click(screen.getByRole('button', {name: /Node node1 actions/i}));
             await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-            const consoleItem = within(screen.getAllByRole('menu')[0]).queryByRole('menuitem', {name: /console/i});
+            const consoleItem = within(screen.getAllByRole('menu')[0]).queryByText(/^Console$/i);
             if (!consoleItem) return;
             await userEvent.click(consoleItem);
             const dialog = await screen.findByRole('dialog');
@@ -1423,7 +1500,6 @@ describe('ObjectDetail Component', () => {
 
             act(() => vi.advanceTimersByTime(5000));
 
-            // The fallback fetch does start (we passed the hasFallbackFired guard)
             await waitFor(() => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
@@ -1435,8 +1511,6 @@ describe('ObjectDetail Component', () => {
                 );
             });
 
-            // hasInstances === true (Object.keys(...).length > 0, line 211), so
-            // we must not overwrite the already present data.
             await waitFor(() => {
                 expect(storeStateWithInstances.setObjectStatuses).not.toHaveBeenCalled();
                 expect(storeStateWithInstances.setInstanceStatuses).not.toHaveBeenCalled();

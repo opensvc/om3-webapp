@@ -747,6 +747,88 @@ describe('Objects Component', () => {
         });
     });
 
+    // ─── svc-only enable / disable ───────────────────────────────────────
+    describe('svc enable/disable actions', () => {
+        test('Enable and Disable appear in the bulk menu when svc objects are selected', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).getByText('Enable')).toBeInTheDocument();
+            expect(within(menu).getByText('Disable')).toBeInTheDocument();
+        });
+
+        test('Enable URL uses the object-path endpoint (no /action prefix)', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Enable');
+            await confirmDialog(/Confirm/i);
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(/test-ns\/svc\/test1\/enable$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test('Disable URL uses the object-path endpoint (no /action prefix)', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Disable');
+            await confirmDialog(/Confirm/i);
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(/test-ns\/svc\/test1\/disable$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test('Enable is not present in the row menu for a non-svc object', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    ...defaultState.objectInstanceStatus,
+                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                },
+            });
+            await waitForLoad();
+            const row = screen.getByRole('row', {name: /test-ns\/cfg\/cfg1/});
+            fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
+            await screen.findByRole('menu');
+            expect(screen.queryByText('Enable')).not.toBeInTheDocument();
+            expect(screen.queryByText('Disable')).not.toBeInTheDocument();
+        });
+
+        test('Enable/Disable not offered when a mixed-kind selection is made', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    ...defaultState.objectInstanceStatus,
+                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                },
+            });
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            selectRow('test-ns/cfg/cfg1');
+            openActionsMenu();
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).queryByText('Enable')).not.toBeInTheDocument();
+            expect(within(menu).queryByText('Disable')).not.toBeInTheDocument();
+        });
+    });
+
     test('row click navigates', async () => {
         setup();
         await waitForLoad();

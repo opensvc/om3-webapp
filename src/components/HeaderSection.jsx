@@ -20,6 +20,7 @@ import logger from '../utils/logger.js';
 
 const HeaderSection = ({
                            decodedObjectName,
+                           objectKind,
                            globalStatus,
                            actionInProgress,
                            objectMenuAnchor,
@@ -31,6 +32,9 @@ const HeaderSection = ({
                        }) => {
     const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
     const {globalExpect} = getObjectStatus();
+    const allowedActions = OBJECT_ACTIONS.filter(
+        (action) => !action.kinds || action.kinds.includes(objectKind)
+    );
 
     return (
         globalStatus && (
@@ -107,7 +111,7 @@ const HeaderSection = ({
                         open={Boolean(objectMenuAnchor)}
                         onClose={() => setObjectMenuAnchor(null)}
                     >
-                        {OBJECT_ACTIONS.map(({name, icon, color}) => {
+                        {allowedActions.map(({name, icon, color}) => {
                             const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
                             return (
                                 <MenuItem

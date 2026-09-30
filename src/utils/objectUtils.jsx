@@ -3,25 +3,33 @@ import {TableCell, Box} from "@mui/material";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
+const COMMON_SVC_ACTIONS = [
+    "start",
+    "stop",
+    "restart",
+    "freeze",
+    "unfreeze",
+    "delete",
+    "provision",
+    "unprovision",
+    "purge",
+    "switch",
+    "giveback",
+    "abort",
+];
+
 const ALLOWED_ACTIONS_BY_KIND = {
     cfg: ["abort", "delete"],
     vol: ["abort", "delete", "freeze", "provision", "purge", "unfreeze", "unprovision"],
     sec: ["abort", "delete"],
     usr: ["abort", "delete"],
-    default: [
-        "start",
-        "stop",
-        "restart",
-        "freeze",
-        "unfreeze",
-        "delete",
-        "provision",
-        "unprovision",
-        "purge",
-        "switch",
-        "giveback",
-        "abort",
-    ],
+    // svc-only actions enable / disable are mounted directly at the object
+    // path (not under /action) and are declared with `kinds: ["svc"]` in
+    // OBJECT_ACTIONS. They must be listed here too, otherwise
+    // isActionAllowedForSelection rejects them and the menu entries stay
+    // disabled or hidden.
+    svc: [...COMMON_SVC_ACTIONS, "enable", "disable"],
+    default: COMMON_SVC_ACTIONS,
 };
 
 export const parseObjectPath = (objName) => {

@@ -304,7 +304,8 @@ const ObjectDetail = () => {
 
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
-        return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
+        const endpoint = INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? action;
+        return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${endpoint}`;
     }, []);
 
     const postConsoleAction = useCallback(async ({node, rid, seats = 1, greet_timeout = "5s"}) => {
@@ -347,7 +348,8 @@ const ObjectDetail = () => {
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
-        const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
+        const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
+        const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${endpoint}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
@@ -694,6 +696,7 @@ const ObjectDetail = () => {
                         <Grid item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
+                                objectKind={kind}
                                 globalStatus={objectStatus}
                                 actionInProgress={actionInProgress}
                                 objectMenuAnchor={objectMenuAnchor}

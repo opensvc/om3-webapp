@@ -55,13 +55,16 @@ vi.mock('../LogsViewer', () => ({
 vi.mock('../../constants/actions', () => ({
     INSTANCE_ACTIONS: [
         {name: '', icon: () => <span>EmptyIcon</span>},
-        {name: 'start', icon: () => <span>StartIcon</span>},
-        {name: 'stop', icon: () => <span>StopIcon</span>},
-        {name: 'freeze', icon: () => <span>FreezeIcon</span>},
-        {name: 'unfreeze', icon: () => <span>UnfreezeIcon</span>},
-        {name: 'restart', icon: () => <span>RestartIcon</span>},
-        {name: 'unprovision', icon: () => <span>UnprovisionIcon</span>},
-        {name: 'purge', icon: () => <span>PurgeIcon</span>},
+        {name: 'start', icon: () => <span>StartIcon</span>, endpoint: 'start'},
+        {name: 'stop', icon: () => <span>StopIcon</span>, endpoint: 'stop'},
+        {name: 'freeze', icon: () => <span>FreezeIcon</span>, endpoint: 'freeze'},
+        {name: 'unfreeze', icon: () => <span>UnfreezeIcon</span>, endpoint: 'unfreeze'},
+        {name: 'restart', icon: () => <span>RestartIcon</span>, endpoint: 'restart'},
+        {name: 'unprovision', icon: () => <span>UnprovisionIcon</span>, endpoint: 'unprovision'},
+        {name: 'purge', icon: () => <span>PurgeIcon</span>, endpoint: 'purge'},
+        // multi-word actions whose endpoint differs from the label
+        {name: 'start standby', icon: () => <span>StartStandbyIcon</span>, endpoint: 'startstandby'},
+        {name: 'pg reset', icon: () => <span>PgResetIcon</span>, endpoint: 'pg/reset'},
     ],
     RESOURCE_ACTIONS: [
         {name: 'start', icon: () => <span>StartIcon</span>},
@@ -591,7 +594,35 @@ describe('ObjectInstanceView', () => {
         await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     });
 
-    // Dialog confirm flows
+    // ── endpoint mapping for multi-word instance actions ─────────────────
+    test('instance action "start standby" uses endpoint "startstandby" in the URL', async () => {
+        global.fetch.mockResolvedValue({ok: true, headers: new Map()});
+        setupWithStatus({avail: 'up', resources: {}});
+        await triggerInstanceAction('Start standby');
+        await waitFor(() => expect(screen.getByText(/Confirm Start standby/i)).toBeInTheDocument());
+        fireEvent.click(screen.getByText('Confirm'));
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/action\/startstandby$/),
+                expect.any(Object)
+            )
+        );
+    });
+
+    test('instance action "pg reset" uses endpoint "pg/reset" in the URL', async () => {
+        global.fetch.mockResolvedValue({ok: true, headers: new Map()});
+        setupWithStatus({avail: 'up', resources: {}});
+        await triggerInstanceAction('Pg reset');
+        await waitFor(() => expect(screen.getByText(/Confirm Pg reset/i)).toBeInTheDocument());
+        fireEvent.click(screen.getByText('Confirm'));
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/action\/pg\/reset$/),
+                expect.any(Object)
+            )
+        );
+    });
+
     test('freeze dialog: confirm button disabled until checkbox checked', async () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Freeze');

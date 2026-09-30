@@ -47,7 +47,7 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
 import {closeEventSource, startEventReception, forceFlush} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
-import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
+import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
@@ -127,7 +127,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
                 )}
             </Box>
 
-            {/* Frozen indicator - right side */}
             <Box sx={{
                 width: "24px",
                 height: "24px",
@@ -482,7 +481,6 @@ const Objects = () => {
     const [loading, setLoading] = useState(false);
     const tableContainerRef = useRef(null);
 
-    // Generate unique IDs for form labels
     const globalStateId = React.useId();
     const namespaceId = React.useId();
     const kindId = React.useId();
@@ -505,7 +503,7 @@ const Objects = () => {
         for (let i = 0; i < allObjectNames.length; i++) {
             const name = allObjectNames[i];
             nsSet.add(extractNamespace(name));
-            kindSet.add(extractKind(name));
+            kindSet.add(parseObjectName(name).kind);
         }
 
         return {
@@ -545,8 +543,7 @@ const Objects = () => {
                 continue;
             }
 
-            // Check kind filter (multiple selection)
-            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(extractKind(name))) {
+            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
                 continue;
             }
 
@@ -695,7 +692,8 @@ const Objects = () => {
                     errorCount++;
                     return;
                 }
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
+                const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/${endpoint}`;
                 try {
                     const response = await fetch(url, {
                         method: "POST",
@@ -934,13 +932,23 @@ const Objects = () => {
     const filteredRowActions = useMemo(() => {
         if (!currentObject) return [];
         const objectData = objectStatus[currentObject];
+        const {kind: objectKind} = parseObjectName(currentObject);
         return OBJECT_ACTIONS.filter(
             (action) =>
+                (!action.kinds || action.kinds.includes(objectKind)) &&
                 isActionAllowedForSelection(action.name, [currentObject]) &&
                 (action.name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
                 (action.name !== "unfreeze" || objectData?.frozen === "frozen")
         );
     }, [currentObject, objectStatus]);
+
+    const filteredBulkActions = useMemo(() => {
+        const allSvc = selectedObjects.length > 0
+            && selectedObjects.every((obj) => parseObjectName(obj).kind === "svc");
+        return OBJECT_ACTIONS.filter(
+            (action) => !action.kinds || (allSvc && action.kinds.includes("svc"))
+        );
+    }, [selectedObjects]);
 
     return (
         <Box sx={{
@@ -1254,7 +1262,7 @@ const Objects = () => {
                             }
                         }}
                     >
-                        {OBJECT_ACTIONS.map((action) => {
+                        {filteredBulkActions.map((action) => {
                             const {name, icon, color} = action;
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (

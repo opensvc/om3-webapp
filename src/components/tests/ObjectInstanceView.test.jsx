@@ -78,13 +78,31 @@ vi.mock('../../constants/actions', () => ({
     ],
 }));
 
-vi.mock('@mui/icons-material', () => ({
-    MoreVert: () => <span data-testid="more-vert-icon">MoreVertIcon</span>,
-    FiberManualRecord: () => <span data-testid="fiber-manual-record-icon">●</span>,
-    PriorityHigh: () => <span data-testid="priority-high-icon" aria-label="Not Provisioned">!</span>,
-    AcUnit: () => <span data-testid="ac-unit-icon" aria-label="Frozen">❄</span>,
-    Article: () => <span data-testid="article-icon">📄</span>,
-    Close: () => <span data-testid="close-icon" aria-label="Close">×</span>,
+// ── Icon mocks ─────────────────────────────────────────────────────────
+
+vi.mock('@mui/icons-material/MoreVert', () => ({
+    default: () => <span data-testid="more-vert-icon">MoreVertIcon</span>,
+}));
+vi.mock('@mui/icons-material/FiberManualRecord', () => ({
+    default: () => <span data-testid="fiber-manual-record-icon">●</span>,
+}));
+vi.mock('@mui/icons-material/PriorityHigh', () => ({
+    default: () => <span data-testid="priority-high-icon" aria-label="Not Provisioned">!</span>,
+}));
+vi.mock('@mui/icons-material/AcUnit', () => ({
+    default: () => <span data-testid="ac-unit-icon" aria-label="Frozen">❄</span>,
+}));
+vi.mock('@mui/icons-material/Article', () => ({
+    default: () => <span data-testid="article-icon">📄</span>,
+}));
+vi.mock('@mui/icons-material/Close', () => ({
+    default: () => <span data-testid="close-icon" aria-label="Close">×</span>,
+}));
+vi.mock('@mui/icons-material/SyncProblem', () => ({
+    default: () => <span data-testid="sync-problem-icon" aria-label="RPO breached">↻</span>,
+}));
+vi.mock('@mui/icons-material/Stop', () => ({
+    default: () => <span data-testid="stop-icon" aria-label="Stop">■</span>,
 }));
 
 Object.assign(navigator, {
@@ -224,6 +242,30 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', frozen_at: '2024-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
         expect(await screen.findByTestId('ac-unit-icon')).toBeInTheDocument();
+    });
+
+    test('shows stopped icon when instance is stopped', async () => {
+        setupWithStatus({avail: 'down', stopped_at: '2024-01-01T00:00:00Z', resources: {}});
+        await waitLoaded();
+        expect(await screen.findByTestId('stop-icon')).toBeInTheDocument();
+    });
+
+    test('does not show stopped icon when stopped_at is the zero sentinel', async () => {
+        setupWithStatus({avail: 'up', stopped_at: '0001-01-01T00:00:00Z', resources: {}});
+        await waitLoaded();
+        expect(screen.queryByTestId('stop-icon')).not.toBeInTheDocument();
+    });
+
+    test('shows sync problem icon when instance is lagging', async () => {
+        setupWithStatus({avail: 'up', rpo_breached_at: '2024-01-01T00:00:00Z', resources: {}});
+        await waitLoaded();
+        expect(await screen.findByTestId('sync-problem-icon')).toBeInTheDocument();
+    });
+
+    test('does not show sync problem icon when rpo_breached_at is the zero sentinel', async () => {
+        setupWithStatus({avail: 'up', rpo_breached_at: '0001-01-01T00:00:00Z', resources: {}});
+        await waitLoaded();
+        expect(screen.queryByTestId('sync-problem-icon')).not.toBeInTheDocument();
     });
 
     test('shows not-provisioned warning when instance is not provisioned', async () => {

@@ -11,7 +11,9 @@ import AcUnitIcon from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import ArticleIcon from "@mui/icons-material/Article";
-import {grey, blue, red} from "@mui/material/colors";
+import SyncProblemIcon from "@mui/icons-material/SyncProblem";
+import Stop from "@mui/icons-material/Stop";
+import {grey, blue, red, orange} from "@mui/material/colors";
 import logger from '../utils/logger.js';
 
 const InstanceCard = ({
@@ -23,7 +25,13 @@ const InstanceCard = ({
                           setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
                           setCurrentNode = () => logger.warn("setCurrentNode not provided"),
                           getColor = () => grey[500],
-                          getNodeState = () => ({avail: "unknown", frozen: "unfrozen", state: null}),
+                          getNodeState = () => ({
+                              avail: "unknown",
+                              frozen: "unfrozen",
+                              state: null,
+                              isStopped: false,
+                              isLagging: false,
+                          }),
                           instanceName,
                           onOpenLogs = () => logger.warn("onOpenLogs not provided"),
                           onViewInstance,
@@ -36,8 +44,12 @@ const InstanceCard = ({
         return null;
     }
 
-    const {avail, frozen, state} = getNodeState(node);
+    const {avail, frozen, state, isStopped, isLagging} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned === false || nodeData?.provisioned === "false";
+
+    const stoppedTooltip = nodeData?.stopped_at
+        ? `stopped at ${new Date(nodeData.stopped_at).toLocaleString()}`
+        : "stopped";
 
     const handleCardClick = (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
@@ -114,6 +126,28 @@ const InstanceCard = ({
                 </Box>
 
                 <Box sx={{display: "flex", alignItems: "center", gap: 2}} className="no-click">
+                    {isStopped && (
+                        <Tooltip title={stoppedTooltip}>
+                            <Stop
+                                sx={{fontSize: "1rem", color: grey[600], cursor: 'help'}}
+                                aria-label={`Instance on node ${node} is stopped`}
+                            />
+                        </Tooltip>
+                    )}
+
+                    {isLagging ? (
+                        <Tooltip title="RPO breached">
+                            <SyncProblemIcon
+                                sx={{fontSize: "1.2rem", color: orange[500]}}
+                                aria-label={`Instance on node ${node} is lagging`}
+                            />
+                        </Tooltip>
+                    ) : frozen === "frozen" ? (
+                        <Tooltip title="frozen">
+                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
+                        </Tooltip>
+                    ) : null}
+
                     <Tooltip title={avail || "unknown"}>
                         <FiberManualRecordIcon
                             sx={{
@@ -122,12 +156,6 @@ const InstanceCard = ({
                             }}
                         />
                     </Tooltip>
-
-                    {frozen === "frozen" && (
-                        <Tooltip title="frozen">
-                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                        </Tooltip>
-                    )}
 
                     <IconButton
                         onClick={handleMenuOpen}

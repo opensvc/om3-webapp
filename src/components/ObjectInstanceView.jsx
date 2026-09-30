@@ -24,14 +24,14 @@ import {
     Checkbox,
     CircularProgress,
 } from "@mui/material";
-import {
-    MoreVert as MoreVertIcon,
-    FiberManualRecord as FiberManualRecordIcon,
-    PriorityHigh as PriorityHighIcon,
-    AcUnit as AcUnitIcon,
-    Article as ArticleIcon,
-    Close as CloseIcon,
-} from "@mui/icons-material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import AcUnitIcon from "@mui/icons-material/AcUnit";
+import ArticleIcon from "@mui/icons-material/Article";
+import CloseIcon from "@mui/icons-material/Close";
+import SyncProblemIcon from "@mui/icons-material/SyncProblem";
+import StopIcon from "@mui/icons-material/Stop";
 import {green, grey, orange, red, blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {URL_NODE} from "../config/apiPath.js";
@@ -49,6 +49,9 @@ const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: fa
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+const ZERO_TIME = "0001-01-01T00:00:00Z";
+const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
 
 const ResourceRow = React.memo(({
                                     rid,
@@ -794,7 +797,9 @@ const ObjectInstanceView = () => {
     }, [isResizing, handleResizeMove, handleResizeEnd]);
 
     const instanceStatus = instanceData.avail || 'unknown';
-    const isFrozen = instanceData.frozen_at && instanceData.frozen_at !== "0001-01-01T00:00:00Z";
+    const isFrozen = hasTimestamp(instanceData.frozen_at);
+    const isStopped = hasTimestamp(instanceData.stopped_at);
+    const isLagging = hasTimestamp(instanceData.rpo_breached_at);
     const isInstanceNotProvisioned = instanceData.provisioned !== undefined ? !instanceData.provisioned : false;
 
     const filteredInstanceActions = useMemo(() => {
@@ -866,6 +871,24 @@ const ObjectInstanceView = () => {
                         <Tooltip title={instanceStatus}>
                             <FiberManualRecordIcon sx={{color: getColor(instanceStatus), fontSize: "1.5rem"}}/>
                         </Tooltip>
+
+                        {isStopped && (
+                            <Tooltip title={`stopped at ${new Date(instanceData.stopped_at).toLocaleString()}`}>
+                                <StopIcon
+                                    sx={{color: grey[600], fontSize: '1.2rem', cursor: 'help'}}
+                                    aria-label="Instance is stopped"
+                                />
+                            </Tooltip>
+                        )}
+
+                        {isLagging && (
+                            <Tooltip title="RPO breached">
+                                <SyncProblemIcon
+                                    sx={{color: orange[500], fontSize: '1.2rem'}}
+                                    aria-label="RPO breached"
+                                />
+                            </Tooltip>
+                        )}
 
                         {isFrozen && (
                             <Tooltip title="frozen">

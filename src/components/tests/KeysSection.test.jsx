@@ -71,6 +71,7 @@ vi.mock('@mui/icons-material/Add', () => ({default: () => <span/>}));
 vi.mock('@mui/icons-material/Edit', () => ({default: () => <span/>}));
 vi.mock('@mui/icons-material/Delete', () => ({default: () => <span/>}));
 vi.mock('@mui/icons-material/Visibility', () => ({default: () => <span/>}));
+vi.mock('@mui/icons-material/VisibilityOff', () => ({default: () => <span/>}));
 vi.mock('@mui/icons-material/Fullscreen', () => ({default: () => <span data-testid="fullscreen-icon"/>}));
 vi.mock('@mui/icons-material/FullscreenExit', () => ({default: () => <span data-testid="fullscreen-exit-icon"/>}));
 
@@ -605,5 +606,199 @@ describe('KeysSection', () => {
             await user.click(within(dialog).getByRole('button', {name: /Update/i}));
         });
         await waitFor(() => expect(capturedBody instanceof File).toBe(true));
+    });
+
+    // ── Secret-specific tests ─────────────────────────────────────────────
+
+    test('secret view is hidden by default', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('supersecret')),
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        await openDialog('view', 'sk');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+
+        expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
+        expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
+    });
+
+    test('secret reveal button toggles content visibility', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('supersecret')),
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        await openDialog('view', 'sk');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+
+        const revealBtn = within(dialog).getByRole('button', {name: /reveal secret/i});
+        await act(async () => {
+            await user.click(revealBtn);
+        });
+        expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
+        expect(within(dialog).queryByText(/hidden by default/i)).not.toBeInTheDocument();
+
+        const hideBtn = within(dialog).getByRole('button', {name: /hide secret/i});
+        await act(async () => {
+            await user.click(hideBtn);
+        });
+        expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
+        expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
+    });
+
+    test('cfg view does not show reveal button and displays content directly', async () => {
+        mockFetch({
+            keys: [{name: 'ck', node: 'n', size: 5}],
+            keyBlob: makeMockBlob(encodeText('hello')),
+        });
+        await renderAndWait('root/cfg/cfg1', 1);
+        await openDialog('view', 'ck');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+
+        expect(within(dialog).queryByRole('button', {name: /reveal secret/i})).not.toBeInTheDocument();
+        expect(within(dialog).queryByRole('button', {name: /hide secret/i})).not.toBeInTheDocument();
+        expect(within(dialog).getByDisplayValue('hello')).toBeInTheDocument();
+    });
+
+    test('secret view resets reveal state on reopen', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('supersecret')),
+        });
+        await renderAndWait('root/sec/sec1', 1);
+
+        let dialog = await openDialog('view', 'sk');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
+        });
+        expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
+
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Close/i}));
+        });
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+        dialog = await openDialog('view', 'sk');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
+        expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
+    });
+
+    test('secret edit does not fetch content and shows info message', async () => {
+        let fetchKeyCalled = false;
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            methods: {
+                GET: (url) => {
+                    if (url.includes('/data/key?name=')) {
+                        fetchKeyCalled = true;
+                        return Promise.resolve({
+                            ok: true,
+                            blob: () => Promise.resolve(makeMockBlob(encodeText('supersecret'))),
+                        });
+                    }
+                    return undefined;
+                },
+            },
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        const dialog = await openDialog('edit', 'sk');
+
+        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(
+            "Secret content is hidden. Provide new content to update it.",
+            "info"
+        ));
+        expect(fetchKeyCalled).toBe(false);
+        expect(within(dialog).getByRole('radio', {name: /Upload from file/i})).toBeChecked();
+        expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+    });
+
+    test('secret edit uploads new content via file', async () => {
+        let capturedBody;
+        let fetchKeyCalled = false;
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            methods: {
+                GET: (url) => {
+                    if (url.includes('/data/key?name=')) {
+                        fetchKeyCalled = true;
+                    }
+                    return undefined;
+                },
+                PUT: (url, options) => {
+                    capturedBody = options.body;
+                    return Promise.resolve({ok: true});
+                },
+            },
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        const dialog = await openDialog('edit', 'sk');
+
+        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(
+            "Secret content is hidden. Provide new content to update it.",
+            "info"
+        ));
+
+        await uploadFileInDialog(dialog, 'update');
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Update/i}));
+        });
+
+        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'sk' updated successfully"));
+        expect(capturedBody).toBeInstanceOf(File);
+        expect(fetchKeyCalled).toBe(false);
+    });
+
+    test('secret delete works normally', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            methods: {DELETE: () => Promise.resolve({ok: true})},
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        const dialog = await openDialog('delete', 'sk');
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Delete/i}));
+        });
+        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'sk' deleted successfully"));
+    });
+
+    test('secret create works normally', async () => {
+        mockFetch({
+            keys: [],
+            methods: {POST: () => Promise.resolve({ok: true})},
+        });
+        await renderAndWait('root/sec/sec1', 0);
+        const dialog = await openDialog('create');
+        await act(async () => {
+            await user.type(within(dialog).getByRole('textbox', {name: /Key Name/i}), 'newSecret');
+        });
+        await selectInputMode(dialog, 'text');
+        const textArea = within(dialog).getByPlaceholderText(/Enter the text content/i);
+        await act(async () => {
+            await user.type(textArea, 'mySecretValue');
+        });
+        await act(async () => {
+            await user.click(within(dialog).getByRole('button', {name: /Create/i}));
+        });
+        await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith("Key 'newSecret' created successfully"));
+    });
+
+    test('secret view shows reveal button with correct initial label', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('topsecret')),
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        await openDialog('view', 'sk');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+
+        expect(within(dialog).getByRole('button', {name: /reveal secret/i})).toBeInTheDocument();
+        expect(within(dialog).queryByRole('button', {name: /hide secret/i})).not.toBeInTheDocument();
     });
 });

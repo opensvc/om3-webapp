@@ -1170,6 +1170,145 @@ describe('ObjectDetail Component', () => {
         if (instanceTitle) expect(instanceTitle).toBeInTheDocument();
     });
 
+    // ── per-node stopped / RPO-breached indicators ───────────────────────
+    describe('per-node stopped and RPO-breached indicators', () => {
+        test('shows the stopped indicator on the node card when stopped_at is set', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'down', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'down',
+                            frozen_at: null,
+                            stopped_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is stopped')).toBeInTheDocument();
+        });
+
+        test('does not show the stopped indicator when stopped_at is the zero sentinel', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            stopped_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is stopped')).not.toBeInTheDocument();
+        });
+
+        test('shows the RPO-breached indicator on the node card when rpo_breached_at is set', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            rpo_breached_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is lagging')).toBeInTheDocument();
+        });
+
+        test('does not show the RPO-breached indicator when rpo_breached_at is the zero sentinel', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            rpo_breached_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is lagging')).not.toBeInTheDocument();
+        });
+
+        test('shows stopped and RPO-breached indicators simultaneously', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'down', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'down',
+                            frozen_at: null,
+                            stopped_at: '2025-05-16T10:00:00Z',
+                            rpo_breached_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is stopped')).toBeInTheDocument();
+            expect(screen.getByLabelText('Instance on node node1 is lagging')).toBeInTheDocument();
+        });
+
+        test('healthy node shows neither stopped nor RPO-breached indicators', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            stopped_at: '0001-01-01T00:00:00Z',
+                            rpo_breached_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is stopped')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Instance on node node1 is lagging')).not.toBeInTheDocument();
+        });
+    });
+
     // ── instanceConfig subscription ──────────────────────────────────────
     test.each([
         [

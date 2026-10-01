@@ -280,6 +280,168 @@ describe('useEventStore', () => {
                 expect(useEventStore.getState().objectInstanceStatus.svc).toEqual({});
             });
         });
+
+        describe('preservation of stopped_at / rpo_breached_at across partial updates', () => {
+            test('stopped_at survives a subsequent partial update without it', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {
+                                avail: 'down',
+                                stopped_at: '2025-05-16T10:00:00Z',
+                            },
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {state: 'idle'},
+                        },
+                    });
+                });
+                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
+                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
+                expect(node.state).toBe('idle');
+                expect(node.avail).toBe('down');
+            });
+
+            test('rpo_breached_at survives a subsequent partial update without it', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {
+                                avail: 'up',
+                                rpo_breached_at: '2025-05-16T10:00:00Z',
+                            },
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {state: 'running'},
+                        },
+                    });
+                });
+                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
+                expect(node.rpo_breached_at).toBe('2025-05-16T10:00:00Z');
+                expect(node.state).toBe('running');
+                expect(node.avail).toBe('up');
+            });
+
+            test('both stopped_at and rpo_breached_at survive together', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {
+                                avail: 'down',
+                                stopped_at: '2025-05-16T10:00:00Z',
+                                rpo_breached_at: '2025-05-16T10:05:00Z',
+                            },
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {state: 'stopping'},
+                        },
+                    });
+                });
+                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
+                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
+                expect(node.rpo_breached_at).toBe('2025-05-16T10:05:00Z');
+                expect(node.state).toBe('stopping');
+            });
+
+            test('an explicit stopped_at in the incoming payload overrides the previous value', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {stopped_at: '2025-05-16T10:00:00Z'},
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {stopped_at: '2025-05-16T11:00:00Z'},
+                        },
+                    });
+                });
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1.stopped_at)
+                    .toBe('2025-05-16T11:00:00Z');
+            });
+
+            test('an explicit rpo_breached_at in the incoming payload overrides the previous value', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {rpo_breached_at: '2025-05-16T10:00:00Z'},
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {rpo_breached_at: '2025-05-16T11:00:00Z'},
+                        },
+                    });
+                });
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1.rpo_breached_at)
+                    .toBe('2025-05-16T11:00:00Z');
+            });
+
+            test('the zero sentinel from the API is stored verbatim and overwrites a previous value', () => {
+                // The UI-side `hasTimestamp` helper is what treats the sentinel
+                // as "not set". The store itself stores whatever the API sends.
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {stopped_at: '2025-05-16T10:00:00Z'},
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {stopped_at: '0001-01-01T00:00:00Z'},
+                        },
+                    });
+                });
+                expect(useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1.stopped_at)
+                    .toBe('0001-01-01T00:00:00Z');
+            });
+
+            test('preservation also works across multiple sequential partial updates', () => {
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {
+                            dev1n1: {
+                                avail: 'down',
+                                stopped_at: '2025-05-16T10:00:00Z',
+                                rpo_breached_at: '2025-05-16T10:05:00Z',
+                            },
+                        },
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {dev1n1: {state: 'stopping'}},
+                    });
+                });
+                act(() => {
+                    useEventStore.getState().setInstanceStatuses({
+                        'root/svc/foo': {dev1n1: {state: 'idle'}},
+                    });
+                });
+                const node = useEventStore.getState().objectInstanceStatus['root/svc/foo'].dev1n1;
+                expect(node.stopped_at).toBe('2025-05-16T10:00:00Z');
+                expect(node.rpo_breached_at).toBe('2025-05-16T10:05:00Z');
+                expect(node.state).toBe('idle');
+            });
+        });
     });
 
     // -----------------------------------------------------------------------

@@ -6,8 +6,6 @@ import {
     DialogActions,
     Button,
     Typography,
-    TextField,
-    Box,
 } from '@mui/material';
 import {
     FreezeDialog,
@@ -20,78 +18,6 @@ import {
 } from './ActionDialogs';
 import logger from '../utils/logger.js';
 
-// ConsoleDialog component for ActionDialogManager
-export const ConsoleDialog = ({
-                                  open,
-                                  onClose,
-                                  onConfirm,
-                                  seats,
-                                  setSeats,
-                                  greetTimeout,
-                                  setGreetTimeout,
-                                  disabled,
-                                  pendingAction
-                              }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Open Console</DialogTitle>
-        <DialogContent>
-            <Typography variant="body1" sx={{mb: 2}}>
-                This will open a terminal console for the selected resource.
-            </Typography>
-            {pendingAction?.rid && (
-                <Typography variant="body2" color="primary" sx={{mb: 2, fontWeight: 'bold'}}>
-                    Resource: {pendingAction.rid}
-                </Typography>
-            )}
-            {pendingAction?.node && (
-                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
-                    Node: {pendingAction.node}
-                </Typography>
-            )}
-            <Typography variant="body2" sx={{mb: 3}}>
-                The console session will open in a new browser tab and provide shell access to the container.
-            </Typography>
-            <Box sx={{mb: 2}}>
-                <TextField
-                    autoFocus
-                    margin="dense"
-                    label="Number of Seats"
-                    type="number"
-                    fullWidth
-                    variant="outlined"
-                    value={seats}
-                    onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value) || 1))}
-                    disabled={disabled}
-                    helperText="Number of simultaneous users allowed in the console"
-                />
-            </Box>
-            <TextField
-                margin="dense"
-                label="Greet Timeout"
-                type="text"
-                fullWidth
-                variant="outlined"
-                value={greetTimeout}
-                onChange={(e) => setGreetTimeout(e.target.value)}
-                disabled={disabled}
-                helperText="Time to wait for console connection (e.g., 5s, 10s)"
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled}
-            >
-                Open Console
-            </Button>
-        </DialogActions>
-    </Dialog>
-);
 export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, disabled, cancelDisabled}) => {
     const dialogTitle = typeof action === 'string' && action
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
@@ -127,12 +53,6 @@ const ActionDialogManager = ({
                                  target,
                                  supportedActions = [],
                                  onClose,
-                                 seats = 1,
-                                 setSeats = () => {
-                                 },
-                                 greetTimeout = "5s",
-                                 setGreetTimeout = () => {
-                                 },
                              }) => {
     const [checkboxState, setCheckboxState] = useState({
         freeze: false,
@@ -142,7 +62,6 @@ const ActionDialogManager = ({
         "delete": {configLoss: false, clusterwide: false},
         "switch": false,
         giveback: false,
-        console: false,
         simpleConfirm: false,
     });
     const [lastAction, setLastAction] = useState(null);
@@ -330,24 +249,6 @@ const ActionDialogManager = ({
                 target,
             },
         },
-        console: {
-            component: ConsoleDialog,
-            props: {
-                onClose: () => {
-                    if (onClose) onClose();
-                },
-                onConfirm: () => {
-                    handleConfirm(pendingAction?.action);
-                    if (onClose) onClose();
-                },
-                seats,
-                setSeats,
-                greetTimeout,
-                setGreetTimeout,
-                pendingAction,
-                target,
-            },
-        },
         simpleConfirm: {
             component: SimpleConfirmDialog,
             props: {
@@ -364,7 +265,7 @@ const ActionDialogManager = ({
                 cancelDisabled: false,
             },
         },
-    }), [checkboxState, handleConfirm, pendingAction, target, onClose, seats, setSeats, greetTimeout, setGreetTimeout]);
+    }), [checkboxState, handleConfirm, pendingAction, target, onClose]);
     useEffect(() => {
         if (pendingAction === null) {
             setLastAction(null);

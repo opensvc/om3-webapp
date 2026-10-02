@@ -193,7 +193,6 @@ vi.mock('../../constants/actions', () => ({
         {name: 'run', icon: 'RunIcon'},
         {name: 'unprovision', icon: 'UnprovisionIcon'},
         {name: 'purge', icon: 'PurgeIcon'},
-        {name: 'console', icon: 'ConsoleIcon'},
     ],
 }));
 
@@ -437,40 +436,6 @@ const mockActionFailure = (status = 500, message = 'Server error') => {
     );
 };
 
-const withConsoleAction = async (fn) => {
-    const {INSTANCE_ACTIONS} = await import('../../constants/actions');
-    const orig = [...INSTANCE_ACTIONS];
-    INSTANCE_ACTIONS.push({name: 'console', icon: 'ConsoleIcon'});
-    try {
-        await fn();
-    } finally {
-        INSTANCE_ACTIONS.length = 0;
-        orig.forEach((a) => INSTANCE_ACTIONS.push(a));
-    }
-};
-
-const openConsoleDialogFn = async () => {
-    await screen.findByText('node1');
-    await userEvent.click(screen.getByRole('button', {name: /Node node1 actions/i}));
-    await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0), {timeout: 3000});
-    const menus = screen.getAllByRole('menu');
-    const consoleItems = within(menus[menus.length - 1]).queryAllByRole('menuitem', {name: /console/i});
-    if (consoleItems.length === 0) return null;
-    await userEvent.click(consoleItems[0]);
-    await waitFor(() => {
-        expect(
-            screen.queryAllByRole('dialog').some(
-                (d) => d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
-            )
-        ).toBe(true);
-    }, {timeout: 5000});
-    return (
-        screen.queryAllByRole('dialog').find(
-            (d) => d.textContent.includes('terminal console') || d.textContent.includes('Open Console')
-        ) || null
-    );
-};
-
 const expandResourceSections = async () => {
     const expandIcons = screen.queryAllByText('ExpandMore');
     for (const icon of expandIcons) {
@@ -483,26 +448,6 @@ const expandResourceSections = async () => {
             }
         }
     }
-};
-
-const findAndOpenResourceConsoleDialog = async (candidateFinders) => {
-    let trigger = null;
-    for (const find of candidateFinders) {
-        const matches = find();
-        if (matches && matches.length > 0) {
-            trigger = matches[0];
-            break;
-        }
-    }
-    if (!trigger) return null;
-    await userEvent.click(trigger);
-    const menus = screen.queryAllByRole('menu');
-    const consoleItem = menus.length
-        ? within(menus[menus.length - 1]).queryByRole('menuitem', {name: /console/i})
-        : null;
-    if (!consoleItem) return null;
-    await userEvent.click(consoleItem);
-    return screen.queryAllByRole('dialog').find((d) => d.textContent.includes('Open Console')) || null;
 };
 
 const defaultFetchMock = (url, options) => {
@@ -532,11 +477,6 @@ const defaultFetchMock = (url, options) => {
             status: 200,
             text: () => Promise.resolve(`[DEFAULT]\nnodes = *\norchestrate = ha\nid = 0bfea9c4-0114-4776-9169-d5e3455cee1f\n[fs#1]\ntype = flag`),
             json: () => Promise.resolve({}),
-        });
-    if (url.includes('/console') && options?.method === 'POST')
-        return Promise.resolve({
-            ok: true,
-            headers: {get: (h) => (h === 'Location' ? 'http://console.example.com/session123' : null)},
         });
     if (options?.method === 'POST' && url.includes('/action/'))
         return Promise.resolve({ok: true, status: 200, text: () => Promise.resolve('Action executed successfully')});
@@ -1040,20 +980,6 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBe(0));
     });
 
-    test('the onClose of the console Dialog (distinct from Cancel button) closes the dialog', async () => {
-        await withConsoleAction(async () => {
-            renderSvc();
-            const dialog = await openConsoleDialogFn();
-            if (!dialog) return;
-            await user.click(within(dialog).getByTestId('dialog-backdrop-close'));
-            await waitFor(() =>
-                expect(
-                    screen.queryAllByRole('dialog').filter((d) => d.textContent.includes('terminal console')).length
-                ).toBe(0)
-            );
-        });
-    });
-
     test('a touchcancel during logs drawer resizing correctly ends the drag', async () => {
         renderSvc();
         await waitForNode('node1');
@@ -1226,109 +1152,6 @@ describe('ObjectDetail Component', () => {
         const menu = screen.getAllByRole('menu')[0];
         expect(!!within(menu).queryByRole('menuitem', {name: /^freeze/i})).toBe(expectFreeze);
         if (expectStart) expect(within(menu).queryByRole('menuitem', {name: /start/i})).toBeTruthy();
-    });
-
-    // ── Console dialog ───────────────────────────────────────────────────
-    test('console dialog not shown by default', async () => {
-        renderSvc();
-        await waitForNode('node1');
-        await waitFor(() => expect(screen.queryByText(/Open Console/i)).not.toBeInTheDocument());
-    });
-
-    test('handleConsoleConfirm: cancel closes dialog', async () => {
-        await withConsoleAction(async () => {
-            renderSvc();
-            const dialog = await openConsoleDialogFn();
-            if (!dialog) return;
-            const cancelBtn = within(dialog).queryByRole('button', {name: /cancel/i});
-            if (cancelBtn) {
-                await user.click(cancelBtn);
-                await waitFor(() =>
-                    expect(screen.queryAllByRole('dialog').filter((d) => d.textContent.includes('terminal console')).length).toBe(0)
-                );
-            }
-        });
-    });
-
-    test('handleConsoleConfirm without rid does not call postConsoleAction', async () => {
-        await withConsoleAction(async () => {
-            renderSvc();
-            await waitForNode('node1');
-            await userEvent.click(screen.getByRole('button', {name: /Node node1 actions/i}));
-            await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-            const consoleItem = within(screen.getAllByRole('menu')[0]).queryByRole('menuitem', {name: /console/i});
-            if (!consoleItem) return;
-            await userEvent.click(consoleItem);
-            const dialog = await screen.findByRole('dialog');
-            const fetchCallsBefore = global.fetch.mock.calls.filter(
-                ([u, opts]) => opts?.method === 'POST' && u.includes('/console')
-            ).length;
-            await userEvent.click(within(dialog).getByRole('button', {name: /open console/i}));
-            await waitFor(() => {
-                const fetchCallsAfter = global.fetch.mock.calls.filter(
-                    ([u, opts]) => opts?.method === 'POST' && u.includes('/console')
-                ).length;
-                expect(fetchCallsAfter).toBe(fetchCallsBefore);
-            });
-        });
-    });
-
-    test('handleConsoleConfirm: seats and greet timeout inputs behave correctly', async () => {
-        await withConsoleAction(async () => {
-            renderSvc();
-            const dialog = await openConsoleDialogFn();
-            if (!dialog) return;
-            const seatsInput = within(dialog).queryByLabelText(/Number of Seats/i);
-            if (seatsInput) {
-                fireEvent.change(seatsInput, {target: {value: '5'}});
-                expect(seatsInput.value).toBe('5');
-                fireEvent.change(seatsInput, {target: {value: '0'}});
-                expect(seatsInput.value).toBe('1');
-                fireEvent.change(seatsInput, {target: {value: 'abc'}});
-                expect(seatsInput.value).toBe('1');
-            }
-            const greetInput = within(dialog).queryByLabelText(/Greet Timeout/i);
-            if (greetInput) {
-                fireEvent.change(greetInput, {target: {value: '10s'}});
-                expect(greetInput.value).toBe('10s');
-            }
-        });
-    });
-
-    test.each([
-        ['action-button trigger', () => [
-            () => screen.queryAllByRole('button', {name: /res1.*(actions|console)/i}),
-            () => screen.queryAllByRole('button', {name: /console/i}),
-            () => screen.queryAllByLabelText(/resource res1 actions/i),
-        ], false],
-        ['tooltip title trigger, exercises HTTP-error path', () => [
-            () => screen.queryAllByTitle(/console/i),
-        ], true],
-    ])('best-effort: resource console trigger via %s', async (label, getCandidates, simulateHttpError) => {
-        await withConsoleAction(async () => {
-            renderSvc();
-            await waitForNode('node1');
-            await expandResourceSections();
-
-            const dialog = await findAndOpenResourceConsoleDialog(getCandidates());
-            if (!dialog) return;
-
-            if (simulateHttpError) mockActionFailure(500, 'Console error');
-            await user.click(within(dialog).getByRole('button', {name: /open console/i}));
-            await waitFor(() => {
-                if (simulateHttpError) {
-                    const alerts = screen.queryAllByRole('alert');
-                    if (alerts.some((a) => a.textContent.includes('Failed to open console'))) {
-                        expect(alerts.some((a) => a.textContent.includes('Failed to open console'))).toBe(true);
-                    }
-                } else {
-                    const called = global.fetch.mock.calls.some(
-                        ([u, opts]) => opts?.method === 'POST' && u.includes('/console')
-                    );
-                    if (called) expect(called).toBe(true);
-                }
-            });
-        });
     });
 
     // ── Fallback fetch ───────────────────────────────────────────────────

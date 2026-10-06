@@ -51,6 +51,16 @@ vi.mock('../EventLogger', () => ({
 vi.mock('../LogsViewer', () => ({
     default: () => <div data-testid="logs-viewer"/>,
 }));
+// The terminal has its own tests: what the page hands it is what is checked
+// here.
+vi.mock('../ConsoleTerminal.jsx', () => ({
+    default: ({open, target, onClose}) => open ? (
+        <div>
+            <span data-testid="console-terminal-target">{JSON.stringify(target)}</span>
+            <button onClick={onClose}>close console</button>
+        </div>
+    ) : null,
+}));
 
 vi.mock('../../constants/actions', () => ({
     INSTANCE_ACTIONS: [
@@ -167,7 +177,7 @@ const triggerConsoleFlow = async () => {
     await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
     await openResourceMenu('container1');
     fireEvent.click(screen.getByText('Console'));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Open Console'})).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('console-terminal-target')).toBeInTheDocument());
 };
 
 const containerStatus = (extraResources = {}) => ({
@@ -742,98 +752,27 @@ describe('ObjectInstanceView', () => {
     });
 
     // Console action
-    test('console dialog: opens, sets params, calls API and shows URL', async () => {
-        global.fetch.mockResolvedValue({
-            ok: true,
-            headers: new Headers({Location: 'https://console.example.com'}),
-        });
+    test('console: opens a terminal on the container resource, with nothing to confirm', async () => {
         setupWithStatus(containerStatus());
         await triggerConsoleFlow();
 
-        fireEvent.change(screen.getByLabelText('Number of Seats'), {target: {value: '2'}});
-        fireEvent.change(screen.getByLabelText('Greet Timeout'), {target: {value: '10s'}});
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-
-        await waitFor(() =>
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('/console?rid=container1&seats=2&greet_timeout=10s'),
-                expect.anything()
-            )
+        expect(screen.getByTestId('console-terminal-target')).toHaveTextContent(
+            JSON.stringify({node: mockNodeName, ...mockParseObjectPathResult, rid: 'container1'})
         );
-        await waitFor(() => {
-            expect(screen.getByText('Console URL')).toBeInTheDocument();
-            expect(screen.getByText('https://console.example.com')).toBeInTheDocument();
-        });
+        // The terminal asks for its ticket itself: the page posts nothing,
+        // and shows no dialog to confirm.
+        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/console'), expect.anything());
+        expect(screen.queryByText(/Confirm/)).not.toBeInTheDocument();
     });
 
-    test('console URL dialog: copy, open in new tab, close', async () => {
-        global.fetch.mockResolvedValue({
-            ok: true,
-            headers: new Headers({Location: 'https://console.example.com'}),
-        });
+    test('console: the terminal is closed when it says so, and can be opened again', async () => {
         setupWithStatus(containerStatus());
         await triggerConsoleFlow();
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        await waitFor(() => expect(screen.getByText('Console URL')).toBeInTheDocument());
+        fireEvent.click(screen.getByText('close console'));
+        await waitFor(() => expect(screen.queryByTestId('console-terminal-target')).not.toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Copy URL'));
-        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://console.example.com');
-
-        const origOpen = window.open;
-        window.open = vi.fn();
-        fireEvent.click(screen.getByText('Open in New Tab'));
-        expect(window.open).toHaveBeenCalledWith('https://console.example.com', '_blank', 'noopener,noreferrer');
-        window.open = origOpen;
-
-        fireEvent.click(screen.getByText('Close'));
-        await waitFor(() => expect(screen.queryByText('Console URL')).not.toBeInTheDocument());
-    });
-
-    test('console dialog: closes on Cancel', async () => {
-        setupWithStatus(containerStatus());
         await triggerConsoleFlow();
-        fireEvent.click(screen.getByText('Cancel'));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Open Console'})).not.toBeInTheDocument());
-    });
-
-    test('console dialog: closes on ESC', async () => {
-        setupWithStatus(containerStatus());
-        await triggerConsoleFlow();
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Open Console'})).not.toBeInTheDocument());
-    });
-
-    test('console URL dialog: closes on ESC', async () => {
-        global.fetch.mockResolvedValue({
-            ok: true,
-            headers: new Headers({Location: 'https://console.example.com'}),
-        });
-        setupWithStatus(containerStatus());
-        await triggerConsoleFlow();
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        await waitFor(() => expect(screen.getByText('Console URL')).toBeInTheDocument());
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
-        await waitFor(() => expect(screen.queryByText('Console URL')).not.toBeInTheDocument());
-    });
-
-    test('console seats input clamps to 1 for invalid values', async () => {
-        setupWithStatus(containerStatus());
-        await triggerConsoleFlow();
-        const seatsInput = screen.getByLabelText('Number of Seats');
-        fireEvent.change(seatsInput, {target: {value: '0'}});
-        expect(seatsInput.value).toBe('1');
-        fireEvent.change(seatsInput, {target: {value: 'abc'}});
-        expect(seatsInput.value).toBe('1');
-    });
-
-    test('console action: shows error when Location header is missing', async () => {
-        global.fetch.mockResolvedValue({ok: true, headers: new Headers()});
-        setupWithStatus(containerStatus());
-        await triggerConsoleFlow();
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        await waitFor(() =>
-            expect(screen.getByText('Failed to open console: Console URL not found in response')).toBeInTheDocument()
-        );
+        expect(screen.getByTestId('console-terminal-target')).toBeInTheDocument();
     });
 
     // Error handling

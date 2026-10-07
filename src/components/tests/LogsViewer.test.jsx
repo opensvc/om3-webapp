@@ -6,11 +6,9 @@ import LogsViewer from '../LogsViewer';
 
 // Hoist mocked functions for use in vi.mock factories
 const {
-    mockUseDarkMode,
     mockLocalStorage,
     mockLogger,
 } = vi.hoisted(() => ({
-    mockUseDarkMode: vi.fn(() => ({isDarkMode: false, toggleDarkMode: vi.fn()})),
     mockLocalStorage: {
         getItem: vi.fn().mockReturnValue('mock-token'),
     },
@@ -21,29 +19,6 @@ const {
 }));
 
 // ── Mocks ──────────────────────────────────────────────────────────────
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        useTheme: () => ({
-            palette: {
-                background: {paper: '#fff', default: '#f5f5f5'},
-                grey: {100: '#f5f5f5'},
-                divider: '#e0e0e0',
-                text: {primary: '#000', secondary: '#666'},
-                error: {main: '#f44336'},
-                warning: {main: '#ff9800'},
-                info: {main: '#2196f3'},
-                action: {hover: '#f0f0f0', selected: '#e0e0e0'},
-            },
-        }),
-    };
-});
-
-vi.mock('../../context/DarkModeContext', () => ({
-    useDarkMode: mockUseDarkMode,
-}));
-
 vi.mock('../../config/apiPath.js', () => ({
     URL_NODE: 'http://mock-api',
 }));
@@ -115,15 +90,12 @@ const mockHttpErrorFetch = (status) => {
 const renderComponent = (props = {}) =>
     render(<LogsViewer nodename="test-node" {...props} />);
 
-const findLogsContainer = (container) => {
-    const boxes = container.querySelectorAll('.MuiBox-root');
-    for (const box of boxes) {
-        const style = getComputedStyle(box);
-        if (style.overflow === 'auto') {
-            return box;
-        }
-    }
-    return null;
+const findLogsContainer = () => screen.getByRole('log', {name: 'Log lines'});
+
+// Opens the level picker and ticks (or unticks) a level.
+const toggleLevel = (name) => {
+    fireEvent.click(screen.getByText('Levels').nextElementSibling.querySelector('summary'));
+    fireEvent.click(screen.getByRole('checkbox', {name}));
 };
 
 const originalConsoleError = console.error;
@@ -168,7 +140,8 @@ describe('LogsViewer', () => {
             global.fetch = vi.fn(() => new Promise(() => {
             }));
             renderComponent();
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByRole('status', {name: 'Loading logs'})).toBeInTheDocument();
+            expect(screen.getByText('Loading logs...')).toBeInTheDocument();
         });
 
         test('displays "No logs available" when empty', async () => {
@@ -277,7 +250,19 @@ describe('LogsViewer', () => {
         test('shows connected status after fetch', async () => {
             mockSuccessfulFetch([]);
             renderComponent();
+            expect(screen.getByText('Disconnected').parentElement).toHaveAttribute('data-state', 'down');
+            const connected = await screen.findByText('Connected');
+            expect(connected.parentElement).toHaveAttribute('data-state', 'up');
+        });
+
+        test('the pause button says whether streaming is paused', async () => {
+            mockSuccessfulFetch([]);
+            renderComponent();
             await screen.findByText('Connected');
+            const pause = screen.getByRole('button', {name: 'Pause'});
+            expect(pause).toHaveAttribute('aria-pressed', 'false');
+            fireEvent.click(pause);
+            expect(screen.getByRole('button', {name: 'Resume'})).toHaveAttribute('aria-pressed', 'true');
         });
 
         test('pauses and resumes streaming - covers abort during reading', async () => {
@@ -328,7 +313,7 @@ describe('LogsViewer', () => {
             mockSuccessfulFetch([{__REALTIME_TIMESTAMP: baseTs * 1000, MESSAGE: 'Plain message'}]);
             renderComponent();
             await screen.findByText('Plain message');
-            expect(screen.getByText('[INFO]')).toBeInTheDocument();
+            expect(screen.getByText('[INFO]')).toHaveClass('text-ink');
         });
 
         test('parses JSON log with all fields', async () => {
@@ -443,9 +428,10 @@ describe('LogsViewer', () => {
             renderComponent();
             await screen.findByText('Debug log');
 
-            const select = screen.getByLabelText('Select Log Levels');
-            fireEvent.mouseDown(select);
-            fireEvent.click(screen.getByText('Debug'));
+            expect(screen.getByText('All levels')).toBeInTheDocument();
+            toggleLevel('Debug');
+            expect(screen.getByRole('checkbox', {name: 'Debug'})).toBeChecked();
+            expect(screen.getByText('debug', {selector: 'summary'})).toBeInTheDocument();
 
             expect(await screen.findByText('Debug log')).toBeInTheDocument();
             await waitFor(() => expect(screen.queryByText('Error log')).not.toBeInTheDocument());
@@ -455,8 +441,7 @@ describe('LogsViewer', () => {
             renderComponent();
             await screen.findByText('Debug log');
 
-            fireEvent.mouseDown(screen.getByLabelText('Select Log Levels'));
-            fireEvent.click(screen.getByText('Debug'));
+            toggleLevel('Debug');
             await screen.findByText('Debug log');
 
             fireEvent.click(screen.getByText('Debug log'));
@@ -464,12 +449,29 @@ describe('LogsViewer', () => {
             expect(screen.queryByText(/Filters active/)).not.toBeInTheDocument();
         });
 
+        test('unticking a level shows its logs again', async () => {
+            renderComponent();
+            await screen.findByText('Debug log');
+
+            toggleLevel('Debug');
+            toggleLevel('Error');
+            expect(screen.getByText('debug, error', {selector: 'summary'})).toBeInTheDocument();
+            await waitFor(() => expect(screen.queryByText('Warn log')).not.toBeInTheDocument());
+            expect(screen.getByText('Error log')).toBeInTheDocument();
+
+            toggleLevel('Error');
+            await waitFor(() => expect(screen.queryByText('Error log')).not.toBeInTheDocument());
+            toggleLevel('Debug');
+            await screen.findByText('Warn log');
+            expect(screen.getByText('All levels')).toBeInTheDocument();
+            expect(screen.queryByText(/Filters active/)).not.toBeInTheDocument();
+        });
+
         test('shows filtered log count', async () => {
             renderComponent();
             await screen.findByText('3 / 3 logs');
 
-            fireEvent.mouseDown(screen.getByLabelText('Select Log Levels'));
-            fireEvent.click(screen.getByText('Debug'));
+            toggleLevel('Debug');
             await screen.findByText('1 / 3 logs');
         });
 
@@ -480,9 +482,7 @@ describe('LogsViewer', () => {
             fireEvent.change(screen.getByPlaceholderText('Search logs...'), {target: {value: 'debug'}});
             await screen.findByText(/Filters active/);
 
-            const chip = screen.getByText(/Filters active/i).closest('.MuiChip-root');
-            const deleteIcon = chip.querySelector('.MuiChip-deleteIcon');
-            fireEvent.click(deleteIcon);
+            fireEvent.click(screen.getByRole('button', {name: 'Reset filters'}));
 
             expect(screen.queryByText(/Filters active/)).not.toBeInTheDocument();
             expect(screen.getByPlaceholderText('Search logs...')).toHaveValue('');
@@ -494,8 +494,10 @@ describe('LogsViewer', () => {
         test('displays warning log with correct color', async () => {
             renderComponent();
             await screen.findByText('Warn log');
-            const warnElement = screen.getByText('[WARN]');
-            expect(warnElement).toBeInTheDocument();
+            // The level says itself in a state colour.
+            expect(screen.getByText('[WARN]')).toHaveClass('text-state-warn');
+            expect(screen.getByText('[ERROR]')).toHaveClass('text-state-down');
+            expect(screen.getByText('[DEBUG]')).toHaveClass('text-ink-muted');
         });
     });
 
@@ -583,10 +585,10 @@ describe('LogsViewer', () => {
                 MESSAGE: `Log ${i + 1}`,
             }));
             mockSuccessfulFetch(logs);
-            const {container, unmount} = renderComponent();
+            const {unmount} = renderComponent();
             await screen.findByText('Log 5');
 
-            const logsContainer = findLogsContainer(container);
+            const logsContainer = findLogsContainer();
             expect(logsContainer).toBeInTheDocument();
             logsContainer.scrollTo = vi.fn();
 
@@ -594,13 +596,25 @@ describe('LogsViewer', () => {
             await screen.findByText('Log 3');
             fireEvent.click(screen.getByText('Log 3'));
 
-            vi.advanceTimersByTime(100);
+            act(() => {
+                vi.advanceTimersByTime(100);
+            });
             expect(logsContainer.scrollTo).toHaveBeenCalledWith({
                 top: expect.any(Number),
                 behavior: 'smooth',
             });
 
-            vi.advanceTimersByTime(2000);
+            // The line found is highlighted for a while.
+            const line = () => screen.getByText('Log 3').closest('.log-line');
+            act(() => {
+                vi.advanceTimersByTime(0);
+            });
+            expect(line()).toHaveClass('bg-accent-soft');
+
+            act(() => {
+                vi.advanceTimersByTime(2000);
+            });
+            expect(line()).not.toHaveClass('bg-accent-soft');
             unmount();
             vi.useRealTimers();
         });
@@ -618,10 +632,10 @@ describe('LogsViewer', () => {
 
         test('handleScroll updates autoScroll when scrolling', async () => {
             mockSuccessfulFetch([{__REALTIME_TIMESTAMP: Date.now() * 1000, MESSAGE: 'Test'}]);
-            const {container} = renderComponent();
+            renderComponent();
             await screen.findByText('Test');
 
-            const logsContainer = findLogsContainer(container);
+            const logsContainer = findLogsContainer();
             expect(logsContainer).toBeInTheDocument();
 
             Object.defineProperty(logsContainer, 'scrollHeight', {value: 1000, configurable: true});

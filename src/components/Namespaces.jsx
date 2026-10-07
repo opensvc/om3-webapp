@@ -1,49 +1,36 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
-import {
-    Box,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Typography,
-    Autocomplete,
-    TextField,
-    CircularProgress,
-} from "@mui/material";
-import {green, red, orange, grey} from "@mui/material/colors";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {useNamespaceData} from "../hooks/useNamespaceData";
-import {SortableTableCell} from "../utils/objectUtils";
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {StatusCount} from "../ui/components/StatusCount";
+import {Select} from "../ui/components/Field";
+import {Spinner} from "../ui/components/Spinner";
 
-const getColorByStatus = (status) => {
-    switch (status) {
-        case "up":
-            return green[500];
-        case "down":
-            return red[500];
-        case "warn":
-            return orange[500];
-        default:
-            return grey[500];
-    }
-};
+const STATUSES = ["up", "down", "warn", "n/a"];
+
+const STATUS_COLUMNS = [
+    {column: "up", label: "Up"},
+    {column: "down", label: "Down"},
+    {column: "warn", label: "Warn"},
+    {column: "n/a", label: "N/A"},
+];
+
+const MARK_STATE = {up: "up", down: "down", warn: "warn", "n/a": "unknown"};
 
 export const areStatusDotPropsEqual = (prev, next) =>
-    prev.status === next.status && prev.count === next.count;
+    prev.status === next.status && prev.count === next.count && prev.namespace === next.namespace;
 
-const StatusDot = React.memo(({status, count}) => (
-    <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-        <FiberManualRecordIcon
-            sx={{fontSize: 18, color: getColorByStatus(status)}}
-        />
-        <Typography variant="body1">{count}</Typography>
-    </Box>
-), areStatusDotPropsEqual);
+/** A status mark and its count; the count opens the objects of the namespace in that state. */
+const NamespaceStatusCount = React.memo(({status, count, namespace, onClick}) => (
+    <StatusCount
+        state={MARK_STATE[status]}
+        count={count}
+        label={`Show the ${count} ${status} object${count === 1 ? "" : "s"} of ${namespace}`}
+        onClick={() => onClick(status)}
+    />
+), (prev, next) => areStatusDotPropsEqual(prev, next) && prev.onClick === next.onClick);
 
 const NamespaceTableRow = React.memo(({
                                           namespace,
@@ -60,36 +47,25 @@ const NamespaceTableRow = React.memo(({
         onNamespaceClick(namespace);
     }, [onNamespaceClick, namespace]);
 
-    const handleStatusClick = useCallback((e, status) => {
-        e.stopPropagation();
+    const handleStatusClick = useCallback((status) => {
         onStatusClick(namespace, status);
     }, [onStatusClick, namespace]);
 
     return (
-        <TableRow
-            hover
-            onClick={handleRowClick}
-            sx={{cursor: "pointer"}}
-        >
-            <TableCell sx={{fontWeight: 500}}>
-                {namespace}
-            </TableCell>
-            {["up", "down", "warn", "n/a"].map((status) => (
-                <TableCell
-                    key={status}
-                    align="center"
-                    onClick={(e) => handleStatusClick(e, status)}
-                    sx={{cursor: "pointer"}}
-                >
-                    <StatusDot status={status} count={counts[status]}/>
-                </TableCell>
+        <Row onActivate={handleRowClick}>
+            <Cell className="font-medium">{namespace}</Cell>
+            {STATUSES.map((status) => (
+                <Cell key={status} numeric>
+                    <NamespaceStatusCount
+                        status={status}
+                        count={counts[status]}
+                        namespace={namespace}
+                        onClick={handleStatusClick}
+                    />
+                </Cell>
             ))}
-            <TableCell align="center">
-                <Typography variant="body1" fontWeight={600}>
-                    {total}
-                </Typography>
-            </TableCell>
-        </TableRow>
+            <Cell numeric className="font-semibold tabular-nums">{total}</Cell>
+        </Row>
     );
 }, (prev, next) => {
     return prev.namespace === next.namespace &&
@@ -190,8 +166,8 @@ const Namespaces = () => {
         setVisibleCount(50);
     }, []);
 
-    const handleNamespaceChange = useCallback((e, val) => {
-        const newNamespace = val || "all";
+    const handleNamespaceChange = useCallback((e) => {
+        const newNamespace = e.target.value || "all";
         setSelectedNamespace(newNamespace);
         setVisibleCount(50);
 
@@ -247,150 +223,93 @@ const Namespaces = () => {
         };
     }, []);
 
-    const renderTextField = useCallback((params) => (
-        <TextField {...params} label="Filter by namespace"/>
-    ), []);
+    // The filter may come from the URL with a namespace not in the list: keep it selectable.
+    const namespaceOptions = useMemo(() => {
+        const options = ["all", ...namespaces];
+        if (!options.includes(selectedNamespace)) options.push(selectedNamespace);
+        return options;
+    }, [namespaces, selectedNamespace]);
 
     return (
-        <Box
-            sx={{
-                bgcolor: "background.default",
-                display: "flex",
-                justifyContent: "center",
-                p: 0,
-                position: 'relative',
-                minHeight: '100vh',
-                width: '100vw',
-                margin: 0,
-            }}
-        >
-            <Box
-                sx={{
-                    width: "100%",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: 3,
-                    m: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    height: '100vh'
-                }}
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1 text-ink-muted">
+                    Filter by namespace
+                    <Select className="h-7" value={selectedNamespace} onChange={handleNamespaceChange}>
+                        {namespaceOptions.map((namespace) => (
+                            <option key={namespace} value={namespace}>{namespace}</option>
+                        ))}
+                    </Select>
+                </label>
+            </div>
+
+            <Table
+                ref={tableContainerRef}
+                sticky
+                data-testid="table-container"
+                className="min-h-0 flex-1 overflow-auto"
             >
-                {/* Namespace Filter */}
-                <Box sx={{mb: 3, flexShrink: 0}}>
-                    <Autocomplete
-                        sx={{width: 300}}
-                        options={["all", ...namespaces]}
-                        value={selectedNamespace}
-                        onChange={handleNamespaceChange}
-                        renderInput={renderTextField}
-                    />
-                </Box>
-
-                <TableContainer
-                    ref={tableContainerRef}
-                    sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        boxShadow: "none",
-                        border: "none"
-                    }}
-                >
-                    <Table>
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
-                            <TableRow>
-                                <SortableTableCell
-                                    column="namespace"
-                                    label="Namespace"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                />
-                                <SortableTableCell
-                                    column="up"
-                                    label="Up"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="down"
-                                    label="Down"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="warn"
-                                    label="Warn"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="n/a"
-                                    label="N/A"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="total"
-                                    label="Total"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {visibleNamespaces.length > 0 ? (
-                                visibleNamespaces.map(([namespace, counts]) => (
-                                    <NamespaceTableRow
-                                        key={namespace}
-                                        namespace={namespace}
-                                        counts={counts}
-                                        onNamespaceClick={handleNamespaceClick}
-                                        onStatusClick={handleStatusClick}
-                                    />
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-namespaces-message">
-                                            {selectedNamespace !== "all"
-                                                ? "No namespaces match the selected filter"
-                                                : "No namespaces available"}
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                    {loading && (
-                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
-                            <CircularProgress size={24}/>
-                        </Box>
+                <thead>
+                    <HeaderRow>
+                        <SortHeaderCell
+                            label="Namespace"
+                            active={sortColumn === "namespace"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("namespace")}
+                        />
+                        {STATUS_COLUMNS.map(({column, label}) => (
+                            <SortHeaderCell
+                                key={column}
+                                label={label}
+                                active={sortColumn === column}
+                                direction={sortDirection}
+                                onSort={() => handleSort(column)}
+                                align="right"
+                            />
+                        ))}
+                        <SortHeaderCell
+                            label="Total"
+                            active={sortColumn === "total"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("total")}
+                            align="right"
+                        />
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {visibleNamespaces.length > 0 ? (
+                        visibleNamespaces.map(([namespace, counts]) => (
+                            <NamespaceTableRow
+                                key={namespace}
+                                namespace={namespace}
+                                counts={counts}
+                                onNamespaceClick={handleNamespaceClick}
+                                onStatusClick={handleStatusClick}
+                            />
+                        ))
+                    ) : (
+                        <EmptyRow colSpan={6}>
+                            <span data-testid="no-namespaces-message">
+                                {selectedNamespace !== "all"
+                                    ? "No namespaces match the selected filter"
+                                    : "No namespaces available"}
+                            </span>
+                        </EmptyRow>
                     )}
-                </TableContainer>
+                </tbody>
+            </Table>
+            {loading && (
+                <div className="flex justify-center">
+                    <Spinner label="Loading more namespaces"/>
+                </div>
+            )}
 
-                <EventLogger
-                    eventTypes={namespaceEventTypes}
-                    title="Namespaces Events Logger"
-                    buttonLabel="Namespace Events"
-                />
-            </Box>
-        </Box>
+            <EventLogger
+                eventTypes={namespaceEventTypes}
+                title="Namespaces Events Logger"
+                buttonLabel="Namespace Events"
+            />
+        </div>
     );
 };
 

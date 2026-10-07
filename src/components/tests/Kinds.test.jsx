@@ -47,83 +47,21 @@ vi.mock('../../hooks/useKindData', () => ({
     useKindData: mockUseKindData,
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        Box: vi.fn(({children, ...props}) => <div data-testid="box" {...props}>{children}</div>),
-        Table: vi.fn(({children, ...props}) => <table data-testid="table" {...props}>{children}</table>),
-        TableHead: vi.fn(({children, ...props}) => <thead data-testid="table-head" {...props}>{children}</thead>),
-        TableBody: vi.fn(({children, ...props}) => <tbody data-testid="table-body" {...props}>{children}</tbody>),
-        TableRow: vi.fn(({children, onClick, hover, ...props}) => (
-            <tr data-testid="table-row" onClick={onClick} {...props}>{children}</tr>
-        )),
-        TableCell: vi.fn(({children, onClick, justifyContent, alignItems, ...props}) => (
-            <td data-testid="table-cell" onClick={onClick} {...props}>{children}</td>
-        )),
-        TableContainer: vi.fn(({children, ...props}) => (
-            <div data-testid="table-container" {...props}>{children}</div>
-        )),
-        Typography: vi.fn(({children, ...props}) => <div data-testid="typography" {...props}>{children}</div>),
-        Autocomplete: vi.fn(({options, value, onChange, renderInput, ...props}) => (
-            <div data-testid="autocomplete" {...props}>
-                <input
-                    data-testid="autocomplete-input"
-                    value={value}
-                    onChange={(e) => onChange && onChange(e, e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') onChange && onChange(e, e.target.value);
-                    }}
-                />
-                {renderInput && renderInput({})}
-            </div>
-        )),
-        TextField: vi.fn(({label, inputProps, ...props}) => (
-            <div data-testid="text-field">
-                {label && <label>{label}</label>}
-                <input {...inputProps} {...props} />
-            </div>
-        )),
-        Drawer: vi.fn(({children, open, anchor, onClose, ...props}) =>
-            open ? <div role="complementary" {...props}>{children}</div> : null
-        ),
-        CircularProgress: vi.fn((props) => <div role="progressbar" {...props} />),
-    };
-});
-
-vi.mock('@mui/icons-material/KeyboardArrowUp', () => ({
-    __esModule: true,
-    default: (props) => <span data-testid="arrow-up" {...props} />,
-}));
-vi.mock('@mui/icons-material/KeyboardArrowDown', () => ({
-    __esModule: true,
-    default: (props) => <span data-testid="arrow-down" {...props} />,
-}));
-vi.mock('@mui/icons-material/FiberManualRecord', () => ({
-    __esModule: true,
-    default: ({sx = {}, ...props}) => {
-        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
-        return <span data-testid="status-icon" style={{color}} {...props} />;
-    },
-}));
-vi.mock('@mui/icons-material/PriorityHigh', () => ({
-    __esModule: true,
-    default: ({sx = {}, ...props}) => {
-        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
-        return <span data-testid="status-icon" style={{color}} {...props} />;
-    },
-}));
-
 // ── Helpers ─────────────────────────────────────────────────────────────
-const getHeaderCellFor = (columnName) => {
-    const head = screen.getByTestId('table-head');
-    const headRow = within(head).getByTestId('table-row');
-    const headCells = within(headRow).getAllByTestId('table-cell');
-    const regex = new RegExp(columnName, 'i');
-    return headCells.find(cell => within(cell).queryByText(regex) !== null);
-};
+// The sort button of a column header (its arrow is hidden from the accessible name).
+const getHeaderCellFor = (columnName) => screen.getByRole('button', {name: columnName});
 
-// Build a statusByKind object from a simplified definition.
+const getColumnHeader = (columnName) =>
+    screen.getAllByRole('columnheader').find(th => within(th).queryByRole('button', {name: columnName}));
+
+const getBody = () => screen.getAllByRole('rowgroup')[1];
+
+const getBodyRows = () => within(getBody()).getAllByRole('row');
+
+const getCells = (row) => within(row).getAllByRole('cell');
+
+const getFilter = () => screen.getByRole('combobox', {name: /Filter by/i});
+
 const buildStatusByKind = (definitions) => {
     const statusByKind = {};
     Object.entries(definitions).forEach(([kind, counts]) => {
@@ -186,17 +124,18 @@ describe('Kinds', () => {
 
     test('renders table with headers', () => {
         renderComponent();
-        expect(screen.getByTestId('table')).toBeInTheDocument();
+        expect(screen.getByRole('table')).toBeInTheDocument();
         ['Kind', 'Up', 'Down', 'Warn', 'Unprovisioned', 'Total'].forEach(text =>
-            expect(screen.getByText(text)).toBeInTheDocument()
+            expect(screen.getByRole('columnheader', {name: text})).toBeInTheDocument()
         );
     });
 
     test('displays kind counts correctly', () => {
         renderComponent();
         const serviceRow = screen.getByRole('row', {name: /service/i});
-        const cells = within(serviceRow).getAllByTestId('table-cell');
+        const cells = getCells(serviceRow);
         // cells: kind, up, down, warn, unprovisioned, total
+        expect(cells[0]).toHaveTextContent('service');
         expect(cells[1]).toHaveTextContent('2');
         expect(cells[2]).toHaveTextContent('1');
         expect(cells[3]).toHaveTextContent('1');
@@ -204,15 +143,20 @@ describe('Kinds', () => {
         expect(cells[5]).toHaveTextContent('4'); // 2+1+1+0
     });
 
-    test('shows status icons with correct colors', () => {
+    test('shows status marks by state', () => {
         renderComponent();
         const serviceRow = screen.getByRole('row', {name: /service/i});
-        const icons = within(serviceRow).getAllByTestId('status-icon');
-        // up, down, warn, unprovisioned (unprovisioned also red)
-        expect(icons[0]).toHaveStyle({color: '#4caf50'}); // up
-        expect(icons[1]).toHaveStyle({color: '#f44336'}); // down
-        expect(icons[2]).toHaveStyle({color: '#ff9800'}); // warn
-        expect(icons[3]).toHaveStyle({color: '#f44336'}); // unprovisioned (same as down)
+        const marks = serviceRow.querySelectorAll('[data-state]');
+        // up, down, warn, unprovisioned (unprovisioned in the down state)
+        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'down']);
+        expect(marks[0]).toHaveTextContent('up');
+        expect(marks[1]).toHaveTextContent('down');
+        expect(marks[2]).toHaveTextContent('warn');
+        expect(marks[3]).toHaveTextContent('unprovisioned');
+        expect(marks[0]).toHaveClass('text-state-up');
+        expect(marks[1]).toHaveClass('text-state-down');
+        expect(marks[2]).toHaveClass('text-state-warn');
+        expect(marks[3]).toHaveClass('text-state-down');
     });
 
     test('navigates to objects on row click', () => {
@@ -221,33 +165,39 @@ describe('Kinds', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service');
     });
 
-    test('navigates with up status on cell click', () => {
+    test('navigates to objects on row Enter key', () => {
         renderComponent();
-        const serviceRow = screen.getByRole('row', {name: /service/i});
-        const cells = within(serviceRow).getAllByTestId('table-cell');
-        fireEvent.click(cells[1]); // up column
+        fireEvent.keyDown(screen.getByRole('row', {name: /service/i}), {key: 'Enter'});
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service');
+    });
+
+    test('navigates with up status on count click', () => {
+        renderComponent();
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 2 up objects of service'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service&globalState=up');
+        // the click does not reach the row
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with down status', () => {
         renderComponent();
-        const serviceRow = screen.getByRole('row', {name: /service/i});
-        fireEvent.click(within(serviceRow).getAllByTestId('table-cell')[2]);
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 down object of service'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service&globalState=down');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with warn status', () => {
         renderComponent();
-        const serviceRow = screen.getByRole('row', {name: /service/i});
-        fireEvent.click(within(serviceRow).getAllByTestId('table-cell')[3]);
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 warn object of service'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service&globalState=warn');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with unprovisioned status', () => {
         renderComponent();
-        const podRow = screen.getByRole('row', {name: /pod/i});
-        fireEvent.click(within(podRow).getAllByTestId('table-cell')[4]); // unprovisioned
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 2 unprovisioned objects of pod'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=pod&globalState=unprovisioned');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('starts event reception on mount with token', async () => {
@@ -282,40 +232,56 @@ describe('Kinds', () => {
         setup({data: {statusByKind: {}, kinds: []}, search: '?kind=nonexistent'});
         renderComponent();
         expect(screen.getByTestId('no-kinds-message')).toHaveTextContent('No kinds match the selected filter');
+        expect(getFilter()).toHaveValue('nonexistent');
     });
 
-    test('filters by kind via autocomplete', () => {
+    test('lists all and every kind in the filter', () => {
         renderComponent();
-        const input = screen.getByTestId('autocomplete-input');
-        fireEvent.change(input, {target: {value: 'deployment'}});
-        fireEvent.keyDown(input, {key: 'Enter'});
+        const options = within(getFilter()).getAllByRole('option').map(option => option.value);
+        expect(options).toEqual(['all', 'service', 'deployment', 'pod']);
+    });
+
+    test('filters by kind via the select', () => {
+        renderComponent();
+        fireEvent.change(getFilter(), {target: {value: 'deployment'}});
         expect(mockNavigate).toHaveBeenCalledWith('/kinds?kind=deployment');
+        expect(getBodyRows()).toHaveLength(1);
+        expect(screen.getByRole('row', {name: /deployment/i})).toBeInTheDocument();
     });
 
-    test('resets to all when clearing autocomplete', () => {
+    test('resets to all when selecting all', () => {
+        setup({search: '?kind=deployment'});
         renderComponent();
-        const input = screen.getByTestId('autocomplete-input');
-        fireEvent.change(input, {target: {value: null}});
+        fireEvent.change(getFilter(), {target: {value: 'all'}});
         expect(mockNavigate).toHaveBeenCalledWith('/kinds');
     });
 
     test('reads initial kind from URL', () => {
         setup({search: '?kind=deployment'});
         renderComponent();
-        expect(screen.getByTestId('autocomplete-input')).toHaveValue('deployment');
+        expect(getFilter()).toHaveValue('deployment');
+        expect(getBodyRows()).toHaveLength(1);
     });
 
     test('handles empty kind parameter in URL', () => {
         setup({search: '?kind='});
         renderComponent();
-        expect(screen.getByTestId('autocomplete-input')).toHaveValue('all');
+        expect(getFilter()).toHaveValue('all');
     });
 
     test('clicking different column resets direction', () => {
         renderComponent();
         fireEvent.click(getHeaderCellFor('Up'));
+        fireEvent.click(getHeaderCellFor('Up'));
+        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'descending');
         fireEvent.click(getHeaderCellFor('Down'));
-        expect(screen.getByTestId('table-body')).toBeInTheDocument();
+        expect(getColumnHeader('Down')).toHaveAttribute('aria-sort', 'ascending');
+        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'none');
+    });
+
+    test('marks the kind column sorted ascending by default', () => {
+        renderComponent();
+        expect(getColumnHeader('Kind')).toHaveAttribute('aria-sort', 'ascending');
     });
 
     describe('sorting order verification', () => {
@@ -325,8 +291,8 @@ describe('Kinds', () => {
         });
 
         const getKindNames = () => {
-            const rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
-            return rows.map(row => within(row).getAllByTestId('table-cell')[0].textContent);
+            const rows = getBodyRows();
+            return rows.map(row => within(row).getAllByRole('cell')[0].textContent);
         };
 
         test('default sort by kind ascending', async () => {
@@ -401,8 +367,8 @@ describe('Kinds', () => {
             vi.useFakeTimers();
             setup({data: generateLargeData(60)});
             renderComponent();
-            await screen.findByTestId('table-body');
-            let rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+            await screen.findAllByRole('rowgroup');
+            let rows = getBodyRows();
             expect(rows).toHaveLength(50);
 
             const container = screen.getByTestId('table-container');
@@ -415,13 +381,13 @@ describe('Kinds', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
 
             act(() => {
                 vi.advanceTimersByTime(100);
             });
             await waitFor(() => {
-                rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+                rows = getBodyRows();
                 expect(rows).toHaveLength(60);
             });
             vi.useRealTimers();
@@ -441,13 +407,13 @@ describe('Kinds', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
 
             fireEvent.scroll(container);
             act(() => {
                 vi.advanceTimersByTime(100);
             });
-            expect(within(screen.getByTestId('table-body')).getAllByTestId('table-row')).toHaveLength(60);
+            expect(getBodyRows()).toHaveLength(60);
             vi.useRealTimers();
         });
 
@@ -465,7 +431,7 @@ describe('Kinds', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+            expect(screen.queryByText(/Loading more/i)).not.toBeInTheDocument();
             vi.useRealTimers();
         });
 
@@ -480,7 +446,7 @@ describe('Kinds', () => {
         });
     });
 
-    test('handles unprovisioned status color as red', () => {
+    test('shows unprovisioned objects in the down state', () => {
         const data = {
             statusByKind: buildStatusByKind({testkind: {up: 0, down: 0, warn: 0, unprovisioned: 1}}),
             kinds: ['testkind'],
@@ -488,12 +454,22 @@ describe('Kinds', () => {
         setup({data});
         renderComponent();
         const row = screen.getByRole('row', {name: /testkind/i});
-        const icons = within(row).getAllByTestId('status-icon');
-        expect(icons[3]).toHaveStyle({color: '#f44336'}); // unprovisioned
+        const marks = row.querySelectorAll('[data-state]');
+        expect(marks[3]).toHaveAttribute('data-state', 'down');
+        expect(marks[3]).toHaveAttribute('title', 'unprovisioned');
+        expect(getCells(row)[4]).toHaveTextContent('1');
+        expect(getCells(row)[5]).toHaveTextContent('1');
     });
 
-    test('renderTextField displays correct label', () => {
+    test('counts a missing status as 0', () => {
+        setup({data: {statusByKind: {odd: {up: 1, down: 0, warn: 0}}, kinds: ['odd']}});
+        renderComponent();
+        expect(screen.getByRole('button', {name: 'Show the 0 unprovisioned objects of odd'})).toHaveTextContent('0');
+    });
+
+    test('labels the kind filter', () => {
         renderComponent();
         expect(screen.getByText('Filter by kind')).toBeInTheDocument();
+        expect(getFilter()).toBeInTheDocument();
     });
 });

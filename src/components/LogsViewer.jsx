@@ -1,33 +1,13 @@
-import React, {useEffect, useState, useRef, useCallback, useMemo} from "react";
-import {
-    Box,
-    Paper,
-    Typography,
-    IconButton,
-    TextField,
-    Chip,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Button,
-    Tooltip,
-    useTheme,
-    Alert,
-    CircularProgress,
-    Checkbox,
-    ListItemText,
-} from "@mui/material";
-import {
-    PlayArrow,
-    Pause,
-    DeleteOutline,
-    Download,
-    Search,
-} from "@mui/icons-material";
+import React, {useEffect, useState, useRef, useCallback, useMemo, useId} from "react";
+import {Button, IconButton} from "../ui/components/Button";
+import {StateGlyph} from "../ui/components/StateGlyph";
+import {Input, Checkbox} from "../ui/components/Field";
+import {Alert} from "../ui/components/Alert";
+import {Spinner} from "../ui/components/Spinner";
+import {CaretRightIcon, ChevronDownIcon, CloseIcon, DownloadIcon, PauseIcon, SearchIcon, TrashIcon} from "../ui/icons";
+import {cn} from "../ui/cn";
 import {URL_NODE} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
-import {useDarkMode} from "../context/DarkModeContext";
 
 const LogsViewer = ({
                         nodename,
@@ -39,8 +19,6 @@ const LogsViewer = ({
                         height = "500px",
                         bottomSpacing = 30,
                     }) => {
-    const theme = useTheme();
-    const {isDarkMode} = useDarkMode();
     const [logs, setLogs] = useState([]);
     const [isPaused, setIsPaused] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -58,6 +36,9 @@ const LogsViewer = ({
     const logBufferRef = useRef([]);
     const seenLogsRef = useRef(new Set());
     const scrollToLogTimeoutRef = useRef(null);
+    const highlightTimeoutRef = useRef(null);
+    const [highlightedLogId, setHighlightedLogId] = useState(null);
+    const levelsLabelId = useId();
 
     useEffect(() => {
         isPausedRef.current = isPaused;
@@ -296,10 +277,9 @@ const LogsViewer = ({
                         top: scrollTop,
                         behavior: "smooth",
                     });
-                    logElement.style.backgroundColor = theme.palette.action.selected;
-                    setTimeout(() => {
-                        if (logElement) logElement.style.backgroundColor = "";
-                    }, 2000);
+                    setHighlightedLogId(selectedLogId);
+                    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+                    highlightTimeoutRef.current = setTimeout(() => setHighlightedLogId(null), 2000);
                 }
                 setShouldScrollToLog(false);
             }, 100);
@@ -307,7 +287,11 @@ const LogsViewer = ({
         return () => {
             if (scrollToLogTimeoutRef.current) clearTimeout(scrollToLogTimeoutRef.current);
         };
-    }, [shouldScrollToLog, selectedLogId, theme]);
+    }, [shouldScrollToLog, selectedLogId]);
+
+    useEffect(() => () => {
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    }, []);
 
     useEffect(() => {
         if (!nodename) return;
@@ -344,17 +328,18 @@ const LogsViewer = ({
             fractionalSecondDigits: 3,
         });
 
-    const getLevelColor = (level) => {
+    // The level in a state colour, its name doubling the colour.
+    const getLevelClass = (level) => {
         switch (level) {
             case "error":
-                return theme.palette.error.main;
+                return "text-state-down";
             case "warn":
             case "warning":
-                return theme.palette.warning.main;
+                return "text-state-warn";
             case "debug":
-                return theme.palette.info.main;
+                return "text-ink-muted";
             default:
-                return theme.palette.text.primary;
+                return "text-ink";
         }
     };
 
@@ -397,249 +382,171 @@ const LogsViewer = ({
         seenLogsRef.current.clear();
     };
 
+    const levelSummary = levelFilter.length === 0 ? "All levels" : levelFilter.join(", ");
+
     return (
-        <Paper
-            elevation={3}
-            sx={{
-                p: 2,
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                bgcolor: theme.palette.background.paper,
-            }}
-        >
-            {/* Header */}
-            <Box
-                sx={{
-                    mb: 2,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: 2,
-                }}
-            >
-                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                    <Typography variant="body2" sx={{color: "text.secondary"}}>
-                        {buildSubtitle()}
-                    </Typography>
-                    <Chip
-                        label={isConnected ? "Connected" : "Disconnected"}
-                        color={isConnected ? "success" : "error"}
-                        size="small"
-                    />
-                    {isLoading && <CircularProgress size={16}/>}
-                </Box>
-                <Box sx={{display: "flex", gap: 1}}>
-                    <Tooltip title={isPaused ? "Resume" : "Pause"}>
-                        <IconButton
-                            onClick={() => setIsPaused(!isPaused)}
-                            color={isPaused ? "warning" : "primary"}
-                            size="small"
-                        >
-                            {isPaused ? <PlayArrow/> : <Pause/>}
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Clear logs">
-                        <IconButton onClick={handleClearLogs} size="small" disabled={logs.length === 0}>
-                            <DeleteOutline/>
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Download logs">
-                        <IconButton
-                            onClick={handleDownload}
-                            size="small"
-                            disabled={filteredLogs.length === 0}
-                        >
-                            <Download/>
-                        </IconButton>
-                    </Tooltip>
-                    {errorMessage && (
-                        <Button size="small" variant="outlined" onClick={handleManualReconnect}>
+        <div className="flex h-full flex-col gap-2 text-ink">
+            {/* Header: what is shown, the connection, the actions */}
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="text-ink-muted">{buildSubtitle()}</span>
+                <span
+                    className="inline-flex items-center gap-1"
+                    data-state={isConnected ? "up" : "down"}
+                >
+                    <span className={isConnected ? "text-state-up" : "text-state-down"}>
+                        <StateGlyph state={isConnected ? "up" : "down"}/>
+                    </span>
+                    <span>{isConnected ? "Connected" : "Disconnected"}</span>
+                </span>
+                {isLoading && <Spinner label="Loading logs"/>}
+                <div className="ml-auto flex items-center gap-2">
+                    <Button
+                        size="sm"
+                        onClick={() => setIsPaused(!isPaused)}
+                        aria-pressed={isPaused}
+                        icon={isPaused ? <CaretRightIcon/> : <PauseIcon/>}
+                    >
+                        {isPaused ? "Resume" : "Pause"}
+                    </Button>
+                    <IconButton label="Clear logs" onClick={handleClearLogs} disabled={logs.length === 0}>
+                        <TrashIcon/>
+                    </IconButton>
+                    <IconButton label="Download logs" onClick={handleDownload} disabled={filteredLogs.length === 0}>
+                        <DownloadIcon/>
+                    </IconButton>
+                </div>
+            </div>
+            {errorMessage && (
+                <Alert
+                    tone="error"
+                    action={
+                        <Button size="sm" onClick={handleManualReconnect}>
                             Retry
                         </Button>
-                    )}
-                </Box>
-            </Box>
-            {errorMessage && (
-                <Alert severity="error" sx={{mb: 2}}>
+                    }
+                >
                     {errorMessage}
                 </Alert>
             )}
-            {isLoading && !errorMessage && (
-                <Alert severity="info" sx={{mb: 2}}>
-                    Loading logs...
-                </Alert>
-            )}
-            {/* Filters */}
-            <Box
-                sx={{
-                    mb: 2,
-                    display: "flex",
-                    gap: 2,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                }}
-            >
-                <TextField
-                    size="small"
-                    placeholder="Search logs..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    slotProps={{
-                        input: {
-                            startAdornment: <Search sx={{mr: 1, color: "text.secondary"}}/>,
-                        },
-                    }}
-                    sx={{flexGrow: 1, minWidth: "200px"}}
-                />
-                <FormControl size="small" sx={{minWidth: "200px"}}>
-                    <InputLabel id="log-levels-label">Select Log Levels</InputLabel>
-                    <Select
-                        labelId="log-levels-label"
-                        multiple
-                        value={levelFilter}
-                        label="Select Log Levels"
-                        onChange={(e) => setLevelFilter(e.target.value)}
-                        renderValue={(selected) =>
-                            selected.length === 0 ? "All Levels" : selected.join(", ")
-                        }
-                    >
-                        {["debug", "error", "info", "warn"].map((level) => (
-                            <MenuItem key={level} value={level}>
-                                <Checkbox checked={levelFilter.includes(level)}/>
-                                <ListItemText
-                                    primary={level.charAt(0).toUpperCase() + level.slice(1)}
-                                />
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                {isFiltered ? (
-                    <Chip
-                        label="Filters active - Click any log to clear"
-                        color="info"
-                        size="small"
-                        onDelete={() => {
-                            setSearchTerm("");
-                            setLevelFilter([]);
-                        }}
+            {isLoading && !errorMessage && <Alert tone="info">Loading logs...</Alert>}
+            {/* Filters, as the oc3 list toolbar */}
+            <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-w-[200px] flex-1 items-center gap-1 text-ink-muted">
+                    <SearchIcon className="shrink-0"/>
+                    <span className="sr-only">Search</span>
+                    <Input
+                        className="h-7"
+                        placeholder="Search logs..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                </label>
+                <div className="flex items-center gap-1 text-ink-muted">
+                    <span id={levelsLabelId}>Levels</span>
+                    <details className="relative">
+                        <summary
+                            aria-describedby={levelsLabelId}
+                            className="flex h-7 cursor-pointer list-none items-center gap-1 rounded-(--radius-control) border border-line bg-surface px-2 text-ink [&::-webkit-details-marker]:hidden"
+                        >
+                            {levelSummary}
+                            <ChevronDownIcon className="h-3 w-3 text-ink-muted"/>
+                        </summary>
+                        <div
+                            role="group"
+                            aria-label="Log levels"
+                            className="absolute left-0 z-10 mt-1 flex min-w-[8rem] flex-col gap-1 rounded-(--radius-control) border border-line bg-surface-raised p-2 text-ink shadow-lg"
+                        >
+                            {["debug", "error", "info", "warn"].map((level) => (
+                                <Checkbox
+                                    key={level}
+                                    label={level.charAt(0).toUpperCase() + level.slice(1)}
+                                    checked={levelFilter.includes(level)}
+                                    onChange={(e) =>
+                                        setLevelFilter((prev) =>
+                                            e.target.checked
+                                                ? [...prev.filter((l) => l !== level), level]
+                                                : prev.filter((l) => l !== level)
+                                        )
+                                    }
+                                />
+                            ))}
+                        </div>
+                    </details>
+                </div>
+                {isFiltered ? (
+                    <span className="inline-flex items-center gap-1 rounded-(--radius-control) border border-line bg-surface-sunken pl-2 text-data">
+                        Filters active - Click any log to clear
+                        <IconButton
+                            size="sm"
+                            label="Reset filters"
+                            onClick={() => {
+                                setSearchTerm("");
+                                setLevelFilter([]);
+                            }}
+                        >
+                            <CloseIcon className="h-3 w-3"/>
+                        </IconButton>
+                    </span>
                 ) : null}
-                <Typography
-                    variant="caption"
-                    sx={{alignSelf: "center", color: "text.secondary"}}
-                >
+                <span className="ml-auto text-data text-ink-muted">
                     {filteredLogs.length} / {logs.length} logs
-                </Typography>
-            </Box>
-            {/* Logs list */}
-            <Box
+                </span>
+            </div>
+            {/* Log lines */}
+            <div
                 ref={logsContainerRef}
                 onScroll={handleScroll}
-                sx={{
-                    flexGrow: 1,
-                    overflow: "auto",
-                    bgcolor: isDarkMode ? theme.palette.background.default : theme.palette.grey[100],
-                    p: 2,
-                    borderRadius: 1,
-                    border: `1px solid ${theme.palette.divider}`,
-                    fontFamily: "monospace",
-                    fontSize: "0.9rem",
-                    height: height,
-                    "& .log-line": {
-                        py: 0.75,
-                        px: 1,
-                        borderBottom: `1px solid ${theme.palette.divider}`,
-                        "&:hover": {
-                            bgcolor: theme.palette.action.hover,
-                        },
-                        transition: "background-color 0.2s",
-                    },
-                }}
+                role="log"
+                aria-live="off"
+                aria-label="Log lines"
+                tabIndex={0}
+                className="relative min-h-0 flex-1 overflow-auto rounded-(--radius-control) border border-line bg-surface-sunken py-1 font-mono text-data"
+                style={{height}}
             >
                 {filteredLogs.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" align="center" sx={{pt: 2}}>
+                    <p className="pt-4 text-center font-sans text-ink-muted">
                         {logs.length === 0 && !isLoading
                             ? "No logs available"
                             : "No logs match current filters"}
-                    </Typography>
+                    </p>
                 ) : (
                     filteredLogs.map((log) => (
-                        <Box
+                        <div
                             key={log.__REALTIME_TIMESTAMP}
-                            className="log-line"
+                            className={cn(
+                                "log-line flex gap-2 border-b border-line px-2 py-0.5 transition-colors",
+                                isFiltered && "cursor-pointer hover:bg-surface-raised",
+                                highlightedLogId === log.__REALTIME_TIMESTAMP && "bg-accent-soft"
+                            )}
                             id={getLogId(log)}
                             onClick={() => handleLogClick(log)}
-                            sx={{
-                                cursor: isFiltered ? "pointer" : "default",
-                                "&:hover": {
-                                    bgcolor: isFiltered ? theme.palette.action.hover : "",
-                                },
-                            }}
                         >
-                            <Box sx={{display: "flex", flexDirection: "column", gap: 0}}>
-                                <Typography
-                                    component="span"
-                                    sx={{color: theme.palette.text.secondary, fontWeight: "medium"}}
-                                >
-                                    {formatTime(log.timestamp)}
-                                </Typography>
-                                <Typography
-                                    component="span"
-                                    sx={{
-                                        color: getLevelColor(log.level),
-                                        fontWeight: "bold",
-                                    }}
-                                >
-                                    [{log.level.toUpperCase()}]
-                                </Typography>
-                                {(log.method || log.path) && (
-                                    <Box sx={{display: "flex", gap: 1, alignItems: "center"}}>
-                                        {log.method && (
-                                            <Typography
-                                                component="span"
-                                                sx={{color: theme.palette.info.main, fontWeight: "medium"}}
-                                            >
-                                                {log.method}
-                                            </Typography>
-                                        )}
-                                        {log.path && (
-                                            <Typography component="span" sx={{color: theme.palette.text.secondary}}>
-                                                {log.path}
-                                            </Typography>
-                                        )}
-                                    </Box>
-                                )}
-                                <Typography
-                                    component="span"
-                                    sx={{
-                                        wordBreak: "break-word",
-                                        whiteSpace: "pre-wrap",
-                                        color: theme.palette.text.primary,
-                                    }}
-                                >
-                                    {log.message}
-                                </Typography>
-                            </Box>
-                        </Box>
+                            <span className="shrink-0 text-ink-muted">{formatTime(log.timestamp)}</span>
+                            <span className={cn("w-[9ch] shrink-0 font-semibold", getLevelClass(log.level))}>
+                                [{log.level.toUpperCase()}]
+                            </span>
+                            {log.method && <span className="shrink-0 font-semibold">{log.method}</span>}
+                            {log.path && <span className="shrink-0 text-ink-muted">{log.path}</span>}
+                            <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">{log.message}</span>
+                        </div>
                     ))
                 )}
-                <Box ref={logsEndRef} sx={{height: bottomSpacing}}/>
-            </Box>
+                <div ref={logsEndRef} style={{height: bottomSpacing}}/>
+            </div>
             {!autoScroll && filteredLogs.length > 0 && (
                 <Button
-                    size="small"
+                    size="sm"
+                    variant="ghost"
+                    className="self-center"
                     onClick={() => {
                         setAutoScroll(true);
                         logsEndRef.current?.scrollIntoView({behavior: "smooth"});
                     }}
-                    sx={{mt: 1, alignSelf: "center"}}
                 >
                     Go to bottom
                 </Button>
             )}
-        </Paper>
+        </div>
     );
 };
 

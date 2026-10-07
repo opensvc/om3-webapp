@@ -4,7 +4,7 @@ import '@testing-library/jest-dom';
 import {vi, beforeAll, beforeEach, afterEach, describe, test, expect} from 'vitest';
 import EventLogger, {hashCode} from '../EventLogger';
 import useEventLogStore from '../../hooks/useEventLogStore';
-import {ThemeProvider, createTheme} from '@mui/material';
+import {panelOpened} from '../../ui/components/slide-over-open';
 import logger from '../../utils/logger.js';
 
 // ─── Global setup ───────────────────────────────────────────────────────────
@@ -41,11 +41,7 @@ vi.mock('../../eventSourceManager', () => ({
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const lightTheme = createTheme();
-const darkTheme = createTheme({palette: {mode: 'dark'}});
-
-const renderWithTheme = (ui, theme = lightTheme) =>
-    render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+const renderWithTheme = (ui) => render(ui);
 
 const makeLog = (overrides = {}) => ({
     id: '1',
@@ -74,10 +70,27 @@ const openDrawerAndWait = async (title = /Event Logger/i) => {
     await waitFor(() => expect(screen.getByText(title)).toBeInTheDocument());
 };
 
+// The settings panel is a SlideOver: mounted with the bottom panel, inert while closed.
+const settingsPanel = () =>
+    screen.getByRole('dialog', {name: 'Event Subscriptions', hidden: true});
+
+const expectSettingsOpen = () => expect(settingsPanel()).not.toHaveAttribute('inert');
+const expectSettingsClosed = () => expect(settingsPanel()).toHaveAttribute('inert');
+
 const openSettings = async () => {
-    fireEvent.click(screen.getByTestId('SettingsIcon'));
-    await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', {name: 'Manage subscriptions'}));
+    await waitFor(expectSettingsOpen);
 };
+
+// The button of a log row: it carries aria-expanded, the filter buttons aria-pressed.
+const rowButton = (eventType) =>
+    screen
+        .getAllByRole('button')
+        .find((b) => b.hasAttribute('aria-expanded') && b.textContent.includes(eventType));
+
+const eventList = () => screen.getByRole('region', {name: 'Event list'});
+const panel = (title = 'Event Logger') => screen.getByRole('region', {name: title});
+const loading = () => screen.queryByRole('status', {name: 'Loading events'});
 
 describe('EventLogger Component', () => {
     let mockSetPaused;
@@ -237,7 +250,19 @@ describe('EventLogger Component', () => {
             );
         });
 
-        test('dark mode renders correctly and displays all JSON value types with syntax highlighting', async () => {
+        test('button hidden while a side panel of the page is open', () => {
+            renderWithTheme(<EventLogger/>);
+            expect(screen.getByRole('button', {name: /^Events$/i})).toBeInTheDocument();
+            let closePanel;
+            act(() => {
+                closePanel = panelOpened();
+            });
+            expect(screen.queryByRole('button', {name: /^Events$/i})).not.toBeInTheDocument();
+            act(() => closePanel());
+            expect(screen.getByRole('button', {name: /^Events$/i})).toBeInTheDocument();
+        });
+
+        test('expanded log colours every JSON value type with the code tokens', async () => {
             vi.useFakeTimers();
             vi.mocked(useEventLogStore).mockReturnValue(
                 mockStore({
@@ -257,20 +282,34 @@ describe('EventLogger Component', () => {
                     clearLogs: mockClearLogs,
                 })
             );
-            renderWithTheme(<EventLogger/>, darkTheme);
+            renderWithTheme(<EventLogger/>);
             openDrawer();
             act(() => vi.advanceTimersByTime(200));
             await waitFor(() =>
                 expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument()
             );
 
-            const logChip = screen.getByText('ALL_TYPES_DARK', {exact: true});
-            fireEvent.click(logChip);
+            const row = rowButton('ALL_TYPES_DARK');
+            expect(row).toHaveAttribute('aria-expanded', 'false');
+            fireEvent.click(row);
+            expect(row).toHaveAttribute('aria-expanded', 'true');
 
+            // Looked up by attribute value in JS: the jsdom selector engine mishandles "null".
+            const token = (kind) =>
+                [...document.querySelectorAll('[data-token]')].find(
+                    (el) => el.getAttribute('data-token') === kind
+                );
             await waitFor(() => {
-                expect(document.querySelector('.json-null')).toBeInTheDocument();
-                expect(document.querySelector('.json-boolean')).toBeInTheDocument();
+                expect(token('null')).toHaveClass('text-code-keyword');
+                expect(token('boolean')).toHaveClass('text-code-keyword');
+                expect(token('number')).toHaveClass('text-code-number');
+                expect(token('string')).toHaveClass('text-code-string');
+                expect(token('key')).toHaveClass('text-code-key');
+                expect(token('punct')).toHaveClass('text-code-punct');
             });
+            expect(token('null').closest('pre')).toHaveClass('font-mono');
+            // No global stylesheet injected any more.
+            expect(document.querySelector('style')).toBeNull();
 
             vi.useRealTimers();
         });
@@ -281,14 +320,14 @@ describe('EventLogger Component', () => {
         test('opens, shows title, and shows "No events logged" when empty', async () => {
             renderWithTheme(<EventLogger/>);
             await openDrawerAndWait();
-            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+            await waitFor(() => expect(loading()).not.toBeInTheDocument());
             expect(screen.getByText(/No events logged/i)).toBeInTheDocument();
         });
 
         test('closes via Close button', async () => {
             renderWithTheme(<EventLogger/>);
             await openDrawerAndWait();
-            act(() => fireEvent.click(screen.getByRole('button', {name: /Close/i})));
+            act(() => fireEvent.click(screen.getByRole('button', {name: /^Close$/})));
             await waitFor(() =>
                 expect(screen.getByRole('button', {name: /Events|Event Logger/i})).toBeInTheDocument()
             );
@@ -451,19 +490,15 @@ describe('EventLogger Component', () => {
                 expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0)
             );
 
-            const logChip = screen
-                .getAllByText(/EXPAND_TEST/i)
-                .find((el) => !el.textContent.includes('('));
-            const container =
-                logChip?.closest('[style*="cursor: pointer"]') || logChip?.closest('div');
-            if (container) {
-                act(() => fireEvent.click(container));
-                await waitFor(() => expect(screen.getByText(/"key"/i)).toBeInTheDocument());
-                act(() => fireEvent.click(container));
-                await waitFor(() =>
-                    expect(screen.getAllByText(/EXPAND_TEST/i).length).toBeGreaterThan(0)
-                );
-            }
+            const row = rowButton('EXPAND_TEST');
+            // Collapsed: a one-line preview of the data.
+            expect(row).toHaveTextContent('{"key":"value"}');
+            act(() => fireEvent.click(row));
+            expect(row).toHaveAttribute('aria-expanded', 'true');
+            await waitFor(() => expect(screen.getByText('"key"')).toBeInTheDocument());
+            act(() => fireEvent.click(row));
+            expect(row).toHaveAttribute('aria-expanded', 'false');
+            expect(screen.queryByText('"key"')).not.toBeInTheDocument();
         });
 
         test('expands circular data without throwing and shows fallback text', async () => {
@@ -485,25 +520,20 @@ describe('EventLogger Component', () => {
             await waitFor(() =>
                 expect(screen.getAllByText(/CIRCULAR_EXPAND/i).length).toBeGreaterThan(0)
             );
-            const chip = screen
-                .getAllByText(/CIRCULAR_EXPAND/i)
-                .find((el) => !el.textContent.includes('('));
-            const rowContainer =
-                chip?.closest('[style*="cursor: pointer"]') || chip?.closest('div');
-            if (rowContainer) {
-                act(() => fireEvent.click(rowContainer));
-                await waitFor(() => {
-                    expect(container.textContent).toContain('[object Object]');
-                });
-            }
+            const rowContainer = rowButton('CIRCULAR_EXPAND');
+            act(() => fireEvent.click(rowContainer));
+            expect(rowContainer).toHaveAttribute('aria-expanded', 'true');
+            await waitFor(() => {
+                expect(container.querySelector('pre')).toHaveTextContent('[object Object]');
+            });
         });
 
-        test('expanded log shows json-key and json-string classes', async () => {
+        test('expanded log shows key and string tokens, escaped as text', async () => {
             vi.useRealTimers();
 
             vi.mocked(useEventLogStore).mockReturnValue(
                 mockStore({
-                    eventLogs: [makeLog({eventType: 'CLASS_TEST', data: {key: 'value'}})],
+                    eventLogs: [makeLog({eventType: 'CLASS_TEST', data: {key: '<b>value</b>'}})],
                     setPaused: mockSetPaused,
                     clearLogs: mockClearLogs,
                 })
@@ -515,18 +545,15 @@ describe('EventLogger Component', () => {
                 expect(screen.getAllByText(/CLASS_TEST/i).length).toBeGreaterThan(0)
             );
 
-            const chip = screen
-                .getAllByText(/CLASS_TEST/i)
-                .find((el) => !el.textContent.includes('('));
-            const row =
-                chip?.closest('[style*="cursor: pointer"]') || chip?.closest('div');
-            if (row) {
-                act(() => fireEvent.click(row));
-                await waitFor(() => {
-                    expect(container.querySelector('.json-key')).toBeInTheDocument();
-                    expect(container.querySelector('.json-string')).toBeInTheDocument();
-                });
-            }
+            await waitFor(() => expect(rowButton('CLASS_TEST')).toBeDefined());
+            act(() => fireEvent.click(rowButton('CLASS_TEST')));
+            await waitFor(() => {
+                expect(container.querySelector('[data-token="key"]')).toHaveTextContent('"key"');
+                expect(container.querySelector('[data-token="string"]')).toHaveTextContent(
+                    '"<b>value</b>"'
+                );
+            });
+            expect(container.querySelector('pre b')).toBeNull();
         });
     });
 
@@ -535,8 +562,19 @@ describe('EventLogger Component', () => {
         test('pause button calls setPaused(true)', async () => {
             renderWithTheme(<EventLogger/>);
             await openDrawerAndWait();
-            act(() => fireEvent.click(screen.getByRole('button', {name: /Pause/i})));
+            act(() => fireEvent.click(screen.getByRole('button', {name: 'Pause'})));
             expect(mockSetPaused).toHaveBeenCalledWith(true);
+        });
+
+        test('resume button calls setPaused(false) when paused', async () => {
+            vi.mocked(useEventLogStore).mockReturnValue(
+                mockStore({isPaused: true, setPaused: mockSetPaused, clearLogs: mockClearLogs})
+            );
+            renderWithTheme(<EventLogger/>);
+            await openDrawerAndWait();
+            expect(screen.queryByRole('button', {name: 'Pause'})).not.toBeInTheDocument();
+            act(() => fireEvent.click(screen.getByRole('button', {name: 'Resume'})));
+            expect(mockSetPaused).toHaveBeenCalledWith(false);
         });
 
         test('clear button calls clearLogs and is disabled when empty', async () => {
@@ -556,7 +594,9 @@ describe('EventLogger Component', () => {
             );
             renderWithTheme(<EventLogger/>);
             await openDrawerAndWait();
-            act(() => fireEvent.click(screen.getByRole('button', {name: /Clear logs/i})));
+            const clearBtn = screen.getByRole('button', {name: /Clear logs/i});
+            expect(clearBtn).not.toBeDisabled();
+            act(() => fireEvent.click(clearBtn));
             expect(mockClearLogs).toHaveBeenCalled();
         });
 
@@ -587,10 +627,17 @@ describe('EventLogger Component', () => {
         test('selecting a chip filters to that type', async () => {
             renderWithTheme(<EventLogger/>);
             openDrawer();
-            await waitFor(() => expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument());
+            await waitFor(() => expect(rowButton('TYPE_B')).toBeDefined());
 
-            act(() => fireEvent.click(screen.getByRole('button', {name: /TYPE_A \(\d+\)/i})));
-            await waitFor(() => expect(screen.getAllByText(/TYPE_A/i).length).toBeGreaterThan(0));
+            const chip = screen.getByRole('button', {name: /TYPE_A \(\d+\)/i});
+            expect(chip).toHaveAttribute('aria-pressed', 'false');
+            act(() => fireEvent.click(chip));
+            expect(chip).toHaveAttribute('aria-pressed', 'true');
+            await waitFor(() => {
+                expect(rowButton('TYPE_A')).toBeDefined();
+                expect(rowButton('TYPE_B')).toBeUndefined();
+            });
+            expect(screen.getByText(/1\/1 events/i)).toBeInTheDocument();
         });
 
         test('toggling chip off restores all logs', async () => {
@@ -601,13 +648,15 @@ describe('EventLogger Component', () => {
             const chip = screen.getByRole('button', {name: /TYPE_A \(\d+\)/i});
             act(() => fireEvent.click(chip));
             act(() => fireEvent.click(chip));
+            expect(chip).toHaveAttribute('aria-pressed', 'false');
             await waitFor(() => {
-                expect(screen.getByText(/TYPE_A/i)).toBeInTheDocument();
-                expect(screen.getByText(/TYPE_B/i)).toBeInTheDocument();
+                expect(rowButton('TYPE_A')).toBeDefined();
+                expect(rowButton('TYPE_B')).toBeDefined();
             });
+            expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument();
         });
 
-        test('non-page-event chip uses green selected style', async () => {
+        test('page and additional event chips are told apart, selected or not', async () => {
             vi.useFakeTimers();
             vi.mocked(useEventLogStore).mockReturnValue(
                 mockStore({
@@ -621,9 +670,27 @@ describe('EventLogger Component', () => {
             act(() => vi.advanceTimersByTime(200));
 
             await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
-            act(() => fireEvent.click(screen.getByRole('button', {name: /EXTRA_TYPE \(\d+\)/i})));
-            await waitFor(() => expect(screen.getAllByText(/EXTRA_TYPE/i).length).toBeGreaterThan(0));
+            const chip = screen.getByRole('button', {name: /EXTRA_TYPE \(\d+\)/i});
+            expect(chip).toHaveAttribute('data-page-event', 'false');
+            expect(chip).toHaveAttribute('title', 'Additional event');
+            act(() => fireEvent.click(chip));
+            expect(chip).toHaveAttribute('aria-pressed', 'true');
+            expect(chip).toHaveClass('bg-ink');
+            await waitFor(() => expect(rowButton('EXTRA_TYPE')).toBeDefined());
             vi.useRealTimers();
+        });
+
+        test('page event chip is marked as such', async () => {
+            vi.mocked(useEventLogStore).mockReturnValue(
+                mockStore({eventLogs: [makeLog({eventType: 'PAGE_TYPE'})]})
+            );
+            renderWithTheme(<EventLogger eventTypes={['PAGE_TYPE']}/>);
+            openDrawer();
+            const chip = await screen.findByRole('button', {name: /PAGE_TYPE \(1\)/i});
+            expect(chip).toHaveAttribute('data-page-event', 'true');
+            expect(chip).toHaveAttribute('title', 'Event of this page');
+            act(() => fireEvent.click(chip));
+            expect(chip).toHaveClass('bg-accent');
         });
     });
 
@@ -703,9 +770,7 @@ describe('EventLogger Component', () => {
             renderWithTheme(<EventLogger objectName={objectName}/>);
             openDrawer();
             if (shouldShow) {
-                await waitFor(() =>
-                    expect(screen.getByText(/ObjectDeleted/i)).toBeInTheDocument()
-                );
+                await waitFor(() => expect(rowButton('ObjectDeleted')).toBeDefined());
             } else {
                 await waitFor(() =>
                     expect(screen.getByText(/No events match current filters/i)).toBeInTheDocument()
@@ -739,9 +804,7 @@ describe('EventLogger Component', () => {
                 />
             );
             openDrawer();
-            await waitFor(() =>
-                expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-            );
+            await waitFor(() => expect(loading()).not.toBeInTheDocument());
             await waitFor(() => expect(screen.getByText(/2\/2 events/i)).toBeInTheDocument());
         });
 
@@ -763,7 +826,8 @@ describe('EventLogger Component', () => {
             ]);
             renderWithTheme(<EventLogger eventTypes={['ALLOWED_EVENT']}/>);
             openDrawer();
-            await waitFor(() => expect(screen.getByText(/ALLOWED_EVENT/i)).toBeInTheDocument());
+            await waitFor(() => expect(rowButton('ALLOWED_EVENT')).toBeDefined());
+            expect(rowButton('BLOCKED_EVENT')).toBeUndefined();
         });
 
         test('all nested path scenarios resolve 3/3 events', async () => {
@@ -800,11 +864,12 @@ describe('EventLogger Component', () => {
             renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
             openDrawer();
             await openSettings();
-            const closeButtons = screen.getAllByLabelText('Close');
-            act(() => fireEvent.click(closeButtons[closeButtons.length - 1]));
-            await waitFor(() =>
-                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
+            act(() =>
+                fireEvent.click(screen.getByRole('button', {name: 'Close subscriptions'}))
             );
+            await waitFor(expectSettingsClosed);
+            // The bottom panel stays open.
+            expect(screen.getByRole('button', {name: /^Close$/})).toBeInTheDocument();
         });
 
         test('Apply button closes dialog', async () => {
@@ -822,9 +887,16 @@ describe('EventLogger Component', () => {
             act(() =>
                 fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}))
             );
-            await waitFor(() =>
-                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
-            );
+            await waitFor(expectSettingsClosed);
+            expect(mockClearLogs).toHaveBeenCalled();
+        });
+
+        test('Escape closes the settings panel', async () => {
+            renderWithTheme(<EventLogger eventTypes={['EVENT1']}/>);
+            openDrawer();
+            await openSettings();
+            act(() => fireEvent.keyDown(document, {key: 'Escape'}));
+            await waitFor(expectSettingsClosed);
         });
 
         test.each([
@@ -881,11 +953,15 @@ describe('EventLogger Component', () => {
             renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
             openDrawer();
             await openSettings();
-            const checkboxes = screen.getAllByRole('checkbox');
-            if (checkboxes.length > 0) {
-                act(() => fireEvent.click(checkboxes[0]));
-                act(() => fireEvent.click(checkboxes[0]));
-            }
+            const checkbox = screen.getByRole('checkbox', {name: /EVENT1/});
+            expect(checkbox).toBeChecked();
+            expect(screen.getByRole('button', {name: /Apply Subscriptions \(2\)/i})).toBeInTheDocument();
+            act(() => fireEvent.click(checkbox));
+            expect(checkbox).not.toBeChecked();
+            expect(screen.getByRole('button', {name: /Apply Subscriptions \(1\)/i})).toBeInTheDocument();
+            act(() => fireEvent.click(checkbox));
+            expect(checkbox).toBeChecked();
+            expect(screen.getByRole('button', {name: /Apply Subscriptions \(2\)/i})).toBeInTheDocument();
         });
 
         test('closeLoggerEventSource called when all unsubscribed and applied', async () => {
@@ -895,8 +971,7 @@ describe('EventLogger Component', () => {
 
             renderWithTheme(<EventLogger eventTypes={[]}/>);
             openDrawer();
-            fireEvent.click(screen.getByTestId('SettingsIcon'));
-            await waitFor(() => expect(screen.getByText('Event Subscriptions')).toBeInTheDocument());
+            await openSettings();
             fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i}));
             fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}));
 
@@ -907,17 +982,13 @@ describe('EventLogger Component', () => {
             renderWithTheme(<EventLogger eventTypes={['EVENT1', 'EVENT2']}/>);
             openDrawer();
             await openSettings();
-            const checkboxes = screen.getAllByRole('checkbox');
-            const event1Checkbox = checkboxes.find((cb) =>
-                cb.closest('[class*="MuiBox"]')?.textContent.includes('EVENT1')
-            );
-            if (event1Checkbox) act(() => fireEvent.click(event1Checkbox));
+            const event1Checkbox = screen.getByRole('checkbox', {name: /EVENT1/});
+            act(() => fireEvent.click(event1Checkbox));
+            expect(event1Checkbox).not.toBeChecked();
             act(() =>
                 fireEvent.click(screen.getByRole('button', {name: /Apply Subscriptions/i}))
             );
-            await waitFor(() =>
-                expect(screen.queryByText('Event Subscriptions')).not.toBeInTheDocument()
-            );
+            await waitFor(expectSettingsClosed);
         });
 
         test('Subscribe to All selects all event types', async () => {
@@ -965,8 +1036,8 @@ describe('EventLogger Component', () => {
             await openSettings();
             expect(screen.getByText(/Additional Events/)).toBeInTheDocument();
             const pageSection = screen
-                .getByRole('heading', {name: /Page Events/})
-                .closest('div');
+                .getByRole('heading', {name: /^Page Events/})
+                .closest('section');
             expect(pageSection.textContent).toContain('NodeStatusUpdated');
         });
 
@@ -977,25 +1048,16 @@ describe('EventLogger Component', () => {
             act(() => vi.advanceTimersByTime(200));
             await openSettings();
 
-            const checkboxA = screen
-                .getAllByRole('checkbox')
-                .find((cb) => cb.closest('[class*="MuiBox"]')?.textContent.includes('EVENT_A'));
+            const checkboxA = screen.getByRole('checkbox', {name: /EVENT_A/});
             expect(checkboxA).toBeChecked();
 
             act(() => {
-                rerender(
-                    <ThemeProvider theme={lightTheme}>
-                        <EventLogger eventTypes={['EVENT_B']}/>
-                    </ThemeProvider>
-                );
+                rerender(<EventLogger eventTypes={['EVENT_B']}/>);
             });
             await waitFor(() => {
-                const checkboxes = screen.getAllByRole('checkbox');
-                const checkboxB = checkboxes.find((cb) =>
-                    cb.closest('[class*="MuiBox"]')?.textContent.includes('EVENT_B')
-                );
-                if (checkboxB) expect(checkboxB).toBeChecked();
+                expect(screen.getByRole('checkbox', {name: /EVENT_B/})).toBeChecked();
             });
+            expect(screen.queryByRole('checkbox', {name: /EVENT_A/})).not.toBeInTheDocument();
 
             vi.useRealTimers();
         });
@@ -1005,11 +1067,10 @@ describe('EventLogger Component', () => {
             openDrawer();
             await openSettings();
 
-            const additionalCheckboxes = screen.getAllByRole('checkbox');
-            const nonPageCheckbox = additionalCheckboxes.find((cb) =>
-                cb.closest('[class*="MuiBox"]')?.textContent.includes('NodeStatusUpdated')
-            );
-            if (nonPageCheckbox) act(() => fireEvent.click(nonPageCheckbox));
+            const nonPageCheckbox = screen.getByRole('checkbox', {name: /NodeStatusUpdated/});
+            expect(nonPageCheckbox).not.toBeChecked();
+            act(() => fireEvent.click(nonPageCheckbox));
+            expect(nonPageCheckbox).toBeChecked();
 
             const pageEventsBtn = screen.getByRole('button', {name: /Subscribe to Page Events/i});
             expect(pageEventsBtn).not.toBeDisabled();
@@ -1075,11 +1136,7 @@ describe('EventLogger Component', () => {
 
             const callsBefore = startLoggerReception.mock.calls.length;
             act(() => {
-                rerender(
-                    <ThemeProvider theme={lightTheme}>
-                        <EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/two"/>
-                    </ThemeProvider>
-                );
+                rerender(<EventLogger eventTypes={['NodeStatusUpdated']} objectName="/path/two"/>);
             });
             await waitFor(() =>
                 expect(startLoggerReception.mock.calls.length).toBeGreaterThan(callsBefore)
@@ -1137,11 +1194,11 @@ describe('EventLogger Component', () => {
 
         test('mouseUp clears pending resize timeout', async () => {
             vi.useFakeTimers();
-            const {container} = renderWithTheme(<EventLogger/>);
+            renderWithTheme(<EventLogger/>);
             openDrawer();
             const handle = screen.getByLabelText(/Resize handle/i);
 
-            const paper = container.querySelector('.MuiDrawer-paper');
+            const paper = panel();
             const initialHeight = paper.style.height;
 
             act(() => fireEvent.mouseDown(handle, {clientY: 100}));
@@ -1156,18 +1213,22 @@ describe('EventLogger Component', () => {
 
         test('timeout execution calls setDrawerHeight and updates height', async () => {
             vi.useFakeTimers();
-            const {container} = renderWithTheme(<EventLogger/>);
+            renderWithTheme(<EventLogger/>);
             openDrawer();
             const handle = screen.getByLabelText(/Resize handle/i);
-            const paper = container.querySelector('.MuiDrawer-paper');
+            const paper = panel();
             const initialHeight = parseInt(paper.style.height, 10);
+            expect(initialHeight).toBe(320);
 
             act(() => fireEvent.mouseDown(handle, {clientY: 100}));
+            expect(handle).toHaveAttribute('data-resizing', 'true');
             act(() => fireEvent.mouseMove(document, {clientY: 40}));
             act(() => vi.advanceTimersByTime(20));
 
             const newHeight = parseInt(paper.style.height, 10);
             expect(newHeight).toBeGreaterThan(initialHeight);
+            act(() => fireEvent.mouseUp(document));
+            expect(handle).toHaveAttribute('data-resizing', 'false');
 
             vi.useRealTimers();
         });
@@ -1182,7 +1243,7 @@ describe('EventLogger Component', () => {
             act(() => fireEvent.mouseMove(document, {clientY: 160}));
             act(() => vi.advanceTimersByTime(20));
 
-            const paper = document.querySelector('.MuiDrawer-paper');
+            const paper = panel();
             const newHeight = parseInt(paper.style.height, 10);
             expect(newHeight).toBeGreaterThan(0);
 
@@ -1196,12 +1257,12 @@ describe('EventLogger Component', () => {
         beforeEach(() => vi.useFakeTimers());
         afterEach(() => vi.useRealTimers());
 
-        test('CircularProgress shown then hidden after 200 ms', async () => {
+        test('Spinner shown then hidden after 200 ms', async () => {
             renderWithTheme(<EventLogger/>);
             openDrawer();
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(loading()).toBeInTheDocument();
             act(() => vi.advanceTimersByTime(200));
-            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+            await waitFor(() => expect(loading()).not.toBeInTheDocument());
         });
 
         test('cleanup clears the initialLoading timeout when component unmounts early', () => {
@@ -1241,17 +1302,8 @@ describe('EventLogger Component', () => {
             await waitFor(() => expect(screen.getByText(/20\/25 events/i)).toBeInTheDocument());
 
             const logTextEl = screen.getByText('EVENT_0');
-            let el = logTextEl.parentElement;
-            let logContainer = null;
-            while (el) {
-                const style = window.getComputedStyle(el);
-                if (style.overflow === 'auto' || style.overflowY === 'auto') {
-                    logContainer = el;
-                    break;
-                }
-                el = el.parentElement;
-            }
-            expect(logContainer).not.toBeNull();
+            const logContainer = eventList();
+            expect(logContainer).toContainElement(logTextEl);
 
             logContainer.style.height = '200px';
             Object.defineProperty(logContainer, 'scrollTop', {
@@ -1298,17 +1350,8 @@ describe('EventLogger Component', () => {
             await waitFor(() => expect(screen.getByText(/20\/30 events/i)).toBeInTheDocument());
 
             const logTextEl = screen.getByText('SCROLL_0');
-            let el = logTextEl.parentElement;
-            let logContainer = null;
-            while (el) {
-                const style = window.getComputedStyle(el);
-                if (style.overflow === 'auto' || style.overflowY === 'auto') {
-                    logContainer = el;
-                    break;
-                }
-                el = el.parentElement;
-            }
-            expect(logContainer).not.toBeNull();
+            const logContainer = eventList();
+            expect(logContainer).toContainElement(logTextEl);
 
             logContainer.style.height = '300px';
             Object.defineProperty(logContainer, 'scrollTop', {
@@ -1337,7 +1380,7 @@ describe('EventLogger Component', () => {
         beforeEach(() => vi.useFakeTimers());
         afterEach(() => vi.useRealTimers());
 
-        test('LogRow re-renders when theme changes light → dark', async () => {
+        test('LogRow survives a switch to the dark theme (colours come from the tokens)', async () => {
             vi.mocked(useEventLogStore).mockReturnValue(
                 mockStore({
                     eventLogs: [makeLog({eventType: 'MEMO_TEST'})],
@@ -1345,25 +1388,19 @@ describe('EventLogger Component', () => {
                     clearLogs: mockClearLogs,
                 })
             );
-            const {rerender} = render(
-                <ThemeProvider theme={lightTheme}>
-                    <EventLogger/>
-                </ThemeProvider>
-            );
+            const {rerender} = render(<EventLogger/>);
             act(() =>
                 fireEvent.click(screen.getByRole('button', {name: /Events|Event Logger/i}))
             );
             act(() => vi.advanceTimersByTime(200));
             await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
 
-            act(() =>
-                rerender(
-                    <ThemeProvider theme={darkTheme}>
-                        <EventLogger/>
-                    </ThemeProvider>
-                )
-            );
+            act(() => {
+                document.documentElement.dataset.theme = 'dark';
+                rerender(<EventLogger/>);
+            });
             await waitFor(() => expect(screen.getByText('MEMO_TEST')).toBeInTheDocument());
+            delete document.documentElement.dataset.theme;
         });
     });
 
@@ -1402,11 +1439,14 @@ describe('EventLogger Component', () => {
             expect(screen.queryAllByRole('button', {name: /Scroll to bottom/i})).toHaveLength(0);
         });
 
-        test('no CancelIcon chips in main drawer by default', async () => {
+        test('no type filter in main drawer by default', async () => {
             renderWithTheme(<EventLogger eventTypes={[]}/>);
             openDrawer();
-            await waitFor(() => expect(screen.getByTestId('SettingsIcon')).toBeInTheDocument());
-            expect(screen.queryAllByTestId('CancelIcon')).toHaveLength(0);
+            await waitFor(() =>
+                expect(screen.getByRole('button', {name: 'Manage subscriptions'})).toBeInTheDocument()
+            );
+            expect(screen.queryByRole('group', {name: 'Filter by type'})).not.toBeInTheDocument();
+            expect(screen.queryAllByRole('button', {pressed: false})).toHaveLength(0);
         });
 
         test('baseFilteredLogs shows all when both subscriptions and filteredTypes are empty', async () => {
@@ -1419,10 +1459,7 @@ describe('EventLogger Component', () => {
             );
             renderWithTheme(<EventLogger eventTypes={[]}/>);
             openDrawer();
-            fireEvent.click(screen.getByTestId('SettingsIcon'));
-            await waitFor(() =>
-                expect(screen.getByText('Event Subscriptions')).toBeInTheDocument()
-            );
+            await openSettings();
             act(() =>
                 fireEvent.click(screen.getByRole('button', {name: /Unsubscribe from All/i}))
             );
@@ -1432,13 +1469,43 @@ describe('EventLogger Component', () => {
             await waitFor(() => expect(screen.getByText('ANY_EVENT')).toBeInTheDocument());
         });
 
-        test('Drawer paper element is rendered', async () => {
-            const {container} = renderWithTheme(<EventLogger/>);
+        test('Drawer panel is rendered as a raised bottom panel', async () => {
+            renderWithTheme(<EventLogger/>);
             openDrawer();
             await waitFor(() => expect(screen.getByText(/Event Logger/i)).toBeInTheDocument());
-            const paper = container.querySelector('.MuiDrawer-paper');
-            if (paper) expect(paper).toBeInTheDocument();
+            const paper = panel();
+            expect(paper).toHaveClass('bg-surface-raised', 'border-t', 'border-line');
+            expect(paper).toHaveStyle({height: '320px'});
+            expect(screen.getByRole('heading', {name: 'Event Logger'})).toBeInTheDocument();
             expect(screen.getByLabelText(/Resize handle/i)).toBeInTheDocument();
+        });
+
+        test('trigger is a raised pill with the feed icon and the label', () => {
+            renderWithTheme(<EventLogger title="Node Events" buttonLabel="Nodes Events"/>);
+            const trigger = screen.getByRole('button', {name: 'Nodes Events'});
+            expect(trigger).toHaveAttribute('title', 'Node Events');
+            expect(trigger).toHaveClass('rounded-full', 'bg-surface-raised', 'border-line');
+            expect(trigger.querySelector('svg')).toBeInTheDocument();
+        });
+
+        test('event type label carries its tone', async () => {
+            vi.mocked(useEventLogStore).mockReturnValue(
+                mockStore({
+                    eventLogs: [
+                        makeLog({id: '1', eventType: 'TEST_ERROR_EVENT'}),
+                        makeLog({id: '2', eventType: 'ITEM_DELETED'}),
+                        makeLog({id: '3', eventType: 'PLAIN'}),
+                    ],
+                })
+            );
+            renderWithTheme(<EventLogger/>);
+            openDrawer();
+            await waitFor(() => expect(rowButton('PLAIN')).toBeDefined());
+            const tone = (type) =>
+                rowButton(type).querySelector('[data-tone]').getAttribute('data-tone');
+            expect(tone('TEST_ERROR_EVENT')).toBe('error');
+            expect(tone('ITEM_DELETED')).toBe('warning');
+            expect(tone('PLAIN')).toBe('default');
         });
     });
 });

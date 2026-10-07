@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act, within} from '@testing-library/react';
 import {BrowserRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import NodesTable from '../NodesTable.jsx';
@@ -31,16 +31,6 @@ const {
 }));
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
-vi.mock('@mui/icons-material/KeyboardArrowUp', () => ({
-    default: () => <div data-testid="KeyboardArrowUpIcon"/>,
-}));
-vi.mock('@mui/icons-material/KeyboardArrowDown', () => ({
-    default: () => <div data-testid="KeyboardArrowDownIcon"/>,
-}));
-vi.mock('@mui/icons-material/Close', () => ({
-    default: () => <div data-testid="CloseIcon"/>,
-}));
-
 vi.mock('../NodeRow.jsx', () => ({
     default: (props) => (
         <tr data-testid={`row-${props.nodename}`}>
@@ -57,8 +47,9 @@ vi.mock('../NodeRow.jsx', () => ({
                 <button onClick={() => props.onAction(props.nodename, 'freeze')}>Freeze</button>
                 <button onClick={() => props.onAction(props.nodename, 'unfreeze')}>Unfreeze</button>
                 <button onClick={() => props.onAction(props.nodename, 'restart daemon')}>Restart Daemon</button>
-                <button onClick={(e) => props.onMenuOpen(e, props.nodename)}>OpenMenu</button>
-                <button onClick={() => props.onMenuClose(props.nodename)}>CloseMenu</button>
+                <span data-testid={`props-${props.nodename}`}>
+                    {Object.keys(props).sort().join(',')}
+                </span>
             </td>
             <td>
                 <button onClick={() => props.onOpenLogs(props.nodename)}>Open Logs</button>
@@ -188,7 +179,8 @@ describe('NodesTable', () => {
     test('shows loader when no data, then renders rows', async () => {
         setStore({nodeStatus: {}, nodeStats: {}, nodeMonitor: {}});
         renderWithRouter(<NodesTable/>);
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading nodes');
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
 
     test('renders all node names', async () => {
@@ -209,11 +201,17 @@ describe('NodesTable', () => {
         fireEvent.click(checkboxes[1]);
         expect(actionsBtn).toBeDisabled();
 
+        expect(checkboxes[0]).toBe(screen.getByRole('checkbox', {name: 'Select all nodes'}));
         fireEvent.click(checkboxes[0]);
+        expect(checkboxes[0]).toBeChecked();
         expect(checkboxes[1]).toBeChecked();
         expect(checkboxes[2]).toBeChecked();
         expect(checkboxes[3]).toBeChecked();
         expect(actionsBtn).toBeEnabled();
+
+        fireEvent.click(checkboxes[0]);
+        expect(checkboxes[1]).not.toBeChecked();
+        expect(actionsBtn).toBeDisabled();
     });
 
     describe('action execution', () => {
@@ -221,10 +219,10 @@ describe('NodesTable', () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click((await screen.findAllByText('Freeze'))[0]);
             await waitFor(() =>
-                expect(screen.getByRole('dialog')).toHaveTextContent('Confirm Freeze Action on node node-1')
+                expect(screen.getByTestId('dialog-freeze')).toHaveTextContent('Confirm Freeze Action on node node-1')
             );
             fireEvent.click(screen.getByText('Cancel'));
-            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            await waitFor(() => expect(screen.queryByTestId('dialog-freeze')).not.toBeInTheDocument());
         });
 
         test('successful single-node action', async () => {
@@ -240,7 +238,7 @@ describe('NodesTable', () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click((await screen.findAllByText('Freeze'))[0]);
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
-            expect(await screen.findByText(/Authentication token not found/i)).toBeInTheDocument();
+            expect(await screen.findByRole('alert')).toHaveTextContent(/Authentication token not found/i);
         });
 
         test('partial success', async () => {
@@ -257,8 +255,10 @@ describe('NodesTable', () => {
             await waitFor(() => expect(actionsBtn).toBeEnabled());
             fireEvent.click(actionsBtn);
             fireEvent.click(await screen.findByRole('menuitem', {name: /^Freeze$/i}));
+            expect(screen.getByTestId('dialog-freeze')).toHaveTextContent('Confirm Freeze Action on 2 nodes');
             fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
-            expect(await screen.findByText(/⚠️ 'Freeze' partially succeeded: 1 ok, 1 errors\./i)).toBeInTheDocument();
+            const alert = await screen.findByRole('alert');
+            expect(alert).toHaveTextContent(/⚠️ 'Freeze' partially succeeded: 1 ok, 1 errors\./i);
         });
 
         test('total failure', async () => {
@@ -370,6 +370,10 @@ describe('NodesTable', () => {
             ['Drain', /\/action\/drain$/],
             ['Abort', /\/action\/abort$/],
             ['Clear', /\/action\/clear$/],
+            ['Dequeue', /\/action\/dequeue$/],
+            ['Scsi Scan', /\/action\/scsi\/scan$/],
+            ['Restart Daemon', /\/daemon\/action\/restart$/],
+            ['Shutdown', /\/daemon\/action\/shutdown$/],
         ])('correct URL for %s', async (label, urlPattern) => {
             global.fetch = vi.fn().mockResolvedValue({ok: true});
             renderWithRouter(<NodesTable/>);
@@ -403,8 +407,9 @@ describe('NodesTable', () => {
             fireEvent.click(await screen.findByRole('button', {name: 'Confirm'}));
             const successMsg = await screen.findByText(/✅ 'Freeze' succeeded on 1 node\(s\)\./i);
             expect(successMsg).toBeInTheDocument();
+            expect(successMsg.closest('[role="status"]')).not.toBeNull();
             const closeButtons = screen.getAllByRole('button', {name: 'Close'});
-            const alertCloseButton = closeButtons.find(btn => btn.closest('[role="alert"]'));
+            const alertCloseButton = closeButtons.find(btn => btn.closest('[role="status"]'));
             expect(alertCloseButton).toBeDefined();
             fireEvent.click(alertCloseButton);
             await waitFor(() => {
@@ -430,10 +435,23 @@ describe('NodesTable', () => {
     });
 
     describe('menus', () => {
-        test('handleMenuOpen/Close updates anchorEls', async () => {
+        test('passes each row its data and callbacks, the row menu being its own', async () => {
             renderWithRouter(<NodesTable/>);
-            fireEvent.click((await screen.findAllByText('OpenMenu'))[0]);
-            fireEvent.click((await screen.findAllByText('CloseMenu'))[0]);
+            expect(await screen.findByTestId('props-node-1')).toHaveTextContent(
+                'daemonNodename,isSelected,monitor,nodename,onAction,onOpenLogs,onSelect,stats,status'
+            );
+        });
+
+        test('bulk menu lists every node action but the frozen-state ones that do not apply', async () => {
+            renderWithRouter(<NodesTable/>);
+            const checkboxes = await screen.findAllByRole('checkbox');
+            fireEvent.click(checkboxes[1]);
+            fireEvent.click(screen.getByRole('button', {name: /actions on selected nodes/i}));
+            const menu = await screen.findByRole('menu', {name: 'Actions on selected nodes'});
+            const names = within(menu).getAllByRole('menuitem').map((item) => item.textContent);
+            expect(names).toContain('Freeze');
+            expect(names).toContain('Restart Daemon');
+            expect(names).not.toContain('Unfreeze');
         });
 
         test('filters based on frozen/unfrozen state and closes via Escape', async () => {
@@ -452,7 +470,7 @@ describe('NodesTable', () => {
                 expect(screen.getByRole('menuitem', {name: /^Unfreeze$/i})).toBeInTheDocument();
                 expect(screen.getByRole('menuitem', {name: /^Freeze$/i})).toBeInTheDocument();
             });
-            fireEvent.keyDown(screen.getByRole('presentation'), {key: 'Escape'});
+            fireEvent.keyDown(screen.getByRole('menu'), {key: 'Escape'});
             await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
         });
 
@@ -477,7 +495,7 @@ describe('NodesTable', () => {
         test('handleAction with nodename closes node menu', async () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click((await screen.findAllByText('Freeze'))[0]);
-            await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByTestId('dialog-freeze')).toHaveTextContent('node node-1'));
         });
     });
 
@@ -491,7 +509,7 @@ describe('NodesTable', () => {
             ['Version', /node-1/],
         ])('ascending sort by %s', async (header, expectedFirst) => {
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText(header));
+            fireEvent.click(screen.getByRole('button', {name: header}));
             await waitFor(() => {
                 const firstRow = screen.getAllByTestId(/row-/)[0];
                 expect(firstRow).toHaveTextContent(expectedFirst);
@@ -500,7 +518,7 @@ describe('NodesTable', () => {
 
         test('sort by name descending', async () => {
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getAllByText('Name')[0]);
+            fireEvent.click(screen.getByRole('button', {name: 'Name'}));
             await waitFor(() => {
                 const rows = screen.getAllByTestId(/row-/);
                 expect(rows[0]).toHaveTextContent('node-3');
@@ -510,18 +528,22 @@ describe('NodesTable', () => {
 
         test('toggles direction on same column, resets on new column', async () => {
             renderWithRouter(<NodesTable/>);
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
-            fireEvent.click(screen.getAllByText('Name')[0]);
-            await waitFor(() => expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument());
-            fireEvent.click(screen.getAllByText('Name')[0]);
-            await waitFor(() => expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument());
-            fireEvent.click(screen.getByText('Score'));
-            await waitFor(() => expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument());
+            const header = (name) => screen.getByRole('columnheader', {name});
+            expect(header('Name')).toHaveAttribute('aria-sort', 'ascending');
+            expect(header('Score')).toHaveAttribute('aria-sort', 'none');
+            fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+            await waitFor(() => expect(header('Name')).toHaveAttribute('aria-sort', 'descending'));
+            fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+            await waitFor(() => expect(header('Name')).toHaveAttribute('aria-sort', 'ascending'));
+            fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Score'}));
+            await waitFor(() => expect(header('Score')).toHaveAttribute('aria-sort', 'ascending'));
+            expect(header('Name')).toHaveAttribute('aria-sort', 'none');
         });
 
         test('sort by booted_at', async () => {
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Booted At'));
+            fireEvent.click(screen.getByRole('button', {name: 'Booted At'}));
             await waitFor(() => {
                 const rows = screen.getAllByTestId(/row-/);
                 expect(rows[0]).toHaveTextContent('node-1');
@@ -538,7 +560,7 @@ describe('NodesTable', () => {
                 },
             });
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Updated At'));
+            fireEvent.click(screen.getByRole('button', {name: 'Updated At'}));
             await waitFor(() => {
                 const rows = screen.getAllByTestId(/row-/);
                 expect(rows[0]).toHaveTextContent('node-2');
@@ -554,7 +576,7 @@ describe('NodesTable', () => {
                 },
             });
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Version'));
+            fireEvent.click(screen.getByRole('button', {name: 'Version'}));
             await waitFor(() => {
                 const rows = screen.getAllByTestId(/row-/);
                 expect(rows[0]).toHaveTextContent('node-1');
@@ -567,7 +589,7 @@ describe('NodesTable', () => {
                 nodeMonitor: {'node-1': {state: 'idle'}},
             });
             renderWithRouter(<NodesTable/>);
-            fireEvent.click(screen.getByText('Score'));
+            fireEvent.click(screen.getByRole('button', {name: 'Score'}));
             await waitFor(() => {
                 const rows = screen.getAllByTestId(/row-/);
                 expect(rows[0]).toHaveTextContent('node-2');
@@ -580,51 +602,45 @@ describe('NodesTable', () => {
             Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
         });
 
+        const logsPanel = () => screen.getByRole('dialog', {name: 'Node Logs'});
+
         test('opens and closes', async () => {
             renderWithRouter(<NodesTable/>);
+            expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument();
+            expect(logsPanel()).toHaveAttribute('inert');
             fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
-            fireEvent.click(screen.getAllByTestId('CloseIcon')[0]);
+            expect(logsPanel()).not.toHaveAttribute('inert');
+            expect(within(logsPanel()).getByTestId('logs-viewer')).toHaveTextContent('Logs for node-1 (node), height: 100%');
+            fireEvent.click(within(logsPanel()).getByRole('button', {name: 'Close'}));
             await waitFor(() => expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument());
+            expect(logsPanel()).toHaveAttribute('inert');
         });
 
-        test('resizes with mouse', async () => {
+        test('shows the logs of the node last asked for', async () => {
             renderWithRouter(<NodesTable/>);
-            fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            const handle = screen.getByLabelText('Resize drawer');
-            fireEvent.mouseDown(handle, {clientX: 800});
-            fireEvent.mouseMove(document, {clientX: 750});
-            fireEvent.mouseMove(document, {clientX: 1200});
-            fireEvent.mouseMove(document, {clientX: 400});
-            fireEvent.mouseUp(document);
-            expect(document.body.style.cursor).toBe('default');
+            const buttons = await screen.findAllByText('Open Logs');
+            fireEvent.click(buttons[0]);
+            fireEvent.click(buttons[1]);
+            expect(screen.getByTestId('logs-viewer')).toHaveTextContent('Logs for node-2');
         });
 
-        test('resizes with touch events', async () => {
+        test('stays open on a click beside it', async () => {
             renderWithRouter(<NodesTable/>);
             fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            const handle = screen.getByLabelText('Resize drawer');
-            fireEvent(handle, new TouchEvent('touchstart', {
-                touches: [{clientX: 800}],
-                bubbles: true,
-                cancelable: true,
-            }));
-            fireEvent(document, new TouchEvent('touchmove', {touches: [{clientX: 700}], bubbles: true}));
-            fireEvent(document, new Event('touchend', {bubbles: true}));
-            expect(document.body.style.cursor).toBe('default');
+            fireEvent.pointerDown(document.body);
+            expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
         });
 
-        test('touch cancel stops resizing', async () => {
+        test('is resizable from its left edge, by the keyboard', async () => {
             renderWithRouter(<NodesTable/>);
+            expect(screen.queryByRole('separator', {name: 'Resize drawer'})).not.toBeInTheDocument();
             fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            const handle = screen.getByLabelText('Resize drawer');
-            fireEvent(handle, new TouchEvent('touchstart', {
-                touches: [{clientX: 800}],
-                bubbles: true,
-                cancelable: true,
-            }));
-            fireEvent(document, new Event('touchcancel', {bubbles: true}));
-            expect(document.body.style.cursor).toBe('default');
+            const handle = screen.getByRole('separator', {name: 'Resize drawer'});
+            const before = handle.getAttribute('aria-valuenow');
+            fireEvent.keyDown(handle, {key: 'ArrowLeft'});
+            await waitFor(() => expect(handle.getAttribute('aria-valuenow')).not.toBe(before));
+            fireEvent.keyDown(handle, {key: 'Enter'});
+            await waitFor(() => expect(handle.getAttribute('aria-valuenow')).toBe(before));
         });
     });
 
@@ -649,108 +665,74 @@ describe('NodesTable', () => {
         expect(mockCloseEventSource).toHaveBeenCalled();
     });
 
-    test('calculateMenuPosition with null anchorRef does not throw', () => {
+    test('renders the rows once data is there', () => {
         renderWithRouter(<NodesTable/>);
         expect(screen.getByText('node-1')).toBeInTheDocument();
+        expect(screen.getByRole('table')).toBeInTheDocument();
     });
-    test('calculateMenuPosition with valid anchorRef (Safari)', async () => {
-        const origGetRect = Element.prototype.getBoundingClientRect;
-        const origScrollY = window.scrollY;
-        const origScrollX = window.scrollX;
-        const origDevicePixelRatio = window.devicePixelRatio;
-        const origUserAgent = navigator.userAgent;
-
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15',
-            configurable: true,
-        });
-        Object.defineProperty(window, 'devicePixelRatio', {
-            value: 2,
-            configurable: true,
-        });
-        Element.prototype.getBoundingClientRect = vi.fn(() => ({
-            bottom: 100,
-            right: 200,
-            top: 50,
-            left: 150,
-            width: 50,
-            height: 30,
-        }));
-        Object.defineProperty(window, 'scrollY', {value: 20, writable: true, configurable: true});
-        Object.defineProperty(window, 'scrollX', {value: 10, writable: true, configurable: true});
-
-        vi.resetModules();
-        const {default: NodesTableSafari} = await import('../NodesTable.jsx');
-
-        renderWithRouter(<NodesTableSafari/>);
-
-        const checkboxes = await screen.findAllByRole('checkbox');
-        fireEvent.click(checkboxes[1]);
-        const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
-        await waitFor(() => expect(actionsBtn).toBeEnabled());
-        fireEvent.click(actionsBtn);
-
-        await act(async () => {
-            await new Promise(resolve => setTimeout(resolve, 20));
+    describe('additional branch coverage', () => {
+        test('bulk menu closes on a click outside', async () => {
+            renderWithRouter(<NodesTable/>);
+            const checkboxes = await screen.findAllByRole('checkbox');
+            fireEvent.click(checkboxes[1]);
+            const actionsBtn = screen.getByRole('button', {name: /actions on selected nodes/i});
+            fireEvent.click(actionsBtn);
+            expect(actionsBtn).toHaveAttribute('aria-expanded', 'true');
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+            fireEvent.pointerDown(document.body);
+            await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+            expect(actionsBtn).toHaveAttribute('aria-expanded', 'false');
         });
 
-        expect(screen.getByRole('menu')).toBeInTheDocument();
-
-        Element.prototype.getBoundingClientRect = origGetRect;
-        Object.defineProperty(window, 'scrollY', {value: origScrollY, writable: true, configurable: true});
-        Object.defineProperty(window, 'scrollX', {value: origScrollX, writable: true, configurable: true});
-        Object.defineProperty(navigator, 'userAgent', {value: origUserAgent, configurable: true});
-        Object.defineProperty(window, 'devicePixelRatio', {value: origDevicePixelRatio, configurable: true});
-    });
-
-    test.each([
-        ['State', 'node-1', 'node-2'],
-        ['Score', 'node-1', 'node-3'],
-        ['Load (15m)', 'node-2', 'node-3'],
-        ['Mem Avail', 'node-2', 'node-3'],
-        ['Swap Avail', 'node-2', 'node-3'],
-        ['Version', 'node-3', 'node-1'],
-        ['Booted At', 'node-3', 'node-1'],
-        ['Updated At', 'node-1', 'node-3'],
-    ])('descending sort by %s', async (header, expectedFirst, expectedLast) => {
-        renderWithRouter(<NodesTable/>);
-        fireEvent.click(screen.getByText(header));
-        fireEvent.click(screen.getByText(header));
-        await waitFor(() => {
-            const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent(expectedFirst);
-            expect(rows[2]).toHaveTextContent(expectedLast);
+        test.each([
+            ['State', 'node-1', 'node-2'],
+            ['Score', 'node-1', 'node-3'],
+            ['Load (15m)', 'node-2', 'node-3'],
+            ['Mem Avail', 'node-2', 'node-3'],
+            ['Swap Avail', 'node-2', 'node-3'],
+            ['Version', 'node-3', 'node-1'],
+            ['Booted At', 'node-3', 'node-1'],
+            ['Updated At', 'node-1', 'node-3'],
+        ])('descending sort by %s', async (header, expectedFirst, expectedLast) => {
+            renderWithRouter(<NodesTable/>);
+            fireEvent.click(screen.getByRole('button', {name: header}));
+            fireEvent.click(screen.getByRole('button', {name: header}));
+            await waitFor(() => {
+                const rows = screen.getAllByTestId(/row-/);
+                expect(rows[0]).toHaveTextContent(expectedFirst);
+                expect(rows[2]).toHaveTextContent(expectedLast);
+            });
         });
-    });
 
-    test('sort by booted_at with missing booted_at', async () => {
-        setStore({
-            nodeStatus: {
-                'node-1': {state: 'idle', frozen_at: null, agent: 'v1.0', booted_at: '2023-01-01T00:00:00Z'},
-                'node-2': {state: 'busy', frozen_at: null, agent: 'v2.0', booted_at: '2023-01-02T00:00:00Z'},
-                'node-3': {state: 'idle', frozen_at: null, agent: 'v3.0'},
-            },
-            nodeStats: {},
-            nodeMonitor: {},
+        test('sort by booted_at with missing booted_at', async () => {
+            setStore({
+                nodeStatus: {
+                    'node-1': {state: 'idle', frozen_at: null, agent: 'v1.0', booted_at: '2023-01-01T00:00:00Z'},
+                    'node-2': {state: 'busy', frozen_at: null, agent: 'v2.0', booted_at: '2023-01-02T00:00:00Z'},
+                    'node-3': {state: 'idle', frozen_at: null, agent: 'v3.0'},
+                },
+                nodeStats: {},
+                nodeMonitor: {},
+            });
+            renderWithRouter(<NodesTable/>);
+            fireEvent.click(screen.getByRole('button', {name: 'Booted At'}));
+            await waitFor(() => {
+                const rows = screen.getAllByTestId(/row-/);
+                expect(rows[0]).toHaveTextContent('node-3');
+                expect(rows[1]).toHaveTextContent('node-1');
+                expect(rows[2]).toHaveTextContent('node-2');
+            });
         });
-        renderWithRouter(<NodesTable/>);
-        fireEvent.click(screen.getByText('Booted At'));
-        await waitFor(() => {
-            const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-3');
-            expect(rows[1]).toHaveTextContent('node-1');
-            expect(rows[2]).toHaveTextContent('node-2');
-        });
-    });
 
-    test('sort by updated_at with missing updated_at', async () => {
-        renderWithRouter(<NodesTable/>);
-        fireEvent.click(screen.getByText('Updated At'));
-        await waitFor(() => {
-            const rows = screen.getAllByTestId(/row-/);
-            expect(rows[0]).toHaveTextContent('node-3');
-            expect(rows[1]).toHaveTextContent('node-2');
-            expect(rows[2]).toHaveTextContent('node-1');
+        test('sort by updated_at with missing updated_at', async () => {
+            renderWithRouter(<NodesTable/>);
+            fireEvent.click(screen.getByRole('button', {name: 'Updated At'}));
+            await waitFor(() => {
+                const rows = screen.getAllByTestId(/row-/);
+                expect(rows[0]).toHaveTextContent('node-3');
+                expect(rows[1]).toHaveTextContent('node-2');
+                expect(rows[2]).toHaveTextContent('node-1');
+            });
         });
     });
 });

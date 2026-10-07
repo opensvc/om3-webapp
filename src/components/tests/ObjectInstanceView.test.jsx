@@ -5,6 +5,7 @@ import '@testing-library/jest-dom';
 import {vi} from 'vitest';
 import ObjectInstanceView from '../ObjectInstanceView';
 import useEventStore from '../../hooks/useEventStore';
+import {startEventReception} from '../../eventSourceManager';
 
 // ── Hoisted mock variables ──────────────────────────────────────────────
 const {
@@ -49,7 +50,7 @@ vi.mock('../EventLogger', () => ({
     default: () => <div data-testid="event-logger"/>,
 }));
 vi.mock('../LogsViewer', () => ({
-    default: () => <div data-testid="logs-viewer"/>,
+    default: (props) => <div data-testid="logs-viewer">{JSON.stringify(props)}</div>,
 }));
 // The terminal has its own tests: what the page hands it is what is checked
 // here.
@@ -64,55 +65,28 @@ vi.mock('../ConsoleTerminal.jsx', () => ({
 
 vi.mock('../../constants/actions', () => ({
     INSTANCE_ACTIONS: [
-        {name: '', icon: () => <span>EmptyIcon</span>},
-        {name: 'start', icon: () => <span>StartIcon</span>, endpoint: 'start'},
-        {name: 'stop', icon: () => <span>StopIcon</span>, endpoint: 'stop'},
-        {name: 'freeze', icon: () => <span>FreezeIcon</span>, endpoint: 'freeze'},
-        {name: 'unfreeze', icon: () => <span>UnfreezeIcon</span>, endpoint: 'unfreeze'},
-        {name: 'restart', icon: () => <span>RestartIcon</span>, endpoint: 'restart'},
-        {name: 'unprovision', icon: () => <span>UnprovisionIcon</span>, endpoint: 'unprovision'},
-        {name: 'purge', icon: () => <span>PurgeIcon</span>, endpoint: 'purge'},
+        {name: '', icon: 'EmptyIcon'},
+        {name: 'start', icon: 'StartIcon', endpoint: 'start'},
+        {name: 'stop', icon: 'StopIcon', endpoint: 'stop'},
+        {name: 'freeze', icon: 'FreezeIcon', endpoint: 'freeze'},
+        {name: 'unfreeze', icon: 'UnfreezeIcon', endpoint: 'unfreeze'},
+        {name: 'restart', icon: 'RestartIcon', endpoint: 'restart'},
+        {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'unprovision'},
+        {name: 'purge', icon: 'PurgeIcon', endpoint: 'purge'},
         // multi-word actions whose endpoint differs from the label
-        {name: 'start standby', icon: () => <span>StartStandbyIcon</span>, endpoint: 'startstandby'},
-        {name: 'pg reset', icon: () => <span>PgResetIcon</span>, endpoint: 'pg/reset'},
+        {name: 'start standby', icon: 'StartStandbyIcon', endpoint: 'startstandby'},
+        {name: 'pg reset', icon: 'PgResetIcon', endpoint: 'pg/reset'},
     ],
     RESOURCE_ACTIONS: [
-        {name: 'start', icon: () => <span>StartIcon</span>},
-        {name: 'stop', icon: () => <span>StopIcon</span>},
-        {name: 'restart', icon: () => <span>RestartIcon</span>},
-        {name: 'run', icon: () => <span>RunIcon</span>},
-        {name: 'console', icon: () => <span>ConsoleIcon</span>},
-        {name: 'freeze', icon: () => <span>FreezeIcon</span>},
-        {name: 'unprovision', icon: () => <span>UnprovisionIcon</span>},
-        {name: 'purge', icon: () => <span>PurgeIcon</span>},
+        {name: 'start', icon: 'StartIcon'},
+        {name: 'stop', icon: 'StopIcon'},
+        {name: 'restart', icon: 'RestartIcon'},
+        {name: 'run', icon: 'RunIcon'},
+        {name: 'console', icon: 'ConsoleIcon'},
+        {name: 'freeze', icon: 'FreezeIcon'},
+        {name: 'unprovision', icon: 'UnprovisionIcon'},
+        {name: 'purge', icon: 'PurgeIcon'},
     ],
-}));
-
-// ── Icon mocks ─────────────────────────────────────────────────────────
-
-vi.mock('@mui/icons-material/MoreVert', () => ({
-    default: () => <span data-testid="more-vert-icon">MoreVertIcon</span>,
-}));
-vi.mock('@mui/icons-material/FiberManualRecord', () => ({
-    default: () => <span data-testid="fiber-manual-record-icon">●</span>,
-}));
-vi.mock('@mui/icons-material/PriorityHigh', () => ({
-    default: () => <span data-testid="priority-high-icon" aria-label="Not Provisioned">!</span>,
-}));
-vi.mock('@mui/icons-material/AcUnit', () => ({
-    default: () => <span data-testid="ac-unit-icon" aria-label="Frozen">❄</span>,
-}));
-vi.mock('@mui/icons-material/Article', () => ({
-    default: () => <span data-testid="article-icon">📄</span>,
-}));
-vi.mock('@mui/icons-material/Close', () => ({
-    default: () => <span data-testid="close-icon" aria-label="Close">×</span>,
-}));
-vi.mock('@mui/icons-material/SyncProblem', () => ({
-    default: () => <span data-testid="sync-problem-icon" aria-label="RPO breached">↻</span>,
-}));
-vi.mock('@mui/icons-material/Stop', () => ({
-    default: () => <span data-testid="stop-icon" aria-label="Stop">■</span>,
 }));
 
 Object.assign(navigator, {
@@ -153,30 +127,35 @@ const setupWithStatus = (instanceData, extra = {}) =>
         ...extra,
     });
 
-const waitLoaded = () =>
-    waitFor(() => expect(screen.queryByText('Loading instance data...')).not.toBeInTheDocument());
+const loadingStatus = () => screen.queryByRole('status', {name: 'Loading instance data...'});
+
+const waitLoaded = () => waitFor(() => expect(loadingStatus()).not.toBeInTheDocument());
+
+const instanceMenuButton = () => screen.getByRole('button', {name: 'Instance actions'});
 
 const openInstanceMenu = async () => {
     await waitLoaded();
-    const buttons = screen.getAllByTestId('more-vert-icon');
-    fireEvent.click(buttons[buttons.length - 1].closest('button'));
+    fireEvent.click(instanceMenuButton());
 };
 
-const openResourceMenu = async (resourceLabel) => {
-    const row = screen.getByText(resourceLabel).closest('div');
-    const icons = within(row).getAllByTestId('more-vert-icon');
-    fireEvent.click(icons[0].closest('button'));
+const openResourceMenu = async (rid) => {
+    fireEvent.click(screen.getByRole('button', {name: `Resource ${rid} actions`}));
 };
+
+const resourceRow = (rid) => screen.getByRole('row', {name: `Resource ${rid}`});
+
+/** The fixed-width flags code of a resource (R M D O E P S restarts). */
+const flagsOf = (rid) => screen.getByRole('img', {name: new RegExp(`^Resource ${rid} status: `)});
 
 const triggerInstanceAction = async (actionLabel) => {
     await openInstanceMenu();
-    fireEvent.click(screen.getByText(actionLabel));
+    fireEvent.click(screen.getByRole('menuitem', {name: actionLabel}));
 };
 
 const triggerConsoleFlow = async () => {
     await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
     await openResourceMenu('container1');
-    fireEvent.click(screen.getByText('Console'));
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Console'}));
     await waitFor(() => expect(screen.getByTestId('console-terminal-target')).toBeInTheDocument());
 };
 
@@ -204,6 +183,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     delete window.matchMedia;
 });
@@ -215,7 +195,16 @@ describe('ObjectInstanceView', () => {
     // Loading & basic render
     test('renders loading state initially', () => {
         setup();
-        expect(screen.getByText('Loading instance data...')).toBeInTheDocument();
+        expect(loadingStatus()).toBeInTheDocument();
+    });
+
+    test('subscribes to the instance events of this object', () => {
+        setup();
+        expect(startEventReception).toHaveBeenCalledWith(
+            'mock-token',
+            ['InstanceStatusUpdated', 'InstanceMonitorUpdated', 'InstanceConfigUpdated'],
+            mockObjectName,
+        );
     });
 
     test('renders instance data after loading', async () => {
@@ -226,10 +215,15 @@ describe('ObjectInstanceView', () => {
             resources: {res1: {type: 'container', running: true, label: 'Resource 1'}},
         });
         await waitLoaded();
-        expect(screen.getByText(mockObjectName)).toBeInTheDocument();
+        expect(screen.getByRole('heading', {level: 1, name: mockObjectName})).toBeInTheDocument();
         expect(screen.getByText(`Node: ${mockNodeName}`)).toBeInTheDocument();
-        expect(screen.getByText('Resources (1)')).toBeInTheDocument();
-        expect(screen.getByText('res1')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Resources (1)'})).toBeInTheDocument();
+        expect(screen.getByRole('table', {name: 'Resources'})).toBeInTheDocument();
+        const row = within(resourceRow('res1'));
+        expect(row.getByText('res1')).toBeInTheDocument();
+        expect(row.getByText('container')).toBeInTheDocument();
+        expect(row.getByText('Resource 1')).toBeInTheDocument();
+        expect(screen.getByTestId('event-logger')).toBeInTheDocument();
     });
 
     test('displays "No resources found" when resources is empty', async () => {
@@ -237,57 +231,96 @@ describe('ObjectInstanceView', () => {
         await waitFor(() =>
             expect(screen.getByText('No resources found on this instance.')).toBeInTheDocument()
         );
+        expect(screen.getByRole('heading', {name: 'Resources (0)'})).toBeInTheDocument();
     });
 
-    test('displays resource status (role=status elements)', async () => {
+    test('displays resource status as a mark with its label', async () => {
         setupWithStatus({
             avail: 'up',
-            resources: {res1: {type: 'container', running: true, label: 'Resource 1', status: 'up'}},
+            resources: {
+                res1: {type: 'container', running: true, label: 'Resource 1', status: 'up'},
+                res2: {type: 'fs', running: false, label: 'Resource 2', status: 'down'},
+                res3: {type: 'fs', label: 'Resource 3', status: 'warn'},
+                res4: {type: 'fs', label: 'Resource 4'},
+            },
         });
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status').length).toBeGreaterThan(0);
+        const markOf = (rid) => resourceRow(rid).querySelector('[data-state]');
+        expect(markOf('res1')).toHaveAttribute('data-state', 'up');
+        expect(markOf('res1')).toHaveAttribute('title', 'up');
+        expect(markOf('res2')).toHaveAttribute('data-state', 'down');
+        expect(markOf('res3')).toHaveAttribute('data-state', 'warn');
+        expect(markOf('res4')).toHaveAttribute('data-state', 'unknown');
+        expect(markOf('res4')).toHaveAttribute('title', 'unknown');
+        expect(within(resourceRow('res2')).getAllByText('down').length).toBeGreaterThan(0);
     });
 
-    test('shows frozen icon when instance is frozen', async () => {
+    test('shows the resource flags with their meaning as a tooltip', async () => {
+        setupWithStatus({avail: 'up', resources: {res1: {type: 'fs', running: true, label: 'R1'}}});
+        await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
+        expect(flagsOf('res1')).toHaveTextContent('R.......');
+        expect(flagsOf('res1')).toHaveAttribute('title', expect.stringContaining('Running'));
+        expect(flagsOf('res1')).toHaveClass('font-mono');
+    });
+
+    test('shows frozen mark when instance is frozen', async () => {
         setupWithStatus({avail: 'up', frozen_at: '2024-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
-        expect(await screen.findByTestId('ac-unit-icon')).toBeInTheDocument();
+        expect(screen.getByTitle('frozen')).toBeInTheDocument();
     });
 
-    test('shows stopped icon when instance is stopped', async () => {
+    test('shows no frozen mark when the frozen date is the zero date', async () => {
+        setupWithStatus({avail: 'up', frozen_at: '0001-01-01T00:00:00Z', resources: {}});
+        await waitLoaded();
+        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
+    });
+
+    test('shows the stopped mark, with the stop date, when the instance is stopped', async () => {
         setupWithStatus({avail: 'down', stopped_at: '2024-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
-        expect(await screen.findByTestId('stop-icon')).toBeInTheDocument();
+        const mark = await screen.findByRole('img', {name: 'Instance is stopped'});
+        expect(mark).toHaveAttribute('title', `stopped at ${new Date('2024-01-01T00:00:00Z').toLocaleString()}`);
+        // A glyph goes with the mark, not a colour alone.
+        expect(mark.querySelector('svg')).not.toBeNull();
     });
 
-    test('does not show stopped icon when stopped_at is the zero sentinel', async () => {
+    test('shows no stopped mark when stopped_at is the zero sentinel', async () => {
         setupWithStatus({avail: 'up', stopped_at: '0001-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
-        expect(screen.queryByTestId('stop-icon')).not.toBeInTheDocument();
+        expect(screen.queryByRole('img', {name: 'Instance is stopped'})).not.toBeInTheDocument();
     });
 
-    test('shows sync problem icon when instance is lagging', async () => {
+    test('shows the RPO breached mark when the instance is lagging', async () => {
         setupWithStatus({avail: 'up', rpo_breached_at: '2024-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
-        expect(await screen.findByTestId('sync-problem-icon')).toBeInTheDocument();
+        const mark = await screen.findByRole('img', {name: 'RPO breached'});
+        expect(mark).toHaveAttribute('title', 'RPO breached');
+        expect(mark.querySelector('svg')).not.toBeNull();
     });
 
-    test('does not show sync problem icon when rpo_breached_at is the zero sentinel', async () => {
+    test('shows no RPO breached mark when rpo_breached_at is the zero sentinel', async () => {
         setupWithStatus({avail: 'up', rpo_breached_at: '0001-01-01T00:00:00Z', resources: {}});
         await waitLoaded();
-        expect(screen.queryByTestId('sync-problem-icon')).not.toBeInTheDocument();
+        expect(screen.queryByRole('img', {name: 'RPO breached'})).not.toBeInTheDocument();
     });
 
     test('shows not-provisioned warning when instance is not provisioned', async () => {
         setupWithStatus({avail: 'up', provisioned: false, resources: {}});
         await waitLoaded();
-        expect((await screen.findAllByTestId('priority-high-icon')).length).toBe(1);
+        expect(screen.getAllByRole('img', {name: /not provisioned/i})).toHaveLength(1);
+        expect(screen.getByRole('img', {name: 'Instance is not provisioned'})).toBeInTheDocument();
     });
 
-    test('renders status circle for instance with undefined avail', async () => {
+    test('shows the instance status badge', async () => {
+        setupWithStatus({avail: 'warn', resources: {}});
+        await waitLoaded();
+        expect(screen.getByText('warn')).toHaveClass('text-state-warn');
+    });
+
+    test('renders an unknown status for instance with undefined avail', async () => {
         setupWithStatus({resources: {}});
         await waitLoaded();
-        expect(screen.getAllByTestId('fiber-manual-record-icon').length).toBeGreaterThan(0);
+        expect(screen.getByText('unknown')).toHaveClass('text-state-unknown');
     });
 
     test('displays monitor state when present and not idle', async () => {
@@ -309,18 +342,26 @@ describe('ObjectInstanceView', () => {
     test('opens instance action menu', async () => {
         setupWithStatus({avail: 'up', resources: {}});
         await openInstanceMenu();
-        await waitFor(() => {
-            expect(screen.getByText('Start')).toBeInTheDocument();
-            expect(screen.getByText('Stop')).toBeInTheDocument();
-            expect(screen.getByText('Freeze')).toBeInTheDocument();
-        });
+        const menu = await screen.findByRole('menu', {name: 'Instance actions'});
+        expect(within(menu).getByRole('menuitem', {name: 'Start'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+    });
+
+    test('instance menu offers unfreeze rather than freeze on a frozen instance', async () => {
+        setupWithStatus({avail: 'up', frozen_at: '2024-01-01T00:00:00Z', resources: {}});
+        await openInstanceMenu();
+        const menu = await screen.findByRole('menu', {name: 'Instance actions'});
+        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Freeze'})).not.toBeInTheDocument();
     });
 
     test('closes instance menu on click away', async () => {
         setupWithStatus({avail: 'up', resources: {}});
         await openInstanceMenu();
         await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument());
-        fireEvent.click(document.body);
+        fireEvent.pointerDown(document.body);
         await waitFor(() => expect(screen.queryByText('Start')).not.toBeInTheDocument());
     });
 
@@ -328,11 +369,10 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {res1: {type: 'container', running: true, label: 'Resource 1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
         await openResourceMenu('res1');
-        await waitFor(() => {
-            expect(screen.getByText('Start')).toBeInTheDocument();
-            expect(screen.getByText('Stop')).toBeInTheDocument();
-            expect(screen.getByText('Console')).toBeInTheDocument();
-        });
+        const menu = await screen.findByRole('menu', {name: 'Resource res1 actions'});
+        expect(within(menu).getByRole('menuitem', {name: 'Start'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Stop'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Console'})).toBeInTheDocument();
     });
 
     test('closes resource menu on click away', async () => {
@@ -340,7 +380,7 @@ describe('ObjectInstanceView', () => {
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
         await openResourceMenu('res1');
         await waitFor(() => expect(screen.getByText('Console')).toBeInTheDocument());
-        fireEvent.click(document.body);
+        fireEvent.pointerDown(document.body);
         await waitFor(() => expect(screen.queryByText('Console')).not.toBeInTheDocument());
     });
 
@@ -359,8 +399,8 @@ describe('ObjectInstanceView', () => {
         await waitFor(() => expect(screen.getByText(rid)).toBeInTheDocument());
         await openResourceMenu(rid);
         await waitFor(() => expect(screen.getByText(present[0])).toBeInTheDocument());
-        for (const label of present) expect(screen.getByText(label)).toBeInTheDocument();
-        for (const label of absent) expect(screen.queryByText(label)).not.toBeInTheDocument();
+        for (const label of present) expect(screen.getByRole('menuitem', {name: label})).toBeInTheDocument();
+        for (const label of absent) expect(screen.queryByRole('menuitem', {name: label})).not.toBeInTheDocument();
     });
 
     test('filters resource actions for encap task resource', async () => {
@@ -375,7 +415,22 @@ describe('ObjectInstanceView', () => {
         expect(screen.queryByText('Console')).not.toBeInTheDocument();
     });
 
-    test('displays encapsulated resources', async () => {
+    test('resource action is confirmed and posted with its rid', async () => {
+        global.fetch.mockResolvedValue({ok: true, headers: new Map()});
+        setupWithStatus({avail: 'up', resources: {fs1: {type: 'fs', running: true, label: 'FS 1'}}});
+        await waitFor(() => expect(screen.getByText('fs1')).toBeInTheDocument());
+        await openResourceMenu('fs1');
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Restart'}));
+        const dialog = await screen.findByRole('dialog', {name: 'Confirm Restart'});
+        expect(dialog).toHaveTextContent('on resource fs1');
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/action/restart?rid=fs1'), expect.anything())
+        );
+        await waitFor(() => expect(screen.getByText("Action 'restart' succeeded")).toBeInTheDocument());
+    });
+
+    test('displays encapsulated resources nested under their container', async () => {
         setupWithStatus({
             avail: 'up',
             resources: {container1: {type: 'container', running: true, label: 'C1'}},
@@ -383,6 +438,21 @@ describe('ObjectInstanceView', () => {
         });
         await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
         expect(screen.getByText('encap1')).toBeInTheDocument();
+        // The following row, indented in the rid cell, flagged E.
+        expect(resourceRow('container1').nextElementSibling).toBe(resourceRow('encap1'));
+        expect(within(resourceRow('encap1')).getByText('encap1')).toHaveClass('pl-6');
+        expect(within(resourceRow('container1')).getByText('container1')).not.toHaveClass('pl-6');
+        expect(flagsOf('encap1').textContent.charAt(4)).toBe('E');
+        expect(flagsOf('container1').textContent.charAt(4)).toBe('.');
+    });
+
+    test('shows message when container has no encap data', async () => {
+        setupWithStatus({
+            avail: 'up',
+            resources: {container1: {type: 'container', running: true, label: 'C1'}},
+        });
+        await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
+        expect(screen.getByText('No encapsulated data available for container1.')).toBeInTheDocument();
     });
 
     test('shows message when encap has no resources key', async () => {
@@ -422,7 +492,8 @@ describe('ObjectInstanceView', () => {
             encap: {container1: {provisioned: false, resources: {}}},
         });
         await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
-        expect(screen.getAllByTestId('priority-high-icon').length).toBeGreaterThan(0);
+        expect(screen.getByRole('img', {name: 'Resource container1 is not provisioned'})).toBeInTheDocument();
+        expect(flagsOf('container1').textContent.charAt(5)).toBe('P');
     });
 
     test('no not-provisioned icon when encap has no provisioned field', async () => {
@@ -432,10 +503,10 @@ describe('ObjectInstanceView', () => {
             encap: {container1: {resources: {encap1: {type: 'fs', running: true, label: 'Enc FS'}}}},
         });
         await waitFor(() => expect(screen.getByText('container1')).toBeInTheDocument());
-        expect(screen.queryAllByTestId('priority-high-icon').length).toBe(0);
+        expect(screen.queryByRole('img', {name: /not provisioned/i})).not.toBeInTheDocument();
     });
 
-    test('displays resource logs with correct level formatting', async () => {
+    test('displays resource logs with correct level formatting, in a row under the resource', async () => {
         setupWithStatus({
             avail: 'up',
             resources: {
@@ -456,6 +527,11 @@ describe('ObjectInstanceView', () => {
             expect(screen.getByText('info: Info message')).toBeInTheDocument();
             expect(screen.getByText('debug: Debug message')).toBeInTheDocument();
         });
+        expect(screen.getByText('error: Critical error')).toHaveClass('text-state-down');
+        expect(screen.getByText('warn: Warning message')).toHaveClass('text-state-warn');
+        expect(screen.getByText('info: Info message')).toHaveClass('text-ink-muted');
+        const logs = screen.getByRole('list', {name: 'Logs of resource res1'});
+        expect(resourceRow('res1').nextElementSibling).toBe(logs.closest('tr'));
     });
 
     test('displays info: actions disabled label', async () => {
@@ -464,7 +540,13 @@ describe('ObjectInstanceView', () => {
             resources: {res1: {type: 'fs', running: true, label: 'R1', info: {actions: 'disabled'}}},
         });
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByText(/info: actions disabled/).length).toBeGreaterThan(0);
+        expect(within(resourceRow('res1')).getByText('info: actions disabled')).toHaveClass('text-ink-muted');
+    });
+
+    test('shows N/A for a resource without label nor type', async () => {
+        setupWithStatus({avail: 'up', resources: {res1: {running: true}}});
+        await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
+        expect(within(resourceRow('res1')).getAllByText('N/A')).toHaveLength(2);
     });
 
     test.each([
@@ -480,19 +562,19 @@ describe('ObjectInstanceView', () => {
             {instanceConfig: {[mockObjectName]: {[mockNodeName]: {resources: {res1: configOverride}}}}}
         );
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent).toContain(letter);
+        expect(flagsOf('res1').textContent).toContain(letter);
     });
 
     test('resource status string starts with . when running is undefined', async () => {
         setupWithStatus({avail: 'up', resources: {res1: {type: 'fs', label: 'R1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent.charAt(0)).toBe('.');
+        expect(flagsOf('res1').textContent.charAt(0)).toBe('.');
     });
 
     test('optional resource shows O in status', async () => {
         setupWithStatus({avail: 'up', resources: {res1: {type: 'fs', running: true, optional: true, label: 'R1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent).toContain('O');
+        expect(flagsOf('res1').textContent).toContain('O');
     });
 
     test('provisioned=n/a shows P in status', async () => {
@@ -501,13 +583,14 @@ describe('ObjectInstanceView', () => {
             resources: {res1: {type: 'fs', running: true, label: 'R1', provisioned: {state: 'n/a'}}},
         });
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent).toContain('P');
+        expect(flagsOf('res1').textContent).toContain('P');
+        expect(screen.getByRole('img', {name: 'Resource res1 is not provisioned'})).toBeInTheDocument();
     });
 
     test('no P in status when resource has no provisioned field', async () => {
         setupWithStatus({avail: 'up', resources: {res1: {type: 'fs', running: true, label: 'R1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent).not.toContain('P');
+        expect(flagsOf('res1').textContent).not.toContain('P');
     });
 
     test.each([
@@ -519,11 +602,11 @@ describe('ObjectInstanceView', () => {
             {instanceConfig: {[mockObjectName]: {[mockNodeName]: {resources: {res1: configOverride}}}}}
         );
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        expect(screen.getAllByRole('status')[0].textContent).toContain(expected);
+        expect(flagsOf('res1').textContent).toContain(expected);
     });
 
     test.each([
-        ['0 remaining', 0, undefined],
+        ['0 remaining', 0, '.'],
         ['3 remaining', undefined, '3'],
         ['15 remaining (>10)', undefined, '+'],
     ])('restart count from monitor: %s', async (_, configRestart, expectedText) => {
@@ -542,9 +625,7 @@ describe('ObjectInstanceView', () => {
             }
         );
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        const statusText = screen.getAllByRole('status')[0].textContent;
-        if (expectedText) expect(statusText).toContain(expectedText);
-        else expect(statusText).toBeDefined();
+        expect(flagsOf('res1').textContent.charAt(7)).toBe(expectedText);
     });
 
     test('resource status M with full config (is_monitored + is_disabled + is_standby all "true")', async () => {
@@ -561,7 +642,7 @@ describe('ObjectInstanceView', () => {
             }
         );
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
-        const statusText = screen.getAllByRole('status')[0].textContent;
+        const statusText = flagsOf('res1').textContent;
         expect(statusText).toContain('M');
         expect(statusText).toContain('D');
         expect(statusText).toContain('S');
@@ -571,41 +652,39 @@ describe('ObjectInstanceView', () => {
     test('opens and closes logs drawer', async () => {
         setupWithStatus({avail: 'up', resources: {}});
         await waitLoaded();
+        expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: /view logs for instance test-namespace\/test-kind\/test-name/i}));
         await waitFor(() => {
             expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
-            expect(screen.getByText(`Instance Logs - ${mockNodeName}/${mockObjectName}`)).toBeInTheDocument();
         });
-        fireEvent.click(screen.getByLabelText('Close'));
+        const drawer = screen.getByRole('dialog', {name: `Instance Logs - ${mockNodeName}/${mockObjectName}`});
+        expect(drawer).not.toHaveAttribute('inert');
+        expect(within(drawer).getByText(`Instance Logs - ${mockNodeName}/${mockObjectName}`)).toBeInTheDocument();
+        expect(JSON.parse(screen.getByTestId('logs-viewer').textContent)).toEqual({
+            nodename: mockNodeName,
+            type: 'instance',
+            namespace: 'test-namespace',
+            kind: 'test-kind',
+            instanceName: 'test-name',
+            height: '100%',
+        });
+        fireEvent.click(screen.getByRole('button', {name: 'Close instance logs'}));
         await waitFor(() => expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument());
     });
 
-    test('drawer resize with mouse events', async () => {
+    test('logs drawer is resizable by its handle', async () => {
         setupWithStatus({avail: 'up', resources: {}});
         await waitLoaded();
+        expect(screen.queryByRole('separator', {name: 'Resize drawer'})).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: /view logs for instance/i}));
         await waitFor(() => expect(screen.getByTestId('logs-viewer')).toBeInTheDocument());
-        const handle = screen.getByLabelText('Resize drawer');
-        fireEvent.mouseDown(handle, {clientX: 500});
-        fireEvent.mouseMove(document, {clientX: 400});
-        fireEvent.mouseUp(document);
-    });
-
-    test('touch resize uses passive:false and cleans up on touchend', async () => {
-        setupWithStatus({avail: 'up', resources: {}});
-        const addSpy = vi.spyOn(document, 'addEventListener');
-        const removeSpy = vi.spyOn(document, 'removeEventListener');
-        await waitLoaded();
-        fireEvent.click(screen.getByRole('button', {name: /view logs for instance/i}));
-        await waitFor(() => expect(screen.getByTestId('logs-viewer')).toBeInTheDocument());
-        fireEvent.touchStart(screen.getByLabelText('Resize drawer'), {touches: [{clientX: 600}]});
-        expect(addSpy).toHaveBeenCalledWith('touchmove', expect.any(Function), {passive: false});
-        fireEvent.touchMove(document, {touches: [{clientX: 500}]});
-        fireEvent.touchEnd(document);
-        expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
-        expect(removeSpy).toHaveBeenCalledWith('touchend', expect.any(Function));
-        addSpy.mockRestore();
-        removeSpy.mockRestore();
+        const handle = screen.getByRole('separator', {name: 'Resize drawer'});
+        const before = handle.getAttribute('aria-valuenow');
+        fireEvent.keyDown(handle, {key: 'ArrowLeft'});
+        await waitFor(() => expect(handle.getAttribute('aria-valuenow')).not.toBe(before));
+        // Enter gives the default width back, for the other tests.
+        fireEvent.keyDown(handle, {key: 'Enter'});
+        await waitFor(() => expect(handle.getAttribute('aria-valuenow')).toBe(before));
     });
 
     // API calls
@@ -614,7 +693,8 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start');
         await waitFor(() => expect(screen.getByText('Confirm Start')).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        expect(screen.getByRole('dialog', {name: 'Confirm Start'})).toHaveTextContent('on this instance');
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() =>
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringContaining(`/instance/path/${mockParseObjectPathResult.namespace}/${mockParseObjectPathResult.kind}/${mockParseObjectPathResult.name}/action/start`),
@@ -624,6 +704,8 @@ describe('ObjectInstanceView', () => {
                 })
             )
         );
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Action 'start' succeeded"));
+        expect(screen.queryByRole('dialog', {name: 'Confirm Start'})).not.toBeInTheDocument();
     });
 
     test('calls API for restart action', async () => {
@@ -631,7 +713,7 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Restart');
         await waitFor(() => expect(screen.getByText('Confirm Restart')).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() =>
             expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/action/restart'), expect.anything())
         );
@@ -642,7 +724,7 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', frozen_at: '2024-01-01T00:00:00Z', resources: {}});
         await triggerInstanceAction('Unfreeze');
         await waitFor(() => expect(screen.getByText('Confirm Unfreeze')).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     });
 
@@ -651,8 +733,8 @@ describe('ObjectInstanceView', () => {
         global.fetch.mockResolvedValue({ok: true, headers: new Map()});
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start standby');
-        await waitFor(() => expect(screen.getByText(/Confirm Start standby/i)).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        const dialog = await screen.findByRole('dialog', {name: 'Confirm Start standby'});
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
         await waitFor(() =>
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringMatching(/\/action\/startstandby$/),
@@ -665,8 +747,8 @@ describe('ObjectInstanceView', () => {
         global.fetch.mockResolvedValue({ok: true, headers: new Map()});
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Pg reset');
-        await waitFor(() => expect(screen.getByText(/Confirm Pg reset/i)).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        const dialog = await screen.findByRole('dialog', {name: 'Confirm Pg reset'});
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
         await waitFor(() =>
             expect(global.fetch).toHaveBeenCalledWith(
                 expect.stringMatching(/\/action\/pg\/reset$/),
@@ -681,7 +763,7 @@ describe('ObjectInstanceView', () => {
         await waitFor(() => expect(screen.getByText('Confirm Freeze')).toBeInTheDocument());
         const confirmBtn = screen.getByRole('button', {name: /confirm/i});
         expect(confirmBtn).toBeDisabled();
-        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('checkbox', {name: /orchestration will be paused/i}));
         expect(confirmBtn).not.toBeDisabled();
         fireEvent.click(screen.getByText('Cancel'));
     });
@@ -691,9 +773,11 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Stop');
         await waitFor(() => expect(screen.getByText('Confirm Stop')).toBeInTheDocument());
-        fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', {name: /stop/i}));
-        await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+        const stopBtn = screen.getByRole('button', {name: 'Stop'});
+        expect(stopBtn).toBeDisabled();
+        fireEvent.click(screen.getByRole('checkbox', {name: /may interrupt services/i}));
+        fireEvent.click(stopBtn);
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/action/stop'), expect.anything()));
     });
 
     test('unprovision dialog: requires both checkboxes', async () => {
@@ -702,9 +786,12 @@ describe('ObjectInstanceView', () => {
         await triggerInstanceAction('Unprovision');
         await waitFor(() => expect(screen.getByText('Confirm Unprovision')).toBeInTheDocument());
         const [cb1, cb2] = screen.getAllByRole('checkbox');
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
         fireEvent.click(cb1);
+        expect(confirmBtn).toBeDisabled();
         fireEvent.click(cb2);
-        fireEvent.click(screen.getByRole('button', {name: /confirm/i}));
+        expect(confirmBtn).not.toBeDisabled();
+        fireEvent.click(confirmBtn);
         await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     });
 
@@ -713,22 +800,23 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Purge');
         await waitFor(() => expect(screen.getByText('Confirm Purge')).toBeInTheDocument());
-        for (const cb of screen.getAllByRole('checkbox')) fireEvent.click(cb);
-        fireEvent.click(screen.getByRole('button', {name: /confirm/i}));
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(3);
+        const confirmBtn = screen.getByRole('button', {name: /confirm/i});
+        fireEvent.click(checkboxes[0]);
+        fireEvent.click(checkboxes[1]);
+        expect(confirmBtn).toBeDisabled();
+        fireEvent.click(checkboxes[2]);
+        fireEvent.click(confirmBtn);
         await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     });
 
     test.each([
-        ['Start', 'Confirm Start', () => {
-        }],
-        ['Stop', 'Confirm Stop', () => {
-        }],
-        ['Unprovision', 'Confirm Unprovision', () => {
-        }],
-        ['Purge', 'Confirm Purge', () => {
-        }],
-        ['Freeze', 'Confirm Freeze', () => {
-        }],
+        ['Start', 'Confirm Start'],
+        ['Stop', 'Confirm Stop'],
+        ['Unprovision', 'Confirm Unprovision'],
+        ['Purge', 'Confirm Purge'],
+        ['Freeze', 'Confirm Freeze'],
     ])('%s dialog closes on Cancel', async (action, title) => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction(action);
@@ -747,7 +835,7 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction(action);
         await waitFor(() => expect(screen.getByText(title)).toBeInTheDocument());
-        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape', code: 'Escape'});
+        fireEvent.keyDown(screen.getByRole('dialog', {name: title}), {key: 'Escape', code: 'Escape'});
         await waitFor(() => expect(screen.queryByText(title)).not.toBeInTheDocument());
     });
 
@@ -776,7 +864,7 @@ describe('ObjectInstanceView', () => {
     });
 
     // Error handling
-    test('shows snackbar on HTTP error with API message', async () => {
+    test('shows feedback on HTTP error with API message', async () => {
         global.fetch.mockResolvedValue({
             ok: false,
             status: 500,
@@ -786,41 +874,53 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start');
         await waitFor(() => expect(screen.getByText('Confirm Start')).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() => {
-            expect(screen.getByText(/Failed: HTTP 500/i)).toBeInTheDocument();
-            expect(screen.getByText(/That is broken/i)).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/Failed: HTTP 500/i);
+            expect(screen.getByRole('alert')).toHaveTextContent(/That is broken/i);
         });
     });
 
-    test('shows snackbar on fetch network error', async () => {
+    test('shows feedback on fetch network error', async () => {
         global.fetch.mockRejectedValue(new Error('Network error'));
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start');
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() => {
             const alerts = screen.getAllByRole('alert');
             expect(alerts.find(a => a.textContent?.includes('Error: Network error'))).toBeInTheDocument();
         });
     });
 
-    test('shows snackbar when auth token is missing', async () => {
+    test('shows feedback when auth token is missing', async () => {
         localStorageMock.getItem.mockReturnValue(null);
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start');
-        fireEvent.click(screen.getByText('Confirm'));
-        await waitFor(() => expect(screen.getByText('Auth token not found.')).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Auth token not found.'));
     });
 
-    test('closes snackbar on close button', async () => {
+    test('dismisses feedback on its close button', async () => {
         global.fetch.mockResolvedValue({ok: false, status: 500});
         setupWithStatus({avail: 'up', resources: {}});
         await triggerInstanceAction('Start');
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() => expect(screen.getByText(/Failed: HTTP 500/i)).toBeInTheDocument());
-        fireEvent.click(screen.getByLabelText('Close'));
+        fireEvent.click(screen.getByRole('button', {name: 'Dismiss'}));
         await waitFor(() => expect(screen.queryByText(/Failed: HTTP 500/i)).not.toBeInTheDocument());
     });
+
+    test('feedback hides itself after a while', async () => {
+        global.fetch.mockResolvedValue({ok: false, status: 500});
+        setupWithStatus({avail: 'up', resources: {}});
+        await triggerInstanceAction('Start');
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(screen.getByText(/Failed: HTTP 500/i)).toBeInTheDocument());
+        await waitFor(
+            () => expect(screen.queryByText(/Failed: HTTP 500/i)).not.toBeInTheDocument(),
+            {timeout: 6000},
+        );
+    }, 10000);
 
     // In-progress state
     test('action in progress disables resource action buttons', async () => {
@@ -829,13 +929,14 @@ describe('ObjectInstanceView', () => {
         setupWithStatus({avail: 'up', resources: {res1: {type: 'container', running: true, label: 'R1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
         await openInstanceMenu();
-        fireEvent.click(screen.getByText('Start'));
-        fireEvent.click(screen.getByText('Confirm'));
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Start'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         await waitFor(() => {
-            const row = screen.getByText('res1').closest('div');
-            const btn = within(row).getAllByTestId('more-vert-icon')[0].closest('button');
-            expect(btn).toBeDisabled();
+            expect(screen.getByRole('button', {name: 'Resource res1 actions'})).toBeDisabled();
+            expect(instanceMenuButton()).toBeDisabled();
+            expect(screen.getByRole('status', {name: 'Action in progress'})).toBeInTheDocument();
         });
+        expect(screen.getByText('Executing start on instance...')).toBeInTheDocument();
     });
 
     // Lifecycle
@@ -862,22 +963,23 @@ describe('ObjectInstanceView', () => {
         });
         await waitFor(() => expect(screen.getByText('encap1')).toBeInTheDocument());
         expect(screen.getByText('info: Encap log message')).toBeInTheDocument();
+        expect(resourceRow('encap1').nextElementSibling).toHaveTextContent('info: Encap log message');
     });
 
-    test('resource action button in mobile view propagates click to stopPropagation Box', async () => {
+    test('resource actions open on a narrow screen too', async () => {
         window.matchMedia = vi.fn().mockImplementation(query => ({
-            matches: query === '(max-width:599.95px)',
+            matches: !query.includes('min-width'),
             addEventListener: vi.fn(),
             removeEventListener: vi.fn(),
         }));
-        window.innerWidth = 400;
-        window.dispatchEvent(new Event('resize'));
 
         setupWithStatus({avail: 'up', resources: {res1: {type: 'container', running: true, label: 'Resource 1'}}});
         await waitFor(() => expect(screen.getByText('res1')).toBeInTheDocument());
 
+        // The table keeps its columns and scrolls sideways rather than wrapping its rows.
+        expect(screen.getByRole('table', {name: 'Resources'})).toHaveClass('min-w-[40rem]');
         const resourceActionBtns = screen.getAllByRole('button', {name: 'Resource res1 actions'});
-        expect(resourceActionBtns.length).toBeGreaterThanOrEqual(1);
+        expect(resourceActionBtns).toHaveLength(1);
         fireEvent.click(resourceActionBtns[0]);
 
         await waitFor(() => expect(screen.getByText('Console')).toBeInTheDocument());
@@ -888,9 +990,7 @@ describe('ObjectInstanceView', () => {
         const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
         });
 
-        await waitLoaded();
-        const instanceMenuButton = screen.getAllByTestId('more-vert-icon').pop().closest('button');
-        fireEvent.click(instanceMenuButton);
+        await openInstanceMenu();
         await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
 
         const menuItems = within(screen.getByRole('menu')).getAllByRole('menuitem');
@@ -907,12 +1007,12 @@ describe('ObjectInstanceView', () => {
             );
         });
 
-        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: /Confirm/})).not.toBeInTheDocument());
 
         consoleWarnSpy.mockRestore();
     });
 
-    test('resource menu handles missing resource after data change', async () => {
+    test('resource menu goes away with its resource after data change', async () => {
         const {rerender} = setupWithStatus({
             avail: 'up',
             resources: {res1: {type: 'container', running: true, label: 'Resource 1'}},
@@ -938,8 +1038,9 @@ describe('ObjectInstanceView', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('Console')).toBeInTheDocument();
-            expect(screen.getByText('Run')).toBeInTheDocument();
+            expect(screen.queryByRole('row', {name: 'Resource res1'})).not.toBeInTheDocument();
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+            expect(screen.getByText('No resources found on this instance.')).toBeInTheDocument();
         });
     });
 });

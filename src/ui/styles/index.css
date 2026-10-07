@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./fonts.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Exposes the tokens as Tailwind utilities: bg-surface, text-ink, border-line, text-state-down... */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-state-up: var(--state-up);
+  --color-state-up-soft: var(--state-up-soft);
+  --color-state-warn: var(--state-warn);
+  --color-state-warn-soft: var(--state-warn-soft);
+  --color-state-down: var(--state-down);
+  --color-state-down-soft: var(--state-down-soft);
+  --color-state-unknown: var(--state-unknown);
+  --color-state-unknown-soft: var(--state-unknown-soft);
+
+  --color-icon-dashboard: var(--icon-dashboard);
+  --color-icon-node: var(--icon-node);
+  --color-icon-service: var(--icon-service);
+  --color-icon-network: var(--icon-network);
+  --color-icon-disk: var(--icon-disk);
+  --color-icon-app: var(--icon-app);
+  --color-icon-tag: var(--icon-tag);
+  --color-icon-group: var(--icon-group);
+  --color-icon-form: var(--icon-form);
+  --color-icon-package: var(--icon-package);
+  --color-icon-metric: var(--icon-metric);
+  --color-code-key: var(--code-key);
+  --color-code-string: var(--code-string);
+  --color-code-number: var(--code-number);
+  --color-code-keyword: var(--code-keyword);
+  --color-code-comment: var(--code-comment);
+  --color-code-punct: var(--code-punct);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
+  --color-icon-compliance: var(--icon-compliance);
+
+  --color-tag: var(--tag);
+  --color-tag-hover: var(--tag-hover);
+  --color-tag-ink: var(--tag-ink);
+  --color-san-1: var(--san-1);
+  --color-san-2: var(--san-2);
+  --color-san-4: var(--san-4);
+  --color-san-8: var(--san-8);
+  --color-san-16: var(--san-16);
+  --color-san-32: var(--san-32);
+  --color-san-64: var(--san-64);
+  --color-san-other: var(--san-other);
+
+  --font-sans: var(--font-sans);
+  --text-data: var(--text-data);
+  --text-ui: var(--text-ui);
+  --text-title: var(--text-title);
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+}
+
+@layer base {
+  /* Native controls (checkboxes, selects, scrollbars) follow the mode. om3 addition. */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+  html {
+    font-family: var(--font-sans);
+    font-size: 100%;
+    color: var(--ink);
+    background: var(--surface);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    font-size: var(--text-ui);
+    line-height: 1.45;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+  /* Digits line up in a column across all tabular data */
+  table,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

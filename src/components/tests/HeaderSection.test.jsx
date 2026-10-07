@@ -1,12 +1,11 @@
 import React from 'react';
-import {render, screen} from '@testing-library/react';
+import {render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
 import HeaderSection from '../HeaderSection';
 
 // ── Hoisted mock functions ──────────────────────────────────────────────
-const {mockSetObjectMenuAnchor, mockHandleObjectActionClick} = vi.hoisted(() => ({
-    mockSetObjectMenuAnchor: vi.fn(),
+const {mockHandleObjectActionClick} = vi.hoisted(() => ({
     mockHandleObjectActionClick: vi.fn(),
 }));
 
@@ -23,92 +22,27 @@ vi.mock('../../constants/actions', () => ({
     ],
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        Typography: ({children, ...props}) => <span {...props}>{children}</span>,
-        Tooltip: ({children, title}) => <span title={title}>{children}</span>,
-        IconButton: ({children, onClick, disabled, ...props}) => (
-            <button onClick={onClick} disabled={disabled} {...props}>
-                {children}
-            </button>
-        ),
-        Menu: ({open, children, anchorEl, onClose, ...props}) =>
-            open ? (
-                <div role="menu" {...props}>
-                    {children}
-                    <button aria-label="close-menu" onClick={onClose}>
-                        Close
-                    </button>
-                </div>
-            ) : null,
-        MenuItem: ({children, onClick, disabled, ...props}) => (
-            <div role="menuitem" onClick={onClick} data-disabled={disabled} {...props}>
-                {children}
-            </div>
-        ),
-        ListItemIcon: ({children, ...props}) => <span {...props}>{children}</span>,
-        ListItemText: ({children}) => <span>{children}</span>,
-    };
-});
-
-vi.mock('@mui/icons-material/FiberManualRecord', () => ({
-    default: () => <svg data-testid="FiberManualRecordIcon"/>,
-}));
-vi.mock('@mui/icons-material/PriorityHigh', () => ({
-    default: () => <svg data-testid="PriorityHighIcon"/>,
-}));
-vi.mock('@mui/icons-material/AcUnit', () => ({
-    default: () => <svg data-testid="AcUnitIcon"/>,
-}));
-vi.mock('@mui/icons-material/MoreVert', () => ({
-    default: () => <svg data-testid="MoreVertIcon"/>,
-}));
-
 vi.mock('../../utils/objectUtils', () => ({
     isActionAllowedForSelection: vi.fn(),
 }));
 
 import {isActionAllowedForSelection} from '../../utils/objectUtils';
 
-// Mock navigator.userAgent
-Object.defineProperty(global.navigator, 'userAgent', {
-    value:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
-    writable: true,
-});
-
-// Mock localStorage
-const mockLocalStorage = {
-    getItem: vi.fn(() => 'mock-token'),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-};
-Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
-
 describe('HeaderSection Component', () => {
     const defaultProps = {
         decodedObjectName: 'root/svc/svc1',
-        objectKind: 'svc',
+        kind: 'svc',
         globalStatus: {avail: 'up', frozen: 'frozen', provisioned: 'true'},
         actionInProgress: false,
-        objectMenuAnchor: null,
-        setObjectMenuAnchor: mockSetObjectMenuAnchor,
         handleObjectActionClick: mockHandleObjectActionClick,
         getObjectStatus: vi.fn(() => ({
             avail: 'up',
             frozen: 'frozen',
             globalExpect: 'placed@node1',
         })),
-        getColor: vi.fn((status) => {
-            if (status === 'up') return 'green';
-            if (status === 'warn') return 'orange';
-            if (status === 'down') return 'red';
-            return 'grey';
-        }),
-        objectMenuAnchorRef: {current: null},
     };
+
+    const status = () => document.querySelector('[data-state]');
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -118,20 +52,20 @@ describe('HeaderSection Component', () => {
             frozen: 'frozen',
             globalExpect: 'placed@node1',
         });
-        global.navigator.userAgent =
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36';
     });
 
-    test('renders object name and status icons', async () => {
+    test('renders object name as heading, status, frozen mark and global expect', () => {
         render(<HeaderSection {...defaultProps} />);
 
-        expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
-        expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {level: 1, name: 'root/svc/svc1'})).toBeInTheDocument();
+        expect(status()).toHaveAttribute('data-state', 'up');
+        expect(status()).toHaveTextContent('up');
+        expect(screen.getByTitle('frozen')).toBeInTheDocument();
         expect(screen.getByText('placed@node1')).toBeInTheDocument();
+        expect(screen.queryByRole('img', {name: 'Object is not provisioned'})).not.toBeInTheDocument();
     });
 
-    test('renders warning icon when status is warn', async () => {
+    test('renders warn status, no frozen mark and no global expect', () => {
         defaultProps.getObjectStatus.mockReturnValue({
             avail: 'warn',
             frozen: 'unfrozen',
@@ -141,129 +75,133 @@ describe('HeaderSection Component', () => {
         render(<HeaderSection {...defaultProps} />);
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
-        expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
+        expect(status()).toHaveAttribute('data-state', 'warn');
+        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
         expect(screen.queryByText('placed@node1')).not.toBeInTheDocument();
     });
 
-    test('renders not provisioned icon when provisioned is false', async () => {
+    test.each([
+        ['down', 'down'],
+        ['n/a', 'unknown'],
+        [undefined, 'unknown'],
+    ])('maps avail %p to state %p', (avail, state) => {
+        defaultProps.getObjectStatus.mockReturnValue({avail, frozen: 'unfrozen', globalExpect: null});
+        render(<HeaderSection {...defaultProps} />);
+        expect(status()).toHaveAttribute('data-state', state);
+    });
+
+    test.each([['false'], [false]])('renders not provisioned mark when provisioned is %p', (provisioned) => {
         const props = {
             ...defaultProps,
-            globalStatus: {...defaultProps.globalStatus, provisioned: 'false'},
+            globalStatus: {...defaultProps.globalStatus, provisioned},
         };
 
         render(<HeaderSection {...props} />);
 
         expect(screen.getByText('root/svc/svc1')).toBeInTheDocument();
-        expect(screen.getAllByTestId('PriorityHighIcon')).toHaveLength(1);
-        expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
-        expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
+        expect(screen.getAllByRole('img', {name: 'Object is not provisioned'})).toHaveLength(1);
+        expect(status()).toHaveAttribute('data-state', 'up');
+        expect(screen.getByTitle('frozen')).toBeInTheDocument();
     });
 
-    test('disables menu button when actionInProgress is true', async () => {
-        const props = {...defaultProps, actionInProgress: true};
-        render(<HeaderSection {...props} />);
+    test('disables menu button when actionInProgress is true', () => {
+        render(<HeaderSection {...defaultProps} actionInProgress={true}/>);
 
-        const objectMenuButton = screen.getByRole('button', {name: 'Object actions'});
-        expect(objectMenuButton).toBeDisabled();
+        expect(screen.getByRole('button', {name: /Object actions/})).toBeDisabled();
     });
 
-    test('does not render when globalStatus is undefined', async () => {
-        const props = {...defaultProps, globalStatus: undefined};
-        render(<HeaderSection {...props} />);
+    test('does not render when globalStatus is undefined', () => {
+        render(<HeaderSection {...defaultProps} globalStatus={undefined}/>);
 
         expect(screen.queryByText('root/svc/svc1')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('FiberManualRecordIcon')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /Object actions/})).not.toBeInTheDocument();
     });
 
-    test('opens menu and logs position on button click', async () => {
-        vi.spyOn(console, 'info').mockImplementation(() => {
-        });
+    test('opens the actions menu on button click', async () => {
         render(<HeaderSection {...defaultProps} />);
 
-        const button = screen.getByLabelText('Object actions');
-        await userEvent.click(button);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
 
-        expect(mockSetObjectMenuAnchor).toHaveBeenCalledWith(expect.anything());
-        expect(console.info).toHaveBeenCalledWith('Object menu opened at:', expect.any(Object));
+        const menu = screen.getByRole('menu', {name: 'Object actions'});
+        // 2 unrestricted + 2 svc-only (the vol-only one is filtered out)
+        expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
+        expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Edit'})).toBeInTheDocument();
+        expect(isActionAllowedForSelection).toHaveBeenCalledWith('delete', ['root/svc/svc1']);
     });
 
     // ── kind-based filtering ────────────────────────────────────────────
-    // ── kind-based filtering ────────────────────────────────────────────
-    describe('action filtering by objectKind', () => {
-        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
+    describe('action filtering by kind', () => {
+        const openMenuLabels = async () => {
+            await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
+            const menu = screen.getByRole('menu', {name: 'Object actions'});
+            // Entries by accessible name, in menu order (the icons are aria-hidden).
+            const names = ['Delete', 'Edit', 'Enable', 'Disable', 'Snapshot'];
+            const items = within(menu).getAllByRole('menuitem');
+            return items.map((item) => names.find((n) => within(menu).queryByRole('menuitem', {name: n}) === item));
+        };
 
-        // The MenuItem mock concatenates the icon string and the label, so
-        // we assert against the visible label via `includes` rather than a
-        // strict equality on textContent.
-        const labels = () =>
-            screen.getAllByRole('menuitem').map((i) => i.textContent);
-
-        test('svc shows all non-kinds actions + svc-only actions', () => {
-            render(<HeaderSection {...defaultProps} objectMenuAnchor={mockAnchor}/>);
-            const names = labels();
-            expect(names.some((n) => n.includes('Delete'))).toBe(true);
-            expect(names.some((n) => n.includes('Edit'))).toBe(true);
-            expect(names.some((n) => n.includes('Enable'))).toBe(true);
-            expect(names.some((n) => n.includes('Disable'))).toBe(true);
-            expect(names.some((n) => n.includes('Snapshot'))).toBe(false);
+        test('svc shows all non-kinds actions + svc-only actions', async () => {
+            render(<HeaderSection {...defaultProps}/>);
+            expect(await openMenuLabels()).toEqual(['Delete', 'Edit', 'Enable', 'Disable']);
         });
 
-        test('vol shows only vol-restricted action, not enable/disable', () => {
-            render(<HeaderSection {...defaultProps} objectKind="vol" objectMenuAnchor={mockAnchor}/>);
-            const names = labels();
-            expect(names.some((n) => n.includes('Delete'))).toBe(true);
-            expect(names.some((n) => n.includes('Edit'))).toBe(true);
-            expect(names.some((n) => n.includes('Snapshot'))).toBe(true);
-            expect(names.some((n) => n.includes('Enable'))).toBe(false);
-            expect(names.some((n) => n.includes('Disable'))).toBe(false);
+        test('vol shows only vol-restricted action, not enable/disable', async () => {
+            render(<HeaderSection {...defaultProps} kind="vol"/>);
+            expect(await openMenuLabels()).toEqual(['Delete', 'Edit', 'Snapshot']);
         });
 
-        test('unknown kind shows only actions without a kinds restriction', () => {
-            render(<HeaderSection {...defaultProps} objectKind="cfg" objectMenuAnchor={mockAnchor}/>);
-            const names = labels();
-            expect(names.some((n) => n.includes('Delete'))).toBe(true);
-            expect(names.some((n) => n.includes('Edit'))).toBe(true);
-            expect(names.some((n) => n.includes('Enable'))).toBe(false);
-            expect(names.some((n) => n.includes('Disable'))).toBe(false);
-            expect(names.some((n) => n.includes('Snapshot'))).toBe(false);
+        test('other kinds show only actions without a kinds restriction', async () => {
+            render(<HeaderSection {...defaultProps} kind="cfg"/>);
+            expect(await openMenuLabels()).toEqual(['Delete', 'Edit']);
         });
 
-        test('renders menu when objectMenuAnchor is set (svc by default)', () => {
-            render(<HeaderSection {...defaultProps} objectMenuAnchor={mockAnchor}/>);
-            expect(screen.getByRole('menu')).toBeInTheDocument();
-            // 2 unrestricted + 2 svc-only (vol-only filtered out)
-            expect(screen.getAllByRole('menuitem')).toHaveLength(4);
+        test('svc-only actions are routed through the click handler', async () => {
+            render(<HeaderSection {...defaultProps}/>);
+            await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
+            await userEvent.click(screen.getByRole('menuitem', {name: 'Enable'}));
+            expect(mockHandleObjectActionClick).toHaveBeenCalledWith('enable');
         });
     });
 
-    test('handles object action click', async () => {
-        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
-        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
-        render(<HeaderSection {...props} />);
-        const menuItems = screen.getAllByRole('menuitem');
-        await userEvent.click(menuItems[0]);
+    test('handles object action click and closes the menu', async () => {
+        render(<HeaderSection {...defaultProps} />);
+
+        await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
+        await userEvent.click(screen.getAllByRole('menuitem')[0]);
+
         expect(mockHandleObjectActionClick).toHaveBeenCalledWith('delete');
-        expect(mockSetObjectMenuAnchor).toHaveBeenCalledWith(null);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
 
-    test('disables menu items when not allowed', () => {
+    test('disables menu items when not allowed', async () => {
         vi.mocked(isActionAllowedForSelection).mockReturnValue(false);
-        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
-        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
-        render(<HeaderSection {...props} />);
+        render(<HeaderSection {...defaultProps} />);
+
+        await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
+
         const menuItems = screen.getAllByRole('menuitem');
-        expect(menuItems[0]).toHaveAttribute('data-disabled', 'true');
+        expect(menuItems).toHaveLength(4);
+        menuItems.forEach((item) => expect(item).toBeDisabled());
+        await userEvent.click(menuItems[0]);
+        expect(mockHandleObjectActionClick).not.toHaveBeenCalled();
     });
 
-    test('closes menu when onClose is triggered', async () => {
-        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
-        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
-        render(<HeaderSection {...props} />);
+    test('closes menu on Escape and on a click outside', async () => {
+        render(<HeaderSection {...defaultProps} />);
 
-        const closeButton = screen.getByRole('button', {name: 'close-menu'});
-        await userEvent.click(closeButton);
+        screen.getByRole('button', {name: /Object actions/}).focus();
+        await userEvent.keyboard('{Enter}');
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 
-        expect(mockSetObjectMenuAnchor).toHaveBeenCalledWith(null);
+        await userEvent.click(screen.getByRole('button', {name: /Object actions/}));
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        await userEvent.click(document.body);
+
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(mockHandleObjectActionClick).not.toHaveBeenCalled();
     });
 });

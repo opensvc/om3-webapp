@@ -1,0 +1,286 @@
+/*
+ * Design tokens of the oc3 collector.
+ * This file is the visual identity contract: the webapp will be able to take it as it is.
+ * Components never use a hard-coded colour, only these variables.
+ */
+
+:root {
+  /* Surfaces and ink: cool neutral, meant for long sessions over dense tables */
+  --surface: #f6f7f5;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eceeeb;
+  --ink: #1a2229;
+  --ink-muted: #5b6770;
+  --line: #d9dedb;
+  --line-strong: #b9c1bd;
+
+  /* Accent: petrol, reserved for navigation, focus and selection */
+  --accent: #0f5b66;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcebec;
+  --focus-ring: #0f5b66;
+
+  /* OpenSVC business states. Always doubled by an icon or a label, never colour alone */
+  --state-up: #2e7d4f;
+  --state-up-soft: #e0f0e6;
+  --state-warn: #a86b12;
+  --state-warn-soft: #f7ecd9;
+  --state-down: #b8322a;
+  --state-down-soft: #f6e1df;
+  --state-unknown: #6f7a82;
+  --state-unknown-soft: #e8ebec;
+
+  /* Colours of the menu icons. One tint per entry, as in the historical collector
+     but desaturated: the icon identifies the view, it must not compete with the
+     state colours nor with the accent. Each is kept at a distance from up / warn /
+     down so that no icon reads as a status. The root entry keeps the ink: the amber
+     of the historical collector is too close to the warn state to serve as permanent
+     decoration. */
+  --icon-dashboard: #1a2229;
+  --icon-node: #3d6fb4;
+  --icon-service: #2f7d6a;
+  --icon-network: #2f7f8c;
+  --icon-disk: #7d7a1e;
+  --icon-app: #a32a72;
+  /* The collector's darkcyan tags. */
+  --icon-tag: #008b8b;
+  --icon-group: #a55446;
+  /* Forms: the pale violet red puzzle piece of the historical collector (wf16). */
+  --icon-form: #b0456c;
+  /* Packages: the tan cube of the historical collector (pkg16). */
+  --icon-package: #95642f;
+  /* Metrics: the sandy brown of the historical collector (metric16). */
+  --icon-metric: #b5652a;
+  /* YAML and other code: keys, strings, numbers, keywords, comments, punctuation. */
+  --code-key: #1f5f99;
+  --code-string: #2e7d4f;
+  --code-number: #a8590f;
+  --code-keyword: #7a3e9d;
+  --code-comment: #6f7a82;
+  --code-punct: #8a5a12;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  /* Compliance: the crimson cogs of the historical collector (modset16), toned down
+     like the others. */
+  --icon-compliance: #a8243a;
+
+  /* Tags attached to an object: the teal of the historical collector
+     (.tag_attached), distinct from the petrol accent so that a badge does not read as
+     a selection. White on #008099: contrast 4.6:1. */
+  --tag: #008099;
+  --tag-hover: #006b7a;
+  --tag-ink: #ffffff;
+
+  /* Speed of a SAN link, in Gb/s: a ramp from amber to violet, the faster the
+     darker, after the yellow-to-red one of the historical collector's SAN diagram.
+     The speed is always written on the link too. */
+  --san-1: #b88a00;
+  --san-2: #c97612;
+  --san-4: #d65a1f;
+  --san-8: #cf3a2c;
+  --san-16: #a81e3b;
+  --san-32: #7a1f6b;
+  --san-64: #3f2a8c;
+  --san-other: #6f7a82;
+
+  /* Typography */
+  --font-sans: "IBM Plex Sans Variable", system-ui, sans-serif;
+  --text-data: 0.8125rem; /* 13px: table cells */
+  --text-ui: 0.875rem; /* 14px: controls and running text */
+  --text-title: 1.125rem;
+
+  /* Density */
+  --row-height: 1.75rem;
+  --radius-control: 3px;
+  --radius-panel: 6px;
+}
+
+.dark {
+  --surface: #151c21;
+  --surface-raised: #1c252b;
+  --surface-sunken: #10161a;
+  --ink: #e3e8e6;
+  --ink-muted: #95a1a8;
+  --line: #2b363d;
+  --line-strong: #3d4a52;
+
+  --accent: #5fb3bd;
+  --accent-ink: #0c1417;
+  --accent-soft: #1d3a3f;
+  --focus-ring: #5fb3bd;
+
+  --state-up: #5cbf83;
+  --state-up-soft: #1b3326;
+  --state-warn: #e0a64a;
+  --state-warn-soft: #3a2d17;
+  --state-down: #ec6f66;
+  --state-down-soft: #3d1f1d;
+  --state-unknown: #9aa5ac;
+  --state-unknown-soft: #262f35;
+
+  /* Same tints, lightened and softened for a dark background. */
+  --icon-dashboard: #e3e8e6;
+  --icon-node: #7fa9e0;
+  --icon-service: #5fb8a2;
+  --icon-network: #5fb0bd;
+  --icon-disk: #b8b45c;
+  --icon-app: #d178ab;
+  --icon-tag: #4cc3c3;
+  --icon-group: #d1907f;
+  --icon-form: #e08aa8;
+  --icon-package: #d4a574;
+  --icon-metric: #e8a46c;
+  --code-key: #7fb3e6;
+  --code-string: #7fcf9b;
+  --code-number: #e8a96b;
+  --code-keyword: #c79ae6;
+  --code-comment: #8b969c;
+  --code-punct: #d9b36a;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --icon-compliance: #e8798a;
+
+  /* Lightened background, dark ink: contrast 5.6:1. */
+  --tag: #3a9aa8;
+  --tag-hover: #4fb0be;
+  --tag-ink: #0c1417;
+
+  --san-1: #f1dc8a;
+  --san-2: #f4bd7a;
+  --san-4: #f59a6e;
+  --san-8: #f0766c;
+  --san-16: #e96a93;
+  --san-32: #cf86dc;
+  --san-64: #a9a3f5;
+  --san-other: #9aa5ac;
+}
+
+/*
+ * High-contrast theme, chosen in the profile (`palette` preference) and set by the
+ * `contrast` class on <html>, on top of the light or dark mode. Same tokens, pushed
+ * further: black or white ink, darker secondary text, borders visible at a glance,
+ * saturated state and icon colours instead of the desaturated ones. Every text
+ * colour reaches at least 6.7:1 on the main surfaces (5.3:1 on the soft state
+ * backgrounds), and the plain border 3.7:1, against 4.5:1 and 3:1 required.
+ */
+.contrast {
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e6e9eb;
+  --ink: #000000;
+  --ink-muted: #3b454c;
+  --line: #7d878d;
+  --line-strong: #40494f;
+
+  --accent: #004a55;
+  --accent-ink: #ffffff;
+  --accent-soft: #c4e4e8;
+  --focus-ring: #004a55;
+
+  --state-up: #00692f;
+  --state-up-soft: #c3ecd1;
+  --state-warn: #8c4a00;
+  --state-warn-soft: #ffdfae;
+  --state-down: #b00d00;
+  --state-down-soft: #ffd3cd;
+  --state-unknown: #454e55;
+  --state-unknown-soft: #dde2e5;
+
+  --icon-dashboard: #000000;
+  --icon-node: #0047ad;
+  --icon-service: #00664f;
+  --icon-network: #005f70;
+  --icon-disk: #595700;
+  --icon-app: #9c005d;
+  --icon-tag: #006464;
+  --icon-group: #9a2c16;
+  --icon-form: #8e1c46;
+  --icon-package: #6b4212;
+  --icon-metric: #7d3f10;
+  --code-key: #0b3f73;
+  --code-string: #145a33;
+  --code-number: #7a3d00;
+  --code-keyword: #5a1f7d;
+  --code-comment: #3b454c;
+  --code-punct: #5c3a00;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --icon-compliance: #8a0f25;
+
+  --tag: #006272;
+  --tag-hover: #004c59;
+  --tag-ink: #ffffff;
+}
+
+.dark.contrast {
+  --surface: #000000;
+  --surface-raised: #0e1215;
+  --surface-sunken: #000000;
+  --ink: #ffffff;
+  --ink-muted: #c9d1d6;
+  --line: #5f6c74;
+  --line-strong: #9aa6ad;
+
+  --accent: #5ce1f0;
+  --accent-ink: #000000;
+  --accent-soft: #003d45;
+  --focus-ring: #5ce1f0;
+
+  --state-up: #4cec8a;
+  --state-up-soft: #063a1c;
+  --state-warn: #ffbf3d;
+  --state-warn-soft: #4a3000;
+  --state-down: #ff6b61;
+  --state-down-soft: #520d08;
+  --state-unknown: #c0cad0;
+  --state-unknown-soft: #252c31;
+
+  --icon-dashboard: #ffffff;
+  --icon-node: #8cbcff;
+  --icon-service: #4fe0bc;
+  --icon-network: #5cd9eb;
+  --icon-disk: #e6e070;
+  --icon-app: #ff8fcf;
+  --icon-tag: #5eeaea;
+  --icon-group: #ffab94;
+  --icon-form: #ff9ec3;
+  --icon-package: #f2c28f;
+  --icon-metric: #f5b98a;
+  --code-key: #a9d0ff;
+  --code-string: #9fe8b8;
+  --code-number: #ffc58a;
+  --code-keyword: #e0b8ff;
+  --code-comment: #b8c2c8;
+  --code-punct: #f0cf8a;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --icon-compliance: #ff8fa0;
+
+  --tag: #3fd0e3;
+  --tag-hover: #72dfee;
+  --tag-ink: #000000;
+}

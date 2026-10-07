@@ -1,12 +1,6 @@
 import React, {useState, useEffect, useMemo} from 'react';
-import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    Typography,
-} from '@mui/material';
+import {Dialog} from '../ui/components/Dialog';
+import {Button} from '../ui/components/Button';
 import {
     FreezeDialog,
     StopDialog,
@@ -24,27 +18,25 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target, d
         ? `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`
         : 'Confirm Action';
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            <DialogContent>
-                <Typography variant="body1">
-                    Are you sure you want
-                    to {typeof action === 'string' && action ? action : 'perform this action'} on {target}?
-                </Typography>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={cancelDisabled}>
-                    Cancel
-                </Button>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={onConfirm}
-                    disabled={disabled}
-                >
-                    Confirm
-                </Button>
-            </DialogActions>
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title={dialogTitle}
+            footer={
+                <>
+                    <Button variant="secondary" onClick={onClose} disabled={cancelDisabled}>
+                        Cancel
+                    </Button>
+                    <Button variant="primary" onClick={onConfirm} disabled={disabled}>
+                        Confirm
+                    </Button>
+                </>
+            }
+        >
+            <p className="text-ink">
+                Are you sure you want
+                to {typeof action === 'string' && action ? action : 'perform this action'} on {target}?
+            </p>
         </Dialog>
     );
 };

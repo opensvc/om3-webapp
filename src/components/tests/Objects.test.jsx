@@ -53,7 +53,7 @@ vi.mock('../../eventSourceManager', () => ({
     closeLoggerEventSource: vi.fn(),
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
+vi.mock('../../ui/lib/media', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
@@ -63,7 +63,7 @@ vi.mock('@mui/material', async (importOriginal) => {
 
 import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
-import {useMediaQuery} from '@mui/material';
+import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
 import {startEventReception, closeEventSource} from '../../eventSourceManager';
 
@@ -117,7 +117,7 @@ const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon
     vi.mocked(useFetchDaemonStatus).mockReturnValue({daemon: daemon || {cluster: {object: {}}}});
     vi.mocked(useLocation).mockReturnValue({search: locationSearch, pathname: '/objects'});
 
-    const mockedUseMediaQuery = useMediaQuery;
+    const mockedUseMediaQuery = vi.mocked(useMediaQuery);
     mockedUseMediaQuery.mockReset();
 
     if (typeof mediaQuery === 'object' && mediaQuery !== null) {
@@ -151,38 +151,53 @@ const setup = (customState = {}, locationSearch = '', mediaQuery = true, {daemon
     return {...utils, state};
 };
 
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+/** The checkbox popover of a multi-valued filter. */
+const filterGroup = (label) => screen.getByRole('group', {name: label});
+const queryFilterGroup = (label) => screen.queryByRole('group', {name: label});
+/** The summary that opens a filter popover, holding the filter name and its choice. */
+const filterSummary = (label) => filterGroup(label).closest('details').querySelector('summary');
+const filterOption = (label, optionText) =>
+    within(filterGroup(label)).getByRole('checkbox', {name: new RegExp(`^${escapeRegExp(optionText)}$`, 'i')});
+
+/** The visible text of a filter option, without its mark. */
+const optionText = (checkbox) => checkbox.closest('label').lastChild.lastChild.textContent;
+
 const waitForLoad = () =>
-    waitFor(() => expect(screen.getByLabelText('Global State')).toBeInTheDocument());
+    waitFor(() => expect(filterGroup('Global State')).toBeInTheDocument());
 
 const selectFilter = async (label, optionText) => {
-    const filter = screen.getByLabelText(label);
-    fireEvent.mouseDown(filter);
-    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument());
-    const listbox = screen.getByRole('listbox');
-    const options = within(listbox).getAllByRole('option');
-    const option = options.find((o) =>
-        o.textContent.toLowerCase().includes(optionText.toLowerCase())
-    );
-    if (!option) throw new Error(`Option "${optionText}" not found`);
-    fireEvent.click(within(option).getByRole('checkbox'));
-    fireEvent.keyDown(listbox, {key: 'Escape', code: 'Escape'});
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    const summary = filterSummary(label);
+    fireEvent.click(summary);
+    fireEvent.click(filterOption(label, optionText));
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument(), {timeout: 1000});
 };
 
+const objectRow = (name) => screen.getByRole('row', {name: new RegExp(name, 'i')});
+const rowCells = (row) => within(row).getAllByRole('cell');
+/** Cells: 0 selection, 1 status, 2 object, then one per node (node1, node2) on a wide screen, then actions. */
+const statusCell = (row) => rowCells(row)[1];
+const nodeCell = (row, index) => rowCells(row)[3 + index];
+
 const selectRow = (name) => {
-    const row = screen.getByRole('row', {name: new RegExp(name, 'i')});
+    const row = objectRow(name);
     const cb = within(row).getByRole('checkbox');
     fireEvent.click(cb);
     return cb;
 };
 
+const rowCheckboxes = () => screen.getAllByRole('checkbox', {name: /^Select object /});
+
 const openActionsMenu = () =>
     fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
 
+const openRowMenu = (row) =>
+    fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
+
 const clickMenuItem = async (text) => {
     const menu = await screen.findByRole('menu');
-    fireEvent.click(within(menu).getByText(new RegExp(`^${text}$`, 'i')));
+    fireEvent.click(within(menu).getByRole('menuitem', {name: new RegExp(`^${text}$`, 'i')}));
 };
 
 const confirmDialog = async (buttonName = /Confirm|Stop|Delete/i) => {
@@ -195,7 +210,15 @@ const confirmDialog = async (buttonName = /Confirm|Stop|Delete/i) => {
     fireEvent.click(within(dialog).getByRole('button', {name: buttonName}));
 };
 
-const clickHeader = (text) => fireEvent.click(screen.getByText(text));
+/** The feedback strip (the former snackbar): an alert for errors and warnings, a status otherwise. */
+const getFeedback = () =>
+    screen.getByRole('button', {name: 'Close'}).closest('[role="alert"], [role="status"]');
+
+const sortButton = (label) =>
+    within(screen.getByRole('columnheader', {name: new RegExp(`^${label}`)})).getByRole('button');
+const clickHeader = (label) => fireEvent.click(sortButton(label));
+const objectNamesInOrder = () =>
+    screen.getAllByRole('row').slice(1).map((row) => rowCells(row)[2].textContent);
 
 const makeMany = (n) => {
     const objectStatus = {};
@@ -214,7 +237,9 @@ const setScroll = (container, scrollTop) => {
     Object.defineProperty(container, 'scrollTop', {value: scrollTop, configurable: true});
 };
 
-const getScrollContainer = () => document.querySelector('.MuiTableContainer-root');
+/** The scrolling wrapper of the sticky table. */
+const getScrollContainer = () => screen.getByRole('table', {name: 'Objects'}).parentElement;
+const loadingMore = () => screen.queryByRole('status', {name: 'Loading more objects'});
 
 beforeEach(() => {
     originalConsoleError = console.error;
@@ -232,7 +257,7 @@ beforeEach(() => {
     Storage.prototype.getItem = vi.fn().mockReturnValue('mock-token');
     mockRemoveObject.mockClear();
     mockSetObjectStatuses.mockClear();
-    useMediaQuery.mockReset();
+    vi.mocked(useMediaQuery).mockReset();
     cleanup();
 });
 
@@ -269,15 +294,59 @@ describe('Objects Component', () => {
         ['test-ns/svc/test1', 'test-ns/svc/test2', 'root/svc/test3'].forEach((name) =>
             expect(screen.getByRole('row', {name: new RegExp(name)})).toBeInTheDocument()
         );
-        const row1 = screen.getByRole('row', {name: /test1/});
-        expect(within(row1).getByLabelText('Object is up')).toBeInTheDocument();
-        expect(within(row1).getByText('frozen')).toBeInTheDocument();
+        const row1 = objectRow('test-ns/svc/test1');
+        const status1 = statusCell(row1);
+        expect(status1.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
+        expect(within(status1).getByTitle('up')).toBeInTheDocument();
+        // The global expect of an instance, as small muted text.
+        expect(within(status1).getByText('frozen')).toHaveClass('text-ink-muted', 'whitespace-nowrap');
+        expect(within(status1).queryByTitle('frozen')).toHaveTextContent('frozen');
+        expect(within(status1).queryByRole('img', {name: 'Not provisioned'})).not.toBeInTheDocument();
 
-        const row3 = screen.getByRole('row', {name: /root\/svc\/test3/});
-        expect(within(row3).getByLabelText('Object has warning')).toBeInTheDocument();
+        const row2 = objectRow('test-ns/svc/test2');
+        expect(statusCell(row2).querySelector('[data-state]')).toHaveAttribute('data-state', 'down');
+        // Frozen object: the snowflake mark, named for screen readers.
+        expect(within(statusCell(row2)).getByText('frozen')).toHaveClass('sr-only');
 
-        const row4 = screen.getByRole('row', {name: /test-ns\/svc\/test4/});
-        expect(within(row4).getByLabelText('Object status is n/a')).toBeInTheDocument();
+        const row3 = objectRow('root/svc/test3');
+        expect(statusCell(row3).querySelector('[data-state]')).toHaveAttribute('data-state', 'warn');
+        expect(within(statusCell(row3)).getByText('started')).toBeInTheDocument();
+
+        const row4 = objectRow('test-ns/svc/test4');
+        expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(within(statusCell(row4)).getByTitle('n/a')).toBeInTheDocument();
+
+        // The object name in its own column, medium weight.
+        expect(rowCells(row1)[2]).toHaveTextContent('test-ns/svc/test1');
+        expect(rowCells(row1)[2]).toHaveClass('font-medium');
+    });
+
+    test('per-node cells show avail, frozen, not provisioned and monitor state', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        expect(screen.getByRole('columnheader', {name: /node1/})).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', {name: /node2/})).toBeInTheDocument();
+
+        const row1 = objectRow('test-ns/svc/test1');
+        const node1 = nodeCell(row1, 0);
+        expect(node1.querySelector('[data-state]')).toHaveAttribute('data-state', 'up');
+        expect(within(node1).getByText('running')).toHaveClass('text-ink-muted', 'whitespace-nowrap');
+        expect(within(node1).queryByTitle('frozen')).not.toBeInTheDocument();
+        const node2 = nodeCell(row1, 1);
+        expect(node2.querySelector('[data-state]')).toHaveAttribute('data-state', 'down');
+        expect(within(node2).getByTitle('frozen')).toBeInTheDocument();
+        // An idle instance shows no monitor state.
+        expect(within(node2).queryByText('idle')).not.toBeInTheDocument();
+
+        const row2 = objectRow('test-ns/svc/test2');
+        expect(within(nodeCell(row2, 0)).getByText('failed')).toBeInTheDocument();
+        // No instance on that node: an empty cell.
+        expect(nodeCell(row2, 1)).toBeEmptyDOMElement();
+
+        const unprovisioned = objectRow('test-ns/svc/unprovisioned(?!-bool)');
+        const unprovisionedNode = nodeCell(unprovisioned, 0);
+        expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(within(unprovisionedNode).getByRole('img', {name: 'Not provisioned'})).toHaveClass('text-state-down');
     });
 
     test('selection and select all', async () => {
@@ -285,11 +354,25 @@ describe('Objects Component', () => {
         await waitForLoad();
         const cb = selectRow('test-ns/svc/test1');
         expect(cb).toBeChecked();
-        const selectAll = screen.getAllByRole('checkbox')[0];
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
+        const selectAll = screen.getByRole('checkbox', {name: 'Select all objects'});
+        expect(selectAll).not.toBeChecked();
         fireEvent.click(selectAll);
-        screen.getAllByRole('checkbox').slice(1).forEach((c) => expect(c).toBeChecked());
+        expect(selectAll).toBeChecked();
+        rowCheckboxes().forEach((c) => expect(c).toBeChecked());
+        expect(screen.getByText(`${rowCheckboxes().length} selected`)).toBeInTheDocument();
         fireEvent.click(selectAll);
-        screen.getAllByRole('checkbox').slice(1).forEach((c) => expect(c).not.toBeChecked());
+        rowCheckboxes().forEach((c) => expect(c).not.toBeChecked());
+        expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
+    });
+
+    test('select all selects the filtered objects only', async () => {
+        setup();
+        await waitForLoad();
+        fireEvent.change(screen.getByLabelText('Name'), {target: {value: 'test1'}});
+        await waitFor(() => expect(rowCheckboxes()).toHaveLength(1));
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Select all objects'}));
+        expect(screen.getByText('1 selected')).toBeInTheDocument();
     });
 
     test('actions menu opens and lists actions', async () => {
@@ -299,25 +382,30 @@ describe('Objects Component', () => {
         openActionsMenu();
         const menu = await screen.findByRole('menu');
         ['Restart', 'Stop', 'Freeze', 'Delete'].forEach((a) =>
-            expect(within(menu).getByText(a)).toBeInTheDocument()
+            expect(within(menu).getByRole('menuitem', {name: a})).toBeEnabled()
         );
+        // The destructive actions carry the down colour on their icon.
+        expect(within(menu).getByRole('menuitem', {name: 'Delete'}).querySelector('.text-state-down')).not.toBeNull();
+        expect(within(menu).getByRole('menuitem', {name: 'Restart'}).querySelector('.text-state-down')).toBeNull();
     });
 
     test('global actions menu disables actions not allowed for the selection', async () => {
-        setup();
+        setup({
+            objectStatus: {
+                ...defaultState.objectStatus,
+                'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+            },
+        });
         await waitForLoad();
-        selectRow('test-ns/svc/test1');
-        selectRow('test-ns/svc/test2');
+        selectRow('test-ns/cfg/conf1');
         openActionsMenu();
         const menu = await screen.findByRole('menu');
         const items = within(menu).getAllByRole('menuitem');
-        const disabledItems = items.filter(
-            (i) =>
-                i.getAttribute('aria-disabled') === 'true' ||
-                i.classList.contains('Mui-disabled')
-        );
-        expect(items.length).toBeGreaterThan(0);
-        expect(disabledItems.length).toBeGreaterThanOrEqual(0);
+        expect(items).toHaveLength(12);
+        expect(within(menu).getByRole('menuitem', {name: 'Start'})).toBeDisabled();
+        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeDisabled();
+        expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
+        expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
     });
 
     describe('filtering', () => {
@@ -366,7 +454,7 @@ describe('Objects Component', () => {
             {option: 'N/a', visible: ['test-ns/svc/test4'], hidden: ['test-ns/svc/test1']},
             {
                 option: 'Unprovisioned',
-                visible: ['test-ns/svc/unprovisioned$', 'test-ns/svc/unprovisioned-bool'],
+                visible: ['test-ns/svc/unprovisioned(?!-bool)', 'test-ns/svc/unprovisioned-bool'],
                 hidden: ['test1'],
             },
         ];
@@ -407,14 +495,58 @@ describe('Objects Component', () => {
             });
         });
 
-        test('clicking on a Global State chip (not delete) removes that filter', async () => {
+        test('unchecking a Global State option removes that filter', async () => {
             setup();
             await waitForLoad();
             await selectFilter('Global State', 'Up');
-            const chip = screen.getByText(/^Up$/).closest('.MuiChip-root');
-            fireEvent.click(chip);
-            await waitFor(() => expect(screen.queryByText(/^Up$/)).not.toBeInTheDocument());
-            expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/})).toBeInTheDocument();
+            await waitFor(() => expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/})).not.toBeInTheDocument());
+            expect(filterSummary('Global State')).toHaveTextContent('Global StateUp');
+            fireEvent.click(filterOption('Global State', 'Up'));
+            await waitFor(() => expect(filterOption('Global State', 'Up')).not.toBeChecked());
+            expect(filterSummary('Global State')).toHaveTextContent('Global StateAll');
+            await waitFor(() => expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/})).toBeInTheDocument());
+        });
+
+        test('filter popovers list the global states, namespaces and kinds on offer', async () => {
+            setup();
+            await waitForLoad();
+            expect(within(filterGroup('Global State')).getAllByRole('checkbox').map(optionText))
+                .toEqual(['Up', 'Down', 'Warn', 'N/a', 'Unprovisioned']);
+            expect(within(filterGroup('Namespace')).getAllByRole('checkbox').map(optionText))
+                .toEqual(['root', 'test-ns']);
+            expect(within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText))
+                .toEqual(['svc']);
+            // Each global state carries its mark.
+            expect(filterOption('Global State', 'Up').closest('label').querySelector('[data-state="up"]')).not.toBeNull();
+            expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="unknown"]')).not.toBeNull();
+            expect(filterOption('Global State', 'Unprovisioned').closest('label').querySelector('svg.text-state-down')).not.toBeNull();
+        });
+
+        test('filter popover opens from its summary and closes on Escape or a click outside', async () => {
+            setup();
+            await waitForLoad();
+            const details = filterGroup('Namespace').closest('details');
+            expect(details.open).toBe(false);
+            fireEvent.click(filterSummary('Namespace'));
+            expect(details.open).toBe(true);
+            fireEvent.keyDown(filterOption('Namespace', 'root'), {key: 'Escape'});
+            expect(details.open).toBe(false);
+            expect(filterSummary('Namespace')).toHaveFocus();
+            fireEvent.click(filterSummary('Namespace'));
+            expect(details.open).toBe(true);
+            fireEvent.pointerDown(filterOption('Namespace', 'root'));
+            expect(details.open).toBe(true);
+            fireEvent.pointerDown(document.body);
+            expect(details.open).toBe(false);
+        });
+
+        test('summary lists the chosen values', async () => {
+            setup();
+            await waitForLoad();
+            expect(filterSummary('Namespace')).toHaveTextContent('NamespaceAll');
+            await selectFilter('Namespace', 'test-ns');
+            await selectFilter('Namespace', 'root');
+            expect(filterSummary('Namespace')).toHaveTextContent('Namespacetest-ns, root');
         });
 
         test('Kind filter excludes objects whose kind does not match the selection', async () => {
@@ -448,32 +580,33 @@ describe('Objects Component', () => {
         });
     });
 
-    test('chips remove filters via onDelete (Namespace)', async () => {
+    test('unchecking a Namespace option restores the filtered objects', async () => {
         setup();
         await waitForLoad();
         await selectFilter('Namespace', 'test-ns');
-        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
-        fireEvent.click(within(chip).getByTestId('CloseIcon'));
+        await waitFor(() =>
+            expect(screen.queryByRole('row', {name: /root\/svc\/test3/})).not.toBeInTheDocument()
+        );
+        fireEvent.click(filterOption('Namespace', 'test-ns'));
         await waitFor(() =>
             expect(screen.getByRole('row', {name: /root\/svc\/test3/})).toBeInTheDocument()
         );
     });
 
-    test('global state chip removal via onDelete restores filtered objects', async () => {
+    test('unchecking a Global State option restores filtered objects', async () => {
         setup();
         await waitForLoad();
         await selectFilter('Global State', 'Up');
         await waitFor(() =>
             expect(screen.queryByRole('row', {name: /test-ns\/svc\/test2/})).not.toBeInTheDocument()
         );
-        const chip = screen.getByText(/^Up$/).closest('.MuiChip-root');
-        fireEvent.click(within(chip).getByTestId('CloseIcon'));
+        fireEvent.click(filterOption('Global State', 'Up'));
         await waitFor(() =>
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/})).toBeInTheDocument()
         );
     });
 
-    test('kind chip removal via onDelete restores filtered objects', async () => {
+    test('unchecking a Kind option keeps the other filters', async () => {
         setup();
         await waitForLoad();
         await selectFilter('Kind', 'svc');
@@ -481,8 +614,10 @@ describe('Objects Component', () => {
         await waitFor(() =>
             expect(screen.queryByRole('row', {name: /root\/svc\/test3/})).not.toBeInTheDocument()
         );
-        const chip = screen.getByText('test-ns').closest('.MuiChip-root');
-        fireEvent.click(within(chip).getByTestId('CloseIcon'));
+        fireEvent.click(filterOption('Kind', 'svc'));
+        await waitFor(() => expect(filterOption('Kind', 'svc')).not.toBeChecked());
+        expect(screen.queryByRole('row', {name: /root\/svc\/test3/})).not.toBeInTheDocument();
+        fireEvent.click(filterOption('Namespace', 'test-ns'));
         await waitFor(() =>
             expect(screen.getByRole('row', {name: /root\/svc\/test3/})).toBeInTheDocument()
         );
@@ -510,8 +645,9 @@ describe('Objects Component', () => {
                 )
             );
             await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(/succeeded/i)
+                expect(screen.getByRole('status')).toHaveTextContent(/'restart' succeeded on 1 object\(s\)\./i)
             );
+            expect(getFeedback()).toHaveClass('text-state-up');
             expect(mockForceFlush).toHaveBeenCalled();
             expect(screen.queryByRole('checkbox', {checked: true})).not.toBeInTheDocument();
         });
@@ -677,7 +813,7 @@ describe('Objects Component', () => {
             openActionsMenu();
             await clickMenuItem('Restart');
             await confirmDialog();
-            await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+            await waitFor(() => expect(getFeedback()).toHaveTextContent(/'restart'/));
         });
 
         test('object removed from objectStatus after selection is treated as an error (rawObj missing)', async () => {
@@ -755,8 +891,17 @@ describe('Objects Component', () => {
             selectRow('test-ns/svc/test1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
-            expect(within(menu).getByText('Enable')).toBeInTheDocument();
-            expect(within(menu).getByText('Disable')).toBeInTheDocument();
+            expect(within(menu).getByRole('menuitem', {name: /^Enable$/})).toBeEnabled();
+            expect(within(menu).getByRole('menuitem', {name: /^Disable$/})).toBeEnabled();
+        });
+
+        test('Enable and Disable appear in the row menu of a svc object', async () => {
+            setup();
+            await waitForLoad();
+            openRowMenu(objectRow('test-ns/svc/test1'));
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).getByRole('menuitem', {name: /^Enable$/})).toBeInTheDocument();
+            expect(within(menu).getByRole('menuitem', {name: /^Disable$/})).toBeInTheDocument();
         });
 
         test('Enable URL uses the object-path endpoint (no /action prefix)', async () => {
@@ -803,9 +948,11 @@ describe('Objects Component', () => {
             await waitForLoad();
             const row = screen.getByRole('row', {name: /test-ns\/cfg\/cfg1/});
             fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-            await screen.findByRole('menu');
-            expect(screen.queryByText('Enable')).not.toBeInTheDocument();
-            expect(screen.queryByText('Disable')).not.toBeInTheDocument();
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
+            expect(within(menu).queryByRole('menuitem', {name: /^Disable$/})).not.toBeInTheDocument();
+            // The actions the kind allows are still there.
+            expect(within(menu).getByRole('menuitem', {name: /^Delete$/})).toBeInTheDocument();
         });
 
         test('Enable/Disable not offered when a mixed-kind selection is made', async () => {
@@ -824,157 +971,163 @@ describe('Objects Component', () => {
             selectRow('test-ns/cfg/cfg1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
-            expect(within(menu).queryByText('Enable')).not.toBeInTheDocument();
-            expect(within(menu).queryByText('Disable')).not.toBeInTheDocument();
+            expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
+            expect(within(menu).queryByRole('menuitem', {name: /^Disable$/})).not.toBeInTheDocument();
         });
     });
 
     describe('per-node stopped and RPO-breached indicators', () => {
         const wideScreen = {isWideScreen: true, isMobile: false};
 
-        const setupNode = (nodeStatus) => setup(
-            {
-                objectStatus: {
-                    'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+        /** One object with one instance on node1; returns the node1 cell. */
+        const setupNode = async (nodeStatus) => {
+            setup(
+                {
+                    objectStatus: {
+                        'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    },
+                    objectInstanceStatus: {
+                        'test-ns/svc/test1': {node1: nodeStatus},
+                    },
                 },
-                objectInstanceStatus: {
-                    'test-ns/svc/test1': {node1: nodeStatus},
-                },
-            },
-            '',
-            wideScreen,
-        );
+                '',
+                wideScreen,
+            );
+            await waitForLoad();
+            return nodeCell(objectRow('test-ns/svc/test1'), 0);
+        };
+
+        const stoppedMark = (cell) => within(cell).queryByRole('img', {name: 'Stopped'});
+        const rpoMark = (cell) => within(cell).queryByRole('img', {name: 'RPO breached'});
+        const frozenMark = (cell) => within(cell).queryByTitle('frozen');
+        const availState = (cell) => cell.querySelector('[data-state]')?.getAttribute('data-state');
 
         test('shows the stopped indicator when stopped_at is set', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'down',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+            const mark = stoppedMark(cell);
+            expect(mark).toBeInTheDocument();
+            expect(mark).toHaveAttribute('title', `stopped at ${new Date('2025-05-16T10:00:00Z').toLocaleString()}`);
+            expect(mark.querySelector('svg')).not.toBeNull();
         });
 
         test('does not show the stopped indicator when stopped_at is the zero sentinel', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
+            expect(stoppedMark(cell)).not.toBeInTheDocument();
         });
 
         test('does not show the stopped indicator when stopped_at is missing', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
+            expect(stoppedMark(cell)).not.toBeInTheDocument();
         });
 
-        test('keeps the availability dot visible alongside the stopped indicator', async () => {
-            setupNode({
+        test('keeps the availability mark visible alongside the stopped indicator', async () => {
+            const cell = await setupNode({
                 avail: 'down',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            // The availability dot (down) must still be rendered
-            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
-            // And the stopped indicator on top of it
-            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+            // The availability mark (down) must still be rendered
+            expect(availState(cell)).toBe('down');
+            expect(within(cell).getByTitle('down')).toBeInTheDocument();
+            // And the stopped indicator beside it
+            expect(stoppedMark(cell)).toBeInTheDocument();
         });
 
         test('shows the RPO-breached indicator when rpo_breached_at is set', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
                 rpo_breached_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+            const mark = rpoMark(cell);
+            expect(mark).toBeInTheDocument();
+            expect(mark).toHaveAttribute('title', 'RPO breached');
+            expect(mark).toHaveClass('text-state-warn');
         });
 
         test('does not show the RPO-breached indicator when rpo_breached_at is the zero sentinel', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
                 rpo_breached_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+            expect(rpoMark(cell)).not.toBeInTheDocument();
         });
 
         test('does not show the RPO-breached indicator when rpo_breached_at is missing', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+            expect(rpoMark(cell)).not.toBeInTheDocument();
         });
 
         test('RPO-breached takes precedence over frozen when both are set', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '2025-05-16T10:00:00Z',
                 rpo_breached_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
-            expect(screen.queryByLabelText('Node node1 is frozen')).not.toBeInTheDocument();
+            expect(rpoMark(cell)).toBeInTheDocument();
+            expect(frozenMark(cell)).not.toBeInTheDocument();
         });
 
         test('frozen is shown when only frozen_at is set', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '2025-05-16T10:00:00Z',
                 rpo_breached_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 is frozen')).toBeInTheDocument();
-            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+            expect(frozenMark(cell)).toBeInTheDocument();
+            expect(rpoMark(cell)).not.toBeInTheDocument();
         });
 
         test('availability, stopped and RPO-breached indicators are visible simultaneously', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'down',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '2025-05-16T10:00:00Z',
                 rpo_breached_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
-            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
-            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+            expect(availState(cell)).toBe('down');
+            expect(stoppedMark(cell)).toBeInTheDocument();
+            expect(rpoMark(cell)).toBeInTheDocument();
         });
 
         test('stopped and RPO-breached indicators are shown together', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'down',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '2025-05-16T10:00:00Z',
                 rpo_breached_at: '2025-05-16T10:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
-            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+            expect(stoppedMark(cell)).toBeInTheDocument();
+            expect(rpoMark(cell)).toBeInTheDocument();
         });
 
         test('no indicators are shown for a healthy node', async () => {
-            setupNode({
+            const cell = await setupNode({
                 avail: 'up',
                 frozen_at: '0001-01-01T00:00:00Z',
                 stopped_at: '0001-01-01T00:00:00Z',
                 rpo_breached_at: '0001-01-01T00:00:00Z',
             });
-            await waitForLoad();
-            expect(screen.getByLabelText('Node node1 is up')).toBeInTheDocument();
-            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
-            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
-            expect(screen.queryByLabelText('Node node1 is frozen')).not.toBeInTheDocument();
+            expect(availState(cell)).toBe('up');
+            expect(within(cell).getByTitle('up')).toBeInTheDocument();
+            expect(stoppedMark(cell)).not.toBeInTheDocument();
+            expect(rpoMark(cell)).not.toBeInTheDocument();
+            expect(frozenMark(cell)).not.toBeInTheDocument();
         });
     });
 
@@ -1056,45 +1209,80 @@ describe('Objects Component', () => {
     test('filters are always visible', async () => {
         setup();
         await waitForLoad();
-        expect(screen.getByLabelText('Namespace')).toBeInTheDocument();
-        expect(screen.getByLabelText('Global State')).toBeInTheDocument();
-        expect(screen.getByLabelText('Kind')).toBeInTheDocument();
+        expect(filterGroup('Namespace')).toBeInTheDocument();
+        expect(filterGroup('Global State')).toBeInTheDocument();
+        expect(filterGroup('Kind')).toBeInTheDocument();
         expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    });
+
+    test('not mobile: no filter toggle, filters shown', async () => {
+        setup({}, '', {isWideScreen: false, isMobile: false});
+        await waitForLoad();
+        expect(screen.queryByRole('button', {name: /show filters|hide filters/i})).not.toBeInTheDocument();
+        expect(filterGroup('Namespace')).toBeInTheDocument();
     });
 
     test('mobile: filters hidden initially and toggle button works', async () => {
         setup({}, '', {isWideScreen: false, isMobile: true});
         await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
-        expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument();
+        expect(queryFilterGroup('Namespace')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
         const toggleButton = screen.getByRole('button', {name: /show filters/i});
+        expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(toggleButton);
-        await waitFor(() => expect(screen.getByLabelText('Namespace')).toBeInTheDocument());
+        await waitFor(() => expect(filterGroup('Namespace')).toBeInTheDocument());
         const hideButton = screen.getByRole('button', {name: /hide filters/i});
+        expect(hideButton).toHaveAttribute('aria-expanded', 'true');
         fireEvent.click(hideButton);
-        await waitFor(() => expect(screen.queryByLabelText('Namespace')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryFilterGroup('Namespace')).not.toBeInTheDocument());
+    });
+
+    test('mobile on a wide screen: filters shown at first', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: true});
+        await waitForLoad();
+        expect(screen.getByRole('button', {name: /hide filters/i})).toBeInTheDocument();
     });
 
     describe('sorting', () => {
-        test('Status sorting works', async () => {
+        test('Status sorting cycles the state put first', async () => {
             setup();
             await waitForLoad();
+            expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'none');
             clickHeader('Status');
-            await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1));
+            await waitFor(() =>
+                expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'ascending')
+            );
+            // First cycle: n/a first, then up, warn, down.
+            await waitFor(() => expect(objectNamesInOrder()[0]).toMatch(/test4|unprovisioned/));
+            expect(objectNamesInOrder().at(-1)).toBe('test-ns/svc/test2');
+            clickHeader('Status');
+            // Next cycle: up first.
+            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/test1'));
+            expect(screen.getByRole('columnheader', {name: /^Status/})).toHaveAttribute('aria-sort', 'ascending');
         });
 
-        test('Object sorting works', async () => {
+        test('Object sorting toggles the direction', async () => {
             setup();
             await waitForLoad();
+            expect(screen.getByRole('columnheader', {name: /^Object/})).toHaveAttribute('aria-sort', 'ascending');
+            expect(objectNamesInOrder()[0]).toBe('root/svc/test3');
             clickHeader('Object');
-            await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1));
+            await waitFor(() =>
+                expect(screen.getByRole('columnheader', {name: /^Object/})).toHaveAttribute('aria-sort', 'descending')
+            );
+            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/unprovisioned-bool'));
         });
 
-        test('node column sorting works without error', async () => {
+        test('node column sorting orders by the avail on that node', async () => {
             setup({}, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
-            const node1Header = screen.getByRole('columnheader', {name: /node1/i});
-            fireEvent.click(node1Header);
-            await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1));
+            clickHeader('node1');
+            await waitFor(() =>
+                expect(screen.getByRole('columnheader', {name: /^node1/})).toHaveAttribute('aria-sort', 'ascending')
+            );
+            await waitFor(() => expect(objectNamesInOrder().at(-1)).toBe('test-ns/svc/test2'));
+            clickHeader('node1');
+            await waitFor(() => expect(objectNamesInOrder()[0]).toBe('test-ns/svc/test1'));
         });
     });
 
@@ -1117,8 +1305,8 @@ describe('Objects Component', () => {
             const container = getScrollContainer();
             setScroll(container, 500);
             fireEvent.scroll(container);
-            await waitFor(() => expect(screen.getByRole('progressbar')).toBeInTheDocument());
-            await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+            await waitFor(() => expect(loadingMore()).toBeInTheDocument());
+            await waitFor(() => expect(loadingMore()).not.toBeInTheDocument());
         });
 
         test('scroll does nothing when no more items', async () => {
@@ -1129,7 +1317,7 @@ describe('Objects Component', () => {
             await waitForLoad();
             const container = getScrollContainer();
             fireEvent.scroll(container);
-            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+            expect(loadingMore()).not.toBeInTheDocument();
         });
 
         test('scroll is ignored while a load is already in progress', async () => {
@@ -1189,10 +1377,13 @@ describe('Objects Component', () => {
             </MemoryRouter>
         );
         await waitFor(() => {
-            expect(screen.getByText('test-ns')).toBeInTheDocument();
-            expect(screen.getByText('svc')).toBeInTheDocument();
+            expect(filterOption('Namespace', 'test-ns')).toBeChecked();
+            expect(filterOption('Kind', 'svc')).toBeChecked();
             expect(screen.getByLabelText('Name')).toHaveValue('test1');
         });
+        expect(filterOption('Namespace', 'root')).not.toBeChecked();
+        expect(filterSummary('Namespace')).toHaveTextContent('Namespacetest-ns');
+        expect(filterSummary('Kind')).toHaveTextContent('Kindsvc');
     });
 
     test('URL globalState param hydrates selected global states on mount', async () => {
@@ -1203,26 +1394,86 @@ describe('Objects Component', () => {
             expect(screen.getByRole('row', {name: /test-ns\/svc\/test2/})).toBeInTheDocument();
             expect(screen.queryByRole('row', {name: /root\/svc\/test3/})).not.toBeInTheDocument();
         });
+        expect(filterOption('Global State', 'Up')).toBeChecked();
+        expect(filterOption('Global State', 'Down')).toBeChecked();
+        expect(filterOption('Global State', 'Warn')).not.toBeChecked();
     });
 
-    test('unknown globalState URL value renders without a status icon (getStateIcon default case)', async () => {
+    test('unknown globalState URL value is offered as an option without a status mark, and can be removed', async () => {
         setup({}, '?globalState=bogus');
         await waitForLoad();
-        await waitFor(() => expect(screen.getByText(/^Bogus$/)).toBeInTheDocument());
+        const bogus = filterOption('Global State', 'Bogus');
+        expect(bogus).toBeChecked();
+        expect(bogus.closest('label').querySelector('[data-state], svg')).toBeNull();
+        expect(filterSummary('Global State')).toHaveTextContent('Global StateBogus');
+        await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
+        fireEvent.click(bogus);
+        await waitFor(() => expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/})).toBeInTheDocument());
     });
 
-    test('snackbar closes on alert close', async () => {
+    test('URL namespace absent from the data stays offered and checked', async () => {
+        setup({}, '?namespace=ghost');
+        await waitForLoad();
+        expect(filterOption('Namespace', 'ghost')).toBeChecked();
+        await waitFor(() => expect(screen.getByText(/No objects found/)).toBeInTheDocument());
+    });
+
+    test('URL sync writes every filter, comma-joined', async () => {
+        vi.useFakeTimers();
+        try {
+            setup();
+            fireEvent.click(filterOption('Global State', 'Up'));
+            fireEvent.click(filterOption('Global State', 'Unprovisioned'));
+            fireEvent.click(filterOption('Namespace', 'test-ns'));
+            fireEvent.click(filterOption('Kind', 'svc'));
+            fireEvent.change(screen.getByLabelText('Name'), {target: {value: ' te '}});
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(mockNavigate).toHaveBeenCalledWith(
+                '/objects?globalState=up%2Cunprovisioned&namespace=test-ns&kind=svc&name=te',
+                {replace: true}
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test('feedback closes with its Close button', async () => {
         setup();
         await waitForLoad();
         selectRow('test-ns/svc/test1');
         openActionsMenu();
         await clickMenuItem('Restart');
         await confirmDialog();
-        await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-        const closeBtn = screen.getByRole('alert').querySelector('button[aria-label="Close"]');
-        if (closeBtn) {
-            fireEvent.click(closeBtn);
-            await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+        await waitFor(() => expect(getFeedback()).toHaveTextContent(/succeeded/i));
+        fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+        await waitFor(() => expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument());
+    });
+
+    test('feedback hides itself after 4 seconds', async () => {
+        setup();
+        await waitForLoad();
+        vi.useFakeTimers();
+        try {
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Restart');
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {name: /Confirm/i}));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
+            expect(getFeedback()).toHaveTextContent(/succeeded/i);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(3900);
+            });
+            expect(screen.getByText(/succeeded/i)).toBeInTheDocument();
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(200);
+            });
+            expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
         }
     });
 
@@ -1285,8 +1536,13 @@ describe('Objects Component', () => {
     test('unprovisioned object icon is shown', async () => {
         setup({}, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
-        const notProvisionedIcons = screen.getAllByLabelText('Object is not provisioned');
-        expect(notProvisionedIcons.length).toBeGreaterThanOrEqual(2);
+        ['test-ns/svc/unprovisioned(?!-bool)', 'test-ns/svc/unprovisioned-bool'].forEach((name) => {
+            const mark = within(statusCell(objectRow(name))).getByRole('img', {name: 'Not provisioned'});
+            expect(mark).toHaveAttribute('title', 'Not provisioned');
+            expect(mark).toHaveClass('text-state-down');
+        });
+        expect(within(statusCell(objectRow('test-ns/svc/test1'))).queryByRole('img', {name: 'Not provisioned'}))
+            .not.toBeInTheDocument();
     });
 
     test.each([
@@ -1356,23 +1612,23 @@ describe('Objects Component', () => {
         await waitFor(() => expect(screen.getAllByRole('row').slice(1).length).toBe(30));
     });
 
-    describe('chip toggle handlers (add branch coverage)', () => {
+    describe('filter option toggle handlers (add branch coverage)', () => {
         test.each([
-            ['Global State', 'Up', () => screen.getByText(/^Up$/).closest('.MuiChip-root'), false],
-            ['Namespace', 'test-ns', () => screen.getByText('test-ns').closest('.MuiChip-root'), true],
-            ['Kind', 'svc', () => screen.getByText('svc').closest('.MuiChip-root'), true],
-        ])('rapidly toggling a %s chip twice re-adds it', async (label, option, getChip, useDeleteIcon) => {
+            ['Global State', 'Up'],
+            ['Namespace', 'test-ns'],
+            ['Kind', 'svc'],
+        ])('rapidly toggling a %s option twice re-adds it', async (label, option) => {
             setup({}, '', {isWideScreen: true, isMobile: false});
             await waitForLoad();
             await selectFilter(label, option);
-            const chip = getChip();
-            fireEvent.mouseDown(chip);
-            const target = useDeleteIcon ? within(chip).getByTestId('CloseIcon') : chip;
+            const checkbox = filterOption(label, option);
+            expect(checkbox).toBeChecked();
             act(() => {
-                fireEvent.click(target);
-                fireEvent.click(target);
+                fireEvent.click(checkbox);
+                fireEvent.click(checkbox);
             });
-            await waitFor(() => expect(getChip()).toBeInTheDocument());
+            await waitFor(() => expect(filterOption(label, option)).toBeChecked());
+            expect(filterSummary(label)).toHaveTextContent(new RegExp(`${option}$`));
         });
     });
 

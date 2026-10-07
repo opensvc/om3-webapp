@@ -1,26 +1,15 @@
 import React, {useEffect, useState, useMemo, useRef} from "react";
 import {useParams} from "react-router-dom";
-import {
-    Box,
-    Typography,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    TextField,
-    Button,
-    Collapse,
-    CircularProgress,
-    Alert,
-} from "@mui/material";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import axios from "axios";
 import debounce from "lodash.debounce";
 import {URL_NETWORK_IP} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Alert} from "../ui/components/Alert";
+import {Button} from "../ui/components/Button";
+import {Input} from "../ui/components/Field";
+import {Spinner} from "../ui/components/Spinner";
+import {ChevronDownIcon} from "../ui/icons";
 
 const NetworkDetails = () => {
     const [ipDetails, setIpDetails] = useState([]);
@@ -135,171 +124,83 @@ const NetworkDetails = () => {
     }, [ipDetails, nodeFilter, pathFilter, ridFilter]);
 
     return (
-        <Box
-            sx={{
-                height: "100vh",
-                bgcolor: 'background.default',
-                display: 'flex',
-                flexDirection: 'column',
-                p: 0,
-                width: '100vw',
-                margin: 0,
-                overflow: 'hidden',
-            }}
-        >
-            <Box
-                ref={containerRef}
-                sx={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: 3,
-                    m: 0,
-                    overflow: 'hidden',
-                }}
-            >
-                <Typography
-                    variant="h4"
-                    gutterBottom
-                    sx={{mb: 3, flexShrink: 0}}
-                    align="center"
+        <div ref={containerRef} className="p-4 space-y-3">
+            <h1 className="text-title font-semibold">
+                Network Details: {networkName || "N/A"} ({networkType})
+            </h1>
+            {error && <Alert>{error}</Alert>}
+            <div className="flex flex-wrap items-center gap-3">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                    icon={<ChevronDownIcon className={showFilters ? "rotate-180" : undefined}/>}
+                    aria-label={showFilters ? "Hide filters" : "Show filters"}
+                    aria-expanded={showFilters}
                 >
-                    Network Details: {networkName || "N/A"} ({networkType})
-                </Typography>
-                {error && (
-                    <Alert severity="error" sx={{mb: 2, flexShrink: 0}}>
-                        {error}
-                    </Alert>
-                )}
-                <Box
-                    sx={{
-                        position: "sticky",
-                        top: 64,
-                        zIndex: 10,
-                        backgroundColor: "background.paper",
-                        pt: 2,
-                        pb: 1,
-                        mb: 2,
-                        flexShrink: 0,
-                    }}
-                >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 1,
-                        }}
-                    >
-                        <Button
-                            onClick={() => setShowFilters(!showFilters)}
-                            startIcon={
-                                showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>
-                            }
-                            aria-label={showFilters ? "Hide filters" : "Show filters"}
-                        >
-                            {showFilters ? "Hide filters" : "Show filters"}
-                        </Button>
-                    </Box>
-                    <Collapse in={showFilters} timeout="auto" unmountOnExit>
-                        <Box
-                            sx={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: 2,
-                                alignItems: "center",
-                                pb: 2,
-                            }}
-                        >
-                            <TextField
-                                label="Node"
+                    {showFilters ? "Hide filters" : "Show filters"}
+                </Button>
+                {showFilters && (
+                    <>
+                        <label className="flex items-center gap-1 text-ink-muted">
+                            Node
+                            <Input
+                                className="h-7 w-48"
                                 value={nodeFilter}
                                 onChange={(e) => debouncedSetNodeFilter(e.target.value)}
-                                sx={{minWidth: 200}}
                             />
-                            <TextField
-                                label="Path"
+                        </label>
+                        <label className="flex items-center gap-1 text-ink-muted">
+                            Path
+                            <Input
+                                className="h-7 w-48"
                                 value={pathFilter}
                                 onChange={(e) => debouncedSetPathFilter(e.target.value)}
-                                sx={{minWidth: 200}}
                             />
-                            <TextField
-                                label="RID"
+                        </label>
+                        <label className="flex items-center gap-1 text-ink-muted">
+                            RID
+                            <Input
+                                className="h-7 w-48"
                                 value={ridFilter}
                                 onChange={(e) => debouncedSetRidFilter(e.target.value)}
-                                sx={{minWidth: 200}}
                             />
-                        </Box>
-                    </Collapse>
-                </Box>
-                {isLoading ? (
-                    <Box sx={{display: "flex", justifyContent: "center", my: 4, flex: 1}}>
-                        <CircularProgress aria-label="Loading network details"/>
-                    </Box>
-                ) : (
-                    <TableContainer
-                        sx={{
-                            flex: 1,
-                            minHeight: 0,
-                            overflow: "auto",
-                            width: "100%"
-                        }}
-                    >
-                        <Table sx={{minWidth: 700}} aria-label="Network details table">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell scope="col">
-                                        <strong>IP</strong>
-                                    </TableCell>
-                                    <TableCell align="center" scope="col">
-                                        <strong>Node</strong>
-                                    </TableCell>
-                                    <TableCell align="center" scope="col">
-                                        <strong>Path</strong>
-                                    </TableCell>
-                                    <TableCell align="center" scope="col">
-                                        <strong>RID</strong>
-                                    </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {filteredIpDetails.length > 0 ? (
-                                    filteredIpDetails.map((detail, index) => (
-                                        <TableRow key={`${detail.rid}-${index}`}>
-                                            <TableCell>{detail.ip || "N/A"}</TableCell>
-                                            <TableCell align="center">
-                                                {detail.node || "N/A"}
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                {detail.path || "N/A"}
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                {detail.rid || "N/A"}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell
-                                            colSpan={4}
-                                            align="center"
-                                            sx={{color: "text.secondary"}}
-                                        >
-                                            No IP details available for this network.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                        </label>
+                    </>
                 )}
-            </Box>
-        </Box>
+            </div>
+            {isLoading ? (
+                <div className="flex justify-center py-8">
+                    <Spinner label="Loading network details"/>
+                </div>
+            ) : (
+                <Table sticky>
+                    <caption className="sr-only">Network details</caption>
+                    <thead>
+                        <HeaderRow>
+                            <HeaderCell>IP</HeaderCell>
+                            <HeaderCell>Node</HeaderCell>
+                            <HeaderCell>Path</HeaderCell>
+                            <HeaderCell>RID</HeaderCell>
+                        </HeaderRow>
+                    </thead>
+                    <tbody>
+                        {filteredIpDetails.length > 0 ? (
+                            filteredIpDetails.map((detail, index) => (
+                                <Row key={`${detail.rid}-${index}`}>
+                                    <Cell className="font-medium">{detail.ip || "N/A"}</Cell>
+                                    <Cell>{detail.node || "N/A"}</Cell>
+                                    <Cell>{detail.path || "N/A"}</Cell>
+                                    <Cell>{detail.rid || "N/A"}</Cell>
+                                </Row>
+                            ))
+                        ) : (
+                            <EmptyRow colSpan={4}>No IP details available for this network.</EmptyRow>
+                        )}
+                    </tbody>
+                </Table>
+            )}
+        </div>
     );
 };
 

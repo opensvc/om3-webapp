@@ -90,6 +90,8 @@ describe('NetworkDetails Component', () => {
             );
             expect(matchingTitle).toBeInTheDocument();
         });
+        expect(screen.getByRole('heading', {level: 1})).toHaveTextContent('Network Details: default (N/A)');
+        expect(screen.getByRole('table', {name: 'Network details'})).toBeInTheDocument();
     });
 
     test('renders N/A in title when networkName is not provided', () => {
@@ -151,6 +153,7 @@ describe('NetworkDetails Component', () => {
         });
 
         const filterButton = screen.getByRole('button', {name: /hide filters/i});
+        expect(filterButton).toHaveAttribute('aria-expanded', 'true');
 
         fireEvent.click(filterButton);
         await waitFor(() => {
@@ -158,7 +161,7 @@ describe('NetworkDetails Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByRole('button', {name: /show filters/i})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: /show filters/i})).toHaveAttribute('aria-expanded', 'false');
         });
 
         fireEvent.click(screen.getByRole('button', {name: /show filters/i}));
@@ -337,7 +340,7 @@ describe('NetworkDetails Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('Failed to load network details. Please try again.')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent('Failed to load network details. Please try again.');
             expect(screen.getByText('No IP details available for this network.')).toBeInTheDocument();
             expect(screen.getByText(/Network Details: default \(N\/A\)/i)).toBeInTheDocument();
             expect(screen.queryByText('192.168.1.1')).not.toBeInTheDocument();
@@ -496,13 +499,14 @@ describe('NetworkDetails Component', () => {
             </MemoryRouter>
         );
 
-        expect(screen.getByLabelText('Loading network details')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading network details');
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
 
         resolve({data: {items: mockIpDetails}});
         await promise;
 
         await waitFor(() => {
-            expect(screen.queryByLabelText('Loading network details')).not.toBeInTheDocument();
+            expect(screen.queryByText('Loading network details')).not.toBeInTheDocument();
         });
 
         await waitFor(() => {

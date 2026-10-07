@@ -1,22 +1,11 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {useParams, useNavigate} from "react-router-dom";
-import {
-    Alert,
-    Box,
-    Button,
-    CircularProgress,
-    Menu,
-    MenuItem,
-    Typography,
-    IconButton,
-    useTheme,
-    Grid,
-    Snackbar,
-    ListItemIcon,
-    ListItemText,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import {green, grey, orange, red} from "@mui/material/colors";
+import {Alert} from "../ui/components/Alert";
+import {IconButton} from "../ui/components/Button";
+import {MenuButton} from "../ui/components/MenuButton";
+import {SlideOver} from "../ui/components/SlideOver";
+import {Spinner} from "../ui/components/Spinner";
+import {CloseIcon} from "../ui/icons";
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
@@ -36,6 +25,18 @@ const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
+
+/** The feedback message hides itself after a while, as the snackbar did. */
+const FEEDBACK_DURATION_MS = 5000;
+const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
+
+/** Icon of an action in a menu: the action icons are sized to the menu line. */
+const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
+
+const PANEL = "rounded-(--radius-panel) border border-line bg-surface-raised";
+
+const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
@@ -62,7 +63,6 @@ const ObjectDetail = () => {
     const decodedObjectName = decodeURIComponent(objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const navigate = useNavigate();
-    const theme = useTheme();
 
     const objectStatus = useEventStore((s) => s.objectStatus[decodedObjectName]);
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus[decodedObjectName]);
@@ -74,11 +74,7 @@ const ObjectDetail = () => {
     const [configRefreshTrigger, setConfigRefreshTrigger] = useState(0);
 
     const [selectedNodes, setSelectedNodes] = useState(/** @type {string[]} */ ([]));
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
-    const [individualNodeMenuAnchor, setIndividualNodeMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
-    const [currentNode, setCurrentNode] = useState(/** @type {string | null} */ (null));
 
-    const [objectMenuAnchor, setObjectMenuAnchor] = useState(/** @type {HTMLElement | null} */ (null));
     const [pendingAction, setPendingAction] = useState(/** @type {any} */ (null));
     const [actionInProgress, setActionInProgress] = useState(false);
 
@@ -99,15 +95,6 @@ const ObjectDetail = () => {
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
     const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(/** @type {string | null} */ (null));
     const [selectedInstanceForLogs, setSelectedInstanceForLogs] = useState(/** @type {string | null} */ (null));
-    const [drawerWidth, setDrawerWidth] = useState(600);
-    const minDrawerWidth = 300;
-    const maxDrawerWidth = window.innerWidth * 0.8;
-
-    const [isResizing, setIsResizing] = useState(false);
-    const startXRef = useRef(0);
-    const startWidthRef = useRef(0);
-    const isDraggingRef = useRef(false);
-    const resizeHandleRef = useRef(/** @type {HTMLElement | null} */ (null));
 
     const objectEventTypes = useMemo(() => [
         "ObjectStatusUpdated",
@@ -126,8 +113,6 @@ const ObjectDetail = () => {
     const fallbackTimer = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
     const hasFallbackFired = useRef(false);
     const [fallbackCompleted, setFallbackCompleted] = useState(false);
-
-    const appBarHeight = `calc(${theme.mixins.toolbar.minHeight || 64}px + env(safe-area-inset-top, 0px))`;
 
     const objectData = useMemo(() => {
         const avail = objectStatus?.avail || "n/a";
@@ -297,6 +282,12 @@ const ObjectDetail = () => {
     }, []);
     const closeSnackbar = useCallback(() => setSnackbar((s) => ({...s, open: false})), []);
 
+    useEffect(() => {
+        if (!snackbar.open) return;
+        const timer = setTimeout(closeSnackbar, FEEDBACK_DURATION_MS);
+        return () => clearTimeout(timer);
+    }, [snackbar, closeSnackbar]);
+
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
         const endpoint = INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? action;
@@ -406,18 +397,15 @@ const ObjectDetail = () => {
 
     const handleBatchNodeActionClick = (action) => {
         openActionDialog(action, {batch: "nodes"});
-        setActionsMenuAnchor(null);
     };
 
-    const handleIndividualNodeActionClick = (action) => {
-        if (!currentNode) return;
-        openActionDialog(action, {node: currentNode});
-        setIndividualNodeMenuAnchor(null);
-    };
+    const handleIndividualNodeActionClick = useCallback((node, action) => {
+        if (!node) return;
+        openActionDialog(action, {node});
+    }, [openActionDialog]);
 
     const handleObjectActionClick = (action) => {
         openActionDialog(action);
-        setObjectMenuAnchor(null);
     };
 
     const handleViewInstance = useCallback((node) => {
@@ -434,13 +422,6 @@ const ObjectDetail = () => {
         setLogsDrawerOpen(false);
         setSelectedNodeForLogs(null);
         setSelectedInstanceForLogs(null);
-    }, []);
-
-    const getColor = useCallback((status) => {
-        if (status === "up" || status === true) return green[500];
-        if (status === "down" || status === false) return red[500];
-        if (status === "warn") return orange[500];
-        return grey[500];
     }, []);
 
     const getNodeState = useCallback((node) => {
@@ -475,74 +456,9 @@ const ObjectDetail = () => {
         });
     }, [getNodeState]);
 
-    const individualFilteredActions = useMemo(() => {
-        if (!currentNode) return INSTANCE_ACTIONS;
-        return filterActionsForNode(INSTANCE_ACTIONS, currentNode);
-    }, [currentNode, filterActionsForNode]);
-
     const batchFilteredActions = useMemo(() => {
         return filterActionsForMultipleNodes(INSTANCE_ACTIONS, selectedNodes);
     }, [selectedNodes, filterActionsForMultipleNodes]);
-
-    // Resize handlers (EventLogger style)
-    const handleResizeStart = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        isDraggingRef.current = true;
-        setIsResizing(true);
-        startXRef.current = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-        startWidthRef.current = drawerWidth;
-        document.body.style.userSelect = 'none';
-        document.body.style.touchAction = 'none';
-        document.body.style.overflow = 'hidden';
-        document.body.style.cursor = "ew-resize";
-    }, [drawerWidth]);
-
-    const handleResizeMove = useCallback((e) => {
-        if (!isDraggingRef.current) return;
-        e.preventDefault();
-        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-        const deltaX = startXRef.current - clientX;
-        const newWidth = startWidthRef.current + deltaX;
-        if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
-            setDrawerWidth(newWidth);
-        }
-    }, [minDrawerWidth, maxDrawerWidth]);
-
-    const handleResizeEnd = useCallback(() => {
-        if (!isDraggingRef.current) return;
-        isDraggingRef.current = false;
-        setIsResizing(false);
-        document.body.style.userSelect = '';
-        document.body.style.touchAction = '';
-        document.body.style.overflow = '';
-        document.body.style.cursor = "default";
-    }, []);
-
-    // Attach global listeners during resize
-    useEffect(() => {
-        if (isResizing) {
-            const onMouseMove = (e) => handleResizeMove(e);
-            const onTouchMove = (e) => handleResizeMove(e);
-            const onMouseUp = () => handleResizeEnd();
-            const onTouchEnd = () => handleResizeEnd();
-            const onTouchCancel = () => handleResizeEnd();
-
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('touchmove', onTouchMove, {passive: false});
-            document.addEventListener('mouseup', onMouseUp);
-            document.addEventListener('touchend', onTouchEnd);
-            document.addEventListener('touchcancel', onTouchCancel);
-
-            return () => {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('touchmove', onTouchMove);
-                document.removeEventListener('mouseup', onMouseUp);
-                document.removeEventListener('touchend', onTouchEnd);
-                document.removeEventListener('touchcancel', onTouchCancel);
-            };
-        }
-    }, [isResizing, handleResizeMove, handleResizeEnd]);
 
     useEffect(() => {
         let unsubscribe = null;
@@ -571,306 +487,177 @@ const ObjectDetail = () => {
 
     const showKeys = ["cfg", "sec"].includes(kind);
 
+    const feedback = snackbar.open && (
+        <Alert
+            tone={TONES[snackbar.severity] ?? "info"}
+            action={
+                <IconButton label="Close" bare onClick={closeSnackbar}>
+                    <CloseIcon className="h-4 w-4"/>
+                </IconButton>
+            }
+        >
+            {snackbar.message}
+        </Alert>
+    );
+
+    const configSection = (
+        <ConfigSection
+            decodedObjectName={decodedObjectName}
+            configNode={configNode}
+            setConfigNode={setConfigNode}
+            openSnackbar={openSnackbar}
+            configDialogOpen={configDialogOpen}
+            setConfigDialogOpen={setConfigDialogOpen}
+            configRefreshTrigger={configRefreshTrigger}
+        />
+    );
+
     if (initialLoading) {
         return (
-            <Box p={4} display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-                <CircularProgress/>
-                <Typography ml={2}>Loading object data...</Typography>
-            </Box>
+            <div className="flex min-h-[80vh] items-center justify-center gap-2 p-4">
+                <Spinner label="Loading object data"/>
+                <span className="text-ink-muted">Loading object data...</span>
+            </div>
         );
     }
 
     if (nodesList.length === 0 && !initialDataError) {
         return (
-            <Box p={4}>
-                <Typography variant="h5" sx={{mb: 2}}>{decodedObjectName}</Typography>
-                <Typography align="center" color="textSecondary" fontSize="1.2rem">
-                    No information available for object.
-                </Typography>
+            <div className="p-4 space-y-3">
+                <h1 className="text-title font-semibold">{decodedObjectName}</h1>
+                {feedback}
+                <p className="py-4 text-center text-ink-muted">No information available for object.</p>
                 {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
-                <ConfigSection
-                    decodedObjectName={decodedObjectName}
-                    configNode={configNode}
-                    setConfigNode={setConfigNode}
-                    openSnackbar={openSnackbar}
-                    configDialogOpen={configDialogOpen}
-                    setConfigDialogOpen={setConfigDialogOpen}
-                    configRefreshTrigger={configRefreshTrigger}
-                />
-            </Box>
+                {configSection}
+            </div>
         );
     }
 
+    const logsTitle = selectedInstanceForLogs
+        ? `Instance Logs - ${selectedInstanceForLogs}`
+        : selectedNodeForLogs
+            ? `Node Logs - ${selectedNodeForLogs}`
+            : "Logs";
+
     return (
-        <Box sx={{
-            display: "flex",
-            flexDirection: "row",
-            width: "100vw",
-            minHeight: "100vh",
-            overflow: "hidden",
-            boxSizing: "border-box",
-            position: 'relative',
-            margin: 0,
-            p: 0
-        }}>
-            <Box sx={{
-                flex: logsDrawerOpen ? `0 0 calc(100% - ${drawerWidth}px)` : "1 1 100%",
-                overflow: "auto",
-                boxSizing: "border-box",
-                maxWidth: logsDrawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
-                transition: theme.transitions.create(["flex", "maxWidth"], {
-                    easing: theme.transitions.easing.sharp,
-                    duration: theme.transitions.duration.enteringScreen,
-                }),
-            }}>
-                <Box sx={{
-                    width: "100%",
-                    margin: "0 auto",
-                    px: 2,
-                    py: 4,
-                    boxSizing: "border-box",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3
-                }}>
-                    <Grid container spacing={2} alignItems="flex-start">
-                        <Grid item xs={12} md={10}>
-                            <HeaderSection
-                                decodedObjectName={decodedObjectName}
-                                objectKind={kind}
-                                globalStatus={objectStatus}
-                                actionInProgress={actionInProgress}
-                                objectMenuAnchor={objectMenuAnchor}
-                                setObjectMenuAnchor={setObjectMenuAnchor}
-                                handleObjectActionClick={handleObjectActionClick}
-                                getObjectStatus={() => objectData}
-                                getColor={getColor}
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <ConfigSection
-                                decodedObjectName={decodedObjectName}
-                                configNode={configNode}
-                                setConfigNode={setConfigNode}
-                                openSnackbar={openSnackbar}
-                                configDialogOpen={configDialogOpen}
-                                setConfigDialogOpen={setConfigDialogOpen}
-                                configRefreshTrigger={configRefreshTrigger}
-                            />
-                        </Grid>
-                    </Grid>
-
-                    {pendingAction && (
-                        <ActionDialogManager
-                            pendingAction={pendingAction}
-                            handleConfirm={handleDialogConfirm}
-                            target={`object ${decodedObjectName}`}
-                            supportedActions={
-                                pendingAction?.batch === "nodes" || pendingAction?.node
-                                    ? INSTANCE_ACTIONS.map(a => a.name)
-                                    : OBJECT_ACTIONS.map(a => a.name)
-                            }
-                            onClose={() => {
-                                setPendingAction(null);
-                                setConfirmDialogOpen(false);
-                                setStopDialogOpen(false);
-                                setUnprovisionDialogOpen(false);
-                                setPurgeDialogOpen(false);
-                                setSimpleDialogOpen(false);
-                            }}
-                            confirmDialogOpen={confirmDialogOpen}
-                            stopDialogOpen={stopDialogOpen}
-                            unprovisionDialogOpen={unprovisionDialogOpen}
-                            purgeDialogOpen={purgeDialogOpen}
-                            simpleDialogOpen={simpleDialogOpen}
-                            checkboxes={checkboxes}
-                            setCheckboxes={setCheckboxes}
-                            stopCheckbox={stopCheckbox}
-                            setStopCheckbox={setStopCheckbox}
-                            unprovisionCheckboxes={unprovisionCheckboxes}
-                            setUnprovisionCheckboxes={setUnprovisionCheckboxes}
-                            purgeCheckboxes={purgeCheckboxes}
-                            setPurgeCheckboxes={setPurgeCheckboxes}
-                        />
-                    )}
-
-                    {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
-
-                    {!["sec", "cfg", "usr"].includes(kind) && (
-                        <>
-                            <Box sx={{display: "flex", alignItems: "center", gap: 1, mb: 2}}>
-                                <Button variant="outlined" onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
-                                        disabled={selectedNodes.length === 0}>
-                                    Actions on Selected Nodes ({selectedNodes.length})
-                                </Button>
-                            </Box>
-
-                            <Menu
-                                anchorEl={actionsMenuAnchor}
-                                open={Boolean(actionsMenuAnchor)}
-                                onClose={() => setActionsMenuAnchor(null)}
-                            >
-                                {batchFilteredActions.map(({name, icon, color}) => (
-                                    <MenuItem
-                                        key={name}
-                                        onClick={() => handleBatchNodeActionClick(name)}
-                                        disabled={actionInProgress}
-                                        sx={{
-                                            color: color === "red" ? "error.main" : "inherit",
-                                            '&.Mui-disabled': {opacity: 0.5},
-                                        }}
-                                    >
-                                        <ListItemIcon
-                                            sx={{
-                                                minWidth: 40,
-                                                color: color === "red" ? "error.main" : "inherit"
-                                            }}>
-                                            {icon}
-                                        </ListItemIcon>
-                                        <ListItemText>
-                                            {name.charAt(0).toUpperCase() + name.slice(1)}
-                                        </ListItemText>
-                                    </MenuItem>
-                                ))}
-                            </Menu>
-
-                            {nodesList.map(node => (
-                                <InstanceCard
-                                    key={node}
-                                    node={node}
-                                    nodeData={memoizedObjectData[node] || {}}
-                                    selectedNodes={selectedNodes}
-                                    toggleNode={toggleNode}
-                                    actionInProgress={actionInProgress}
-                                    setIndividualNodeMenuAnchor={setIndividualNodeMenuAnchor}
-                                    setCurrentNode={setCurrentNode}
-                                    getColor={getColor}
-                                    getNodeState={getNodeState}
-                                    parseProvisionedState={parseProvisionedState}
-                                    setPendingAction={setPendingAction}
-                                    setSimpleDialogOpen={setSimpleDialogOpen}
-                                    namespace={namespace}
-                                    kind={kind}
-                                    instanceName={name}
-                                    onOpenLogs={handleOpenLogs}
-                                    onViewInstance={handleViewInstance}
-                                />
-                            ))}
-
-                            <Menu
-                                anchorEl={individualNodeMenuAnchor}
-                                open={Boolean(individualNodeMenuAnchor)}
-                                onClose={() => setIndividualNodeMenuAnchor(null)}
-                            >
-                                {individualFilteredActions.map(({name, icon, color}) => (
-                                    <MenuItem
-                                        key={name}
-                                        onClick={() => handleIndividualNodeActionClick(name)}
-                                        disabled={actionInProgress}
-                                        sx={{
-                                            color: color === "red" ? "error.main" : "inherit",
-                                            '&.Mui-disabled': {opacity: 0.5},
-                                        }}
-                                    >
-                                        <ListItemIcon
-                                            sx={{
-                                                minWidth: 40,
-                                                color: color === "red" ? "error.main" : "inherit"
-                                            }}>
-                                            {icon}
-                                        </ListItemIcon>
-                                        <ListItemText>
-                                            {name.charAt(0).toUpperCase() + name.slice(1)}
-                                        </ListItemText>
-                                    </MenuItem>
-                                ))}
-                            </Menu>
-                        </>
-                    )}
-
-                    <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={closeSnackbar}
-                              anchorOrigin={{vertical: "bottom", horizontal: "center"}}>
-                        <Alert onClose={closeSnackbar} severity={snackbar.severity}
-                               variant="filled">{snackbar.message}</Alert>
-                    </Snackbar>
-                </Box>
-            </Box>
-
-            {logsDrawerOpen && selectedNodeForLogs && (
-                <Box
-                    role="complementary"
-                    data-width={`${drawerWidth}px`}
-                    sx={{
-                        position: "fixed",
-                        top: appBarHeight,
-                        right: 0,
-                        width: `${drawerWidth}px`,
-                        maxWidth: "80vw",
-                        height: `calc(100% - ${appBarHeight})`,
-                        backgroundColor: theme.palette.background.paper,
-                        borderLeft: `1px solid ${theme.palette.divider}`,
-                        zIndex: 1200,
-                        display: "flex",
-                        flexDirection: "column",
-                        overflow: "hidden",
-                        boxShadow: theme.shadows[3],
-                        transition: theme.transitions.create("width", {
-                            easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.enteringScreen,
-                        }),
-                    }}
-                >
-                    <Box
-                        ref={resizeHandleRef}
-                        onMouseDown={handleResizeStart}
-                        onTouchStart={handleResizeStart}
-                        sx={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: "8px",
-                            height: "100%",
-                            cursor: "ew-resize",
-                            bgcolor: theme.palette.grey[300],
-                            zIndex: 10,
-                            touchAction: "none",
-                            userSelect: "none",
-                            WebkitUserSelect: "none",
-                            "&:hover": {
-                                bgcolor: theme.palette.primary.light,
-                            },
-                            "&:active": {
-                                bgcolor: theme.palette.primary.main,
-                            },
-                        }}
-                        aria-label="Resize drawer"
+        <div className="p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1">
+                    <HeaderSection
+                        decodedObjectName={decodedObjectName}
+                        kind={kind}
+                        globalStatus={objectStatus}
+                        actionInProgress={actionInProgress}
+                        handleObjectActionClick={handleObjectActionClick}
+                        getObjectStatus={() => objectData}
                     />
-                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, pb: 1}}>
-                        <Typography variant="h6">
-                            {selectedInstanceForLogs ? `Instance Logs - ${selectedInstanceForLogs}` : `Node Logs - ${selectedNodeForLogs}`}
-                        </Typography>
-                        <IconButton onClick={handleCloseLogsDrawer} size="large">
-                            <CloseIcon/>
-                        </IconButton>
-                    </Box>
-                    <Box sx={{flexGrow: 1, overflow: "hidden", position: "relative"}}>
-                        <LogsViewer
-                            nodename={selectedNodeForLogs}
-                            type={selectedInstanceForLogs ? "instance" : "node"}
-                            namespace={namespace}
-                            kind={kind}
-                            instanceName={selectedInstanceForLogs}
-                            height="100%"
-                        />
-                    </Box>
-                </Box>
+                </div>
+                <div className="shrink-0">{configSection}</div>
+            </div>
+
+            {feedback}
+
+            {pendingAction && (
+                <ActionDialogManager
+                    pendingAction={pendingAction}
+                    handleConfirm={handleDialogConfirm}
+                    target={`object ${decodedObjectName}`}
+                    supportedActions={
+                        pendingAction?.batch === "nodes" || pendingAction?.node
+                            ? INSTANCE_ACTIONS.map(a => a.name)
+                            : OBJECT_ACTIONS.map(a => a.name)
+                    }
+                    onClose={() => {
+                        setPendingAction(null);
+                        setConfirmDialogOpen(false);
+                        setStopDialogOpen(false);
+                        setUnprovisionDialogOpen(false);
+                        setPurgeDialogOpen(false);
+                        setSimpleDialogOpen(false);
+                    }}
+                    confirmDialogOpen={confirmDialogOpen}
+                    stopDialogOpen={stopDialogOpen}
+                    unprovisionDialogOpen={unprovisionDialogOpen}
+                    purgeDialogOpen={purgeDialogOpen}
+                    simpleDialogOpen={simpleDialogOpen}
+                    checkboxes={checkboxes}
+                    setCheckboxes={setCheckboxes}
+                    stopCheckbox={stopCheckbox}
+                    setStopCheckbox={setStopCheckbox}
+                    unprovisionCheckboxes={unprovisionCheckboxes}
+                    setUnprovisionCheckboxes={setUnprovisionCheckboxes}
+                    purgeCheckboxes={purgeCheckboxes}
+                    setPurgeCheckboxes={setPurgeCheckboxes}
+                />
             )}
+
+            {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
+
+            {!["sec", "cfg", "usr"].includes(kind) && (
+                <section aria-labelledby="object-instances" className={PANEL}>
+                    <div className="flex items-center gap-3 border-b border-line px-3 py-2">
+                        <h2 id="object-instances" className="font-semibold">
+                            Instances ({nodesList.length})
+                        </h2>
+                        <MenuButton
+                            label={`Actions on selected nodes (${selectedNodes.length})`}
+                            disabled={selectedNodes.length === 0}
+                            className="ml-auto"
+                            align="end"
+                            items={batchFilteredActions.map(({name, icon, color}) => ({
+                                key: name,
+                                label: capitalize(name),
+                                icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+                                disabled: actionInProgress,
+                                onSelect: () => handleBatchNodeActionClick(name),
+                            }))}
+                        />
+                    </div>
+                    <div className="divide-y divide-line">
+                        {nodesList.map(node => (
+                            <InstanceCard
+                                key={node}
+                                node={node}
+                                nodeData={memoizedObjectData[node] || {}}
+                                selectedNodes={selectedNodes}
+                                toggleNode={toggleNode}
+                                actionInProgress={actionInProgress}
+                                actions={filterActionsForNode(INSTANCE_ACTIONS, node)}
+                                onAction={handleIndividualNodeActionClick}
+                                getNodeState={getNodeState}
+                                instanceName={name}
+                                onOpenLogs={handleOpenLogs}
+                                onViewInstance={handleViewInstance}
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            <SlideOver
+                open={logsDrawerOpen && selectedNodeForLogs !== null}
+                title={logsTitle}
+                onClose={handleCloseLogsDrawer}
+                closeLabel="Close logs"
+                size="wide"
+                resizeLabel="Resize drawer"
+                closeOnOutsideClick={false}
+            >
+                {logsDrawerOpen && selectedNodeForLogs !== null && (
+                    <LogsViewer
+                        nodename={selectedNodeForLogs}
+                        type={selectedInstanceForLogs ? "instance" : "node"}
+                        namespace={namespace}
+                        kind={kind}
+                        instanceName={selectedInstanceForLogs}
+                        height="100%"
+                    />
+                )}
+            </SlideOver>
 
             <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}
                          title={`Events - ${decodedObjectName}`} buttonLabel="Object Events"/>
-        </Box>
+        </div>
     );
 };
 

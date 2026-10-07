@@ -1,54 +1,70 @@
 import React, {useCallback, useEffect, useState, useRef, useMemo} from "react";
 import {useParams} from "react-router-dom";
-import {
-    Alert,
-    Box,
-    Typography,
-    Snackbar,
-    IconButton,
-    Tooltip,
-    LinearProgress,
-    ClickAwayListener,
-    Paper,
-    Popper,
-    MenuItem,
-    ListItemIcon,
-    ListItemText,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    FormControlLabel,
-    Checkbox,
-    CircularProgress,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import ArticleIcon from "@mui/icons-material/Article";
-import CloseIcon from "@mui/icons-material/Close";
-import SyncProblemIcon from "@mui/icons-material/SyncProblem";
-import StopIcon from "@mui/icons-material/Stop";
-import {green, grey, orange, red, blue} from "@mui/material/colors";
 import useEventStore from "../hooks/useEventStore.js";
 import {URL_NODE} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import {INSTANCE_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
+import {ObjectIcon, om3ObjectKind} from "../ui/components/ObjectIcon";
+import {StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
 import {startEventReception, closeEventSource} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import LogsViewer from "./LogsViewer";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
-import {useTheme} from "@mui/material/styles";
+import {Table, HeaderRow, HeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {StatusBadge} from "../ui/components/StatusBadge";
+import {StatusMark} from "../ui/components/StatusMark";
+import {FrozenMark} from "../ui/components/FrozenMark";
+import {MenuButton} from "../ui/components/MenuButton";
+import {Button, IconButton} from "../ui/components/Button";
+import {Checkbox} from "../ui/components/Field";
+import {Dialog} from "../ui/components/Dialog";
+import {SlideOver} from "../ui/components/SlideOver";
+import {Alert} from "../ui/components/Alert";
+import {Spinner} from "../ui/components/Spinner";
+import {AlertTriangleIcon, CloseIcon, FileIcon, MoreIcon} from "../ui/icons";
 
 const DEFAULT_CHECKBOXES = {failover: false};
 const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+/** The feedback message hides itself after a while, as the snackbar did. */
+const FEEDBACK_DURATION_MS = 5000;
+const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
+
+/** Number of columns of the resource table, for the rows spanning all of them. */
+const COLUMNS = 6;
+
+/** Class names of the menu entry icons: the action icons squared to 16px. */
+const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+
+const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+/** The state of a resource or an instance status, as the coloured dot told it. */
+const toState = (status) => {
+    if (status === "up" || status === true) return "up";
+    if (status === "down" || status === false) return "down";
+    if (status === "warn") return "warn";
+    return "unknown";
+};
+
+const LOG_INK = {warn: "text-state-warn", error: "text-state-down"};
+
+const NotProvisionedMark = ({label}) => (
+    <span role="img" aria-label={label} title="Not Provisioned" className="inline-flex text-state-down">
+        <AlertTriangleIcon className="h-3.5 w-3.5"/>
+    </span>
+);
+
+/** A line of the table under a resource, spanning all columns: a note or the resource logs. */
+const NoteRow = ({isEncap, children}) => (
+    <tr className="border-b border-line last:border-b-0">
+        <td colSpan={COLUMNS} className={`px-2 py-1 text-ink-muted ${isEncap ? "pl-8" : "pl-6"}`}>
+            {children}
+        </td>
+    </tr>
+);
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
 const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
@@ -60,9 +76,8 @@ const ResourceRow = React.memo(({
                                     instanceConfig,
                                     instanceMonitor,
                                     encapData = {},
-                                    getColor,
                                     getResourceStatusLetters,
-                                    onActionClick,
+                                    menuItems,
                                     actionInProgress = false,
                                 }) => {
     const {statusString, tooltipText} = getResourceStatusLetters(
@@ -83,310 +98,62 @@ const ResourceRow = React.memo(({
         : resource?.provisioned?.state;
     const isResourceNotProvisioned = provisionedState === "false" || provisionedState === false || provisionedState === "n/a";
     const logs = resource.log || [];
-    const getLogPaddingLeft = () => {
-        if (isEncap) {
-            return {xs: "72px", sm: "72px"};
-        } else {
-            return {xs: "56px", sm: "56px"};
-        }
-    };
+    const statusLabel = resource.status || "unknown";
 
     return (
-        <Box
-            sx={{
-                display: "flex",
-                flexDirection: "column",
-                width: "100%",
-                fontFamily: "'Roboto Mono', monospace",
-                fontSize: "0.9rem",
-                gap: 1,
-                mb: 2,
-            }}
-        >
-            <Box
-                sx={{
-                    display: "flex",
-                    flexDirection: {xs: "column", sm: "row"},
-                    alignItems: {xs: "flex-start", sm: "center"},
-                    width: "100%",
-                    gap: {xs: 1, sm: 2},
-                }}
-            >
-                <Box
-                    sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: {xs: 1, sm: 2},
-                        width: "100%",
-                        pl: isEncap ? {xs: 4, sm: 4} : {xs: 2, sm: 0},
-                    }}
-                >
-                    <Typography
-                        sx={{
-                            minWidth: {xs: "60px", sm: "80px"},
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            fontSize: {xs: '0.8rem', sm: '0.9rem'}
-                        }}
-                    >
-                        {rid}
-                    </Typography>
-                    <Box
-                        sx={{
-                            display: {xs: "none", sm: "flex"},
-                            alignItems: "center",
-                            gap: 2,
-                            flexGrow: 0,
-                        }}
-                    >
-                        <Tooltip title={tooltipText}>
-                            <Typography
-                                role="status"
-                                sx={{
-                                    minWidth: {sm: "80px"},
-                                    fontFamily: "'Roboto Mono', monospace",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: '0.9rem'
-                                }}
-                                aria-label={`Resource ${rid} status: ${statusString}`}
-                            >
-                                {statusString}
-                            </Typography>
-                        </Tooltip>
-                        <Typography
-                            sx={{
-                                minWidth: {sm: "80px"},
-                                fontFamily: "'Roboto Mono', monospace",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                fontSize: '0.9rem'
-                            }}
-                        >
-                            {resourceType}
-                        </Typography>
-                        <Typography
-                            sx={{
-                                fontFamily: "'Roboto Mono', monospace",
-                                whiteSpace: "normal",
-                                wordBreak: "break-word",
-                                fontSize: '0.9rem'
-                            }}
-                        >
-                            {labelText}
-                            {infoText && (
-                                <Typography
-                                    component="span"
-                                    sx={{
-                                        ml: 1,
-                                        color: "textSecondary",
-                                        fontFamily: "'Roboto Mono', monospace",
-                                        whiteSpace: "normal",
-                                        wordBreak: "break-word",
-                                        fontSize: '0.9rem'
-                                    }}
-                                >
-                                    {infoText}
-                                </Typography>
-                            )}
-                        </Typography>
-                    </Box>
-                    <Box
-                        sx={{
-                            display: {xs: "flex", sm: "none"},
-                            alignItems: "center",
-                            gap: 1,
-                            flexShrink: 0,
-                            marginLeft: "auto",
-                        }}
-                    >
-                        <Tooltip title={resource.status || "unknown"}>
-                            <FiberManualRecordIcon
-                                sx={{
-                                    fontSize: "1rem",
-                                    color: typeof getColor === "function" ? getColor(resource.status) : grey[500]
-                                }}
-                            />
-                        </Tooltip>
+        <>
+            <Row aria-label={`Resource ${rid}`}>
+                <Cell className={`whitespace-nowrap ${isEncap ? "pl-6" : ""}`}>{rid}</Cell>
+                <Cell className="whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                        <StatusMark state={toState(resource.status)} label={statusLabel}/>
+                        <span aria-hidden="true">{statusLabel}</span>
                         {isResourceNotProvisioned && (
-                            <Tooltip title="Not Provisioned">
-                                <PriorityHighIcon
-                                    sx={{color: red[500], fontSize: "1rem"}}
-                                    aria-label={`Resource ${rid} is not provisioned`}
-                                />
-                            </Tooltip>
+                            <NotProvisionedMark label={`Resource ${rid} is not provisioned`}/>
                         )}
-                        <Box onClick={(e) => e.stopPropagation()}>
-                            <IconButton
-                                onClick={(e) => {
-                                    e.persist();
-                                    e.stopPropagation();
-                                    onActionClick(rid, e);
-                                }}
-                                disabled={actionInProgress}
-                                aria-label={`Resource ${rid} actions`}
-                                sx={{padding: '4px'}}
-                            >
-                                <Tooltip title="Actions">
-                                    <MoreVertIcon sx={{fontSize: '1rem'}}/>
-                                </Tooltip>
-                            </IconButton>
-                        </Box>
-                    </Box>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Tooltip title={tooltipText}>
-                        <Typography
-                            role="status"
-                            sx={{
-                                fontFamily: "'Roboto Mono', monospace",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                fontSize: '0.8rem'
-                            }}
-                            aria-label={`Resource ${rid} status: ${statusString}`}
-                        >
-                            {statusString}
-                        </Typography>
-                    </Tooltip>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
-                        sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            fontSize: '0.8rem'
-                        }}
+                    </span>
+                </Cell>
+                <Cell className="whitespace-nowrap">
+                    <span
+                        role="img"
+                        aria-label={`Resource ${rid} status: ${statusString}`}
+                        title={tooltipText}
+                        className="font-mono"
                     >
-                        {resourceType}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        pl: isEncap ? 4 : 2,
-                        display: {xs: "block", sm: "none"},
-                        width: "100%",
-                    }}
-                >
-                    <Typography
-                        sx={{
-                            fontFamily: "'Roboto Mono', monospace",
-                            whiteSpace: "normal",
-                            wordBreak: "break-word",
-                            fontSize: '0.8rem'
-                        }}
-                    >
+                        {statusString}
+                    </span>
+                </Cell>
+                <Cell className="whitespace-nowrap">{resourceType}</Cell>
+                <Cell className="w-full max-w-0">
+                    <span className="block truncate" title={infoText ? `${labelText} ${infoText}` : labelText}>
                         {labelText}
-                        {infoText && (
-                            <Typography
-                                component="span"
-                                sx={{
-                                    ml: 1,
-                                    color: "textSecondary",
-                                    fontFamily: "'Roboto Mono', monospace",
-                                    whiteSpace: "normal",
-                                    wordBreak: "break-word",
-                                    fontSize: '0.8rem'
-                                }}
-                            >
-                                {infoText}
-                            </Typography>
-                        )}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        display: {xs: "none", sm: "flex"},
-                        alignItems: "center",
-                        gap: 1,
-                        flexShrink: 0,
-                        flexGrow: 1,
-                        justifyContent: "flex-end",
-                    }}
-                >
-                    <Tooltip title={resource.status || "unknown"}>
-                        <FiberManualRecordIcon
-                            sx={{
-                                fontSize: "1rem",
-                                color: typeof getColor === "function" ? getColor(resource.status) : grey[500]
-                            }}
-                        />
-                    </Tooltip>
-                    {isResourceNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <PriorityHighIcon
-                                sx={{color: red[500], fontSize: "1rem"}}
-                                aria-label={`Resource ${rid} is not provisioned`}
-                            />
-                        </Tooltip>
-                    )}
-                    <Box onClick={(e) => e.stopPropagation()}>
-                        <IconButton
-                            onClick={(e) => {
-                                e.persist();
-                                e.stopPropagation();
-                                onActionClick(rid, e);
-                            }}
-                            disabled={actionInProgress}
-                            aria-label={`Resource ${rid} actions`}
-                            sx={{p: 0.5}}
-                        >
-                            <Tooltip title="Actions">
-                                <MoreVertIcon sx={{fontSize: '1rem'}}/>
-                            </Tooltip>
-                        </IconButton>
-                    </Box>
-                </Box>
-            </Box>
+                        {infoText && <span className="ml-2 text-ink-muted">{infoText}</span>}
+                    </span>
+                </Cell>
+                <Cell align="center">
+                    <MenuButton
+                        label={`Resource ${rid} actions`}
+                        icon={<MoreIcon className="h-4 w-4"/>}
+                        compact
+                        align="end"
+                        className="inline-flex align-middle"
+                        disabled={actionInProgress}
+                        items={menuItems}
+                    />
+                </Cell>
+            </Row>
             {logs.length > 0 && (
-                <Box
-                    sx={{
-                        pl: getLogPaddingLeft(),
-                        width: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 0.5,
-                        mt: 0.5,
-                    }}
-                >
-                    {logs.map((log, index) => (
-                        <Typography
-                            key={index}
-                            sx={{
-                                fontFamily: "'Roboto Mono', monospace",
-                                fontSize: "0.8rem",
-                                color: log.level === "warn" ? orange[500] : log.level === "error" ? red[500] : "textSecondary",
-                                whiteSpace: "normal",
-                                wordBreak: "break-word",
-                                lineHeight: 1.3,
-                            }}
-                            aria-label={`Log for resource ${rid}: ${log.level} - ${log.message}`}
-                        >
-                            {log.level}: {log.message}
-                        </Typography>
-                    ))}
-                </Box>
+                <NoteRow isEncap={isEncap}>
+                    <ul aria-label={`Logs of resource ${rid}`} className="space-y-0.5 text-data">
+                        {logs.map((log, index) => (
+                            <li key={index} className={`break-words ${LOG_INK[log.level] ?? "text-ink-muted"}`}>
+                                {log.level}: {log.message}
+                            </li>
+                        ))}
+                    </ul>
+                </NoteRow>
             )}
-        </Box>
+        </>
     );
 });
 
@@ -394,7 +161,6 @@ const ObjectInstanceView = () => {
     const {node: nodeName, objectName} = useParams();
     const decodedObjectName = decodeURIComponent(objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
-    const theme = useTheme();
 
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
     const instanceMonitor = useEventStore((s) => s.instanceMonitor);
@@ -407,9 +173,6 @@ const ObjectInstanceView = () => {
     const resources = instanceData.resources || {};
     const encapResources = instanceData.encap || {};
 
-    const [resourceMenuAnchor, setResourceMenuAnchor] = useState(null);
-    const [instanceMenuAnchor, setInstanceMenuAnchor] = useState(null);
-    const [currentResourceId, setCurrentResourceId] = useState(null);
     const [actionInProgress, setActionInProgress] = useState(false);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "success"});
 
@@ -427,17 +190,10 @@ const ObjectInstanceView = () => {
     const [purgeCheckboxes, setPurgeCheckboxes] = useState(DEFAULT_PURGE_CHECKBOXES);
 
     const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-    const [drawerWidth, setDrawerWidth] = useState(600);
-    const minDrawerWidth = 300;
-    const maxDrawerWidth = window.innerWidth * 0.8;
 
     const [initialLoading, setInitialLoading] = useState(true);
-    const [isResizing, setIsResizing] = useState(false);
 
     const isMounted = useRef(true);
-    const startXRef = useRef(0);
-    const startWidthRef = useRef(0);
-    const isDraggingRef = useRef(false);
 
     const instanceEventTypes = useMemo(() => [
         "InstanceStatusUpdated",
@@ -465,6 +221,14 @@ const ObjectInstanceView = () => {
             clearTimeout(timer);
         };
     }, [decodedObjectName, nodeName, instanceEventTypes]);
+
+    useEffect(() => {
+        if (!snackbar.open) return;
+        const timer = setTimeout(() => {
+            setSnackbar((prev) => ({...prev, open: false}));
+        }, FEEDBACK_DURATION_MS);
+        return () => clearTimeout(timer);
+    }, [snackbar]);
 
     const openSnackbar = useCallback((msg, sev = "success") => {
         if (isMounted.current) {
@@ -572,8 +336,6 @@ const ObjectInstanceView = () => {
                 setUnprovisionDialogOpen(false);
                 setPurgeDialogOpen(false);
                 setSimpleDialogOpen(false);
-                setInstanceMenuAnchor(null);
-                setResourceMenuAnchor(null);
             }
         }
     }, [nodeName, namespace, kind, name, pendingAction, openSnackbar]);
@@ -582,16 +344,9 @@ const ObjectInstanceView = () => {
         openActionDialog(action, {node: nodeName});
     }, [nodeName, openActionDialog]);
 
-    const handleResourceAction = useCallback((action, rid = null) => {
-        openActionDialog(action, {node: nodeName, rid: rid || currentResourceId});
-    }, [nodeName, currentResourceId, openActionDialog]);
-
-    const getColor = useCallback((status) => {
-        if (status === "up" || status === true) return green[500];
-        if (status === "down" || status === false) return red[500];
-        if (status === "warn") return orange[500];
-        return grey[500];
-    }, []);
+    const handleResourceAction = useCallback((action, rid) => {
+        openActionDialog(action, {node: nodeName, rid});
+    }, [nodeName, openActionDialog]);
 
     const getResourceStatusLetters = useCallback((rid, resourceData, instanceConfig, instanceMonitor, isEncap = false, encapData = {}) => {
         const letters = [".", ".", ".", ".", ".", ".", ".", "."];
@@ -709,74 +464,14 @@ const ObjectInstanceView = () => {
         return '';
     }, [resources, encapResources]);
 
-    const handleResourceActionClick = useCallback((rid, event) => {
-        setCurrentResourceId(rid);
-        setResourceMenuAnchor(event.currentTarget);
-    }, []);
-
-    const handleOpenLogs = useCallback(() => {
-        setLogsDrawerOpen(true);
-    }, []);
-
-    const handleCloseLogsDrawer = useCallback(() => {
-        setLogsDrawerOpen(false);
-    }, []);
-
-    const handleResizeStart = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        isDraggingRef.current = true;
-        setIsResizing(true);
-        startXRef.current = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-        startWidthRef.current = drawerWidth;
-        document.body.style.userSelect = 'none';
-        document.body.style.touchAction = 'none';
-        document.body.style.overflow = 'hidden';
-    }, [drawerWidth]);
-
-    const handleResizeMove = useCallback((e) => {
-        if (!isDraggingRef.current) return;
-        e.preventDefault();
-        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-        const deltaX = startXRef.current - clientX;
-        const newWidth = startWidthRef.current + deltaX;
-        if (newWidth >= minDrawerWidth && newWidth <= maxDrawerWidth) {
-            setDrawerWidth(newWidth);
-        }
-    }, [minDrawerWidth, maxDrawerWidth]);
-
-    const handleResizeEnd = useCallback(() => {
-        if (!isDraggingRef.current) return;
-        isDraggingRef.current = false;
-        setIsResizing(false);
-        document.body.style.userSelect = '';
-        document.body.style.touchAction = '';
-        document.body.style.overflow = '';
-    }, []);
-
-    useEffect(() => {
-        if (isResizing) {
-            const onMouseMove = (e) => handleResizeMove(e);
-            const onTouchMove = (e) => handleResizeMove(e);
-            const onMouseUp = () => handleResizeEnd();
-            const onTouchEnd = () => handleResizeEnd();
-            const onTouchCancel = () => handleResizeEnd();
-
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('touchmove', onTouchMove, {passive: false});
-            document.addEventListener('mouseup', onMouseUp);
-            document.addEventListener('touchend', onTouchEnd);
-            document.addEventListener('touchcancel', onTouchCancel);
-
-            return () => {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('touchmove', onTouchMove);
-                document.removeEventListener('mouseup', onMouseUp);
-                document.removeEventListener('touchend', onTouchEnd);
-                document.removeEventListener('touchcancel', onTouchCancel);
-            };
-        }
-    }, [isResizing, handleResizeMove, handleResizeEnd]);
+    /** The entries of the action menu of a resource, filtered by its type. */
+    const resourceMenuItems = useCallback((rid) =>
+        getFilteredResourceActions(getResourceType(rid)).map(({name, icon}) => ({
+            key: name,
+            label: capitalize(name),
+            icon: <span aria-hidden="true" className={ICON}>{icon}</span>,
+            onSelect: () => handleResourceAction(name, rid),
+        })), [getFilteredResourceActions, getResourceType, handleResourceAction]);
 
     const instanceStatus = instanceData.avail || 'unknown';
     const isFrozen = hasTimestamp(instanceData.frozen_at);
@@ -792,398 +487,253 @@ const ObjectInstanceView = () => {
         });
     }, [isFrozen]);
 
-    const appBarHeight = `calc(${theme.mixins.toolbar.minHeight || 64}px + env(safe-area-inset-top, 0px))`;
-
-    const getZoomLevel = useCallback(() => window.devicePixelRatio || 1, []);
-    const popperProps = useMemo(() => ({
-        placement: "bottom-end",
-        disablePortal: isSafari,
-        modifiers: [
-            {
-                name: "offset",
-                options: {offset: [0, 8 / getZoomLevel()]},
-            },
-            {name: "preventOverflow", options: {boundariesElement: "viewport"}},
-            {name: "flip", options: {enabled: true}},
-        ],
-        sx: {
-            zIndex: 10000,
-            "& .MuiPaper-root": {
-                minWidth: 200,
-                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-            },
-        },
-    }), [getZoomLevel]);
-
     if (initialLoading) {
         return (
-            <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>
-                <CircularProgress/>
-                <Typography sx={{ml: 2}}>Loading instance data...</Typography>
-            </Box>
+            <div className="flex justify-center p-4 py-8">
+                <Spinner label="Loading instance data..."/>
+            </div>
         );
     }
 
+    const resourceIds = Object.keys(resources);
+    const rowProps = {
+        instanceConfig: configData,
+        instanceMonitor: monitorData,
+        getResourceStatusLetters,
+        actionInProgress,
+    };
+
     return (
-        <Box sx={{p: 3, maxWidth: 1400, margin: '0 auto'}}>
-            <Box sx={{mb: 3}}>
-                <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
-                    <Box>
-                        <Typography variant="h5" sx={{mb: 0.5}}>
-                            {decodedObjectName}
-                        </Typography>
-                        <Typography variant="h6" color="primary">
-                            Node: {nodeName}
-                        </Typography>
-                    </Box>
+        <div className="p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="min-w-0">
+                    {/* The kind icon before the name, as in the object page header. */}
+                    <h1 className="flex items-center gap-2 text-title font-semibold break-all">
+                        <ObjectIcon kind={om3ObjectKind(parseObjectPath(decodedObjectName).kind)} className="h-5 w-5"/>
+                        {decodedObjectName}
+                    </h1>
+                    <p className="text-ink-muted">Node: {nodeName}</p>
+                </div>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <StatusBadge state={toState(instanceStatus)} label={instanceStatus}/>
+                    {monitorData.state && monitorData.state !== 'idle' && (
+                        <span className="text-ink-muted">{monitorData.state}</span>
+                    )}
+                    {isStopped && <StoppedMark stoppedAt={instanceData.stopped_at} label="Instance is stopped"/>}
+                    {isLagging && <RpoBreachedMark/>}
+                    {isInstanceNotProvisioned && <NotProvisionedMark label="Instance is not provisioned"/>}
+                    <FrozenMark frozen={!!isFrozen}/>
+                    <IconButton label={`View logs for instance ${decodedObjectName}`} onClick={() => setLogsDrawerOpen(true)}>
+                        <FileIcon className="h-4 w-4"/>
+                    </IconButton>
+                    <MenuButton
+                        label="Instance actions"
+                        align="end"
+                        disabled={actionInProgress}
+                        items={filteredInstanceActions.map(({name, icon}) => ({
+                            key: name,
+                            label: capitalize(name),
+                            icon: <span aria-hidden="true" className={ICON}>{icon}</span>,
+                            onSelect: () => handleInstanceAction(name),
+                        }))}
+                    />
+                </div>
+            </div>
 
-                    <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                        {isInstanceNotProvisioned && (
-                            <Tooltip title="Not Provisioned">
-                                <PriorityHighIcon sx={{color: red[500]}}/>
-                            </Tooltip>
-                        )}
+            {actionInProgress && <Spinner label="Action in progress"/>}
 
-                        {monitorData.state && monitorData.state !== 'idle' && (
-                            <Typography variant="body2" color="text.secondary">
-                                {monitorData.state}
-                            </Typography>
-                        )}
-
-                        <Tooltip title={instanceStatus}>
-                            <FiberManualRecordIcon sx={{color: getColor(instanceStatus), fontSize: "1.5rem"}}/>
-                        </Tooltip>
-
-                        {isStopped && (
-                            <Tooltip title={`stopped at ${new Date(instanceData.stopped_at).toLocaleString()}`}>
-                                <StopIcon
-                                    sx={{color: grey[600], fontSize: '1.2rem', cursor: 'help'}}
-                                    aria-label="Instance is stopped"
-                                />
-                            </Tooltip>
-                        )}
-
-                        {isLagging && (
-                            <Tooltip title="RPO breached">
-                                <SyncProblemIcon
-                                    sx={{color: orange[500], fontSize: '1.2rem'}}
-                                    aria-label="RPO breached"
-                                />
-                            </Tooltip>
-                        )}
-
-                        {isFrozen && (
-                            <Tooltip title="frozen">
-                                <AcUnitIcon sx={{color: blue[300]}}/>
-                            </Tooltip>
-                        )}
-
-                        <IconButton
-                            onClick={(e) => setInstanceMenuAnchor(e.currentTarget)}
-                            disabled={actionInProgress}
-                        >
-                            <MoreVertIcon/>
+            {snackbar.open && (
+                <Alert
+                    tone={TONES[snackbar.severity] ?? "info"}
+                    action={
+                        <IconButton label="Dismiss" bare onClick={closeSnackbar}>
+                            <CloseIcon className="h-4 w-4"/>
                         </IconButton>
+                    }
+                >
+                    {snackbar.message}
+                </Alert>
+            )}
 
-                        <Tooltip title="View instance logs">
-                            <IconButton
-                                onClick={handleOpenLogs}
-                                color="primary"
-                                aria-label={`View logs for instance ${decodedObjectName}`}
-                            >
-                                <ArticleIcon/>
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                </Box>
-            </Box>
+            <h2 className="font-semibold">Resources ({resourceIds.length})</h2>
 
-            {actionInProgress && <LinearProgress sx={{mb: 2}}/>}
-
-            <Box sx={{mb: 3}}>
-                <Typography variant="h6" sx={{mb: 2}}>
-                    Resources ({Object.keys(resources).length})
-                </Typography>
-
-                {Object.keys(resources).length === 0 ? (
-                    <Box sx={{p: 4, textAlign: 'center'}}>
-                        <Typography color="textSecondary">
-                            No resources found on this instance.
-                        </Typography>
-                    </Box>
-                ) : (
-                    <Box sx={{display: "flex", flexDirection: "column", gap: 1}}>
-                        {Object.keys(resources).map((rid) => {
-                            const res = resources[rid] || {};
-                            const isContainer = res.type?.toLowerCase().includes("container") || false;
-                            const encapRes = isContainer && encapResources[rid]?.resources ? encapResources[rid].resources : {};
-                            const encapResIds = Object.keys(encapRes);
-                            return (
-                                <Box key={rid}>
+            {/* Wider than a phone: the table scrolls sideways there rather than wrap its 30px rows. */}
+            <Table aria-label="Resources" tableClassName="min-w-[40rem]">
+                <thead>
+                <HeaderRow>
+                    <HeaderCell>Resource</HeaderCell>
+                    <HeaderCell>Status</HeaderCell>
+                    <HeaderCell>Flags</HeaderCell>
+                    <HeaderCell>Type</HeaderCell>
+                    <HeaderCell>Label</HeaderCell>
+                    <HeaderCell align="center"><span className="sr-only">Actions</span></HeaderCell>
+                </HeaderRow>
+                </thead>
+                <tbody>
+                {resourceIds.length === 0 ? (
+                    <EmptyRow colSpan={COLUMNS}>No resources found on this instance.</EmptyRow>
+                ) : resourceIds.map((rid) => {
+                    const res = resources[rid] || {};
+                    const isContainer = res.type?.toLowerCase().includes("container") || false;
+                    const encapRes = isContainer && encapResources[rid]?.resources ? encapResources[rid].resources : {};
+                    const encapResIds = Object.keys(encapRes);
+                    return (
+                        <React.Fragment key={rid}>
+                            <ResourceRow
+                                rid={rid}
+                                resource={res}
+                                isEncap={false}
+                                encapData={encapResources}
+                                menuItems={resourceMenuItems(rid)}
+                                {...rowProps}
+                            />
+                            {isContainer && !encapResources[rid] && (
+                                <NoteRow isEncap>No encapsulated data available for {rid}.</NoteRow>
+                            )}
+                            {isContainer && encapResources[rid] && !encapResources[rid].resources && (
+                                <NoteRow isEncap>
+                                    Encapsulated data found for {rid}, but no resources defined.
+                                </NoteRow>
+                            )}
+                            {isContainer && encapResIds.length > 0 && res.status !== "down" &&
+                                encapResIds.map((encapRid) => (
                                     <ResourceRow
-                                        rid={rid}
-                                        resource={res}
-                                        instanceConfig={configData}
-                                        instanceMonitor={monitorData}
-                                        isEncap={false}
-                                        encapData={encapResources}
-                                        getColor={getColor}
-                                        getResourceStatusLetters={getResourceStatusLetters}
-                                        onActionClick={handleResourceActionClick}
-                                        actionInProgress={actionInProgress}
+                                        key={encapRid}
+                                        rid={encapRid}
+                                        resource={encapRes[encapRid] || {}}
+                                        isEncap={true}
+                                        encapData={encapResources[rid] || {}}
+                                        menuItems={resourceMenuItems(encapRid)}
+                                        {...rowProps}
                                     />
-                                    {isContainer && !encapResources[rid] && (
-                                        <Box sx={{ml: 4}}>
-                                            <Typography color="textSecondary">
-                                                No encapsulated data available for {rid}.
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                    {isContainer && encapResources[rid] && !encapResources[rid].resources && (
-                                        <Box sx={{ml: 4}}>
-                                            <Typography color="textSecondary">
-                                                Encapsulated data found for {rid}, but no resources defined.
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                    {isContainer && encapResIds.length > 0 && res.status !== "down" && (
-                                        <Box sx={{ml: 4}}>
-                                            {encapResIds.map((encapRid) => (
-                                                <ResourceRow
-                                                    key={encapRid}
-                                                    rid={encapRid}
-                                                    resource={encapRes[encapRid] || {}}
-                                                    instanceConfig={configData}
-                                                    instanceMonitor={monitorData}
-                                                    isEncap={true}
-                                                    encapData={encapResources[rid] || {}}
-                                                    getColor={getColor}
-                                                    getResourceStatusLetters={getResourceStatusLetters}
-                                                    onActionClick={handleResourceActionClick}
-                                                    actionInProgress={actionInProgress}
-                                                />
-                                            ))}
-                                        </Box>
-                                    )}
-                                    {isContainer && encapResIds.length === 0 && encapResources[rid]?.resources !== undefined && (
-                                        <Box sx={{ml: 4}}>
-                                            <Typography color="textSecondary">
-                                                No encapsulated resources available for {rid}.
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                </Box>
-                            );
+                                ))}
+                            {isContainer && encapResIds.length === 0 && encapResources[rid]?.resources !== undefined && (
+                                <NoteRow isEncap>No encapsulated resources available for {rid}.</NoteRow>
+                            )}
+                        </React.Fragment>
+                    );
+                })}
+                </tbody>
+            </Table>
+
+            <Dialog
+                open={confirmDialogOpen}
+                title="Confirm Freeze"
+                onClose={() => setConfirmDialogOpen(false)}
+                size="md"
+                footer={
+                    <>
+                        <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleDialogConfirm} disabled={!checkboxes.failover}>
+                            Confirm
+                        </Button>
+                    </>
+                }
+            >
+                <Checkbox
+                    checked={checkboxes.failover}
+                    onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
+                    label="I understand that the selected service orchestration will be paused."
+                />
+            </Dialog>
+
+            <Dialog
+                open={stopDialogOpen}
+                title="Confirm Stop"
+                onClose={() => setStopDialogOpen(false)}
+                size="md"
+                footer={
+                    <>
+                        <Button onClick={() => setStopDialogOpen(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleDialogConfirm} disabled={!stopCheckbox}>
+                            Stop
+                        </Button>
+                    </>
+                }
+            >
+                <Checkbox
+                    checked={stopCheckbox}
+                    onChange={(e) => setStopCheckbox(e.target.checked)}
+                    label="I understand that this may interrupt services."
+                />
+            </Dialog>
+
+            <Dialog
+                open={unprovisionDialogOpen}
+                title="Confirm Unprovision"
+                onClose={() => setUnprovisionDialogOpen(false)}
+                size="md"
+                footer={
+                    <>
+                        <Button onClick={() => setUnprovisionDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleDialogConfirm}
+                            disabled={!unprovisionCheckboxes.dataLoss || !unprovisionCheckboxes.serviceInterruption}
+                        >
+                            Confirm
+                        </Button>
+                    </>
+                }
+            >
+                <div className="flex flex-col gap-2">
+                    <Checkbox
+                        checked={unprovisionCheckboxes.dataLoss}
+                        onChange={(e) => setUnprovisionCheckboxes({
+                            ...unprovisionCheckboxes,
+                            dataLoss: e.target.checked
                         })}
-                    </Box>
-                )}
-            </Box>
-
-            <Popper open={Boolean(instanceMenuAnchor)} anchorEl={instanceMenuAnchor} {...popperProps}>
-                <ClickAwayListener onClickAway={() => setInstanceMenuAnchor(null)}>
-                    <Paper elevation={3} role="menu">
-                        {filteredInstanceActions.map(({name, icon, color}) => (
-                            <MenuItem
-                                key={name}
-                                onClick={() => {
-                                    handleInstanceAction(name);
-                                    setInstanceMenuAnchor(null);
-                                }}
-                                disabled={actionInProgress}
-                                sx={{
-                                    color: color === "red" ? "error.main" : "inherit",
-                                    '&.Mui-disabled': {opacity: 0.5},
-                                }}
-                            >
-                                <ListItemIcon
-                                    sx={{
-                                        minWidth: 40,
-                                        color: color === "red" ? "error.main" : "inherit",
-                                    }}
-                                >
-                                    {icon}
-                                </ListItemIcon>
-                                <ListItemText>
-                                    {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </ListItemText>
-                            </MenuItem>
-                        ))}
-                    </Paper>
-                </ClickAwayListener>
-            </Popper>
-
-            <Popper open={Boolean(resourceMenuAnchor)} anchorEl={resourceMenuAnchor} {...popperProps}>
-                <ClickAwayListener onClickAway={() => setResourceMenuAnchor(null)}>
-                    <Paper elevation={3} role="menu">
-                        {currentResourceId && (() => {
-                            const resourceType = getResourceType(currentResourceId);
-                            const filteredActions = getFilteredResourceActions(resourceType);
-                            return filteredActions.map(({name, icon, color}) => (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => {
-                                        handleResourceAction(name, currentResourceId);
-                                        setResourceMenuAnchor(null);
-                                    }}
-                                    disabled={actionInProgress}
-                                    sx={{
-                                        color: color === "red" ? "error.main" : "inherit",
-                                        '&.Mui-disabled': {opacity: 0.5},
-                                    }}
-                                >
-                                    <ListItemIcon
-                                        sx={{
-                                            minWidth: 40,
-                                            color: color === "red" ? "error.main" : "inherit",
-                                        }}
-                                    >
-                                        {icon}
-                                    </ListItemIcon>
-                                    <ListItemText>
-                                        {name.charAt(0).toUpperCase() + name.slice(1)}
-                                    </ListItemText>
-                                </MenuItem>
-                            ));
-                        })()}
-                    </Paper>
-                </ClickAwayListener>
-            </Popper>
-
-            <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Confirm Freeze</DialogTitle>
-                <DialogContent>
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={checkboxes.failover}
-                                onChange={(e) => setCheckboxes({...checkboxes, failover: e.target.checked})}
-                            />
-                        }
-                        label="I understand that the selected service orchestration will be paused."
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={handleDialogConfirm}
-                        variant="contained"
-                        disabled={!checkboxes.failover}
-                    >
-                        Confirm
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={stopDialogOpen} onClose={() => setStopDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Confirm Stop</DialogTitle>
-                <DialogContent>
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={stopCheckbox}
-                                onChange={(e) => setStopCheckbox(e.target.checked)}
-                            />
-                        }
-                        label="I understand that this may interrupt services."
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setStopDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={handleDialogConfirm}
-                        variant="contained"
-                        disabled={!stopCheckbox}
-                    >
-                        Stop
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={unprovisionDialogOpen} onClose={() => setUnprovisionDialogOpen(false)} maxWidth="sm"
-                    fullWidth>
-                <DialogTitle>Confirm Unprovision</DialogTitle>
-                <DialogContent>
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={unprovisionCheckboxes.dataLoss}
-                                onChange={(e) => setUnprovisionCheckboxes({
-                                    ...unprovisionCheckboxes,
-                                    dataLoss: e.target.checked
-                                })}
-                            />
-                        }
                         label="I understand data will be lost."
                     />
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={unprovisionCheckboxes.serviceInterruption}
-                                onChange={(e) => setUnprovisionCheckboxes({
-                                    ...unprovisionCheckboxes,
-                                    serviceInterruption: e.target.checked
-                                })}
-                            />
-                        }
+                    <Checkbox
+                        checked={unprovisionCheckboxes.serviceInterruption}
+                        onChange={(e) => setUnprovisionCheckboxes({
+                            ...unprovisionCheckboxes,
+                            serviceInterruption: e.target.checked
+                        })}
                         label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
                     />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setUnprovisionDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={handleDialogConfirm}
-                        variant="contained"
-                        disabled={!unprovisionCheckboxes.dataLoss || !unprovisionCheckboxes.serviceInterruption}
-                    >
-                        Confirm
-                    </Button>
-                </DialogActions>
+                </div>
             </Dialog>
 
-            <Dialog open={purgeDialogOpen} onClose={() => setPurgeDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Confirm Purge</DialogTitle>
-                <DialogContent>
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={purgeCheckboxes.dataLoss}
-                                onChange={(e) => setPurgeCheckboxes({...purgeCheckboxes, dataLoss: e.target.checked})}
-                            />
-                        }
+            <Dialog
+                open={purgeDialogOpen}
+                title="Confirm Purge"
+                onClose={() => setPurgeDialogOpen(false)}
+                size="md"
+                footer={
+                    <>
+                        <Button onClick={() => setPurgeDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleDialogConfirm}
+                            disabled={!purgeCheckboxes.dataLoss || !purgeCheckboxes.configLoss || !purgeCheckboxes.serviceInterruption}
+                        >
+                            Confirm
+                        </Button>
+                    </>
+                }
+            >
+                <div className="flex flex-col gap-2">
+                    <Checkbox
+                        checked={purgeCheckboxes.dataLoss}
+                        onChange={(e) => setPurgeCheckboxes({...purgeCheckboxes, dataLoss: e.target.checked})}
                         label="I understand data will be lost."
                     />
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={purgeCheckboxes.configLoss}
-                                onChange={(e) => setPurgeCheckboxes({...purgeCheckboxes, configLoss: e.target.checked})}
-                            />
-                        }
+                    <Checkbox
+                        checked={purgeCheckboxes.configLoss}
+                        onChange={(e) => setPurgeCheckboxes({...purgeCheckboxes, configLoss: e.target.checked})}
                         label="I understand the configuration will be lost."
                     />
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={purgeCheckboxes.serviceInterruption}
-                                onChange={(e) => setPurgeCheckboxes({
-                                    ...purgeCheckboxes,
-                                    serviceInterruption: e.target.checked
-                                })}
-                            />
-                        }
+                    <Checkbox
+                        checked={purgeCheckboxes.serviceInterruption}
+                        onChange={(e) => setPurgeCheckboxes({
+                            ...purgeCheckboxes,
+                            serviceInterruption: e.target.checked
+                        })}
                         label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
                     />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setPurgeDialogOpen(false)}>Cancel</Button>
-                    <Button
-                        onClick={handleDialogConfirm}
-                        variant="contained"
-                        disabled={!purgeCheckboxes.dataLoss || !purgeCheckboxes.configLoss || !purgeCheckboxes.serviceInterruption}
-                    >
-                        Confirm
-                    </Button>
-                </DialogActions>
+                </div>
             </Dialog>
 
             <ConsoleTerminal
@@ -1192,23 +742,22 @@ const ObjectInstanceView = () => {
                 onClose={() => setConsoleTarget(null)}
             />
 
-            <Dialog open={simpleDialogOpen} onClose={() => setSimpleDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>
-                    Confirm {pendingAction?.action ? pendingAction.action.charAt(0).toUpperCase() + pendingAction.action.slice(1) : 'Action'}
-                </DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        Are you sure you want to{' '}
-                        <strong>{pendingAction?.action || 'perform this action'}</strong>{' '}
-                        {pendingAction?.rid ? `on resource ${pendingAction.rid}` : 'on this instance'}?
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSimpleDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleDialogConfirm} variant="contained">
-                        Confirm
-                    </Button>
-                </DialogActions>
+            <Dialog
+                open={simpleDialogOpen}
+                title={`Confirm ${pendingAction?.action ? capitalize(pendingAction.action) : 'Action'}`}
+                onClose={() => setSimpleDialogOpen(false)}
+                footer={
+                    <>
+                        <Button onClick={() => setSimpleDialogOpen(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleDialogConfirm}>Confirm</Button>
+                    </>
+                }
+            >
+                <p>
+                    Are you sure you want to{' '}
+                    <strong>{pendingAction?.action || 'perform this action'}</strong>{' '}
+                    {pendingAction?.rid ? `on resource ${pendingAction.rid}` : 'on this instance'}?
+                </p>
             </Dialog>
 
             <EventLogger
@@ -1219,97 +768,27 @@ const ObjectInstanceView = () => {
                 buttonLabel="Instance Events"
             />
 
-            {logsDrawerOpen && (
-                <Box
-                    sx={{
-                        position: "fixed",
-                        top: appBarHeight,
-                        right: 0,
-                        width: `${drawerWidth}px`,
-                        maxWidth: "80vw",
-                        height: `calc(100% - ${appBarHeight})`,
-                        backgroundColor: theme.palette.background.paper,
-                        borderLeft: `1px solid ${theme.palette.divider}`,
-                        zIndex: 1200,
-                        display: "flex",
-                        flexDirection: "column",
-                        overflow: "hidden",
-                        boxShadow: theme.shadows[3],
-                        transition: theme.transitions.create("width", {
-                            easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.enteringScreen,
-                        }),
-                    }}
-                >
-                    <Box
-                        onMouseDown={handleResizeStart}
-                        onTouchStart={handleResizeStart}
-                        sx={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: 24,
-                            height: "100%",
-                            cursor: "ew-resize",
-                            bgcolor: "transparent",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            zIndex: 10,
-                            touchAction: "none",
-                            userSelect: "none",
-                            WebkitUserSelect: "none",
-                            "&::after": {
-                                content: '""',
-                                position: "absolute",
-                                top: 0,
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                                width: 6,
-                                height: "100%",
-                                bgcolor: theme.palette.grey[300],
-                                borderRadius: 3,
-                            },
-                            "&:hover::after": {
-                                bgcolor: theme.palette.primary.light,
-                            },
-                        }}
-                        aria-label="Resize drawer"
-                    />
-
-                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, pb: 1}}>
-                        <Typography variant="h6" noWrap>
-                            Instance Logs - {nodeName}/{decodedObjectName}
-                        </Typography>
-                        <IconButton onClick={handleCloseLogsDrawer} size="large">
-                            <CloseIcon/>
-                        </IconButton>
-                    </Box>
-
-                    <Box sx={{flexGrow: 1, overflow: "hidden", position: "relative"}}>
-                        <LogsViewer
-                            nodename={nodeName}
-                            type="instance"
-                            namespace={namespace}
-                            kind={kind}
-                            instanceName={name}
-                            height="100%"
-                        />
-                    </Box>
-                </Box>
-            )}
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={5000}
-                onClose={closeSnackbar}
-                anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+            <SlideOver
+                open={logsDrawerOpen}
+                title={`Instance Logs - ${nodeName}/${decodedObjectName}`}
+                onClose={() => setLogsDrawerOpen(false)}
+                closeLabel="Close instance logs"
+                size="wide"
+                resizeLabel="Resize drawer"
+                closeOnOutsideClick={false}
             >
-                <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{width: '100%'}}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-        </Box>
+                {logsDrawerOpen && (
+                    <LogsViewer
+                        nodename={nodeName}
+                        type="instance"
+                        namespace={namespace}
+                        kind={kind}
+                        instanceName={name}
+                        height="100%"
+                    />
+                )}
+            </SlideOver>
+        </div>
     );
 };
 

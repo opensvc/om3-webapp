@@ -1,4 +1,12 @@
-import React, {createContext, useContext, useState, useEffect} from 'react';
+import React, {createContext, useContext, useState, useEffect, useRef, useCallback} from 'react';
+import {
+    applyPalette,
+    applyTheme,
+    cachedPalette,
+    cachedTheme,
+    isDarkTheme,
+    watchSystemTheme,
+} from '../ui/theme';
 
 const DarkModeContext = createContext();
 
@@ -10,30 +18,50 @@ export const useDarkMode = () => {
     return context;
 };
 
+/**
+ * Appearance state of the app: the oc3 theme (system, light or dark) and palette
+ * (standard or high contrast), applied as classes on <html> by src/ui/theme.
+ * `isDarkMode` and `toggleDarkMode` keep the API of the former boolean dark mode.
+ */
 export const DarkModeProvider = ({children}) => {
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        const saved = localStorage.getItem('darkMode');
-        return saved ? JSON.parse(saved) : false;
-    });
+    const [theme, setThemeState] = useState(cachedTheme);
+    const [palette, setPaletteState] = useState(cachedPalette);
+    const [isDarkMode, setIsDarkMode] = useState(() => isDarkTheme(theme));
+    const themeRef = useRef(theme);
 
     useEffect(() => {
-        localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+        themeRef.current = theme;
+        applyTheme(theme);
+        setIsDarkMode(isDarkTheme(theme));
+    }, [theme]);
 
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-            document.body.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            document.body.classList.remove('dark');
-        }
-    }, [isDarkMode]);
+    useEffect(() => {
+        applyPalette(palette);
+    }, [palette]);
 
-    const toggleDarkMode = () => {
-        setIsDarkMode(prev => !prev);
-    };
+    useEffect(() => watchSystemTheme(
+        () => themeRef.current,
+        () => setIsDarkMode(isDarkTheme('system')),
+    ), []);
+
+    const setTheme = useCallback((next) => {
+        // Applied right away so that styles computed during the next render,
+        // such as the MUI theme read from the tokens, already see the new mode.
+        applyTheme(next);
+        setThemeState(next);
+    }, []);
+
+    const setPalette = useCallback((next) => {
+        applyPalette(next);
+        setPaletteState(next);
+    }, []);
+
+    const toggleDarkMode = useCallback(() => {
+        setTheme(isDarkMode ? 'light' : 'dark');
+    }, [isDarkMode, setTheme]);
 
     return (
-        <DarkModeContext.Provider value={{isDarkMode, toggleDarkMode}}>
+        <DarkModeContext.Provider value={{isDarkMode, toggleDarkMode, theme, setTheme, palette, setPalette}}>
             {children}
         </DarkModeContext.Provider>
     );

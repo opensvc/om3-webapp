@@ -39,16 +39,19 @@ describe('Authenticating Component', () => {
         });
     });
 
-    test('renders dialog with translated title, content, and button', () => {
+    test('renders panel with translated title, content, spinner and button', () => {
         render(<Authenticating/>);
 
-        // Check that the dialog is rendered
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toBeInTheDocument();
-        expect(dialog).toHaveAttribute('aria-labelledby', 'dialog-title');
+        // Check that the panel is rendered and named by its title
+        const panel = screen.getByRole('region', {name: 'Authentication'});
+        expect(panel).toBeInTheDocument();
+        expect(panel).toHaveAttribute('aria-labelledby', 'dialog-title');
 
         // Check the translated title
-        expect(screen.getByText('Authentication')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Authentication'})).toBeInTheDocument();
+
+        // Check the spinner
+        expect(screen.getByRole('status')).toHaveTextContent('Loading...');
         expect(mockT).toHaveBeenCalledWith('Authentication');
 
         // Check the translated content
@@ -60,11 +63,11 @@ describe('Authenticating Component', () => {
         expect(mockT).toHaveBeenCalledWith('Reload');
     });
 
-    test('dialog is always open', () => {
+    test('panel is always shown', () => {
         render(<Authenticating/>);
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toBeInTheDocument();
-        expect(dialog).toBeVisible();
+        const panel = screen.getByRole('region', {name: 'Authentication'});
+        expect(panel).toBeInTheDocument();
+        expect(panel).toBeVisible();
     });
 
     test('clicking reload button calls window.location.reload', () => {

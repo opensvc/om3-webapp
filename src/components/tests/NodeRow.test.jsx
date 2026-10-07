@@ -1,35 +1,32 @@
 import React from 'react';
-import {render, screen, fireEvent, within} from '@testing-library/react';
+import {render as rtlRender, screen, fireEvent, within} from '@testing-library/react';
 import NodeRow from '../NodeRow';
+
+// A row lives in a table body.
+const wrapper = ({children}) => <table><tbody>{children}</tbody></table>;
+const render = (ui, options) => rtlRender(ui, {wrapper, ...options});
 import '@testing-library/jest-dom';
 
-jest.mock('@mui/icons-material', () => {
-    const Wifi = (props) => <span {...props} aria-label="Daemon node indicator"/>;
-    const AcUnit = (props) => <span {...props} aria-label="Frozen indicator"/>;
-    const MoreVertIcon = (props) => <button {...props} aria-label="More actions icon"/>;
-    const ArticleIcon = (props) => <button {...props} aria-label="Article icon"/>;
-    const KeyboardArrowUpIcon = (props) => <span {...props} aria-label="Arrow up"/>;
-    const KeyboardArrowDownIcon = (props) => <span {...props} aria-label="Arrow down"/>;
-
-    return {Wifi, AcUnit, MoreVertIcon, ArticleIcon, KeyboardArrowUpIcon, KeyboardArrowDownIcon};
-});
-
 // Mock NODE_ACTIONS
-jest.mock('../../constants/actions', () => ({
+vi.mock('../../constants/actions', async () => {
+    const {createElement} = await import('react');
+    return {
     NODE_ACTIONS: [
-        {name: 'freeze', icon: jest.fn(() => <span aria-label="Freeze icon"/>)},
-        {name: 'unfreeze', icon: jest.fn(() => <span aria-label="Unfreeze icon"/>)},
-        {name: 'restart daemon', icon: jest.fn(() => <span aria-label="Restart daemon icon"/>)},
-        {name: 'abort', icon: jest.fn(() => <span aria-label="Abort icon"/>)},
-        {name: 'clear', icon: jest.fn(() => <span aria-label="Clear icon"/>)},
-        {name: 'drain', icon: jest.fn(() => <span aria-label="Drain icon"/>)},
-        {name: 'push/asset', icon: jest.fn(() => <span aria-label="Asset icon"/>)},
-        {name: 'push/disk', icon: jest.fn(() => <span aria-label="Disk icon"/>)},
-        {name: 'push/pkg', icon: jest.fn(() => <span aria-label="Pkg icon"/>)},
-        {name: 'scan/capabilities', icon: jest.fn(() => <span aria-label="Capabilities icon"/>)},
-        {name: 'sysreport', icon: jest.fn(() => <span aria-label="Sysreport icon"/>)},
+        {name: 'freeze', icon: createElement('span', {'aria-label': 'Freeze icon'})},
+        {name: 'unfreeze', icon: createElement('span', {'aria-label': 'Unfreeze icon'})},
+        {name: 'restart daemon', icon: createElement('span', {'aria-label': 'Restart daemon icon'})},
+        {name: 'abort', icon: createElement('span', {'aria-label': 'Abort icon'})},
+        {name: 'clear', icon: createElement('span', {'aria-label': 'Clear icon'})},
+        {name: 'drain', icon: createElement('span', {'aria-label': 'Drain icon'})},
+        {name: 'push/asset', icon: createElement('span', {'aria-label': 'Asset icon'})},
+        {name: 'push/disk', icon: createElement('span', {'aria-label': 'Disk icon'})},
+        {name: 'push/pkg', icon: createElement('span', {'aria-label': 'Pkg icon'})},
+        {name: 'scan/capabilities', icon: createElement('span', {'aria-label': 'Capabilities icon'})},
+        {name: 'sysreport', icon: createElement('span', {'aria-label': 'Sysreport icon'})},
+        {name: 'shutdown', icon: createElement('span', {'aria-label': 'Shutdown icon'}), color: 'red'},
     ],
-}));
+    };
+});
 
 describe('NodeRow Component', () => {
     const defaultProps = {
@@ -40,10 +37,7 @@ describe('NodeRow Component', () => {
         isSelected: false,
         daemonNodename: 'node2',
         onSelect: jest.fn(),
-        onMenuOpen: jest.fn(),
-        onMenuClose: jest.fn(),
         onAction: jest.fn(),
-        anchorEl: null,
         onOpenLogs: jest.fn(),
     };
 
@@ -88,33 +82,53 @@ describe('NodeRow Component', () => {
 
     test('renders monitor state when not idle', () => {
         render(<NodeRow {...defaultProps} monitor={{state: 'running'}}/>);
-        expect(screen.getByText('running')).toBeInTheDocument();
+        const cells = screen.getAllByRole('cell');
+        expect(within(cells[2]).getByText('running', {ignore: '.sr-only'})).toBeInTheDocument();
+        const mark = within(cells[2]).getByTitle('running');
+        expect(mark).toHaveAttribute('data-state', 'warn');
+    });
 
+    test('shows idle as a mark only', () => {
         render(<NodeRow {...defaultProps} monitor={{state: 'idle'}}/>);
-        expect(screen.queryByText('idle')).not.toBeInTheDocument();
+        const cells = screen.getAllByRole('cell');
+        expect(within(cells[2]).queryByText('idle', {ignore: '.sr-only'})).not.toBeInTheDocument();
+        expect(within(cells[2]).getByTitle('idle')).toHaveAttribute('data-state', 'up');
     });
 
-    test('renders frozen icon when frozen_at is set', () => {
+    test('marks a failed monitor state as down', () => {
+        render(<NodeRow {...defaultProps} monitor={{state: 'drain failed'}}/>);
+        expect(screen.getByTitle('drain failed')).toHaveAttribute('data-state', 'down');
+    });
+
+    test('marks a missing monitor as unknown', () => {
+        render(<NodeRow {...defaultProps} monitor={undefined}/>);
+        expect(screen.getByTitle('unknown')).toHaveAttribute('data-state', 'unknown');
+    });
+
+    test('renders frozen mark when frozen_at is set', () => {
         render(<NodeRow {...defaultProps} status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}/>);
-        expect(screen.getByLabelText('Frozen indicator')).toBeInTheDocument();
+        const cells = screen.getAllByRole('cell');
+        expect(within(cells[2]).getByTitle('frozen')).toHaveTextContent('frozen');
     });
 
-    test('does not render frozen icon when not frozen or invalid date', () => {
-        render(<NodeRow {...defaultProps} status={{frozen_at: null}}/>);
-        expect(screen.queryByLabelText('Frozen indicator')).not.toBeInTheDocument();
+    test('does not render frozen mark when not frozen or invalid date', () => {
+        const {unmount} = render(<NodeRow {...defaultProps} status={{frozen_at: null}}/>);
+        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
+        unmount();
 
         render(<NodeRow {...defaultProps} status={{frozen_at: '0001-01-01T00:00:00Z'}}/>);
-        expect(screen.queryByLabelText('Frozen indicator')).not.toBeInTheDocument();
+        expect(screen.queryByTitle('frozen')).not.toBeInTheDocument();
     });
 
-    test('renders wifi icon when nodename matches daemonNodename', () => {
+    test('renders daemon node indicator when nodename matches daemonNodename', () => {
         render(<NodeRow {...defaultProps} daemonNodename="node1"/>);
-        expect(screen.getByLabelText('Daemon node indicator')).toBeInTheDocument();
+        const indicator = screen.getByRole('img', {name: 'Connected to this node'});
+        expect(indicator).toHaveAttribute('title', 'Connected to this node');
     });
 
-    test('does not render wifi icon when nodename does not match daemonNodename', () => {
+    test('does not render daemon node indicator when nodename does not match daemonNodename', () => {
         render(<NodeRow {...defaultProps} daemonNodename="node2"/>);
-        expect(screen.queryByLabelText('Daemon node indicator')).not.toBeInTheDocument();
+        expect(screen.queryByRole('img', {name: 'Connected to this node'})).not.toBeInTheDocument();
     });
 
     test('renders stats correctly', () => {
@@ -134,51 +148,63 @@ describe('NodeRow Component', () => {
         expect(cells[5]).toHaveTextContent('N/A');
         expect(cells[6]).toHaveTextContent('N/A');
         expect(cells[7]).toHaveTextContent('N/A');
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
 
-    test('renders LinearProgress with correct value and color for load_15m', () => {
+    test('renders the load bar beside its value, with value and state', () => {
         render(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
-        const progress = within(screen.getByText('5').closest('td')).getByRole('progressbar');
+        const cell = screen.getByText('5').closest('td');
+        const progress = within(cell).getByRole('progressbar', {name: 'Load (15m)'});
         expect(progress).toHaveAttribute('aria-valuenow', '100');
-        expect(progress).toHaveClass('MuiLinearProgress-colorError');
+        expect(progress).toHaveAttribute('data-state', 'down');
+        expect(progress.firstChild).toHaveClass('bg-state-down');
+        expect(progress.firstChild).toHaveStyle({width: '100%'});
     });
 
-    test('renders LinearProgress with correct value and color for mem_avail', () => {
+    test('renders the mem bar beside its value, with value and state', () => {
         render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
-        const progress = within(screen.getByText('10%').closest('td')).getByRole('progressbar');
+        const cell = screen.getByText('10%').closest('td');
+        const progress = within(cell).getByRole('progressbar', {name: 'Mem Avail'});
         expect(progress).toHaveAttribute('aria-valuenow', '10');
-        expect(progress).toHaveClass('MuiLinearProgress-colorError');
+        expect(progress).toHaveAttribute('data-state', 'down');
+        expect(progress.firstChild).toHaveStyle({width: '10%'});
     });
 
-    test('opens menu when menu button is clicked', () => {
+    test('opens the row menu when its button is clicked', () => {
         render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        const menuButton = screen.getByRole('button', {name: 'More actions for node node1'});
+        expect(menuButton).toHaveAttribute('aria-haspopup', 'menu');
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
         fireEvent.click(menuButton);
-        expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
+        expect(screen.getByRole('menu', {name: 'More actions for node node1'})).toBeInTheDocument();
+        expect(menuButton).toHaveAttribute('aria-expanded', 'true');
     });
 
-    test('calls onAction and onMenuClose when menu item is clicked', async () => {
-        const anchorEl = document.createElement('div');
-        render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-        const menu = await screen.findByRole('menu', {}, {timeout: 3000});
-        const item = within(menu).getByRole('menuitem', {name: /Freeze action/i});
-        fireEvent.click(item);
+    test('calls onAction and closes the menu when a menu item is clicked', () => {
+        render(<NodeRow {...defaultProps} />);
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        const menu = screen.getByRole('menu');
+        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Freeze'}));
         expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'freeze');
-        expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
 
-    test('calculateMenuPosition updates menuPosition when menuAnchorRef is valid', async () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
-            configurable: true,
-        });
+    test('passes the action name, not its label', () => {
         render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        expect(menuButton).toBeInTheDocument();
-        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-        fireEvent.click(menuButton);
-        jest.runAllTimers();
-        expect(defaultProps.onMenuOpen).toHaveBeenCalledWith(expect.any(Object), 'node1');
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Restart Daemon'}));
+        expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'restart daemon');
+    });
+
+    test('tints the icon of a destructive action', () => {
+        render(<NodeRow {...defaultProps} />);
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        const shutdownIcon = screen.getByLabelText('Shutdown icon').parentElement;
+        const freezeIcon = screen.getByLabelText('Freeze icon').parentElement;
+        expect(shutdownIcon).toHaveClass('text-state-down');
+        expect(freezeIcon).toHaveClass('text-ink-muted');
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Shutdown'}));
+        expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'shutdown');
     });
 
     test('checkbox click stops propagation', () => {
@@ -190,49 +216,50 @@ describe('NodeRow Component', () => {
         spy.mockRestore();
     });
 
-    test('menu item click stops propagation', async () => {
-        const anchorEl = document.createElement('div');
-        render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-        const menu = await screen.findByRole('menu', {}, {timeout: 3000});
-        const menuItem = within(menu).getByRole('menuitem', {name: /Freeze action/i});
-        const spy = jest.spyOn(Event.prototype, 'stopPropagation');
-        fireEvent.click(menuItem);
-        expect(spy).toHaveBeenCalled();
-        spy.mockRestore();
+    test('menu closes on Escape and on a click outside, without action', () => {
+        render(<NodeRow {...defaultProps} />);
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        fireEvent.click(menuButton);
+        fireEvent.keyDown(screen.getByRole('menu'), {key: 'Escape'});
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        fireEvent.click(menuButton);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        fireEvent.pointerDown(document.body);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(defaultProps.onAction).not.toHaveBeenCalled();
     });
 
-    test('renders correctly with undefined monitor', () => {
-        render(<NodeRow {...defaultProps} monitor={undefined}/>);
-        expect(screen.queryByText('running')).not.toBeInTheDocument();
-    });
-
-    test('onMenuClose is triggered when menu is closed via onClose prop', async () => {
-        const anchorEl = document.createElement('div');
-        render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-        const menu = await screen.findByRole('menu', {}, {timeout: 3000});
-        fireEvent.keyDown(menu, {key: 'Escape'});
-        expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
-        fireEvent.click(document.body);
-        expect(defaultProps.onMenuClose).toHaveBeenCalledWith('node1');
-    });
-
-    test('menu positioning handles null menuAnchorRef gracefully', () => {
-        const menuAnchorRef = null;
-        expect(menuAnchorRef).toBe(null);
+    test('a second click on the button closes the menu', () => {
+        render(<NodeRow {...defaultProps} />);
+        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
+        fireEvent.click(menuButton);
+        fireEvent.click(menuButton);
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
 
     test('filters menu items correctly when node is frozen', () => {
         render(<NodeRow {...defaultProps} status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}/>);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        fireEvent.click(menuButton);
-        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        const menu = screen.getByRole('menu');
+        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Freeze'})).not.toBeInTheDocument();
+        expect(within(menu).getAllByRole('menuitem')).toHaveLength(11);
     });
 
     test('filters menu items correctly when node is not frozen', () => {
         render(<NodeRow {...defaultProps} status={{frozen_at: null, agent: 'v1.2.3'}}/>);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        fireEvent.click(menuButton);
-        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        const menu = screen.getByRole('menu');
+        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+        expect(within(menu).getByRole('menuitem', {name: 'Push/asset'})).toBeInTheDocument();
+        expect(within(menu).getAllByRole('menuitem')).toHaveLength(11);
+    });
+
+    test('shows the action icons in the menu', () => {
+        render(<NodeRow {...defaultProps} />);
+        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
+        expect(within(screen.getByRole('menu')).getByLabelText('Freeze icon')).toBeInTheDocument();
     });
 
     describe('booted_at column', () => {
@@ -242,8 +269,9 @@ describe('NodeRow Component', () => {
         });
 
         test('renders tooltip with full date when booted_at is valid', () => {
-            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '2023-01-01T10:00:00Z'}}/>);
-            expect(screen.getByText('2h ago')).toBeInTheDocument();
+            const date = '2023-01-01T10:00:00Z';
+            render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: date}}/>);
+            expect(screen.getByText('2h ago')).toHaveAttribute('title', new Date(date).toLocaleString());
         });
 
         test('renders "Xd ago" when booted_at is within 7 days', () => {
@@ -266,20 +294,23 @@ describe('NodeRow Component', () => {
         test('renders "-" when booted_at equals the zero-value date', () => {
             render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: '0001-01-01T00:00:00Z'}}/>);
             const cells = screen.getAllByRole('cell');
-            expect(cells[8]).toHaveTextContent('-');
+            expect(cells[8]).toHaveTextContent(/^-$/);
         });
     });
 
     describe('updated_at column', () => {
         test('renders "-" when updated_at is null', () => {
             render(<NodeRow {...defaultProps} />);
-            expect(screen.getAllByText('-')[1]).toBeInTheDocument();
+            const cells = screen.getAllByRole('cell');
+            expect(cells[9]).toHaveTextContent(/^-$/);
+            expect(within(cells[9]).getByText('-')).toHaveAttribute('title', '-');
         });
 
         test('renders formatted date when updated_at is valid', () => {
+            const date = '2023-01-01T11:30:00Z';
             render(<NodeRow {...defaultProps}
-                            monitor={{...defaultProps.monitor, updated_at: '2023-01-01T11:30:00Z'}}/>);
-            expect(screen.getByText('30m ago')).toBeInTheDocument();
+                            monitor={{...defaultProps.monitor, updated_at: date}}/>);
+            expect(screen.getByText('30m ago')).toHaveAttribute('title', new Date(date).toLocaleString());
         });
 
         test('renders "Xd ago" when updated_at is within 7 days', () => {
@@ -305,7 +336,7 @@ describe('NodeRow Component', () => {
             render(<NodeRow {...defaultProps}
                             monitor={{...defaultProps.monitor, updated_at: '0001-01-01T00:00:00Z'}}/>);
             const cells = screen.getAllByRole('cell');
-            expect(cells[9]).toHaveTextContent('-');
+            expect(cells[9]).toHaveTextContent(/^-$/);
         });
     });
 
@@ -316,92 +347,29 @@ describe('NodeRow Component', () => {
         expect(defaultProps.onOpenLogs).toHaveBeenCalledWith('node1');
     });
 
-    test('handles zoom level calculation correctly', () => {
-        const originalDevicePixelRatio = window.devicePixelRatio;
-        Object.defineProperty(window, 'devicePixelRatio', {value: 2, configurable: true});
-        render(<NodeRow {...defaultProps} />);
-        expect(window.devicePixelRatio).toBe(2);
-        Object.defineProperty(window, 'devicePixelRatio', {value: originalDevicePixelRatio});
-    });
-
-    test('handles Safari browser detection', () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
-            configurable: true,
-        });
-        render(<NodeRow {...defaultProps} />);
-        expect(screen.getByText('node1')).toBeInTheDocument();
-    });
-
-    test('renders load_15m progress bar with different colors based on value', () => {
+    test('renders load_15m progress bar with different states based on value', () => {
         const {rerender} = render(<NodeRow {...defaultProps} stats={{load_15m: 1}}/>);
         expect(screen.getByText('1')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: 'Load (15m)'})).toHaveAttribute('data-state', 'up');
+        expect(screen.getByRole('progressbar', {name: 'Load (15m)'})).toHaveAttribute('aria-valuenow', '20');
         rerender(<NodeRow {...defaultProps} stats={{load_15m: 3}}/>);
         expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: 'Load (15m)'})).toHaveAttribute('data-state', 'warn');
         rerender(<NodeRow {...defaultProps} stats={{load_15m: 5}}/>);
         expect(screen.getByText('5')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: 'Load (15m)'})).toHaveAttribute('data-state', 'down');
     });
 
-    test('renders mem_avail progress bar with different colors based on value', () => {
+    test('renders mem_avail progress bar with different states based on value', () => {
         const {rerender} = render(<NodeRow {...defaultProps} stats={{mem_avail: 10}}/>);
         expect(screen.getByText('10%')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: 'Mem Avail'})).toHaveAttribute('data-state', 'down');
         rerender(<NodeRow {...defaultProps} stats={{mem_avail: 30}}/>);
         expect(screen.getByText('30%')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: 'Mem Avail'})).toHaveAttribute('data-state', 'warn');
         rerender(<NodeRow {...defaultProps} stats={{mem_avail: 80}}/>);
         expect(screen.getByText('80%')).toBeInTheDocument();
-    });
-
-    test('handles scroll position in calculateMenuPosition', () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
-            configurable: true,
-        });
-        Object.defineProperty(window, 'scrollY', {value: 100, configurable: true});
-        Object.defineProperty(window, 'pageYOffset', {value: 100, configurable: true});
-        Object.defineProperty(window, 'scrollX', {value: 50, configurable: true});
-        Object.defineProperty(window, 'pageXOffset', {value: 50, configurable: true});
-        render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-        fireEvent.click(menuButton);
-        jest.runAllTimers();
-        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
-    });
-
-    test('handles missing scroll properties in calculateMenuPosition', () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
-            configurable: true,
-        });
-        const originalScrollY = window.scrollY;
-        const originalPageYOffset = window.pageYOffset;
-        const originalScrollX = window.scrollX;
-        const originalPageXOffset = window.pageXOffset;
-        Object.defineProperty(window, 'scrollY', {configurable: true, writable: true, value: undefined});
-        Object.defineProperty(window, 'pageYOffset', {configurable: true, writable: true, value: undefined});
-        Object.defineProperty(window, 'scrollX', {configurable: true, writable: true, value: undefined});
-        Object.defineProperty(window, 'pageXOffset', {configurable: true, writable: true, value: undefined});
-        try {
-            render(<NodeRow {...defaultProps} />);
-            const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-            menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-            fireEvent.click(menuButton);
-            jest.runAllTimers();
-            expect(defaultProps.onMenuOpen).toHaveBeenCalled();
-        } finally {
-            Object.defineProperty(window, 'scrollY', {configurable: true, writable: true, value: originalScrollY});
-            Object.defineProperty(window, 'pageYOffset', {
-                configurable: true,
-                writable: true,
-                value: originalPageYOffset
-            });
-            Object.defineProperty(window, 'scrollX', {configurable: true, writable: true, value: originalScrollX});
-            Object.defineProperty(window, 'pageXOffset', {
-                configurable: true,
-                writable: true,
-                value: originalPageXOffset
-            });
-        }
+        expect(screen.getByRole('progressbar', {name: 'Mem Avail'})).toHaveAttribute('data-state', 'up');
     });
 
     test('renders "-" when nodename is empty', () => {
@@ -410,40 +378,17 @@ describe('NodeRow Component', () => {
         expect(cells[1]).toHaveTextContent('-');
     });
 
-    test('does not call onMenuOpen when anchorEl is already set', () => {
-        const anchorEl = document.createElement('div');
-        const {container} = render(<NodeRow {...defaultProps} anchorEl={anchorEl}/>);
-        const menuButton = container.querySelector('button[aria-label="More actions for node node1"]');
-        expect(menuButton).not.toBeNull();
-        fireEvent.click(menuButton);
-        expect(defaultProps.onMenuOpen).not.toHaveBeenCalled();
-    });
-
-    test('uses fallback zoom level when devicePixelRatio is undefined', () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
-            configurable: true,
-        });
-        const originalDevicePixelRatio = window.devicePixelRatio;
-        Object.defineProperty(window, 'devicePixelRatio', {value: undefined, configurable: true});
+    test('keeps its cells on one line', () => {
         render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        menuButton.getBoundingClientRect = jest.fn(() => ({bottom: 100, right: 200}));
-        fireEvent.click(menuButton);
-        jest.runAllTimers();
-        expect(defaultProps.onMenuOpen).toHaveBeenCalled();
-        Object.defineProperty(window, 'devicePixelRatio', {value: originalDevicePixelRatio, configurable: true});
+        const row = screen.getByRole('row', {name: /Node node1 row/i});
+        expect(row).toHaveClass('h-[1.875rem]');
+        expect(screen.getAllByRole('cell')).toHaveLength(12);
     });
 
-    test('calculateMenuPosition returns early when component is unmounted', () => {
-        Object.defineProperty(navigator, 'userAgent', {
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15',
-            configurable: true,
-        });
-        const {unmount} = render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        fireEvent.click(menuButton);
-        unmount();
-        jest.runAllTimers();
+    test('marks a selected row', () => {
+        const {rerender} = render(<NodeRow {...defaultProps} isSelected={true}/>);
+        expect(screen.getByRole('row', {name: /Node node1 row/i})).toHaveClass('bg-accent-soft');
+        rerender(<NodeRow {...defaultProps} isSelected={false}/>);
+        expect(screen.getByRole('row', {name: /Node node1 row/i})).not.toHaveClass('bg-accent-soft');
     });
 });

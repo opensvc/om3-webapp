@@ -62,15 +62,6 @@ vi.mock('../../context/AuthProvider.jsx', () => ({
     Logout: 'LOGOUT',
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        AppBar: vi.fn(({children}) => <div>{children}</div>),
-        Toolbar: vi.fn(({children}) => <div>{children}</div>),
-    };
-});
-
 vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     __esModule: true,
     default: mockUseFetchDaemonStatus,
@@ -146,7 +137,7 @@ describe('NavBar', () => {
 
     test('renders cluster breadcrumb and WhoAmI link on /cluster', () => {
         renderNavBar();
-        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /navigate to cluster/i})).toHaveAttribute('href', '/');
         expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
     });
 
@@ -255,104 +246,68 @@ describe('NavBar', () => {
     });
 
     // ---------- object status counts ----------
-    describe('object status counts', () => {
-        const baseStore = {
-            objectStatus: {},
-            objectInstanceStatus: {},
-            instanceMonitor: {},
-        };
-
-        test('counts from eventStore', () => {
-            setupMocks({
-                eventStoreData: {
-                    ...baseStore,
-                    objectStatus: {
-                        obj1: {avail: 'down'},
-                        obj2: {avail: 'warn'},
-                        obj3: {avail: 'up'},
-                        obj4: {avail: 'invalid'},
-                    },
-                },
-            });
-            renderNavBar();
-            expect(screen.getByText('1', {selector: '[href="/objects?globalState=down"]'})).toBeInTheDocument();
-            expect(screen.getByText('1', {selector: '[href="/objects?globalState=warn"]'})).toBeInTheDocument();
-        });
-
-        test('falls back to daemon when objectStatus is empty', () => {
-            setupMocks({
-                daemon: {cluster: {object: {o1: {avail: 'down'}, o2: {avail: 'warn'}}}},
-            });
-            renderNavBar();
-            expect(screen.getByText('1', {selector: '[href="/objects?globalState=down"]'})).toBeInTheDocument();
-            expect(screen.getByText('1', {selector: '[href="/objects?globalState=warn"]'})).toBeInTheDocument();
-        });
-
-        test('handles undefined objects and missing instance monitor', () => {
-            setupMocks({
-                eventStoreData: {
-                    objectStatus: {obj1: undefined},
-                    objectInstanceStatus: {obj1: {}},
-                    instanceMonitor: {},
-                },
-            });
-            renderNavBar();
-            expect(screen.queryByText('1')).not.toBeInTheDocument();
-        });
-
-        test('displays only down when warn is zero', () => {
-            setupMocks({eventStoreData: {...baseStore, objectStatus: {x: {avail: 'down'}}}});
-            renderNavBar();
-            expect(screen.getByText('1')).toHaveAttribute('href', '/objects?globalState=down');
-            expect(screen.queryByText('1', {selector: '[href="/objects?globalState=warn"]'})).toBeNull();
-        });
-
-        test('tooltip on counts', async () => {
-            setupMocks({eventStoreData: {...baseStore, objectStatus: {a: {avail: 'down'}, b: {avail: 'warn'}}}});
-            renderNavBar();
-            fireEvent.mouseOver(screen.getByText('1', {selector: '[href="/objects?globalState=down"]'}));
-            await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Number of down objects'));
-            fireEvent.mouseLeave(screen.getByText('1', {selector: '[href="/objects?globalState=down"]'}));
-            fireEvent.mouseOver(screen.getByText('1', {selector: '[href="/objects?globalState=warn"]'}));
-            await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Number of warn objects'));
-        });
-
-        test('correctly identifies status when instanceMonitor has global_expect', () => {
-            setupMocks({
-                eventStoreData: {
-                    objectStatus: {obj1: {avail: 'down'}},
-                    objectInstanceStatus: {
-                        obj1: {node1: {avail: 'down'}, node2: {avail: 'up'}},
-                    },
-                    instanceMonitor: {
-                        'node1:obj1': {global_expect: 'something'},
-                        'node2:obj1': {global_expect: 'none'},
-                    },
-                },
-            });
-            renderNavBar();
-            expect(screen.getByText('1', {selector: '[href="/objects?globalState=down"]'})).toBeInTheDocument();
-        });
+    test('is the oc3 top bar: a 44px raised header with a breadcrumb navigation', () => {
+        renderNavBar();
+        const header = screen.getByRole('banner');
+        expect(header).toHaveClass('h-11', 'border-b', 'border-line', 'bg-surface-raised');
+        expect(screen.getByRole('navigation', {name: 'Breadcrumb'})).toBeInTheDocument();
     });
 
-    // ---------- menu ----------
-    test('opens, selects and navigates from menu', async () => {
-        setupMocks({pathname: '/namespaces'});
+    test('shows offline with a hint and a glyph, not colour alone', () => {
+        setupMocks({online: false});
         renderNavBar();
-        fireEvent.click(screen.getByLabelText(/open navigation menu/i));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        expect(screen.getByRole('menuitem', {name: /namespaces/i})).toHaveClass('Mui-selected');
-        fireEvent.click(screen.getByRole('menuitem', {name: /heartbeats/i}));
-        expect(mockNavigate).toHaveBeenCalledWith('/heartbeats');
-        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+        const badge = screen.getByText('Offline');
+        expect(badge).toHaveAttribute('title', 'You are offline — some features may be limited');
+        expect(badge.querySelector('svg')).toHaveAttribute('data-glyph', 'down');
     });
 
-    test('closes menu on Escape', async () => {
+    test('shows no object status counts: they moved to the sidebar pills', () => {
+        setupMocks({
+            eventStoreData: {
+                objectStatus: {a: {avail: 'down'}, b: {avail: 'warn'}},
+                objectInstanceStatus: {},
+                instanceMonitor: {},
+            },
+        });
         renderNavBar();
-        fireEvent.click(screen.getByLabelText(/open navigation menu/i));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        fireEvent.keyDown(screen.getByRole('menu'), {key: 'Escape'});
-        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+        expect(document.querySelector('[href^="/objects?globalState="]')).toBeNull();
+    });
+
+    // ---------- logo ----------
+    test('shows the OpenSVC logo link to the home view, as in oc3', () => {
+        renderNavBar();
+        const link = screen.getByRole('link', {name: 'OpenSVC'});
+        expect(link).toHaveAttribute('href', '/');
+        const logo = link.querySelector('img');
+        expect(logo).toHaveAttribute('alt', '');
+        expect(logo).toHaveAttribute('width', '24');
+    });
+
+    // ---------- sidebar toggle ----------
+    test('shows no sidebar toggle unless asked to', () => {
+        renderNavBar();
+        expect(screen.queryByRole('button', {name: /menu/i})).not.toBeInTheDocument();
+    });
+
+    test('sidebar toggle announces the sidebar state and calls onToggleSidebar', () => {
+        const onToggleSidebar = vi.fn();
+        const {rerender} = render(
+            <MemoryRouter>
+                <NavBar sidebarOpen showSidebarToggle onToggleSidebar={onToggleSidebar}/>
+            </MemoryRouter>
+        );
+        const toggle = screen.getByRole('button', {name: /hide menu/i});
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveAttribute('aria-controls', 'app-sidebar');
+        fireEvent.click(toggle);
+        expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <MemoryRouter>
+                <NavBar sidebarOpen={false} showSidebarToggle onToggleSidebar={onToggleSidebar}/>
+            </MemoryRouter>
+        );
+        expect(screen.getByRole('button', {name: /show menu/i})).toHaveAttribute('aria-expanded', 'false');
     });
 
     // ---------- online status ----------

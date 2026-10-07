@@ -12,69 +12,6 @@ vi.mock('../../eventSourceManager.jsx', () => ({
     configureEventSource: vi.fn(),
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        CircularProgress: () => <div role="progressbar">Loading...</div>,
-        Dialog: ({children, open, onClose, fullScreen, ...props}) =>
-            open ? (
-                <div
-                    role="dialog"
-                    data-fullscreen={fullScreen ? 'true' : 'false'}
-                    onKeyDown={e => e.key === 'Escape' && onClose?.()}
-                    {...props}
-                >
-                    {children}
-                </div>
-            ) : null,
-        TextField: ({label, value, onChange, disabled, multiline, placeholder, inputProps, ...props}) => (
-            <input
-                type="text"
-                aria-label={label}
-                placeholder={placeholder || label}
-                value={value}
-                onChange={onChange}
-                disabled={disabled}
-                data-multiline={multiline ? 'true' : undefined}
-                {...inputProps}
-                {...props}
-            />
-        ),
-        IconButton: ({children, onClick, disabled, 'aria-label': ariaLabel}) => (
-            <button onClick={onClick} disabled={disabled} aria-label={ariaLabel}>{children}</button>
-        ),
-        Button: ({children, onClick, disabled, component, htmlFor}) => (
-            <button onClick={onClick} disabled={disabled} {...(component === 'label' ? {htmlFor} : {})}>
-                {children}
-            </button>
-        ),
-        Typography: ({children}) => <span>{children}</span>,
-        Box: ({children}) => <div>{children}</div>,
-        Tooltip: ({children, title}) => <div data-tooltip={title}>{children}</div>,
-        Table: ({children}) => <table>{children}</table>,
-        TableHead: ({children}) => <thead>{children}</thead>,
-        TableBody: ({children}) => <tbody>{children}</tbody>,
-        TableRow: ({children}) => <tr>{children}</tr>,
-        TableCell: ({children}) => <td>{children}</td>,
-        Paper: ({children}) => <div>{children}</div>,
-        FormControl: ({children}) => <div>{children}</div>,
-        FormLabel: ({children}) => <label>{children}</label>,
-        DialogTitle: ({children}) => <div>{children}</div>,
-        DialogContent: ({children}) => <div>{children}</div>,
-        DialogActions: ({children}) => <div>{children}</div>,
-        Alert: ({children, severity}) => <div role="alert" data-severity={severity}>{children}</div>,
-    };
-});
-
-vi.mock('@mui/icons-material/Add', () => ({default: () => <span/>}));
-vi.mock('@mui/icons-material/Edit', () => ({default: () => <span/>}));
-vi.mock('@mui/icons-material/Delete', () => ({default: () => <span/>}));
-vi.mock('@mui/icons-material/Visibility', () => ({default: () => <span/>}));
-vi.mock('@mui/icons-material/VisibilityOff', () => ({default: () => <span/>}));
-vi.mock('@mui/icons-material/Fullscreen', () => ({default: () => <span data-testid="fullscreen-icon"/>}));
-vi.mock('@mui/icons-material/FullscreenExit', () => ({default: () => <span data-testid="fullscreen-exit-icon"/>}));
-
 const mockLocalStorage = {
     getItem: vi.fn(() => 'mock-token'),
     setItem: vi.fn(),
@@ -84,6 +21,7 @@ Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
 const user = userEvent.setup();
 const openSnackbar = vi.fn();
+const queryLoading = (container = screen) => container.queryByRole('status', {name: /^Loading/});
 const encodeText = (text) => new TextEncoder().encode(text);
 const makeMockBlob = (uint8Array) => ({
     arrayBuffer: () => Promise.resolve(uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength)),
@@ -116,7 +54,7 @@ const renderAndWait = async (objectName, expectedCount) => {
             )).toBeInTheDocument();
         }, {timeout: 15000});
     }
-    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
 };
 
 const openDialog = async (action, keyName = 'key1') => {
@@ -211,7 +149,7 @@ describe('KeysSection', () => {
         global.fetch = vi.fn(() => new Promise(() => {
         }));
         render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
-        expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+        expect(await screen.findByRole('status', {name: 'Loading keys'})).toBeInTheDocument();
     });
 
     test('displays fetch error', async () => {
@@ -376,9 +314,10 @@ describe('KeysSection', () => {
         if (action === 'create') await renderAndWait('root/cfg/cfg1', 0);
         else await renderAndWait('root/cfg/cfg1', 1);
         let dialog = await openDialog(action);
-        if (action === 'view') await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        if (action === 'view') await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
+        // The footer button (the header holds a close cross too).
         await act(async () => {
-            await user.click(within(dialog).getByRole('button', {name: /(Cancel|Close)/i}));
+            await user.click(within(dialog).getAllByRole('button', {name: /^(Cancel|Close)$/}).at(-1));
         });
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
@@ -392,7 +331,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 1);
         await openDialog('view', 'tk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByText(/Type:\s*Text/i)).toBeInTheDocument();
         expect(within(dialog).getByDisplayValue('hello')).toBeInTheDocument();
     });
@@ -402,7 +341,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 1);
         await openDialog('view', 'bk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByText(/Binary \(Hex View\)/i)).toBeInTheDocument();
     });
 
@@ -440,9 +379,9 @@ describe('KeysSection', () => {
         });
         await renderAndWait('root/cfg/cfg1', 1);
         const dialog = await openDialog('edit', 'key1');
-        expect(within(dialog).getByRole('progressbar')).toBeInTheDocument();
+        expect(within(dialog).getByRole('status', {name: 'Loading key content'})).toBeInTheDocument();
         await act(async () => resolveBlob(makeMockBlob(encodeText('hi'))));
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
     });
 
     test('update binary falls back to file', async () => {
@@ -467,17 +406,30 @@ describe('KeysSection', () => {
         mockFetch({keys: []});
         await renderAndWait('root/cfg/cfg1', 0);
         const dialog = await openDialog('create');
+        expect(within(dialog).queryByRole('button', {name: 'Full screen'})).not.toBeInTheDocument();
         await selectInputMode(dialog, 'text');
-        const fullscreenBtn = within(dialog).getByTestId('fullscreen-icon').closest('button');
         await act(async () => {
-            await user.click(fullscreenBtn);
+            await user.click(within(dialog).getByRole('button', {name: 'Full screen'}));
         });
-        await waitFor(() => expect(screen.getByRole('dialog')).toHaveAttribute('data-fullscreen', 'true'));
-        const exitBtn = within(screen.getByRole('dialog')).getByTestId('fullscreen-exit-icon').closest('button');
+        await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', {name: 'Exit full screen'})).toBeInTheDocument());
+        expect(within(screen.getByRole('dialog')).getByRole('textbox', {name: 'Key Content'})).toBeInTheDocument();
         await act(async () => {
-            await user.click(exitBtn);
+            await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Exit full screen'}));
         });
-        expect(screen.getByRole('dialog')).toHaveAttribute('data-fullscreen', 'false');
+        expect(within(screen.getByRole('dialog')).queryByRole('button', {name: 'Exit full screen'})).not.toBeInTheDocument();
+        expect(within(screen.getByRole('dialog')).getByRole('textbox', {name: /Key Name/i})).toBeInTheDocument();
+    });
+
+    test('fullscreen keeps the typed text', async () => {
+        mockFetch({keys: []});
+        await renderAndWait('root/cfg/cfg1', 0);
+        const dialog = await openDialog('create');
+        await selectInputMode(dialog, 'text');
+        await act(async () => {
+            await user.type(within(dialog).getByRole('textbox', {name: 'Key Content'}), 'abc');
+            await user.click(within(dialog).getByRole('button', {name: 'Full screen'}));
+        });
+        expect(within(screen.getByRole('dialog')).getByRole('textbox', {name: 'Key Content'})).toHaveValue('abc');
     });
 
     test('fullscreen hides fields', async () => {
@@ -485,13 +437,12 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 0);
         const dialog = await openDialog('create');
         await selectInputMode(dialog, 'text');
-        const fullscreenBtn = within(dialog).getByTestId('fullscreen-icon').closest('button');
         await act(async () => {
-            await user.click(fullscreenBtn);
+            await user.click(within(dialog).getByRole('button', {name: 'Full screen'}));
         });
         const fullDlg = screen.getByRole('dialog');
         expect(within(fullDlg).queryByRole('textbox', {name: /Key Name/i})).not.toBeInTheDocument();
-        expect(within(fullDlg).queryByRole('radiogroup')).not.toBeInTheDocument();
+        expect(within(fullDlg).queryByRole('group', {name: 'Input Mode'})).not.toBeInTheDocument();
     });
 
     test('cancel after fullscreen resets', async () => {
@@ -499,16 +450,16 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 0);
         const dialog = await openDialog('create');
         await selectInputMode(dialog, 'text');
-        const fullscreenBtn = within(dialog).getByTestId('fullscreen-icon').closest('button');
         await act(async () => {
-            await user.click(fullscreenBtn);
+            await user.click(within(dialog).getByRole('button', {name: 'Full screen'}));
         });
         await act(async () => {
             await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: /Cancel/i}));
         });
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         const newDialog = await openDialog('create');
-        expect(newDialog).toHaveAttribute('data-fullscreen', 'false');
+        expect(within(newDialog).queryByRole('button', {name: 'Exit full screen'})).not.toBeInTheDocument();
+        expect(within(newDialog).getByRole('textbox', {name: /Key Name/i})).toBeInTheDocument();
     });
 
     test('shows selected file name', async () => {
@@ -589,7 +540,7 @@ describe('KeysSection', () => {
         await waitFor(() => expect(capturedBody instanceof Blob).toBe(true));
 
         dialog = await openDialog('edit');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         await uploadFileInDialog(dialog, 'update');
         global.fetch = vi.fn((url, options = {}) => {
             if (url.includes('/data/key') && options.method === 'PUT') {
@@ -618,7 +569,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
 
         // The "hidden by default" message must be visible
         expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
@@ -634,7 +585,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
 
         // "Reveal secret" button present
         const revealBtn = within(dialog).getByRole('button', {name: /reveal secret/i});
@@ -661,7 +612,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 1);
         await openDialog('view', 'ck');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
 
         expect(within(dialog).queryByRole('button', {name: /reveal secret/i})).not.toBeInTheDocument();
         expect(within(dialog).queryByRole('button', {name: /hide secret/i})).not.toBeInTheDocument();
@@ -677,7 +628,7 @@ describe('KeysSection', () => {
 
         // Open and reveal
         let dialog = await openDialog('view', 'sk');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
         });
@@ -685,13 +636,13 @@ describe('KeysSection', () => {
 
         // Close
         await act(async () => {
-            await user.click(within(dialog).getByRole('button', {name: /Close/i}));
+            await user.click(within(dialog).getAllByRole('button', {name: /^Close$/}).at(-1));
         });
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
         // Reopen → must be hidden by default
         dialog = await openDialog('view', 'sk');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
         expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
     });
@@ -725,7 +676,7 @@ describe('KeysSection', () => {
         // The form must default to "file" mode
         expect(within(dialog).getByRole('radio', {name: /Upload from file/i})).toBeChecked();
         // No spinner
-        expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        expect(queryLoading(within(dialog))).not.toBeInTheDocument();
     });
 
     test('secret edit uploads new content via file', async () => {
@@ -806,7 +757,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
 
         // Initially the button must invite to reveal
         expect(within(dialog).getByRole('button', {name: /reveal secret/i})).toBeInTheDocument();
@@ -821,7 +772,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
 
         // Hidden by default even for binary
         expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
@@ -871,11 +822,11 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         const dialog = await openDialog('edit', 'sk');
         // Check immediately then after a few ticks
-        expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        expect(queryLoading(within(dialog))).not.toBeInTheDocument();
         await act(async () => {
             await Promise.resolve();
         });
-        expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+        expect(queryLoading(within(dialog))).not.toBeInTheDocument();
     });
 
     test('secret edit resets between opens', async () => {
@@ -907,12 +858,12 @@ describe('KeysSection', () => {
         });
         await renderAndWait('root/sec/sec1', 1);
         let dialog = await openDialog('view', 'sk');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
         });
         await act(async () => {
-            await user.click(within(dialog).getByRole('button', {name: /Close/i}));
+            await user.click(within(dialog).getAllByRole('button', {name: /^Close$/}).at(-1));
         });
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
@@ -925,7 +876,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/cfg/cfg1', 1);
         await openDialog('view', 'ck');
         dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).queryByRole('button', {name: /reveal secret/i})).not.toBeInTheDocument();
         expect(within(dialog).getByDisplayValue('hello')).toBeInTheDocument();
     });
@@ -938,7 +889,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByRole('button', {name: /reveal secret/i})).not.toBeDisabled();
     });
 
@@ -955,7 +906,7 @@ describe('KeysSection', () => {
         await renderAndWait(path, 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
     });
 
@@ -987,7 +938,7 @@ describe('KeysSection', () => {
         await renderAndWait('root/sec/sec1', 1);
         await openDialog('view', 'sk');
         const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
         await act(async () => {
             await user.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
         });

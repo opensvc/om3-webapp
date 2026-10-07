@@ -4,11 +4,15 @@ import { DarkModeProvider, useDarkMode } from '../DarkModeContext';
 
 // Helper component to consume the context
 const TestConsumer = () => {
-    const { isDarkMode, toggleDarkMode } = useDarkMode();
+    const { isDarkMode, toggleDarkMode, theme, setTheme, palette, setPalette } = useDarkMode();
     return (
         <div>
             <span data-testid="mode">{isDarkMode ? 'dark' : 'light'}</span>
+            <span data-testid="theme">{theme}</span>
+            <span data-testid="palette">{palette}</span>
             <button onClick={toggleDarkMode}>Toggle</button>
+            <button onClick={() => setTheme('system')}>System</button>
+            <button onClick={() => setPalette('contrast')}>Contrast</button>
         </div>
     );
 };
@@ -19,104 +23,98 @@ const UnwrappedConsumer = () => {
     return null;
 };
 
+const renderProvider = () => render(
+    <DarkModeProvider>
+        <TestConsumer />
+    </DarkModeProvider>
+);
+
+const htmlHas = (name) => document.documentElement.classList.contains(name);
+
 describe('DarkModeContext', () => {
     beforeEach(() => {
         localStorage.clear();
-        // Mock classList methods
-        document.documentElement.classList.add = jest.fn();
-        document.documentElement.classList.remove = jest.fn();
-        document.body.classList.add = jest.fn();
-        document.body.classList.remove = jest.fn();
+        document.documentElement.classList.remove('dark', 'contrast');
     });
 
-    afterEach(() => {
-        jest.restoreAllMocks();
-    });
-
-    test('provides default isDarkMode as false when localStorage is empty', () => {
-        render(
-            <DarkModeProvider>
-                <TestConsumer />
-            </DarkModeProvider>
-        );
+    test('follows the system theme, light without matchMedia, when nothing is stored', () => {
+        renderProvider();
+        expect(screen.getByTestId('theme').textContent).toBe('system');
         expect(screen.getByTestId('mode').textContent).toBe('light');
+        expect(htmlHas('dark')).toBe(false);
     });
 
-    test('reads initial isDarkMode from localStorage if present', () => {
+    test('follows a dark system theme', () => {
+        const original = window.matchMedia;
+        window.matchMedia = jest.fn().mockReturnValue({
+            matches: true,
+            addEventListener: jest.fn(),
+            removeEventListener: jest.fn(),
+        });
+        try {
+            renderProvider();
+            expect(screen.getByTestId('mode').textContent).toBe('dark');
+            expect(htmlHas('dark')).toBe(true);
+        } finally {
+            window.matchMedia = original;
+        }
+    });
+
+    test('reads the stored theme', () => {
+        localStorage.setItem('om3.theme', 'dark');
+        renderProvider();
+        expect(screen.getByTestId('mode').textContent).toBe('dark');
+        expect(htmlHas('dark')).toBe(true);
+    });
+
+    test('carries over the former darkMode setting and drops its key', () => {
         localStorage.setItem('darkMode', 'true');
-        render(
-            <DarkModeProvider>
-                <TestConsumer />
-            </DarkModeProvider>
-        );
-        expect(screen.getByTestId('mode').textContent).toBe('dark');
+        renderProvider();
+        expect(screen.getByTestId('theme').textContent).toBe('dark');
+        expect(localStorage.getItem('om3.theme')).toBe('dark');
+        expect(localStorage.getItem('darkMode')).toBeNull();
     });
 
-    test('toggleDarkMode toggles isDarkMode and updates localStorage', () => {
-        render(
-            <DarkModeProvider>
-                <TestConsumer />
-            </DarkModeProvider>
-        );
+    test('toggleDarkMode switches between explicit dark and light themes', () => {
+        renderProvider();
 
-        const button = screen.getByText('Toggle');
-
-        // Initial light mode
-        expect(screen.getByTestId('mode').textContent).toBe('light');
-        expect(localStorage.getItem('darkMode')).toBe('false');
-
-        // Toggle to dark
-        act(() => {
-            button.click();
-        });
-        expect(screen.getByTestId('mode').textContent).toBe('dark');
-        expect(localStorage.getItem('darkMode')).toBe('true');
-
-        // Toggle back to light
-        act(() => {
-            button.click();
-        });
-        expect(screen.getByTestId('mode').textContent).toBe('light');
-        expect(localStorage.getItem('darkMode')).toBe('false');
-    });
-
-    test('adds dark class to document.documentElement and document.body when dark mode is on', () => {
-        render(
-            <DarkModeProvider>
-                <TestConsumer />
-            </DarkModeProvider>
-        );
-
-        // Initially no dark class
-        expect(document.documentElement.classList.add).not.toHaveBeenCalledWith('dark');
-        expect(document.body.classList.add).not.toHaveBeenCalledWith('dark');
-
-        // Toggle on
         act(() => {
             screen.getByText('Toggle').click();
         });
-
-        expect(document.documentElement.classList.add).toHaveBeenCalledWith('dark');
-        expect(document.body.classList.add).toHaveBeenCalledWith('dark');
-    });
-
-    test('removes dark class from document.documentElement and document.body when dark mode is off', () => {
-        // Start with dark mode true
-        localStorage.setItem('darkMode', 'true');
-        render(
-            <DarkModeProvider>
-                <TestConsumer />
-            </DarkModeProvider>
-        );
-
-        jest.clearAllMocks();
+        expect(screen.getByTestId('mode').textContent).toBe('dark');
+        expect(localStorage.getItem('om3.theme')).toBe('dark');
+        expect(htmlHas('dark')).toBe(true);
 
         act(() => {
-            screen.getByText('Toggle').click(); // now light
+            screen.getByText('Toggle').click();
         });
+        expect(screen.getByTestId('mode').textContent).toBe('light');
+        expect(localStorage.getItem('om3.theme')).toBe('light');
+        expect(htmlHas('dark')).toBe(false);
+    });
 
-        expect(document.documentElement.classList.remove).toHaveBeenCalledWith('dark');
-        expect(document.body.classList.remove).toHaveBeenCalledWith('dark');
+    test('setTheme goes back to the system theme', () => {
+        localStorage.setItem('om3.theme', 'dark');
+        renderProvider();
+
+        act(() => {
+            screen.getByText('System').click();
+        });
+        expect(screen.getByTestId('theme').textContent).toBe('system');
+        expect(localStorage.getItem('om3.theme')).toBe('system');
+        expect(htmlHas('dark')).toBe(false);
+    });
+
+    test('setPalette applies and stores the high-contrast palette', () => {
+        renderProvider();
+        expect(screen.getByTestId('palette').textContent).toBe('standard');
+
+        act(() => {
+            screen.getByText('Contrast').click();
+        });
+        expect(screen.getByTestId('palette').textContent).toBe('contrast');
+        expect(localStorage.getItem('om3.palette')).toBe('contrast');
+        expect(htmlHas('contrast')).toBe(true);
     });
 
     test('useDarkMode throws error when used outside DarkModeProvider', () => {

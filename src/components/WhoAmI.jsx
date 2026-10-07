@@ -1,24 +1,23 @@
 import React, {useEffect, useState} from 'react';
 import {URL_AUTH_WHOAMI} from '../config/apiPath';
-import {
-    Card,
-    CardContent,
-    LinearProgress,
-    Alert,
-    Typography,
-    Button,
-    Box,
-} from '@mui/material';
-import Grid from '@mui/material/Grid';
-import {useTheme} from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import {FaSignOutAlt, FaServer, FaUser, FaLock, FaMoon, FaSun} from "react-icons/fa";
+import {Button} from '../ui/components/Button';
+import {Alert} from '../ui/components/Alert';
+import {Spinner} from '../ui/components/Spinner';
+import {LockIcon, MoonIcon, ServerIcon, SignOutIcon, SunIcon, UserIcon} from '../ui/icons';
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import {useAuth, useAuthDispatch, Logout} from "../context/AuthProvider.jsx";
 import {useNavigate} from "react-router-dom";
 import logger from '../utils/logger.js';
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import {useDarkMode} from "../context/DarkModeContext";
+
+/** A labelled value of a panel: the label muted above, the value in monospace. */
+const Value = ({label, children}) => (
+    <div>
+        <dt className="text-data text-ink-muted">{label}</dt>
+        <dd className="font-mono">{children}</dd>
+    </div>
+);
 
 const WhoAmI = () => {
     const [userInfo, setUserInfo] = useState(null);
@@ -31,8 +30,6 @@ const WhoAmI = () => {
     const navigate = useNavigate();
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const {isDarkMode, toggleDarkMode} = useDarkMode();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     // Fetch version from GitHub
     useEffect(() => {
@@ -120,143 +117,71 @@ const WhoAmI = () => {
         navigate("/auth-choice");
     };
 
-    if (loading) return <LinearProgress/>;
-    if (error) return <Alert severity="error">{String(error)}</Alert>;
-
-    const MyInfoCard = (
-        <Card sx={{height: '100%'}}>
-            <CardContent sx={{py: 2}}>
-                <Box sx={{display: 'flex', alignItems: 'center', mb: 1}}>
-                    <FaUser style={{marginRight: '8px', color: '#1976d2'}}/>
-                    <Typography variant="h6">My Information</Typography>
-                </Box>
-                <Typography variant="subtitle2" sx={{display: 'flex', alignItems: 'center', mb: 0.5}}>
-                    <FaUser style={{marginRight: '4px', fontSize: '0.9rem'}}/>
-                    Identity
-                </Typography>
-                <Box>
-                    <Typography variant="caption" color="text.secondary">Username</Typography>
-                    <Typography variant="body2" sx={{fontFamily: 'monospace', mb: 1}}>
-                        {userInfo?.name || "N/A"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">Auth Method</Typography>
-                    <Typography variant="body2" sx={{fontFamily: 'monospace'}}>
-                        {userInfo?.auth || "N/A"}
-                    </Typography>
-                </Box>
-            </CardContent>
-        </Card>
+    if (loading) return (
+        <div className="p-4">
+            <Spinner label="Loading user information"/>
+        </div>
+    );
+    if (error) return (
+        <div className="p-4">
+            <Alert>{String(error)}</Alert>
+        </div>
     );
 
-    const PermissionCard = (
-        <Card sx={{height: '100%'}}>
-            <CardContent sx={{py: 2}}>
-                <Box sx={{display: 'flex', alignItems: 'center', mb: 1}}>
-                    <FaLock style={{marginRight: '8px', color: '#1976d2'}}/>
-                    <Typography variant="h6">Permission Details</Typography>
-                </Box>
-                <Box sx={{
-                    bgcolor: isDarkMode ? 'background.default' : 'grey.50',
-                    p: 1.5,
-                    borderRadius: 1
-                }}>
-                    <Typography variant="caption" color="text.secondary">Raw Permissions</Typography>
-                    <Typography variant="body2" sx={{fontFamily: 'monospace'}}>
-                        {userInfo?.raw_grant || "None"}
-                    </Typography>
-                </Box>
-            </CardContent>
-        </Card>
-    );
-
-    const ServerInfoCard = (
-        <Card sx={{height: '100%'}}>
-            <CardContent>
-                <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
-                    <FaServer style={{marginRight: '8px', color: '#1976d2'}}/>
-                    <Typography variant="h6">Server Information</Typography>
-                </Box>
-                <Box>
-                    <Typography variant="caption" color="text.secondary">Connected Node</Typography>
-                    <Typography variant="body2" sx={{fontFamily: 'monospace', mb: 1.5}}>
-                        {daemon?.nodename || "Loading..."}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">WebApp Version</Typography>
-                    <Typography variant="body2" sx={{fontFamily: 'monospace'}}>
-                        v{appVersion}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                        OM3 WebApp
-                    </Typography>
-                </Box>
-            </CardContent>
-        </Card>
-    );
-
-    const ActionButtons = (
-        <Box sx={{display: 'flex', flexDirection: {xs: 'column', sm: 'row'}, gap: 2}}>
-            <Button
-                startIcon={isDarkMode ? <FaSun/> : <FaMoon/>}
-                onClick={toggleDarkMode}
-                size="large"
-                fullWidth
-                sx={{
-                    backgroundColor: isDarkMode ? "#ff9800" : "#333333",
-                    color: "white",
-                    fontWeight: 'bold',
-                    borderRadius: 2,
-                }}
-            >
-                {isDarkMode ? "Light Mode" : "Dark Mode"}
-            </Button>
-            <Button
-                startIcon={<FaSignOutAlt/>}
-                onClick={handleLogout}
-                size="large"
-                fullWidth
-                sx={{
-                    backgroundColor: "red",
-                    color: "white",
-                    fontWeight: 'bold',
-                    borderRadius: 2
-                }}
-            >
-                Logout
-            </Button>
-        </Box>
-    );
-
-    if (isMobile) {
-        return (
-            <Box sx={{p: 3}}>
-                <Grid container spacing={3} direction="column">
-                    <Grid item>{MyInfoCard}</Grid>
-                    <Grid item>{PermissionCard}</Grid>
-                    <Grid item>{ServerInfoCard}</Grid>
-                    <Grid item>{ActionButtons}</Grid>
-                </Grid>
-            </Box>
-        );
-    }
+    const PANEL = "rounded-(--radius-panel) border border-line bg-surface-raised p-3";
 
     return (
-        <Box sx={{p: 3}}>
-            <Grid container spacing={3}>
-                <Grid item xs={12} lg={8}>
-                    <Box sx={{display: 'flex', flexDirection: 'column', gap: 3}}>
-                        <Box sx={{display: 'flex', flexDirection: {xs: 'column', md: 'row'}, gap: 3}}>
-                            <Box sx={{flex: 1}}>{MyInfoCard}</Box>
-                            <Box sx={{flex: 1}}>{PermissionCard}</Box>
-                        </Box>
-                        {ActionButtons}
-                    </Box>
-                </Grid>
+        <div className="p-4 space-y-3">
+            <div className="grid gap-3 lg:grid-cols-3">
+                <section aria-labelledby="whoami-my-info" className={PANEL}>
+                    <h2 id="whoami-my-info" className="mb-2 flex items-center gap-2 font-semibold">
+                        <UserIcon className="text-accent"/>
+                        My Information
+                    </h2>
+                    <dl className="space-y-2">
+                        <Value label="Username">{userInfo?.name || "N/A"}</Value>
+                        <Value label="Auth Method">{userInfo?.auth || "N/A"}</Value>
+                    </dl>
+                </section>
 
-                <Grid item xs={12} lg={4}>
-                    {ServerInfoCard}
-                </Grid>
-            </Grid>
-        </Box>
+                <section aria-labelledby="whoami-permissions" className={PANEL}>
+                    <h2 id="whoami-permissions" className="mb-2 flex items-center gap-2 font-semibold">
+                        <LockIcon className="text-accent"/>
+                        Permission Details
+                    </h2>
+                    <dl className="rounded-(--radius-control) bg-surface-sunken p-2">
+                        <Value label="Raw Permissions">{userInfo?.raw_grant || "None"}</Value>
+                    </dl>
+                </section>
+
+                <section aria-labelledby="whoami-server" className={PANEL}>
+                    <h2 id="whoami-server" className="mb-2 flex items-center gap-2 font-semibold">
+                        <ServerIcon className="text-accent"/>
+                        Server Information
+                    </h2>
+                    <dl className="space-y-2">
+                        <Value label="Connected Node">{daemon?.nodename || "Loading..."}</Value>
+                        <div>
+                            <dt className="text-data text-ink-muted">WebApp Version</dt>
+                            <dd className="font-mono">v{appVersion}</dd>
+                            <dd className="text-data text-ink-muted">OM3 WebApp</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                    onClick={toggleDarkMode}
+                    icon={isDarkMode ? <SunIcon className="h-4 w-4"/> : <MoonIcon className="h-4 w-4"/>}
+                >
+                    {isDarkMode ? "Light Mode" : "Dark Mode"}
+                </Button>
+                <Button variant="danger" icon={<SignOutIcon/>} onClick={handleLogout}>
+                    Logout
+                </Button>
+            </div>
+        </div>
     );
 };
 

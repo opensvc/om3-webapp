@@ -1,12 +1,13 @@
 import { cn } from "../cn";
 import type { ObjectState } from "./StatusBadge";
+import { StateGlyph } from "./StateGlyph";
 
-/** The glyphs and tints of `StatusBadge`: the shape tells the state without colour. */
-const MARKS: Record<ObjectState, { ink: string; glyph: string; label: string }> = {
-  up: { ink: "text-state-up", glyph: "●", label: "up" },
-  warn: { ink: "text-state-warn", glyph: "▲", label: "warn" },
-  down: { ink: "text-state-down", glyph: "■", label: "down" },
-  unknown: { ink: "text-state-unknown", glyph: "○", label: "n/a" },
+/** The tints of `StatusBadge`; the shape (`StateGlyph`) tells the state without colour. */
+const MARKS: Record<ObjectState, { ink: string; label: string }> = {
+  up: { ink: "text-state-up", label: "up" },
+  warn: { ink: "text-state-warn", label: "warn" },
+  down: { ink: "text-state-down", label: "down" },
+  unknown: { ink: "text-state-unknown", label: "n/a" },
 };
 
 /**
@@ -30,9 +31,9 @@ export function StatusMark({
     <span
       title={text}
       data-state={state}
-      className={cn("inline-flex w-4 shrink-0 justify-center text-[0.75rem] leading-none", mark.ink, className)}
+      className={cn("inline-flex w-4 shrink-0 items-center justify-center", mark.ink, className)}
     >
-      <span aria-hidden="true">{mark.glyph}</span>
+      <StateGlyph state={state} />
       <span className="sr-only">{text}</span>
     </span>
   );

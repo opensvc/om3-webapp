@@ -1,4 +1,5 @@
 import { cn } from "../cn";
+import { StateGlyph } from "./StateGlyph";
 
 export type ObjectState = "up" | "warn" | "down" | "unknown";
 
@@ -10,11 +11,11 @@ const LABELS: Record<ObjectState, string> = {
   unknown: "n/a",
 };
 
-const styles: Record<ObjectState, { ink: string; glyph: string }> = {
-  up: { ink: "text-state-up", glyph: "●" },
-  warn: { ink: "text-state-warn", glyph: "▲" },
-  down: { ink: "text-state-down", glyph: "■" },
-  unknown: { ink: "text-state-unknown", glyph: "○" },
+const styles: Record<ObjectState, { ink: string }> = {
+  up: { ink: "text-state-up" },
+  warn: { ink: "text-state-warn" },
+  down: { ink: "text-state-down" },
+  unknown: { ink: "text-state-unknown" },
 };
 
 /**
@@ -46,9 +47,7 @@ export function StatusBadge({
         className,
       )}
     >
-      <span aria-hidden="true" className="text-[0.625rem]">
-        {s.glyph}
-      </span>
+      <StateGlyph state={state} className="h-2 w-2" />
       {label ?? LABELS[state]}
     </span>
   );

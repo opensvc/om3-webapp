@@ -7,26 +7,28 @@ import { ObjectIcon, type ObjectKind, om3ObjectKind } from "../components/Object
 
 describe("StatusBadge", () => {
   test.each([
-    ["up", "up", "●", "text-state-up"],
-    ["warn", "warn", "▲", "text-state-warn"],
-    ["down", "down", "■", "text-state-down"],
-    ["unknown", "n/a", "○", "text-state-unknown"],
-  ] as [ObjectState, string, string, string][])(
-    "%s reads %s with the glyph %s in %s",
-    (state, label, glyph, ink) => {
+    ["up", "up", "text-state-up"],
+    ["warn", "warn", "text-state-warn"],
+    ["down", "down", "text-state-down"],
+    ["unknown", "n/a", "text-state-unknown"],
+  ] as [ObjectState, string, string][])(
+    "%s reads %s with its drawn shape, in %s",
+    (state, label, ink) => {
       const { container } = render(<StatusBadge state={state} />);
       const badge = container.firstElementChild;
-      expect(badge).toHaveTextContent(`${glyph}${label}`);
+      expect(badge).toHaveTextContent(label);
       expect(badge).toHaveClass(ink);
-      const mark = screen.getByText(glyph);
-      expect(mark).toHaveAttribute("aria-hidden", "true");
+      const glyph = badge!.querySelector("svg");
+      expect(glyph).toHaveAttribute("data-glyph", state);
+      expect(glyph).toHaveAttribute("aria-hidden", "true");
     },
   );
 
   test("label replaces the state's label, keeping its shape", () => {
     const { container } = render(<StatusBadge state="up" label="stdby up" className="extra" />);
     const badge = container.firstElementChild;
-    expect(badge).toHaveTextContent("●stdby up");
+    expect(badge).toHaveTextContent("stdby up");
+    expect(badge!.querySelector("svg")).toHaveAttribute("data-glyph", "up");
     expect(badge).toHaveClass("text-state-up", "extra");
   });
 });

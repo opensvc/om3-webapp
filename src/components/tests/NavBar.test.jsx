@@ -258,7 +258,7 @@ describe('NavBar', () => {
         renderNavBar();
         const badge = screen.getByText('Offline');
         expect(badge).toHaveAttribute('title', 'You are offline — some features may be limited');
-        expect(badge).toHaveTextContent('■');
+        expect(badge.querySelector('svg')).toHaveAttribute('data-glyph', 'down');
     });
 
     test('shows no object status counts: they moved to the sidebar pills', () => {

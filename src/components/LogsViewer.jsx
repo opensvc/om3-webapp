@@ -1,5 +1,6 @@
 import React, {useEffect, useState, useRef, useCallback, useMemo, useId} from "react";
 import {Button, IconButton} from "../ui/components/Button";
+import {StateGlyph} from "../ui/components/StateGlyph";
 import {Input, Checkbox} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
@@ -392,11 +393,8 @@ const LogsViewer = ({
                     className="inline-flex items-center gap-1"
                     data-state={isConnected ? "up" : "down"}
                 >
-                    <span
-                        aria-hidden="true"
-                        className={cn("text-[0.75rem] leading-none", isConnected ? "text-state-up" : "text-state-down")}
-                    >
-                        {isConnected ? "●" : "■"}
+                    <span className={isConnected ? "text-state-up" : "text-state-down"}>
+                        <StateGlyph state={isConnected ? "up" : "down"}/>
                     </span>
                     <span>{isConnected ? "Connected" : "Disconnected"}</span>
                 </span>

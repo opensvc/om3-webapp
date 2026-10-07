@@ -145,20 +145,22 @@ describe("Table", () => {
 
 describe("StatusMark", () => {
   test.each([
-    ["up", "●", "text-state-up", "up"],
-    ["warn", "▲", "text-state-warn", "warn"],
-    ["down", "■", "text-state-down", "down"],
-    ["unknown", "○", "text-state-unknown", "n/a"],
-  ] as const)("marks %s with its glyph, tint and label", (state, glyph, ink, label) => {
+    ["up", "text-state-up", "up"],
+    ["warn", "text-state-warn", "warn"],
+    ["down", "text-state-down", "down"],
+    ["unknown", "text-state-unknown", "n/a"],
+  ] as const)("marks %s with its drawn shape, tint and label", (state, ink, label) => {
     render(<StatusMark state={state} />);
     const mark = screen.getByTitle(label);
     expect(mark).toHaveAttribute("data-state", state);
     expect(mark).toHaveClass(ink);
-    expect(mark).toHaveTextContent(`${glyph}${label}`);
+    expect(mark).toHaveTextContent(label);
+    expect(mark.querySelector("svg")).toHaveAttribute("data-glyph", state);
   });
 
   test("takes a more precise label", () => {
     render(<StatusMark state="down" label="stale" />);
-    expect(screen.getByTitle("stale")).toHaveTextContent("■stale");
+    expect(screen.getByTitle("stale")).toHaveTextContent("stale");
+    expect(screen.getByTitle("stale").querySelector("svg")).toHaveAttribute("data-glyph", "down");
   });
 });

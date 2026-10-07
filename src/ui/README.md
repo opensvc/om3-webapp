@@ -44,7 +44,7 @@ Tests: `npx vitest run src/ui`.
 | `Alert` | om3, in the state colours | Alert, Snackbar content |
 | `Spinner` | om3 | CircularProgress |
 | `Table` (`HeaderRow`, `HeaderCell`, `SortHeaderCell`, `Row`, `Cell`, `EmptyRow`) | om3, from the oc3 `CollectorList` markup | Table* |
-| `StatusMark`, `StatusCount` | om3, from the `StatusBadge` glyphs | status dots and status counts |
+| `StatusMark`, `StatusCount`, `StateGlyph` | om3, from the `StatusBadge` glyphs, drawn in SVG | status dots and status counts |
 | `UsageBar` | om3 | determinate LinearProgress |
 | `StoppedMark`, `RpoBreachedMark` (`StateMarks`) | om3 | stopped and RPO breached icons |
 | `lib/media` (`useMediaQuery`) | om3 | MUI useMediaQuery |

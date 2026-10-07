@@ -1,5 +1,6 @@
 import {Link, useLocation} from "react-router-dom";
 import {SidebarIcon, UserIcon} from "../ui/icons";
+import {StateGlyph} from "../ui/components/StateGlyph";
 import opensvcLogo from "../ui/assets/opensvc-logo.svg";
 import {useAuth} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useCallback} from "react";
@@ -175,7 +176,7 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                         title="You are offline — some features may be limited"
                         className="inline-flex items-center gap-1 rounded-(--radius-control) bg-state-down-soft px-2 py-0.5 text-data font-semibold text-state-down"
                     >
-                        <span aria-hidden="true" className="text-[0.625rem]">■</span>
+                        <StateGlyph state="down" className="h-2 w-2"/>
                         Offline
                     </span>
                 )}

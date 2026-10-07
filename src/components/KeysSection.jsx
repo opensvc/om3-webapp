@@ -6,6 +6,7 @@ import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {EyeIcon, EyeOffIcon, FileIcon, KeyIcon, LockIcon, PencilIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {SECRET_REVEAL_MS, useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
@@ -270,6 +271,8 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keyViewContent, setKeyViewContent] = useState(null);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
     const [revealSecret, setRevealSecret] = useState(false);
+    // A revealed secret is masked again on its own after a few seconds.
+    useAutoHide(revealSecret, () => setRevealSecret(false));
     const [actionLoading, setActionLoading] = useState(false);
 
     const [updateInitialName, setUpdateInitialName] = useState("");
@@ -611,6 +614,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-data text-ink-muted">
                                 {`Type: ${keyViewContent.type === "text" ? "Text" : "Binary (Hex View)"}`}
+                                {isSecret && revealSecret && ` · Shown for ${SECRET_REVEAL_MS / 1000} seconds.`}
                             </p>
                             {isSecret && (
                                 <IconButton

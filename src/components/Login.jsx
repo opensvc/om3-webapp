@@ -1,13 +1,10 @@
 import React, {useState, forwardRef} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router-dom';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import opensvcLogo from '../ui/assets/opensvc-logo.svg';
+import {Button} from '../ui/components/Button';
+import {Field, Input} from '../ui/components/Field';
+import {Alert} from '../ui/components/Alert';
 import {SetAccessToken, SetAuthChoice, useAuthDispatch} from "../context/AuthProvider.jsx";
 import {URL_TOKEN, URL_REFRESH} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
@@ -190,90 +187,60 @@ const Login = forwardRef((props, ref) => {
     };
 
     return (
-        <Dialog
-            open={true}
+        <section
             aria-labelledby="login-dialog"
             ref={ref}
-            sx={{
-                '& .MuiPaper-root': {
-                    width: '100%',
-                    maxWidth: '448px',
-                    mx: 'auto',
-                    p: 3,
-                    borderRadius: 2,
-                    boxShadow: 3
-                }
-            }}
+            className="mx-auto mt-[15vh] max-w-sm space-y-3 rounded-(--radius-panel) border border-line bg-surface-raised p-4"
         >
-            <DialogTitle
-                id="login-dialog"
-                sx={{textAlign: 'center', fontSize: '1.5rem', fontWeight: 600, py: 2, color: 'text.primary'}}
-            >
-                {t('Login')}
-            </DialogTitle>
-            <DialogContent sx={{px: 3}}>
-                <TextField
-                    margin="normal"
-                    fullWidth
-                    label={t('Username')}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoFocus
-                    disabled={loading}
-                    sx={{mb: 2}}
-                    className="login-autofill-field"
-                    slotProps={{
-                        input: {
-                            className: 'login-autofill-input'
-                        }
-                    }}
-                />
-                <TextField
-                    margin="normal"
-                    fullWidth
-                    label={t('Password')}
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    disabled={loading}
-                    sx={{mb: 2}}
-                    className="login-autofill-field"
-                    slotProps={{
-                        input: {
-                            className: 'login-autofill-input'
-                        }
-                    }}
-                />
-                {errorMessage && (
-                    <Typography
-                        color="error"
-                        variant="body2"
-                        sx={{mt: 1, textAlign: 'center', animation: 'pulse 1.5s infinite'}}
-                    >
-                        {errorMessage}
-                    </Typography>
+            <div className="flex items-center gap-2">
+                <img src={opensvcLogo} alt="" className="h-8 w-8"/>
+                <h1 id="login-dialog" className="text-title font-semibold">
+                    {t('Login')}
+                </h1>
+            </div>
+            <Field label={t('Username')}>
+                {(control) => (
+                    <Input
+                        {...control}
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        autoFocus
+                        autoComplete="username"
+                        disabled={loading}
+                    />
                 )}
-            </DialogContent>
-            <DialogActions sx={{display: 'flex', justifyContent: 'center', gap: 2, px: 3, pb: 3}}>
+            </Field>
+            <Field label={t('Password')}>
+                {(control) => (
+                    <Input
+                        {...control}
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        autoComplete="current-password"
+                        disabled={loading}
+                    />
+                )}
+            </Field>
+            {errorMessage && <Alert>{errorMessage}</Alert>}
+            <div className="flex justify-end gap-2">
                 <Button
-                    variant="contained"
-                    onClick={handleSubmit}
-                    disabled={!username || !password || loading}
-                    sx={{px: 4, py: 1, borderRadius: 1}}
-                >
-                    {loading ? t('Loading...') : t('Submit')}
-                </Button>
-                <Button
-                    variant="outlined"
+                    variant="secondary"
                     onClick={handleChangeMethod}
                     disabled={loading}
-                    sx={{px: 4, py: 1, borderRadius: 1}}
                 >
                     {t('Change Method')}
                 </Button>
-            </DialogActions>
-        </Dialog>
+                <Button
+                    variant="primary"
+                    onClick={handleSubmit}
+                    disabled={!username || !password || loading}
+                >
+                    {loading ? t('Loading...') : t('Submit')}
+                </Button>
+            </div>
+        </section>
     );
 });
 

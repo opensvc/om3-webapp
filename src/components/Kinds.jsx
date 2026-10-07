@@ -1,48 +1,37 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
-import {
-    Box,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Typography,
-    Autocomplete,
-    TextField,
-    CircularProgress,
-} from "@mui/material";
-import {green, red, orange, grey} from "@mui/material/colors";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import {useNavigate, useLocation} from "react-router-dom";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {useKindData} from "../hooks/useKindData";
-import {SortableTableCell} from "../utils/objectUtils";
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {StatusCount} from "../ui/components/StatusCount";
+import {Select} from "../ui/components/Field";
+import {Spinner} from "../ui/components/Spinner";
 
-const getColorByStatus = (status) => {
-    switch (status) {
-        case "up":
-            return green[500];
-        case "down":
-            return red[500];
-        case "warn":
-            return orange[500];
-        case "unprovisioned":
-            return red[500];
-        default:
-            return grey[500];
-    }
-};
+const STATUSES = ["up", "down", "warn", "unprovisioned"];
 
-const StatusDot = React.memo(({status, count}) => (
-    <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
-        <FiberManualRecordIcon
-            sx={{fontSize: 18, color: getColorByStatus(status)}}
-        />
-        <Typography variant="body1">{count}</Typography>
-    </Box>
-), (prev, next) => prev.status === next.status && prev.count === next.count);
+const STATUS_COLUMNS = [
+    {column: "up", label: "Up"},
+    {column: "down", label: "Down"},
+    {column: "warn", label: "Warn"},
+    {column: "unprovisioned", label: "Unprovisioned"},
+];
+
+const MARK_STATE = {up: "up", down: "down", warn: "warn", unprovisioned: "down"};
+
+const areStatusDotPropsEqual = (prev, next) =>
+    prev.status === next.status && prev.count === next.count && prev.kind === next.kind;
+
+/** A status mark and its count; the count opens the objects of the kind in that state. */
+const KindStatusCount = React.memo(({status, count, kind, onClick}) => (
+    <StatusCount
+        state={MARK_STATE[status]}
+        markLabel={status === "unprovisioned" ? "unprovisioned" : undefined}
+        count={count}
+        label={`Show the ${count} ${status} object${count === 1 ? "" : "s"} of ${kind}`}
+        onClick={() => onClick(status)}
+    />
+), (prev, next) => areStatusDotPropsEqual(prev, next) && prev.onClick === next.onClick);
 
 const KindTableRow = React.memo(({
                                      kind,
@@ -59,36 +48,25 @@ const KindTableRow = React.memo(({
         onKindClick(kind);
     }, [onKindClick, kind]);
 
-    const handleStatusClick = useCallback((e, status) => {
-        e.stopPropagation();
+    const handleStatusClick = useCallback((status) => {
         onStatusClick(kind, status);
     }, [onStatusClick, kind]);
 
     return (
-        <TableRow
-            hover
-            onClick={handleRowClick}
-            sx={{cursor: "pointer"}}
-        >
-            <TableCell sx={{fontWeight: 500}}>
-                {kind}
-            </TableCell>
-            {["up", "down", "warn", "unprovisioned"].map((status) => (
-                <TableCell
-                    key={status}
-                    align="center"
-                    onClick={(e) => handleStatusClick(e, status)}
-                    sx={{cursor: "pointer"}}
-                >
-                    <StatusDot status={status} count={counts[status] || 0}/>
-                </TableCell>
+        <Row onActivate={handleRowClick}>
+            <Cell className="font-medium">{kind}</Cell>
+            {STATUSES.map((status) => (
+                <Cell key={status} numeric>
+                    <KindStatusCount
+                        status={status}
+                        count={counts[status] || 0}
+                        kind={kind}
+                        onClick={handleStatusClick}
+                    />
+                </Cell>
             ))}
-            <TableCell align="center">
-                <Typography variant="body1" fontWeight={600}>
-                    {total}
-                </Typography>
-            </TableCell>
-        </TableRow>
+            <Cell numeric className="font-semibold tabular-nums">{total}</Cell>
+        </Row>
     );
 }, (prev, next) => {
     return prev.kind === next.kind &&
@@ -189,8 +167,8 @@ const Kinds = () => {
         setVisibleCount(50);
     }, []);
 
-    const handleKindChange = useCallback((e, val) => {
-        const newKind = val || "all";
+    const handleKindChange = useCallback((e) => {
+        const newKind = e.target.value || "all";
         setSelectedKind(newKind);
         setVisibleCount(50);
 
@@ -206,7 +184,7 @@ const Kinds = () => {
     }, [navigate]);
 
     const handleStatusClick = useCallback((kind, status) => {
-        const url = `/objects?kind=${kind}&globalState=${status === 'unprovisioned' ? 'unprovisioned' : status}`;
+        const url = `/objects?kind=${kind}&globalState=${status}`;
         navigate(url);
     }, [navigate]);
 
@@ -246,146 +224,93 @@ const Kinds = () => {
         };
     }, []);
 
-    const renderTextField = useCallback((params) => (
-        <TextField {...params} label="Filter by kind"/>
-    ), []);
+    // The filter may come from the URL with a kind not in the list: keep it selectable.
+    const kindOptions = useMemo(() => {
+        const options = ["all", ...kinds];
+        if (!options.includes(selectedKind)) options.push(selectedKind);
+        return options;
+    }, [kinds, selectedKind]);
 
     return (
-        <Box
-            sx={{
-                bgcolor: "background.default",
-                display: "flex",
-                justifyContent: "center",
-                p: 0,
-                position: 'relative',
-                minHeight: '100vh',
-                width: '100vw',
-                margin: 0,
-            }}
-        >
-            <Box
-                sx={{
-                    width: "100%",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: 3,
-                    m: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    height: '100vh'
-                }}
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1 text-ink-muted">
+                    Filter by kind
+                    <Select className="h-7" value={selectedKind} onChange={handleKindChange}>
+                        {kindOptions.map((kind) => (
+                            <option key={kind} value={kind}>{kind}</option>
+                        ))}
+                    </Select>
+                </label>
+            </div>
+
+            <Table
+                ref={tableContainerRef}
+                sticky
+                data-testid="table-container"
+                className="min-h-0 flex-1 overflow-auto"
             >
-                {/* Kind Filter */}
-                <Box sx={{mb: 3, flexShrink: 0}}>
-                    <Autocomplete
-                        sx={{width: 300}}
-                        options={["all", ...kinds]}
-                        value={selectedKind}
-                        onChange={handleKindChange}
-                        renderInput={renderTextField}
-                    />
-                </Box>
-
-                <TableContainer
-                    ref={tableContainerRef}
-                    sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        boxShadow: "none",
-                        border: "none"
-                    }}
-                >
-                    <Table>
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
-                            <TableRow>
-                                <SortableTableCell
-                                    column="kind"
-                                    label="Kind"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                />
-                                <SortableTableCell
-                                    column="up"
-                                    label="Up"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="down"
-                                    label="Down"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="warn"
-                                    label="Warn"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="unprovisioned"
-                                    label="Unprovisioned"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                                <SortableTableCell
-                                    column="total"
-                                    label="Total"
-                                    currentSortColumn={sortColumn}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
-                                    align="center"
-                                />
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {visibleKinds.length > 0 ? (
-                                visibleKinds.map(([kind, counts]) => (
-                                    <KindTableRow
-                                        key={kind}
-                                        kind={kind}
-                                        counts={counts}
-                                        onKindClick={handleKindClick}
-                                        onStatusClick={handleStatusClick}
-                                    />
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={6} align="center">
-                                        <Typography data-testid="no-kinds-message">
-                                            {selectedKind !== "all"
-                                                ? "No kinds match the selected filter"
-                                                : "No kinds available"}
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                    {loading && (
-                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
-                            <CircularProgress size={24}/>
-                        </Box>
+                <thead>
+                    <HeaderRow>
+                        <SortHeaderCell
+                            label="Kind"
+                            active={sortColumn === "kind"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("kind")}
+                        />
+                        {STATUS_COLUMNS.map(({column, label}) => (
+                            <SortHeaderCell
+                                key={column}
+                                label={label}
+                                active={sortColumn === column}
+                                direction={sortDirection}
+                                onSort={() => handleSort(column)}
+                                align="right"
+                            />
+                        ))}
+                        <SortHeaderCell
+                            label="Total"
+                            active={sortColumn === "total"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("total")}
+                            align="right"
+                        />
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {visibleKinds.length > 0 ? (
+                        visibleKinds.map(([kind, counts]) => (
+                            <KindTableRow
+                                key={kind}
+                                kind={kind}
+                                counts={counts}
+                                onKindClick={handleKindClick}
+                                onStatusClick={handleStatusClick}
+                            />
+                        ))
+                    ) : (
+                        <EmptyRow colSpan={6}>
+                            <span data-testid="no-kinds-message">
+                                {selectedKind !== "all"
+                                    ? "No kinds match the selected filter"
+                                    : "No kinds available"}
+                            </span>
+                        </EmptyRow>
                     )}
-                </TableContainer>
+                </tbody>
+            </Table>
+            {loading && (
+                <div className="flex justify-center">
+                    <Spinner label="Loading more kinds"/>
+                </div>
+            )}
 
-                <EventLogger eventTypes={kindEventTypes} title="Kinds Events Logger" buttonLabel="Kind Events"/>
-            </Box>
-        </Box>
+            <EventLogger
+                eventTypes={kindEventTypes}
+                title="Kinds Events Logger"
+                buttonLabel="Kind Events"
+            />
+        </div>
     );
 };
 

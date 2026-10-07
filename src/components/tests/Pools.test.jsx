@@ -28,6 +28,9 @@ const mockPools = [
     {name: 'pool3', type: 'ext4', volume_count: 10, used: 75, size: 100, head: 'node3'},
 ];
 
+const sortButton = (name) => screen.getByRole('button', {name});
+const header = (name) => screen.getByRole('columnheader', {name});
+
 describe('Pools Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -44,12 +47,13 @@ describe('Pools Component', () => {
         render(<Pools/>);
 
         await waitFor(() => {
-            expect(screen.getByText('Name')).toBeInTheDocument();
-            expect(screen.getByText('Type')).toBeInTheDocument();
-            expect(screen.getByText('Volume Count')).toBeInTheDocument();
-            expect(screen.getByText('Usage')).toBeInTheDocument();
-            expect(screen.getByText('Head')).toBeInTheDocument();
+            const headers = screen.getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+            expect(headers).toEqual(['Name', 'Type', 'Volume Count', 'Usage', 'Head']);
         });
+        // Default sort: name ascending, the other columns unsorted
+        expect(header('Name')).toHaveAttribute('aria-sort', 'ascending');
+        expect(header('Type')).toHaveAttribute('aria-sort', 'none');
+        expect(screen.getByRole('table', {name: 'Pools'})).toBeInTheDocument();
     });
 
     test('displays pool data correctly when API call succeeds', async () => {
@@ -95,7 +99,7 @@ describe('Pools Component', () => {
             expect(screen.queryByText('pool2')).not.toBeInTheDocument();
 
             const alert = screen.getByRole('alert');
-            expect(alert).toHaveClass('MuiAlert-standardError');
+            expect(alert).toHaveClass('text-state-down');
             expect(within(alert).getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
             expect(within(alert).getByRole('button', {name: /retry/i})).toBeInTheDocument();
         });
@@ -228,7 +232,7 @@ describe('Pools Component', () => {
         fireEvent.click(retryButton);
 
         await waitFor(() => {
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByRole('status')).toHaveTextContent('Loading pools');
         });
 
         await waitFor(() => {
@@ -258,98 +262,98 @@ describe('Pools Component', () => {
             expect(within(rows[0]).getByText('pool1')).toBeInTheDocument();
             expect(within(rows[1]).getByText('pool2')).toBeInTheDocument();
             expect(within(rows[2]).getByText('pool3')).toBeInTheDocument();
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Name')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // name desc
-        fireEvent.click(screen.getByText('Name'));
+        fireEvent.click(sortButton('Name'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument();
             expect(within(rows[1]).getByText('pool2')).toBeInTheDocument();
             expect(within(rows[2]).getByText('pool1')).toBeInTheDocument();
-            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+            expect(header('Name')).toHaveAttribute('aria-sort', 'descending');
         });
 
-        fireEvent.click(screen.getByText('Name'));
+        fireEvent.click(sortButton('Name'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool1')).toBeInTheDocument();
             expect(within(rows[1]).getByText('pool2')).toBeInTheDocument();
             expect(within(rows[2]).getByText('pool3')).toBeInTheDocument();
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Name')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // type asc
-        fireEvent.click(screen.getByText('Type'));
+        fireEvent.click(sortButton('Type'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument(); // ext4
             expect(within(rows[1]).getByText('pool2')).toBeInTheDocument(); // lvm
             expect(within(rows[2]).getByText('pool1')).toBeInTheDocument(); // zfs
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Type')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // type desc
-        fireEvent.click(screen.getByText('Type'));
+        fireEvent.click(sortButton('Type'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool1')).toBeInTheDocument(); // zfs
-            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+            expect(header('Type')).toHaveAttribute('aria-sort', 'descending');
         });
 
         // volume_count asc
-        fireEvent.click(screen.getByText('Volume Count'));
+        fireEvent.click(sortButton('Volume Count'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool2')).toBeInTheDocument(); // 3
             expect(within(rows[1]).getByText('pool1')).toBeInTheDocument(); // 5
             expect(within(rows[2]).getByText('pool3')).toBeInTheDocument(); // 10
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Volume Count')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // volume_count desc
-        fireEvent.click(screen.getByText('Volume Count'));
+        fireEvent.click(sortButton('Volume Count'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument(); // 10
-            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+            expect(header('Volume Count')).toHaveAttribute('aria-sort', 'descending');
         });
 
         // usage asc
-        fireEvent.click(screen.getByText('Usage'));
+        fireEvent.click(sortButton('Usage'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool2')).toBeInTheDocument(); // 0.0%
             expect(within(rows[1]).getByText('pool1')).toBeInTheDocument(); // 50.0%
             expect(within(rows[2]).getByText('pool3')).toBeInTheDocument(); // 75.0%
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Usage')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // usage desc
-        fireEvent.click(screen.getByText('Usage'));
+        fireEvent.click(sortButton('Usage'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument(); // 75.0%
-            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+            expect(header('Usage')).toHaveAttribute('aria-sort', 'descending');
         });
 
         // head asc
-        fireEvent.click(screen.getByText('Head'));
+        fireEvent.click(sortButton('Head'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool1')).toBeInTheDocument(); // node1
             expect(within(rows[1]).getByText('pool2')).toBeInTheDocument(); // node2
             expect(within(rows[2]).getByText('pool3')).toBeInTheDocument(); // node3
-            expect(screen.getByTestId('KeyboardArrowUpIcon')).toBeInTheDocument();
+            expect(header('Head')).toHaveAttribute('aria-sort', 'ascending');
         });
 
         // head desc
-        fireEvent.click(screen.getByText('Head'));
+        fireEvent.click(sortButton('Head'));
         await waitFor(() => {
             const rows = getRows();
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument(); // node3
-            expect(screen.getByTestId('KeyboardArrowDownIcon')).toBeInTheDocument();
+            expect(header('Head')).toHaveAttribute('aria-sort', 'descending');
         });
     });
 
@@ -375,12 +379,12 @@ describe('Pools Component', () => {
 
         await waitFor(() => {
             const alert = screen.getByRole('alert');
-            expect(alert).toHaveClass('MuiAlert-standardError');
+            expect(alert).toHaveClass('text-state-down');
             expect(within(alert).getByText('Failed to load pools. Please try again.')).toBeInTheDocument();
 
             const retryButton = within(alert).getByRole('button', {name: /retry/i});
-            expect(retryButton).toHaveClass('MuiButton-colorInherit');
-            expect(retryButton).toHaveClass('MuiButton-sizeSmall');
+            expect(retryButton).toHaveAttribute('type', 'button');
+            expect(retryButton).toHaveClass('h-7');
         });
 
         // Retry fails again
@@ -389,7 +393,7 @@ describe('Pools Component', () => {
         fireEvent.click(retryButton);
 
         await waitFor(() => {
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByRole('status')).toHaveTextContent('Loading pools');
         });
 
         await waitFor(() => {
@@ -418,7 +422,7 @@ describe('Pools Component', () => {
         expect(within(rows[2]).getByText('pool3')).toBeInTheDocument();
 
         // Click Name to sort desc: order becomes pool3, pool2, N/A
-        fireEvent.click(screen.getByText('Name'));
+        fireEvent.click(sortButton('Name'));
         await waitFor(() => {
             rows = screen.getAllByRole('row', {name: /pool|N\/A/});
             expect(within(rows[0]).getByText('pool3')).toBeInTheDocument();
@@ -427,7 +431,7 @@ describe('Pools Component', () => {
         });
 
         // Click Name again to sort asc: back to N/A, pool2, pool3
-        fireEvent.click(screen.getByText('Name'));
+        fireEvent.click(sortButton('Name'));
         await waitFor(() => {
             rows = screen.getAllByRole('row', {name: /pool|N\/A/});
             expect(within(rows[0]).getByText('N/A')).toBeInTheDocument();
@@ -436,7 +440,7 @@ describe('Pools Component', () => {
         });
 
         // Sort by type asc: null type first ('' < 'ext4' < 'zfs')
-        fireEvent.click(screen.getByText('Type'));
+        fireEvent.click(sortButton('Type'));
         await waitFor(() => {
             rows = screen.getAllByRole('row', {name: /pool|N\/A/});
             expect(within(rows[0]).getByText('pool2')).toBeInTheDocument(); // null type
@@ -445,7 +449,7 @@ describe('Pools Component', () => {
         });
 
         // Sort by head asc: null head first ('' < 'node1' < 'node3')
-        fireEvent.click(screen.getByText('Head'));
+        fireEvent.click(sortButton('Head'));
         await waitFor(() => {
             rows = screen.getAllByRole('row', {name: /pool|N\/A/});
             expect(within(rows[0]).getByText('pool2')).toBeInTheDocument(); // null head
@@ -465,7 +469,7 @@ describe('Pools Component', () => {
         render(<Pools/>);
         await waitFor(() => expect(screen.getByText('pool1')).toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Volume Count'));
+        fireEvent.click(sortButton('Volume Count'));
         await waitFor(() => {
             const rows = screen.getAllByRole('row', {name: /pool[1-3]/});
             // null volume_count treated as 0, so order: pool2 (0), pool1 (5), pool3 (10)
@@ -486,7 +490,7 @@ describe('Pools Component', () => {
         render(<Pools/>);
         await waitFor(() => expect(screen.getByText('pool1')).toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Usage'));
+        fireEvent.click(sortButton('Usage'));
         await waitFor(() => {
             const rows = screen.getAllByRole('row', {name: /pool[1-3]/});
             // pool2 (size=0) treated as 0% (false branch of the ternary)
@@ -511,5 +515,36 @@ describe('Pools Component', () => {
         await waitFor(() => {
             expect(screen.getByText('No pools available.')).toBeInTheDocument();
         });
+    });
+
+    test('shows a usage bar beside the percentage, coloured by thresholds', async () => {
+        const pools = [
+            {name: 'low', type: 'zfs', volume_count: 1, used: 50, size: 100, head: 'n1'},
+            {name: 'mid', type: 'zfs', volume_count: 1, used: 60, size: 100, head: 'n1'},
+            {name: 'high', type: 'zfs', volume_count: 1, used: 90, size: 100, head: 'n1'},
+            {name: 'over', type: 'zfs', volume_count: 1, used: 120, size: 100, head: 'n1'},
+            {name: 'none', type: 'zfs', volume_count: 1, used: 10, size: 0, head: 'n1'},
+        ];
+        axios.get.mockResolvedValueOnce({data: {items: pools}});
+
+        render(<Pools/>);
+        await waitFor(() => expect(screen.getByText('low')).toBeInTheDocument());
+
+        const bar = (name) => within(screen.getByRole('row', {name: new RegExp(`^${name} `)})).queryByRole('progressbar');
+        const fill = (name) => bar(name).firstElementChild;
+        expect(bar('low')).toHaveAccessibleName('Usage of low');
+        expect(bar('low')).toHaveAttribute('aria-valuenow', '50');
+        expect(bar('low')).toHaveAttribute('data-state', 'up');
+        expect(fill('low')).toHaveClass('bg-state-up');
+        expect(fill('low')).toHaveStyle({width: '50%'});
+        expect(bar('mid')).toHaveAttribute('data-state', 'warn');
+        expect(fill('mid')).toHaveClass('bg-state-warn');
+        expect(bar('high')).toHaveAttribute('data-state', 'down');
+        expect(fill('high')).toHaveClass('bg-state-down');
+        expect(fill('over')).toHaveStyle({width: '100%'});
+        expect(bar('none')).toBeNull();
+
+        const overRow = screen.getByRole('row', {name: /^over /});
+        expect(within(overRow).getByText('120.0%').parentElement).toHaveAttribute('title', '120/100');
     });
 });

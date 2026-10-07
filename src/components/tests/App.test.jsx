@@ -2,7 +2,6 @@ import React from 'react';
 import {render, screen, waitFor, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
-import {ThemeProvider, createTheme} from '@mui/material/styles';
 import {vi} from 'vitest';
 import logger from '../../utils/logger.js';
 import oidcConfiguration from '../../config/oidcConfiguration.js';
@@ -10,7 +9,6 @@ import {decodeToken} from '../Login';
 import {__setMockRecreateUserManager, __setMockIsInitialized} from '../../context/OidcAuthContext.tsx';
 
 // --- Mocks ---
-let mockIsDarkMode = false;
 vi.mock('../../styles/main.css', () => ({}));
 vi.mock('../../utils/logger.js', () => ({
     default: {
@@ -21,7 +19,7 @@ vi.mock('../../utils/logger.js', () => ({
     },
 }));
 vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
-vi.mock('../Cluster', () => ({default: () => <div data-testid="cluster">ClusterOverview</div>}));
+vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Namespaces', () => ({default: () => <div data-testid="namespaces">Namespaces</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
@@ -51,10 +49,6 @@ vi.mock('../../config/oidcConfiguration.js', () => ({
         authority: 'https://test-issuer.com',
         scope: 'openid profile email',
     })),
-}));
-vi.mock('../../context/DarkModeContext', () => ({
-    DarkModeProvider: ({children}) => <>{children}</>,
-    useDarkMode: () => ({isDarkMode: mockIsDarkMode}),
 }));
 vi.mock('../../context/AuthProvider', () => ({
     AuthProvider: ({children}) => <div>{children}</div>,
@@ -130,16 +124,11 @@ const makeTokenWithExp = (expSecondsFromNow) => {
     return 'h.' + btoa(JSON.stringify(payload)) + '.s';
 };
 
-const renderApp = (initialEntries = ['/']) => {
-    const theme = createTheme();
-    return render(
-        <ThemeProvider theme={theme}>
-            <MemoryRouter initialEntries={initialEntries}>
-                <App/>
-            </MemoryRouter>
-        </ThemeProvider>
-    );
-};
+const renderApp = (initialEntries = ['/']) => render(
+    <MemoryRouter initialEntries={initialEntries}>
+        <App/>
+    </MemoryRouter>
+);
 
 const setupBasicAuth = (tokenExpOffset = 3600) => {
     const token = makeTokenWithExp(tokenExpOffset);
@@ -180,7 +169,6 @@ describe('App Component', () => {
         mockRecreateUserManager = vi.fn();
         __setMockRecreateUserManager(mockRecreateUserManager);
         __setMockIsInitialized(true);
-        mockIsDarkMode = false;
     });
 
     afterEach(() => {
@@ -188,17 +176,36 @@ describe('App Component', () => {
     });
 
     // --- Routing ---
-    test('renders NavBar and redirects / to /cluster', async () => {
+    test('renders NavBar and redirects / to /objects', async () => {
         setupBasicAuth();
         renderApp(['/']);
         expect(await screen.findByTestId('navbar')).toBeInTheDocument();
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
-    test('unknown route redirects to /cluster', async () => {
+    test('shows the sidebar beside the views', async () => {
+        setupBasicAuth();
+        renderApp(['/objects']);
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
+        expect(screen.getByRole('navigation', {name: 'Main'})).toBeInTheDocument();
+    });
+
+    test('sends the former cluster overview URL to the objects', async () => {
+        setupBasicAuth();
+        renderApp(['/cluster']);
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
+    });
+
+    test('shows no sidebar on the sign-in screens', async () => {
+        renderApp(['/auth-choice']);
+        expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
+        expect(screen.queryByRole('navigation', {name: 'Main'})).not.toBeInTheDocument();
+    });
+
+    test('unknown route redirects to /objects', async () => {
         setupBasicAuth();
         renderApp(['/unknown-route']);
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
     test.each([
@@ -232,13 +239,13 @@ describe('App Component', () => {
     // --- ProtectedRoute ---
     test('ProtectedRoute: valid basic token shows content', async () => {
         setupBasicAuth();
-        renderApp(['/cluster']);
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        renderApp(['/objects']);
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
     test('ProtectedRoute: expired basic token redirects and clears storage', async () => {
         setupBasicAuth(-3600);
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('tokenExpiration');
@@ -246,7 +253,7 @@ describe('App Component', () => {
     });
 
     test('ProtectedRoute: null token + null authChoice redirects', async () => {
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
 
@@ -254,15 +261,15 @@ describe('App Component', () => {
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authChoice' ? 'openid' : null
         );
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
 
     test('ProtectedRoute: OIDC with malformed token still renders', async () => {
         setupOidcAuth('not-a-valid-jwt');
         decodeToken.mockReturnValue(null);
-        renderApp(['/cluster']);
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        renderApp(['/objects']);
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
     test('ProtectedRoute: null token + null authChoice clears storage', async () => {
@@ -270,7 +277,7 @@ describe('App Component', () => {
             k === 'authToken' ? makeTokenWithExp(-3600) : k === 'authChoice' ? null : null
         );
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
@@ -280,7 +287,7 @@ describe('App Component', () => {
         __setMockIsInitialized(false);
         setupOidcAuth(makeTokenWithExp(3600));
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(oidcConfiguration).toHaveBeenCalled());
         await waitFor(() => expect(mockRecreateUserManager).toHaveBeenCalled());
         __setMockIsInitialized(true);
@@ -328,7 +335,7 @@ describe('App Component', () => {
         __setMockIsInitialized(false);
         oidcConfiguration.mockImplementationOnce(() => Promise.reject(new Error('config failed')));
         setupOidcAuth(makeTokenWithExp(3600));
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await new Promise(r => setTimeout(r, 200));
         expect(oidcConfiguration).toHaveBeenCalled();
         expect(mockRecreateUserManager).not.toHaveBeenCalled();
@@ -344,7 +351,7 @@ describe('App Component', () => {
         });
         __setMockRecreateUserManager(mockRecreateUserManager);
         setupOidcAuth(makeTokenWithExp(3600));
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await new Promise(r => setTimeout(r, 200));
         expect(mockRecreateUserManager).toHaveBeenCalled();
         expect(logger.error).toHaveBeenCalled();
@@ -361,7 +368,7 @@ describe('App Component', () => {
         };
         mockUserManager.getUser.mockResolvedValue(validUser);
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'new-token'}));
         await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'Login', data: 'test-user'}));
         await waitFor(() => expect(mockLocalStorage.setItem).toHaveBeenCalledWith('authToken', 'new-token'));
@@ -371,7 +378,7 @@ describe('App Component', () => {
     test('expired user from getUser does not trigger SetAccessToken', async () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.getUser).toHaveBeenCalled());
         expect(mockAuthDispatch).not.toHaveBeenCalledWith(expect.objectContaining({type: 'SetAccessToken'}));
     });
@@ -386,7 +393,7 @@ describe('App Component', () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
         mockUserManager.signinSilent.mockResolvedValue(refreshedUser);
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
         await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({
             type: 'SetAccessToken',
@@ -399,7 +406,7 @@ describe('App Component', () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
         mockUserManager.signinSilent.mockRejectedValue(new Error('Renew failed'));
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
         expect(logger.error).toHaveBeenCalledWith('Silent renew failed:', expect.any(Error));
     });
@@ -407,7 +414,7 @@ describe('App Component', () => {
     test('getUser rejection logs error', async () => {
         mockUserManager.getUser.mockRejectedValue(new Error('getUser failed'));
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(logger.error).toHaveBeenCalledWith('Error getting user:', expect.any(Error)));
     });
 
@@ -415,14 +422,14 @@ describe('App Component', () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
         mockUserManager.signinSilent.mockResolvedValue(null);
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
         expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Silent renew failed or user still expired'));
     });
 
     test('addAccessTokenExpired handler clears storage and navigates', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addAccessTokenExpired).toHaveBeenCalled());
         act(() => mockUserManager.events.addAccessTokenExpired.mock.calls[0][0]());
         await waitFor(() => expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken'));
@@ -432,7 +439,7 @@ describe('App Component', () => {
 
     test('addSilentRenewError handler clears storage and navigates', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addSilentRenewError).toHaveBeenCalled());
         act(() => mockUserManager.events.addSilentRenewError.mock.calls[0][0](new Error('renew failed')));
         await waitFor(() => expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken'));
@@ -441,7 +448,7 @@ describe('App Component', () => {
 
     test('addAccessTokenExpiring listener logs debug', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addAccessTokenExpiring).toHaveBeenCalled());
         act(() => mockUserManager.events.addAccessTokenExpiring.mock.calls[0][0]());
         expect(logger.debug).toHaveBeenCalled();
@@ -449,7 +456,7 @@ describe('App Component', () => {
 
     test('removes old event listeners before adding new ones', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.removeUserLoaded).toHaveBeenCalled());
         await waitFor(() => expect(mockUserManager.events.removeAccessTokenExpired).toHaveBeenCalled());
         await waitFor(() => expect(mockUserManager.events.removeSilentRenewError).toHaveBeenCalled());
@@ -461,7 +468,7 @@ describe('App Component', () => {
             access_token: 'new-token',
             expires_at: Math.floor(Date.now() / 1000) + 3600,
         });
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockAuthDispatch).toHaveBeenCalledWith({type: 'SetAccessToken', data: 'new-token'}));
         expect(mockAuthDispatch).not.toHaveBeenCalledWith(expect.objectContaining({
             type: 'Login',
@@ -471,7 +478,7 @@ describe('App Component', () => {
 
     test('onUserRefreshed via addUserLoaded event fires correctly', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.events.addUserLoaded).toHaveBeenCalled());
         act(() => mockUserManager.events.addUserLoaded.mock.calls[0][0]({
             profile: {preferred_username: 'event-user'},
@@ -498,7 +505,7 @@ describe('App Component', () => {
     // --- Auth Resume (visibility/focus) ---
     test('focus triggers redirect when basic token is expired', async () => {
         setupBasicAuth(-3600);
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
@@ -508,31 +515,31 @@ describe('App Component', () => {
 
     test('focus does not redirect when OIDC token is present', async () => {
         setupOidcAuth('dummy-token');
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 10));
         });
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
         expect(mockNavigate).not.toHaveBeenCalledWith('/auth-choice', {replace: true});
     });
 
     test('focus does not redirect when basic token is valid', async () => {
         setupBasicAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 10));
         });
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
     test('visibilitychange triggers auth check without redirect for valid token', async () => {
         setupBasicAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         Object.defineProperty(document, 'visibilityState', {value: 'visible', configurable: true});
         act(() => document.dispatchEvent(new Event('visibilitychange')));
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
+        expect(await screen.findByTestId('objects')).toBeInTheDocument();
     });
 
     test('OIDC expired token on resume triggers silent renew and updates storage', async () => {
@@ -544,7 +551,7 @@ describe('App Component', () => {
             expires_at: Math.floor(Date.now() / 1000) + 3600,
             expired: false,
         });
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
@@ -557,13 +564,13 @@ describe('App Component', () => {
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authChoice' ? 'openid' : null
         );
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
     });
 
     test('handleCheckAuthOnResume: OIDC no token on focus redirects', async () => {
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authChoice' ? 'openid' : null
         );
@@ -585,7 +592,7 @@ describe('App Component', () => {
             recreateUserManager: mockRecreateUserManager,
             isInitialized: false,
         });
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
@@ -600,7 +607,7 @@ describe('App Component', () => {
         setupOidcAuth(expiredToken);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
         mockUserManager.signinSilent.mockResolvedValue({expired: true});
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         act(() => window.dispatchEvent(new Event('focus')));
         await act(async () => {
             await new Promise(r => setTimeout(r, 600));
@@ -614,8 +621,8 @@ describe('App Component', () => {
         setupOidcAuth(expiredToken);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) - 3600});
         mockUserManager.signinSilent.mockRejectedValue(new Error('Renew failed on resume'));
-        renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
         mockNavigate.mockClear();
         logger.error.mockClear();
         act(() => window.dispatchEvent(new Event('focus')));
@@ -629,8 +636,8 @@ describe('App Component', () => {
     test('resume check with expired basic token (after initial valid) clears storage and redirects', async () => {
         setupBasicAuth(3600);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
-        renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
         const expiredToken = makeTokenWithExp(-3600);
         mockLocalStorage.getItem.mockImplementation((k) =>
             k === 'authToken' ? expiredToken : k === 'authChoice' ? 'basic' : null
@@ -651,8 +658,8 @@ describe('App Component', () => {
     test('cleanup clears debounce timer on unmount', async () => {
         vi.useFakeTimers();
         setupBasicAuth();
-        const {unmount} = renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        const {unmount} = renderApp(['/objects']);
+        await screen.findByTestId('objects');
         act(() => {
             window.dispatchEvent(new Event('focus'));
         });
@@ -665,8 +672,8 @@ describe('App Component', () => {
     test('debouncedCheck clears previous timer before setting new one', async () => {
         vi.useFakeTimers();
         setupBasicAuth();
-        renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
         mockNavigate.mockClear();
 
         act(() => {
@@ -686,14 +693,14 @@ describe('App Component', () => {
         mockUserManager.getUser.mockResolvedValue({profile: {preferred_username: 'x'}, expired: true});
         mockUserManager.signinSilent.mockResolvedValue({expired: true, profile: {preferred_username: 'x'}});
         setupOidcAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         await waitFor(() => expect(mockUserManager.signinSilent).toHaveBeenCalled());
         expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Silent renew failed or user still expired'));
     });
 
     test('handleCheckAuthOnResume handles storage errors gracefully', async () => {
         setupBasicAuth();
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         mockLocalStorage.getItem.mockImplementation(() => {
             throw new Error('Storage error');
         });
@@ -709,7 +716,7 @@ describe('App Component', () => {
             k === 'authToken' ? token : k === 'authChoice' ? 'basic' : null
         );
         decodeToken.mockReturnValue({foo: 'bar'});
-        renderApp(['/cluster']);
+        renderApp(['/objects']);
         expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
         expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('authToken');
     });
@@ -718,8 +725,8 @@ describe('App Component', () => {
         const validToken = makeTokenWithExp(3600);
         setupOidcAuth(validToken);
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
-        renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
         mockLocalStorage.setItem.mockClear();
         mockLocalStorage.removeItem.mockClear();
         mockNavigate.mockClear();
@@ -743,8 +750,8 @@ describe('App Component', () => {
             k === 'authToken' ? validToken : k === 'authChoice' ? 'basic' : null
         );
         decodeToken.mockReturnValue({exp: Math.floor(Date.now() / 1000) + 3600});
-        renderApp(['/cluster']);
-        await screen.findByTestId('cluster');
+        renderApp(['/objects']);
+        await screen.findByTestId('objects');
         mockLocalStorage.setItem.mockClear();
         mockLocalStorage.removeItem.mockClear();
         mockNavigate.mockClear();
@@ -778,12 +785,6 @@ describe('App Component', () => {
         expect(removeItemCallsForAuth).toHaveLength(0);
     });
 
-    test('renders with dark mode theme', async () => {
-        mockIsDarkMode = true;
-        setupBasicAuth();
-        renderApp(['/cluster']);
-        expect(await screen.findByTestId('cluster')).toBeInTheDocument();
-    });
 
     // --- Miscellaneous ---
     test('handles om3:auth-redirect event', async () => {
@@ -821,7 +822,7 @@ describe('App Component', () => {
                 k === 'authToken' ? token : k === 'authChoice' ? 'basic' : null
             );
             decodeToken.mockReturnValue(null);
-            const {unmount} = renderApp(['/cluster']);
+            const {unmount} = renderApp(['/objects']);
             expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
             unmount();
         }

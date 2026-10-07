@@ -1,37 +1,11 @@
-import React, {useState, useEffect, useCallback} from "react";
-import {
-    Box,
-    Typography,
-    Tooltip,
-    IconButton,
-    CircularProgress,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    TextField,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    FormControl,
-    FormLabel,
-    RadioGroup,
-    FormControlLabel,
-    Radio,
-} from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import FullscreenIcon from "@mui/icons-material/Fullscreen";
-import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
+import React, {useState, useEffect, useCallback, useId} from "react";
+import {Dialog} from "../ui/components/Dialog";
+import {Button, IconButton} from "../ui/components/Button";
+import {Field, Input, Textarea} from "../ui/components/Field";
+import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
+import {Alert} from "../ui/components/Alert";
+import {Spinner} from "../ui/components/Spinner";
+import {EyeIcon, EyeOffIcon, FileIcon, KeyIcon, LockIcon, PencilIcon, PlusIcon, TrashIcon} from "../ui/icons";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import logger from '../utils/logger.js';
@@ -92,6 +66,9 @@ const parseBlobContent = async (blob) => {
     }
 };
 
+
+const RADIO = "h-4 w-4 accent-(--accent)";
+
 const KeyFormDialog = ({
                            open,
                            onClose,
@@ -110,6 +87,7 @@ const KeyFormDialog = ({
     const [file, setFile] = useState(null);
     const [text, setText] = useState(initialContent);
     const [fullscreen, setFullscreen] = useState(false);
+    const radioName = useId();
 
     useEffect(() => {
         if (open) {
@@ -144,189 +122,132 @@ const KeyFormDialog = ({
 
     const fileUploadId = `${mode}-key-file-upload`;
 
-    const renderRadioOptions = () => {
-        const options = [];
-        if (allowEmpty) {
-            options.push(
-                <FormControlLabel
-                    key="empty"
-                    value="empty"
-                    control={<Radio/>}
-                    label="Empty key (no content)"
-                    disabled={loading}
-                />
-            );
-        }
-        options.push(
-            <FormControlLabel
-                key="file"
-                value="file"
-                control={<Radio/>}
-                label="Upload from file"
-                disabled={loading}
-            />
-        );
-        options.push(
-            <Box display="flex" alignItems="center" key="text">
-                <FormControlLabel
-                    value="text"
-                    control={<Radio/>}
-                    label="Enter text directly"
-                    disabled={loading}
-                />
-                {inputMode === "text" && !fullscreen && (
-                    <Tooltip title="Full screen">
-                        <IconButton
-                            size="small"
-                            onClick={() => setFullscreen(true)}
-                            sx={{ml: 1}}
-                        >
-                            <FullscreenIcon/>
-                        </IconButton>
-                    </Tooltip>
-                )}
-            </Box>
-        );
-        return options;
+    const close = () => {
+        onClose();
+        setFullscreen(false);
     };
+
+    const radio = (value, label) => (
+        <label key={value} className="flex items-center gap-2">
+            <input
+                type="radio"
+                name={radioName}
+                value={value}
+                checked={inputMode === value}
+                onChange={(e) => setInputMode(e.target.value)}
+                disabled={loading}
+                className={RADIO}
+            />
+            {label}
+        </label>
+    );
+
+    const textArea = (control) => (
+        <Textarea
+            {...control}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={loading}
+            placeholder="Enter the text content for this key..."
+            rows={fullscreen ? 24 : 8}
+            className={fullscreen ? "h-[60vh] resize-none font-mono text-data" : "resize-y font-mono text-data"}
+        />
+    );
 
     return (
         <Dialog
             open={open}
-            onClose={() => {
-                onClose();
-                setFullscreen(false);
-            }}
-            maxWidth={fullscreen ? false : "md"}
-            fullScreen={fullscreen}
-            fullWidth={!fullscreen}
+            onClose={close}
+            title={title}
+            size={fullscreen ? "lg" : "md"}
+            footer={
+                <>
+                    <Button onClick={close} disabled={loading}>Cancel</Button>
+                    <Button
+                        variant="primary"
+                        onClick={handleSubmit}
+                        disabled={loading || isSubmitDisabled() || initialLoading}
+                    >
+                        {mode === 'create' ? 'Create' : 'Update'}
+                    </Button>
+                </>
+            }
         >
-            <DialogTitle>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                    <Typography variant="h6">{title}</Typography>
-                    {fullscreen && (
-                        <IconButton
-                            edge="end"
-                            onClick={() => setFullscreen(false)}
-                            aria-label="Exit full screen"
-                        >
-                            <FullscreenExitIcon/>
-                        </IconButton>
-                    )}
-                </Box>
-            </DialogTitle>
-            <DialogContent>
-                {initialLoading ? (
-                    <Box sx={{display: 'flex', justifyContent: 'center', p: 3}}>
-                        <CircularProgress/>
-                    </Box>
-                ) : (
-                    <>
-                        {!fullscreen && (
-                            <>
-                                <TextField
-                                    autoFocus
-                                    margin="dense"
-                                    label="Key Name"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    disabled={loading}
-                                />
-                                <FormControl component="fieldset" sx={{mt: 2, width: '100%'}}>
-                                    <FormLabel component="legend">Input Mode</FormLabel>
-                                    <RadioGroup
-                                        value={inputMode}
-                                        onChange={(e) => setInputMode(e.target.value)}
-                                    >
-                                        {renderRadioOptions()}
-                                    </RadioGroup>
-                                </FormControl>
-                            </>
-                        )}
-
-                        {inputMode === "file" && !fullscreen && (
-                            <Box sx={{mt: 2}}>
-                                <input
-                                    id={fileUploadId}
-                                    type="file"
-                                    hidden
-                                    onChange={(e) => setFile(e.target.files[0])}
-                                    disabled={loading}
-                                />
-                                <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                                    <Button
-                                        variant="outlined"
-                                        component="label"
-                                        htmlFor={fileUploadId}
+            {initialLoading ? (
+                <div className="flex justify-center p-6">
+                    <Spinner label="Loading key content"/>
+                </div>
+            ) : (
+                <>
+                    {!fullscreen && (
+                        <>
+                            <Field label="Key Name">
+                                {(control) => (
+                                    <Input
+                                        {...control}
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
                                         disabled={loading}
-                                    >
-                                        Choose File
-                                    </Button>
-                                    <Typography
-                                        variant="body2"
-                                        color={file ? "textPrimary" : "textSecondary"}
-                                    >
-                                        {file ? file.name : "No file selected"}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        )}
+                                    />
+                                )}
+                            </Field>
+                            <fieldset className="space-y-1">
+                                <legend className="mb-1 font-medium">Input Mode</legend>
+                                {allowEmpty && radio("empty", "Empty key (no content)")}
+                                {radio("file", "Upload from file")}
+                                <div className="flex items-center gap-2">
+                                    {radio("text", "Enter text directly")}
+                                    {inputMode === "text" && (
+                                        <Button variant="ghost" size="sm" onClick={() => setFullscreen(true)}>
+                                            Full screen
+                                        </Button>
+                                    )}
+                                </div>
+                            </fieldset>
+                        </>
+                    )}
 
-                        {inputMode === "text" && (
-                            <Box
-                                sx={{
-                                    mt: fullscreen ? 0 : 2,
-                                    height: fullscreen ? 'calc(100vh - 180px)' : 'auto',
-                                    width: '100%',
-                                }}
+                    {inputMode === "file" && !fullscreen && (
+                        <div className="flex items-center gap-3">
+                            <input
+                                id={fileUploadId}
+                                type="file"
+                                className="peer sr-only"
+                                onChange={(e) => setFile(e.target.files[0])}
+                                disabled={loading}
+                            />
+                            <label
+                                htmlFor={fileUploadId}
+                                className={
+                                    loading
+                                        ? "inline-flex h-8 items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium opacity-60"
+                                        : "inline-flex h-8 cursor-pointer items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium hover:bg-surface-sunken peer-focus-visible:outline-2 peer-focus-visible:outline-(--focus-ring)"
+                                }
                             >
-                                <TextField
-                                    multiline
-                                    fullWidth
-                                    variant="outlined"
-                                    label={fullscreen ? undefined : "Key Content"}
-                                    value={text}
-                                    onChange={(e) => setText(e.target.value)}
-                                    disabled={loading}
-                                    slotProps={{
-                                        inputLabel: {shrink: true}
-                                    }}
-                                    minRows={fullscreen ? 20 : 8}
-                                    maxRows={fullscreen ? 40 : 20}
-                                    placeholder="Enter the text content for this key..."
-                                    sx={{
-                                        height: fullscreen ? '100%' : 'auto',
-                                        '& .MuiInputBase-root': {
-                                            height: fullscreen ? '100%' : 'auto',
-                                        },
-                                        '& .MuiInputBase-input': {
-                                            resize: 'vertical',
-                                            height: fullscreen ? '100% !important' : 'auto',
-                                        }
-                                    }}
-                                />
-                            </Box>
-                        )}
-                    </>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={() => {
-                    onClose();
-                    setFullscreen(false);
-                }} disabled={loading}>
-                    Cancel
-                </Button>
-                <Button
-                    variant="contained"
-                    onClick={handleSubmit}
-                    disabled={loading || isSubmitDisabled() || initialLoading}
-                >
-                    {mode === 'create' ? 'Create' : 'Update'}
-                </Button>
-            </DialogActions>
+                                Choose File
+                            </label>
+                            <span className={file ? "text-ink" : "text-ink-muted"}>
+                                {file ? file.name : "No file selected"}
+                            </span>
+                        </div>
+                    )}
+
+                    {inputMode === "text" && (
+                        fullscreen ? (
+                            <>
+                                <div className="flex justify-end">
+                                    <Button variant="ghost" size="sm" onClick={() => setFullscreen(false)}>
+                                        Exit full screen
+                                    </Button>
+                                </div>
+                                {textArea({"aria-label": "Key Content"})}
+                            </>
+                        ) : (
+                            <Field label="Key Content">{textArea}</Field>
+                        )
+                    )}
+                </>
+            )}
         </Dialog>
     );
 };
@@ -355,6 +276,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [updateInitialContent, setUpdateInitialContent] = useState("");
     const [updateInitialInputMode, setUpdateInitialInputMode] = useState("file");
     const [updateContentLoading, setUpdateContentLoading] = useState(false);
+    const titleId = useId();
 
     const fetchKeys = useCallback(async () => {
         const {kind} = parseObjectPath(decodedObjectName);
@@ -590,179 +512,156 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const safeKeys = Array.isArray(keys) ? keys : [];
 
     return (
-        <Box sx={{mb: 4}}>
-            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Typography variant="h6" fontWeight="medium">
-                    Object Keys ({safeKeys.length})
-                </Typography>
-                <Tooltip title="Add new key">
-                    <IconButton
-                        color="primary"
-                        onClick={() => setCreateDialogOpen(true)}
-                        disabled={actionLoading}
-                        aria-label="Add new key"
-                    >
-                        <AddIcon/>
-                    </IconButton>
-                </Tooltip>
-            </Box>
+        <section
+            aria-labelledby={titleId}
+            className="rounded-(--radius-panel) border border-line bg-surface-raised"
+        >
+            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+                <KeyIcon className="text-ink-muted"/>
+                <h2 id={titleId} className="font-semibold">
+                    {`Object Keys (${safeKeys.length})`}
+                </h2>
+                <IconButton
+                    label="Add new key"
+                    className="ml-auto"
+                    onClick={() => setCreateDialogOpen(true)}
+                    disabled={actionLoading}
+                >
+                    <PlusIcon/>
+                </IconButton>
+            </div>
 
-            {keysLoading && <CircularProgress size={24}/>}
-            {hasKeysError && (
-                <Alert severity="error" sx={{mb: 2}}>
-                    {String(keysError)}
-                </Alert>
-            )}
-            {!keysLoading && !hasKeysError && safeKeys.length === 0 && (
-                <Typography color="textSecondary">No keys available.</Typography>
+            {(keysLoading || hasKeysError || safeKeys.length === 0) && (
+                <div className="space-y-2 p-3">
+                    {keysLoading && <Spinner label="Loading keys"/>}
+                    {hasKeysError && <Alert>{String(keysError)}</Alert>}
+                    {!keysLoading && !hasKeysError && safeKeys.length === 0 && (
+                        <p className="text-ink-muted">No keys available.</p>
+                    )}
+                </div>
             )}
             {!keysLoading && !hasKeysError && safeKeys.length > 0 && (
-                <TableContainer component={Paper} sx={{boxShadow: "none"}}>
-                    <Table sx={{minWidth: 650}} aria-label="keys table">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell sx={{fontWeight: "bold"}}>Name</TableCell>
-                                <TableCell sx={{fontWeight: "bold"}}>Node</TableCell>
-                                <TableCell sx={{fontWeight: "bold"}}>Size</TableCell>
-                                <TableCell sx={{fontWeight: "bold"}}>Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {safeKeys.map((key) => (
-                                <TableRow key={key.name}>
-                                    <TableCell component="th" scope="row">
-                                        {key.name}
-                                    </TableCell>
-                                    <TableCell>{key.node}</TableCell>
-                                    <TableCell>{key.size} bytes</TableCell>
-                                    <TableCell>
-                                        <Tooltip title="View">
-                                            <span>
-                                                <IconButton
-                                                    onClick={() => handleViewKey(key.name)}
-                                                    disabled={actionLoading}
-                                                    aria-label={`View key ${key.name}`}
-                                                >
-                                                    <VisibilityIcon/>
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                        <Tooltip title="Edit">
-                                            <span>
-                                                <IconButton
-                                                    onClick={() => openUpdateDialog(key.name)}
-                                                    disabled={actionLoading}
-                                                    aria-label={`Edit key ${key.name}`}
-                                                >
-                                                    <EditIcon/>
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                        <Tooltip title="Delete">
-                                            <span>
-                                                <IconButton
-                                                    onClick={() => {
-                                                        setKeyToDelete(key.name);
-                                                        setDeleteDialogOpen(true);
-                                                    }}
-                                                    disabled={actionLoading}
-                                                    aria-label={`Delete key ${key.name}`}
-                                                >
-                                                    <DeleteIcon/>
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                <Table aria-label="keys table" className="rounded-none border-0">
+                    <thead>
+                    <HeaderRow>
+                        <HeaderCell>Name</HeaderCell>
+                        <HeaderCell>Node</HeaderCell>
+                        <HeaderCell align="right">Size</HeaderCell>
+                        <HeaderCell align="right">Actions</HeaderCell>
+                    </HeaderRow>
+                    </thead>
+                    <tbody>
+                    {safeKeys.map((key) => (
+                        <Row key={key.name}>
+                            <th scope="row" className="px-2 py-1 text-left font-normal">
+                                {key.name}
+                            </th>
+                            <Cell>{key.node}</Cell>
+                            <Cell numeric className="whitespace-nowrap">{`${key.size} bytes`}</Cell>
+                            <Cell align="right" className="whitespace-nowrap">
+                                <IconButton
+                                    size="sm"
+                                    label={`View key ${key.name}`}
+                                    onClick={() => handleViewKey(key.name)}
+                                    disabled={actionLoading}
+                                >
+                                    <FileIcon/>
+                                </IconButton>
+                                <IconButton
+                                    size="sm"
+                                    label={`Edit key ${key.name}`}
+                                    onClick={() => openUpdateDialog(key.name)}
+                                    disabled={actionLoading}
+                                >
+                                    <PencilIcon/>
+                                </IconButton>
+                                <IconButton
+                                    size="sm"
+                                    label={`Delete key ${key.name}`}
+                                    className="hover:text-state-down"
+                                    onClick={() => {
+                                        setKeyToDelete(key.name);
+                                        setDeleteDialogOpen(true);
+                                    }}
+                                    disabled={actionLoading}
+                                >
+                                    <TrashIcon/>
+                                </IconButton>
+                            </Cell>
+                        </Row>
+                    ))}
+                    </tbody>
+                </Table>
             )}
 
-            <Dialog open={viewDialogOpen} onClose={() => setViewDialogOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>View Key: {keyToView}</DialogTitle>
-                <DialogContent>
-                    {keyViewLoading && (
-                        <Box sx={{display: 'flex', justifyContent: 'center', p: 3}}>
-                            <CircularProgress/>
-                        </Box>
-                    )}
-                    {!keyViewLoading && keyViewContent && (
-                        <Box>
-                            <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1}}>
-                                <Typography variant="caption" color="textSecondary">
-                                    Type: {keyViewContent.type === "text" ? "Text" : "Binary (Hex View)"}
-                                </Typography>
-                                {isSecret && (
-                                    <Tooltip title={revealSecret ? "Hide secret" : "Reveal secret"}>
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => setRevealSecret(v => !v)}
-                                            aria-label={revealSecret ? "Hide secret" : "Reveal secret"}
-                                        >
-                                            {revealSecret ? <VisibilityOffIcon/> : <VisibilityIcon/>}
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-                            </Box>
-
-                            {isSecret && !revealSecret ? (
-                                <Box
-                                    sx={{
-                                        mt: 1,
-                                        p: 3,
-                                        border: '1px dashed',
-                                        borderColor: 'divider',
-                                        borderRadius: 1,
-                                        bgcolor: 'action.hover',
-                                        textAlign: 'center',
-                                    }}
+            <Dialog
+                open={viewDialogOpen}
+                onClose={() => setViewDialogOpen(false)}
+                title={`View Key: ${keyToView ?? ""}`}
+                size="lg"
+                footer={<Button onClick={() => setViewDialogOpen(false)}>Close</Button>}
+            >
+                {keyViewLoading && (
+                    <div className="flex justify-center p-6">
+                        <Spinner label="Loading key content"/>
+                    </div>
+                )}
+                {!keyViewLoading && keyViewContent && (
+                    <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-data text-ink-muted">
+                                {`Type: ${keyViewContent.type === "text" ? "Text" : "Binary (Hex View)"}`}
+                            </p>
+                            {isSecret && (
+                                <IconButton
+                                    size="sm"
+                                    label={revealSecret ? "Hide secret" : "Reveal secret"}
+                                    onClick={() => setRevealSecret(v => !v)}
                                 >
-                                    <Typography variant="body2" color="textSecondary">
-                                        🔒 The content of this secret is hidden by default.
-                                        <br/>
-                                        Click the 👁 icon to reveal it.
-                                    </Typography>
-                                </Box>
-                            ) : (
-                                <TextField
-                                    multiline
-                                    fullWidth
-                                    variant="outlined"
-                                    value={keyViewContent.content}
-                                    slotProps={{
-                                        input: {
-                                            readOnly: true,
-                                            sx: {fontFamily: 'monospace', fontSize: '0.875rem'}
-                                        }
-                                    }}
-                                    minRows={10}
-                                    maxRows={20}
-                                    sx={{mt: 1}}
-                                />
+                                    {revealSecret ? <EyeOffIcon/> : <EyeIcon/>}
+                                </IconButton>
                             )}
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
-                </DialogActions>
+                        </div>
+                        {isSecret && !revealSecret ? (
+                            <div className="flex flex-col items-center gap-1 rounded-(--radius-control) border border-dashed border-line bg-surface-sunken p-6 text-center text-ink-muted">
+                                <LockIcon/>
+                                <p>The content of this secret is hidden by default.</p>
+                                <p>Use the Reveal secret button to show it.</p>
+                            </div>
+                        ) : (
+                            <Textarea
+                                aria-label="Key content"
+                                readOnly
+                                value={keyViewContent.content}
+                                rows={16}
+                                className="resize-y font-mono text-data"
+                            />
+                        )}
+                    </div>
+                )}
             </Dialog>
 
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>Confirm Key Deletion</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1">
-                        Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>Cancel</Button>
-                    <Button variant="contained" color="error" onClick={handleDeleteKey} disabled={actionLoading}>
-                        Delete
-                    </Button>
-                </DialogActions>
+            <Dialog
+                open={deleteDialogOpen}
+                onClose={() => setDeleteDialogOpen(false)}
+                title="Confirm Key Deletion"
+                footer={
+                    <>
+                        <Button onClick={() => setDeleteDialogOpen(false)} disabled={actionLoading}>Cancel</Button>
+                        <Button
+                            variant="danger"
+                            icon={<TrashIcon/>}
+                            onClick={handleDeleteKey}
+                            disabled={actionLoading}
+                        >
+                            Delete
+                        </Button>
+                    </>
+                }
+            >
+                <p>
+                    Are you sure you want to delete the key <strong className="font-mono">{keyToDelete}</strong>?
+                </p>
             </Dialog>
 
             <KeyFormDialog
@@ -787,7 +686,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                 loading={actionLoading}
                 initialLoading={updateContentLoading}
             />
-        </Box>
+        </section>
     );
 };
 

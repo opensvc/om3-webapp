@@ -1,64 +1,18 @@
-import React, {useRef, useState} from "react";
-import {
-    Box,
-    Checkbox,
-    IconButton,
-    LinearProgress,
-    Menu,
-    MenuItem,
-    TableCell,
-    TableRow,
-    Tooltip,
-    Typography,
-    ListItemIcon,
-    ListItemText,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ArticleIcon from "@mui/icons-material/Article";
-import {Wifi, AcUnit} from "@mui/icons-material";
-import {blue, green, red, orange} from "@mui/material/colors";
+import React from "react";
+import {Row, Cell} from "../ui/components/Table";
+import {Checkbox} from "../ui/components/Field";
+import {IconButton} from "../ui/components/Button";
+import {MenuButton} from "../ui/components/MenuButton";
+import {StatusMark} from "../ui/components/StatusMark";
+import {FrozenMark} from "../ui/components/FrozenMark";
+import {UsageBar} from "../ui/components/UsageBar";
+import {FileIcon, RssIcon, MoreIcon} from "../ui/icons";
 import {NODE_ACTIONS} from "../constants/actions";
 
-const isSafari = () => /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-const COLORS = {
-    frozen: blue[600],
-    daemon: green[500],
-    error: red[500],
-    warning: orange[500],
-    success: green[500],
-};
-
-const STYLES = {
-    progress: {mt: 1, height: 4},
-    flexBox: {
-        display: "flex",
-        gap: 0.5,
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "24px",
-        width: "100%"
-    },
-    iconsContainer: {
-        display: "flex",
-        alignItems: "center",
-        gap: "4px",
-        minWidth: "60px",
-        justifyContent: "center",
-        position: "relative"
-    },
-    fixedIconWrapper: {
-        width: "24px",
-        height: "24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0
-    }
-};
+const ZERO_DATE = "0001-01-01T00:00:00Z";
 
 const formatDate = (dateString) => {
-    if (!dateString || dateString === "0001-01-01T00:00:00Z") {
+    if (!dateString || dateString === ZERO_DATE) {
         return "-";
     }
 
@@ -77,6 +31,28 @@ const formatDate = (dateString) => {
     return date.toLocaleDateString();
 };
 
+const capitalize = (name) =>
+    name
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+
+/**
+ * The node monitor state as a mark: idle is the normal state, a failure is down,
+ * anything else is a transition. Without a monitor the state is unknown.
+ */
+const monitorMark = (monitor) => {
+    const state = monitor?.state;
+    if (!state) return {state: "unknown", label: "unknown"};
+    if (state === "idle") return {state: "up", label: "idle"};
+    if (state.includes("fail")) return {state: "down", label: state};
+    return {state: "warn", label: state};
+};
+
+/** Class names of the per-row menu: its trigger made a square ⋮ button, its menu aligned on the right. */
+const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
+
 const NodeRow = ({
                      nodename,
                      stats,
@@ -85,229 +61,106 @@ const NodeRow = ({
                      isSelected,
                      daemonNodename,
                      onSelect,
-                     onMenuOpen,
                      onAction,
-                     onMenuClose,
-                     anchorEl,
                      onOpenLogs,
                  }) => {
-    const menuAnchorRef = useRef(null);
-    const [menuPosition, setMenuPosition] = useState({top: 0, left: 0});
-
-    const isFrozen = !!status?.frozen_at && status.frozen_at !== "0001-01-01T00:00:00Z";
+    const isFrozen = !!status?.frozen_at && status.frozen_at !== ZERO_DATE;
     const isDaemonNode = daemonNodename === nodename;
     const filteredMenuItems = NODE_ACTIONS.filter(({name}) => {
         if (name === "freeze" && isFrozen) return false;
         return !(name === "unfreeze" && !isFrozen);
     });
+    const mark = monitorMark(monitor);
 
-    const getZoomLevel = () => window.devicePixelRatio || 1;
-
-    const calculateMenuPosition = () => {
-        if (!menuAnchorRef.current) return;
-        const zoomLevel = getZoomLevel();
-        const rect = menuAnchorRef.current.getBoundingClientRect();
-        const scrollY = window.scrollY ?? window.pageYOffset ?? 0;
-        const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
-        setMenuPosition({
-            top: (rect.bottom + scrollY) / zoomLevel,
-            left: (rect.right + scrollX) / zoomLevel,
-        });
-    };
-
-    const handleMenuOpen = (e) => {
-        if (anchorEl) return;
-        onMenuOpen(e, nodename);
-        if (isSafari()) {
-            setTimeout(() => {
-                calculateMenuPosition();
-            }, 0);
-        }
-    };
-
-    const menuProps = {
-        anchorOrigin: {vertical: "bottom", horizontal: "right"},
-        transformOrigin: {vertical: "top", horizontal: "right"},
-        sx: isSafari()
-            ? {
-                "& .MuiMenu-paper": {
-                    position: "fixed",
-                    top: `${menuPosition.top}px !important`,
-                    left: `${menuPosition.left}px !important`,
-                    transform: "translateX(-100%)",
-                    boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                    zIndex: 1300,
-                },
-            }
-            : {},
-    };
+    const loadState = stats?.load_15m > 4 ? "down" : stats?.load_15m > 2 ? "warn" : "up";
+    const memState = stats?.mem_avail < 20 ? "down" : stats?.mem_avail < 50 ? "warn" : "up";
+    const bootedValid = status?.booted_at && status.booted_at !== ZERO_DATE;
+    const updatedValid = monitor?.updated_at && monitor.updated_at !== ZERO_DATE;
 
     return (
-        <TableRow hover aria-label={`Node ${nodename} row`} sx={{cursor: "pointer"}}>
-            <TableCell align="center" sx={{width: 50}}>
+        <Row aria-label={`Node ${nodename} row`} className={isSelected ? "bg-accent-soft" : undefined}>
+            <Cell align="center" className="w-8">
                 <Checkbox
                     checked={isSelected}
                     onChange={(e) => onSelect(e, nodename)}
-                    slotProps={{input: {"aria-label": `Select node ${nodename}`}}}
+                    aria-label={`Select node ${nodename}`}
                     onClick={(e) => e.stopPropagation()}
                 />
-            </TableCell>
-            <TableCell align="center">
-                <Typography>{nodename || "-"}</Typography>
-            </TableCell>
-            <TableCell align="center">
-                <Box sx={STYLES.flexBox}>
-                    {monitor && monitor.state !== "idle" && (
-                        <Typography variant="caption" sx={{minWidth: "60px", textAlign: "center"}}>
-                            {monitor.state}
-                        </Typography>
-                    )}
-
-                    <Box sx={STYLES.iconsContainer}>
-                        <Box sx={STYLES.fixedIconWrapper}>
-                            {isDaemonNode ? (
-                                <Tooltip title="Connected to this node">
-                                    <Wifi
-                                        sx={{color: COLORS.daemon}}
-                                        aria-label="Daemon node indicator"
-                                    />
-                                </Tooltip>
-                            ) : (
-                                <Box sx={{width: 24, height: 24}}/>
-                            )}
-                        </Box>
-
-                        <Box sx={STYLES.fixedIconWrapper}>
-                            {isFrozen ? (
-                                <Tooltip title="Frozen">
-                                    <AcUnit
-                                        sx={{color: COLORS.frozen}}
-                                        aria-label="Frozen indicator"
-                                    />
-                                </Tooltip>
-                            ) : (
-                                <Box sx={{width: 24, height: 24}}/>
-                            )}
-                        </Box>
-                    </Box>
-                </Box>
-            </TableCell>
-            <TableCell align="center">
-                <Typography>{stats?.score || "N/A"}</Typography>
-            </TableCell>
-            <TableCell align="center">
-                {stats?.load_15m ? (
-                    <Box>
-                        <Typography>{stats.load_15m}</Typography>
-                        <LinearProgress
-                            variant="determinate"
-                            value={Math.min(stats.load_15m * 20, 100)}
-                            sx={STYLES.progress}
-                            color={stats.load_15m > 4 ? "error" : stats.load_15m > 2 ? "warning" : "success"}
-                        />
-                    </Box>
-                ) : (
-                    <Typography>N/A</Typography>
-                )}
-            </TableCell>
-            <TableCell align="center">
-                {stats?.mem_avail ? (
-                    <Box>
-                        <Typography>{stats.mem_avail}%</Typography>
-                        <LinearProgress
-                            variant="determinate"
-                            value={stats.mem_avail}
-                            sx={STYLES.progress}
-                            color={stats.mem_avail < 20 ? "error" : stats.mem_avail < 50 ? "warning" : "success"}
-                        />
-                    </Box>
-                ) : (
-                    <Typography>N/A</Typography>
-                )}
-            </TableCell>
-            <TableCell align="center">
-                <Typography>{stats?.swap_avail || "N/A"}%</Typography>
-            </TableCell>
-            <TableCell align="center">
-                <Typography>{status?.agent || "N/A"}</Typography>
-            </TableCell>
-            <TableCell align="center">
-                {status?.booted_at && status.booted_at !== "0001-01-01T00:00:00Z" ? (
-                    <Tooltip title={new Date(status.booted_at).toLocaleString()}>
-                        <Typography>
-                            {formatDate(status.booted_at)}
-                        </Typography>
-                    </Tooltip>
-                ) : (
-                    <Typography>-</Typography>
-                )}
-            </TableCell>
-            <TableCell align="center">
-                <Tooltip title={monitor?.updated_at && monitor.updated_at !== "0001-01-01T00:00:00Z"
-                    ? new Date(monitor.updated_at).toLocaleString()
-                    : "-"}>
-                    <Typography>
-                        {formatDate(monitor?.updated_at)}
-                    </Typography>
-                </Tooltip>
-            </TableCell>
-            <TableCell align="center">
-                <IconButton
-                    onClick={handleMenuOpen}
-                    aria-label={`More actions for node ${nodename}`}
-                    ref={menuAnchorRef}
-                >
-                    <MoreVertIcon/>
-                </IconButton>
-                <Menu
-                    anchorEl={anchorEl}
-                    open={Boolean(anchorEl)}
-                    onClose={() => onMenuClose(nodename)}
-                    {...menuProps}
-                    sx={{
-                        ...(menuProps.sx || {}),
-                        zIndex: 10000,
-                    }}
-                >
-                    {filteredMenuItems.map(({name, icon, color}) => (
-                        <MenuItem
-                            key={name}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onAction(nodename, name);
-                                onMenuClose(nodename);
-                            }}
-                            sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                                color: color === "red" ? "error.main" : "inherit",
-                            }}
-                            aria-label={`${name} action`}
+            </Cell>
+            <Cell className="font-medium whitespace-nowrap">{nodename || "-"}</Cell>
+            <Cell className="whitespace-nowrap">
+                <span className="flex items-center gap-1.5">
+                    <StatusMark state={mark.state} label={mark.label}/>
+                    {monitor && monitor.state !== "idle" && <span>{monitor.state}</span>}
+                    {isDaemonNode && (
+                        <span
+                            role="img"
+                            title="Connected to this node"
+                            aria-label="Connected to this node"
+                            className="text-state-up"
                         >
-                            <ListItemIcon sx={{color: color === "red" ? "error.main" : "inherit"}}>
-                                {icon}
-                            </ListItemIcon>
-                            <ListItemText>
-                                {name
-                                    .split(" ")
-                                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                                    .join(" ")}
-                            </ListItemText>
-                        </MenuItem>
-                    ))}
-                </Menu>
-            </TableCell>
-            <TableCell align="center">
-                <IconButton
-                    onClick={() => onOpenLogs(nodename)}
-                    color="primary"
-                    aria-label={`View logs for node ${nodename}`}
-                >
-                    <ArticleIcon/>
+                            <RssIcon className="h-3.5 w-3.5"/>
+                        </span>
+                    )}
+                    <FrozenMark frozen={isFrozen}/>
+                </span>
+            </Cell>
+            <Cell numeric>{stats?.score || "N/A"}</Cell>
+            <Cell numeric className="whitespace-nowrap">
+                {stats?.load_15m ? (
+                    <span className="inline-flex items-center gap-2">
+                        <span>{stats.load_15m}</span>
+                        <UsageBar showValue={false} value={Math.min(stats.load_15m * 20, 100)} state={loadState} label="Load (15m)"/>
+                    </span>
+                ) : (
+                    "N/A"
+                )}
+            </Cell>
+            <Cell numeric className="whitespace-nowrap">
+                {stats?.mem_avail ? (
+                    <span className="inline-flex items-center gap-2">
+                        <span>{stats.mem_avail}%</span>
+                        <UsageBar showValue={false} value={stats.mem_avail} state={memState} label="Mem Avail"/>
+                    </span>
+                ) : (
+                    "N/A"
+                )}
+            </Cell>
+            <Cell numeric>{stats?.swap_avail || "N/A"}%</Cell>
+            <Cell className="whitespace-nowrap">{status?.agent || "N/A"}</Cell>
+            <Cell className="whitespace-nowrap">
+                {bootedValid ? (
+                    <span title={new Date(status.booted_at).toLocaleString()}>{formatDate(status.booted_at)}</span>
+                ) : (
+                    "-"
+                )}
+            </Cell>
+            <Cell className="whitespace-nowrap">
+                <span title={updatedValid ? new Date(monitor.updated_at).toLocaleString() : "-"}>
+                    {formatDate(monitor?.updated_at)}
+                </span>
+            </Cell>
+            <Cell align="center">
+                <MenuButton
+                    label={`More actions for node ${nodename}`}
+                    icon={<MoreIcon className="h-4 w-4"/>}
+                    compact
+                    align="end"
+                    className="inline-flex align-middle"
+                    items={filteredMenuItems.map(({name, icon, color}) => ({
+                        key: name,
+                        label: capitalize(name),
+                        icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
+                        onSelect: () => onAction(nodename, name),
+                    }))}
+                />
+            </Cell>
+            <Cell align="center">
+                <IconButton size="sm" className="align-middle" label={`View logs for node ${nodename}`} onClick={() => onOpenLogs(nodename)}>
+                    <FileIcon className="h-4 w-4"/>
                 </IconButton>
-            </TableCell>
-        </TableRow>
+            </Cell>
+        </Row>
     );
 };
 

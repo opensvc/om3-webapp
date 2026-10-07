@@ -241,6 +241,51 @@ describe("ConsoleTerminal", () => {
         expect(screen.queryByText("The console connection was lost.")).not.toBeInTheDocument();
     });
 
+    test("is a dialog named after the console", async () => {
+        await startSession();
+        expect(screen.getByRole("dialog", {name: "Console container#1 on n1"})).toBeInTheDocument();
+    });
+
+    test("closes on Escape", async () => {
+        const {onClose} = await startSession();
+        await userEvent.keyboard("{Escape}");
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    test("draws the terminal in the colours of the design tokens, and follows the theme", async () => {
+        const root = document.documentElement;
+        root.style.setProperty("--surface-sunken", "#101010");
+        root.style.setProperty("--ink", "#eeeeee");
+        root.style.setProperty("--accent", "#00aaaa");
+        root.style.setProperty("--state-down", "#ff0000");
+        try {
+            const {view} = await startSession();
+            const term = terminals[0];
+            expect(term.options.theme).toMatchObject({
+                background: "#101010",
+                foreground: "#eeeeee",
+                cursor: "#00aaaa",
+                red: "#ff0000",
+            });
+            // A token not defined leaves the xterm default.
+            expect(term.options.theme).not.toHaveProperty("magenta");
+
+            root.style.setProperty("--ink", "#222222");
+            root.classList.add("dark");
+            await waitFor(() => expect(term.options.theme.foreground).toBe("#222222"));
+
+            // The theme is no longer followed once the console closed.
+            view.unmount();
+            root.style.setProperty("--ink", "#333333");
+            root.classList.remove("dark");
+            await new Promise((r) => setTimeout(r, 0));
+            expect(term.options.theme.foreground).toBe("#222222");
+        } finally {
+            root.removeAttribute("style");
+            root.classList.remove("dark");
+        }
+    });
+
     test("opens no session for a ticket issued after the dialog closed", async () => {
         let resolve;
         requestConsoleTicket.mockReturnValue(new Promise((r) => {

@@ -1,7 +1,6 @@
 import React from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {ThemeProvider, createTheme} from '@mui/material/styles';
 import AuthChoice from '../AuthChoice';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 
@@ -52,8 +51,6 @@ vi.mock('../../config/oidcConfiguration', () => ({
 }));
 
 describe('AuthChoice Component', () => {
-    const theme = createTheme();
-
     beforeEach(() => {
         vi.clearAllMocks();
 
@@ -84,25 +81,39 @@ describe('AuthChoice Component', () => {
     const renderComponent = () => {
         return render(
             <MemoryRouter>
-                <ThemeProvider theme={theme}>
-                    <AuthChoice/>
-                </ThemeProvider>
+                <AuthChoice/>
             </MemoryRouter>
         );
     };
 
-    test('renders dialog with title and description', () => {
+    test('renders panel with title and description', () => {
         renderComponent();
-        expect(screen.getByText('Authentication Methods')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Authentication Methods'})).toBeInTheDocument();
         expect(screen.getByText('Please select one of the authentication methods the cluster advertises.')).toBeInTheDocument();
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'Authentication Methods'})).toBeInTheDocument();
     });
 
-    test('renders no buttons when authInfo is null', () => {
+    test('renders a spinner and no buttons when authInfo is null', () => {
         mockUseAuthInfo.mockReturnValue(null);
         renderComponent();
-        expect(screen.queryByText('OpenID')).not.toBeInTheDocument();
-        expect(screen.queryByText('Login')).not.toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading authentication methods');
+        expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    test('hides the spinner once authInfo is loaded', () => {
+        mockUseAuthInfo.mockReturnValue({openid: null, methods: ['basic']});
+        renderComponent();
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    test('uses the authInfo prop over the hook value', () => {
+        mockUseAuthInfo.mockReturnValue(null);
+        render(
+            <MemoryRouter>
+                <AuthChoice authInfo={{openid: null, methods: ['basic']}}/>
+            </MemoryRouter>
+        );
+        expect(screen.getByRole('button', {name: 'Login'})).toBeInTheDocument();
     });
 
     test('renders OpenID button when openid.issuer is defined', () => {
@@ -111,8 +122,8 @@ describe('AuthChoice Component', () => {
             methods: [],
         });
         renderComponent();
-        expect(screen.getByText('OpenID')).toBeInTheDocument();
-        expect(screen.queryByText('Login')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'OpenID'})).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Login'})).not.toBeInTheDocument();
     });
 
     test('renders Login button when methods includes basic', () => {
@@ -121,8 +132,8 @@ describe('AuthChoice Component', () => {
             methods: ['basic'],
         });
         renderComponent();
-        expect(screen.queryByText('OpenID')).not.toBeInTheDocument();
-        expect(screen.getByText('Login')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'OpenID'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Login'})).toBeInTheDocument();
     });
 
     test('renders both buttons when both methods are available', () => {
@@ -131,8 +142,8 @@ describe('AuthChoice Component', () => {
             methods: ['basic'],
         });
         renderComponent();
-        expect(screen.getByText('OpenID')).toBeInTheDocument();
-        expect(screen.getByText('Login')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'OpenID'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Login'})).toBeInTheDocument();
     });
 
     test('clicking OpenID button calls signinRedirect when userManager exists', () => {
@@ -149,7 +160,7 @@ describe('AuthChoice Component', () => {
         });
 
         renderComponent();
-        fireEvent.click(screen.getByText('OpenID'));
+        fireEvent.click(screen.getByRole('button', {name: 'OpenID'}));
 
         expect(mockSigninRedirect).toHaveBeenCalled();
         expect(console.log).not.toHaveBeenCalled();
@@ -166,7 +177,7 @@ describe('AuthChoice Component', () => {
         });
 
         renderComponent();
-        fireEvent.click(screen.getByText('OpenID'));
+        fireEvent.click(screen.getByRole('button', {name: 'OpenID'}));
 
         expect(console.info).toHaveBeenCalledWith(
             "handleAuthChoice openid skipped: can't create userManager"
@@ -180,7 +191,7 @@ describe('AuthChoice Component', () => {
         });
 
         renderComponent();
-        fireEvent.click(screen.getByText('Login'));
+        fireEvent.click(screen.getByRole('button', {name: 'Login'}));
 
         expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
     });
@@ -260,7 +271,7 @@ describe('AuthChoice Component', () => {
 
         renderComponent();
 
-        fireEvent.click(screen.getByText('OpenID'));
+        fireEvent.click(screen.getByRole('button', {name: 'OpenID'}));
 
         await waitFor(() => {
             expect(mockSigninRedirect).toHaveBeenCalled();

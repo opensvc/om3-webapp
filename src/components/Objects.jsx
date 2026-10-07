@@ -1,49 +1,5 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
-import {
-    Box,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Typography,
-    Button,
-    MenuItem,
-    Checkbox,
-    TextField,
-    Snackbar,
-    Alert,
-    ListItemIcon,
-    ListItemText,
-    useMediaQuery,
-    useTheme,
-    Tooltip,
-    IconButton,
-    CircularProgress,
-    Collapse,
-    Menu,
-    FormControl,
-    InputLabel,
-    Select,
-    OutlinedInput,
-    Chip,
-} from "@mui/material";
-import Grid from "@mui/material/Grid";
-import AcUnit from "@mui/icons-material/AcUnit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import CloseIcon from "@mui/icons-material/Close";
-import SyncProblemIcon from "@mui/icons-material/SyncProblem";
-import Stop from "@mui/icons-material/Stop";
-import {green, red, blue, orange, grey} from "@mui/material/colors";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
@@ -54,9 +10,47 @@ import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
+import {useNodeData} from "../hooks/useNodeData";
+import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
+import {StatusMark} from "../ui/components/StatusMark";
+import {FrozenMark} from "../ui/components/FrozenMark";
+import {MenuButton} from "../ui/components/MenuButton";
+import {Button, IconButton} from "../ui/components/Button";
+import {Checkbox, Input} from "../ui/components/Field";
+import {Alert} from "../ui/components/Alert";
+import {Spinner} from "../ui/components/Spinner";
+import {useMediaQuery} from "../ui/lib/media";
+import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, MoreIcon, SearchIcon} from "../ui/icons";
 
+// The breakpoints of the MUI theme the view used: below md (900px) the filters fold
+// behind a button, from lg (1200px) the node columns are shown.
+const MOBILE_QUERY = "(max-width:899.95px)";
+const WIDE_QUERY = "(min-width:1200px)";
+
+/** How long a feedback message stays, as the snackbar it replaces. */
+const FEEDBACK_DURATION_MS = 4000;
+
+/** Feedback tones, from the severities of the snackbar it replaces. */
+const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
+
+/** An availability as a mark state: n/a and anything unknown read as unknown. */
+const MARK_STATE = {up: "up", down: "down", warn: "warn"};
+const markState = (avail) => MARK_STATE[avail] ?? "unknown";
+
+/** Icons of the action menus, the destructive ones in the down colour. */
+const ACTION_ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+const DANGER_ACTION_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
+
+/** The zero timestamp of the API reads as "not set". */
 const ZERO_TIME = "0001-01-01T00:00:00Z";
-const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
+const hasTimestamp = (value) => !!value && value !== ZERO_TIME;
+
+const capitalize = (value) => value.charAt(0).toUpperCase() + value.slice(1);
+
+const actionIcon = ({icon, color}) => (
+    <span aria-hidden="true" className={color === "red" ? DANGER_ACTION_ICON : ACTION_ICON}>{icon}</span>
+);
 
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
@@ -76,301 +70,59 @@ const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
 const selectRemoveObject = (state) => state.removeObject;
 
-const STATUS_COL_WIDTH = 150;
-const NODE_COL_WIDTH = 150;
-const NODE_ICONS_WIDTH = 100;
-const NODE_STATE_WIDTH = 50;
-
-const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
-    return (
-        <Box sx={{
-            width: "80px",
-            height: "24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 0.5
-        }}>
-            <Box sx={{
-                width: "24px",
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                visibility: isNotProvisioned ? "visible" : "hidden"
-            }}>
-                {isNotProvisioned && (
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}} aria-label="Object is not provisioned"/>
-                    </Tooltip>
-                )}
-            </Box>
-
-            <Box sx={{
-                width: "24px",
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-            }}>
-                {avail === "up" && (
-                    <Tooltip title="up">
-                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}} aria-label="Object is up"/>
-                    </Tooltip>
-                )}
-                {avail === "down" && (
-                    <Tooltip title="down">
-                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}} aria-label="Object is down"/>
-                    </Tooltip>
-                )}
-                {avail === "warn" && (
-                    <Tooltip title="warn">
-                        <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}} aria-label="Object has warning"/>
-                    </Tooltip>
-                )}
-                {avail === "n/a" && (
-                    <Tooltip title="n/a">
-                        <FiberManualRecordIcon sx={{color: grey[500], fontSize: 24}} aria-label="Object status is n/a"/>
-                    </Tooltip>
-                )}
-            </Box>
-
-            <Box sx={{
-                width: "24px",
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                visibility: frozen === "frozen" ? "visible" : "hidden"
-            }}>
-                {frozen === "frozen" && (
-                    <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label="Object is frozen"/>
-                    </Tooltip>
-                )}
-            </Box>
-        </Box>
-    );
-}, (prev, next) => prev.avail === next.avail && prev.isNotProvisioned === next.isNotProvisioned && prev.frozen === next.frozen);
-
-const GlobalExpectDisplay = React.memo(({globalExpect}) => {
-    return (
-        <Box sx={{
-            width: "70px",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
-        }}>
-            {globalExpect && (
-                <Tooltip title={globalExpect}>
-                    <Typography variant="caption" sx={{
-                        fontSize: "0.75rem",
-                        lineHeight: "1.2",
-                        maxWidth: "70px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        display: "inline-block"
-                    }}>
-                        {globalExpect}
-                    </Typography>
-                </Tooltip>
-            )}
-        </Box>
-    );
-}, (prev, next) => prev.globalExpect === next.globalExpect);
-
-const NodeStatusIcons = React.memo(({
-                                        nodeAvail,
-                                        isNodeNotProvisioned,
-                                        isFrozen,
-                                        isStopped,
-                                        isLagging,
-                                        stoppedAt,
-                                        node,
-                                    }) => {
-        return (
-            <Box sx={{
-                width: `${NODE_ICONS_WIDTH}px`,
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 0.25,
-            }}>
-                <Box sx={{
-                    width: "20px",
-                    height: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    visibility: isNodeNotProvisioned ? "visible" : "hidden"
-                }}>
-                    {isNodeNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <PriorityHighIcon sx={{color: red[500], fontSize: 18}}
-                                              aria-label={`Node ${node} is not provisioned`}/>
-                        </Tooltip>
-                    )}
-                </Box>
-
-                <Box sx={{
-                    width: "20px",
-                    height: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center"
-                }}>
-                    {nodeAvail === "up" && (
-                        <Tooltip title="up">
-                            <FiberManualRecordIcon sx={{color: green[500], fontSize: 20}}
-                                                   aria-label={`Node ${node} is up`}/>
-                        </Tooltip>
-                    )}
-                    {nodeAvail === "down" && (
-                        <Tooltip title="down">
-                            <FiberManualRecordIcon sx={{color: red[500], fontSize: 20}}
-                                                   aria-label={`Node ${node} is down`}/>
-                        </Tooltip>
-                    )}
-                    {nodeAvail === "warn" && (
-                        <Tooltip title="warn">
-                            <FiberManualRecordIcon sx={{color: orange[500], fontSize: 20}}
-                                                   aria-label={`Node ${node} has warning`}/>
-                        </Tooltip>
-                    )}
-                    {!nodeAvail && (
-                        <Tooltip title="n/a">
-                            <FiberManualRecordIcon sx={{color: grey[500], fontSize: 20}}
-                                                   aria-label={`Node ${node} status is n/a`}/>
-                        </Tooltip>
-                    )}
-                </Box>
-
-                <Box sx={{
-                    width: "20px",
-                    height: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    visibility: isStopped ? "visible" : "hidden"
-                }}>
-                    {isStopped && (
-                        <Tooltip title={stoppedAt ? `stopped at ${new Date(stoppedAt).toLocaleString()}` : "stopped"}>
-                            <Stop
-                                sx={{color: grey[600], fontSize: 16, cursor: 'help'}}
-                                aria-label={`Node ${node} is stopped`}
-                            />
-                        </Tooltip>
-                    )}
-                </Box>
-
-                <Box sx={{
-                    width: "20px",
-                    height: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                }}>
-                    {isLagging ? (
-                        <Tooltip title="RPO breached">
-                            <SyncProblemIcon
-                                sx={{color: orange[500], fontSize: 18}}
-                                aria-label={`Node ${node} RPO breached`}
-                            />
-                        </Tooltip>
-                    ) : isFrozen ? (
-                        <Tooltip title="frozen">
-                            <AcUnit sx={{color: blue[600], fontSize: 18}} aria-label={`Node ${node} is frozen`}/>
-                        </Tooltip>
-                    ) : null}
-                </Box>
-            </Box>
-        );
-    }, (prev, next) =>
-        prev.nodeAvail === next.nodeAvail &&
-        prev.isNodeNotProvisioned === next.isNodeNotProvisioned &&
-        prev.isFrozen === next.isFrozen &&
-        prev.isStopped === next.isStopped &&
-        prev.isLagging === next.isLagging &&
-        prev.stoppedAt === next.stoppedAt &&
-        prev.node === next.node
+/** The not-provisioned mark: an icon in the down colour, named for screen readers. */
+const NotProvisionedMark = () => (
+    <span role="img" aria-label="Not provisioned" title="Not provisioned" className="inline-flex text-state-down">
+        <AlertTriangleIcon className="h-3.5 w-3.5"/>
+    </span>
 );
 
-const NodeStateDisplay = React.memo(({nodeState, node}) => {
-    return (
-        <Box sx={{
-            width: `${NODE_STATE_WIDTH}px`,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center"
-        }}>
-            {nodeState && (
-                <Tooltip title={nodeState}>
-                    <Typography variant="caption" sx={{
-                        fontSize: "0.75rem",
-                        lineHeight: "1.2",
-                        maxWidth: `${NODE_STATE_WIDTH}px`,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        display: "inline-block"
-                    }} aria-label={`Node ${node} state: ${nodeState}`}>
-                        {nodeState}
-                    </Typography>
-                </Tooltip>
-            )}
-        </Box>
-    );
-}, (prev, next) => prev.nodeState === next.nodeState && prev.node === next.node);
+/** Small muted text on one line: a global expect, a monitor state. */
+const SideText = ({children}) => (
+    <span title={children} className="text-[0.75rem] whitespace-nowrap text-ink-muted">{children}</span>
+);
+
+const StatusMarks = React.memo(({avail, isNotProvisioned, frozen, globalExpect}) => (
+    <span className="inline-flex items-center gap-1.5">
+        <StatusMark state={markState(avail)} label={avail || "n/a"}/>
+        <FrozenMark frozen={frozen === "frozen"}/>
+        {isNotProvisioned && <NotProvisionedMark/>}
+        {globalExpect && <SideText>{globalExpect}</SideText>}
+    </span>
+), (prev, next) => prev.avail === next.avail && prev.isNotProvisioned === next.isNotProvisioned &&
+    prev.frozen === next.frozen && prev.globalExpect === next.globalExpect);
 
 const NodeStatus = React.memo(({objectName, node}) => {
-    const nodeData = useEventStore(
-        (s) => s.objectInstanceStatus?.[objectName]?.[node]
-    );
-
+    const nodeData = useNodeData(objectName, node);
+    // Stopped and RPO breached come straight from the instance status: one string each.
+    const stoppedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.stopped_at);
+    const rpoBreachedAt = useEventStore((s) => s.objectInstanceStatus?.[objectName]?.[node]?.rpo_breached_at);
     const hasData = Boolean(nodeData?.avail);
-    const isNodeNotProvisioned = hasData && (nodeData.provisioned === "false" || nodeData.provisioned === false);
-    const isStopped = hasData && hasTimestamp(nodeData.stopped_at);
-    const isLagging = hasData && hasTimestamp(nodeData.rpo_breached_at);
-    const isFrozen = hasData && hasTimestamp(nodeData.frozen_at);
+    if (!hasData) return null;
+    const isNodeNotProvisioned = nodeData.provisioned === "false" || nodeData.provisioned === false;
+    const isStopped = hasTimestamp(stoppedAt);
+    const isLagging = hasTimestamp(rpoBreachedAt);
 
     return (
-        <Box sx={{
-            width: `${NODE_COL_WIDTH}px`,
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between"
-        }}>
-            {hasData ? (
-                <NodeStatusIcons
-                    nodeAvail={nodeData.avail}
-                    isNodeNotProvisioned={isNodeNotProvisioned}
-                    isFrozen={isFrozen}
-                    isStopped={isStopped}
-                    isLagging={isLagging}
-                    stoppedAt={nodeData.stopped_at}
-                    node={node}
-                />
-            ) : (
-                <Box sx={{width: `${NODE_ICONS_WIDTH}px`}}/>
-            )}
-            {hasData ? (
-                <NodeStateDisplay nodeState={nodeData.state} node={node}/>
-            ) : (
-                <Box sx={{width: `${NODE_STATE_WIDTH}px`}}/>
-            )}
-        </Box>
+        <span className="inline-flex items-center gap-1.5" data-node={node}>
+            <StatusMark state={markState(nodeData.avail)} label={nodeData.avail}/>
+            {isStopped && <StoppedMark stoppedAt={stoppedAt}/>}
+            {/* A breached RPO takes the place of the frozen mark, as in the other views. */}
+            {isLagging ? <RpoBreachedMark/> : <FrozenMark frozen={nodeData.frozen === "frozen"}/>}
+            {isNodeNotProvisioned && <NotProvisionedMark/>}
+            {nodeData.state && <SideText>{nodeData.state}</SideText>}
+        </span>
     );
 }, (prev, next) => prev.objectName === next.objectName && prev.node === next.node);
+
+const stopPropagation = (e) => e.stopPropagation();
 
 const TableRowComponent = React.memo(({
                                           objectName,
                                           isSelected,
                                           onSelectObject,
                                           onObjectClick,
-                                          onRowMenuOpen,
+                                          onActionClick,
                                           allNodes,
                                           isWideScreen,
                                       }) => {
@@ -381,100 +133,142 @@ const TableRowComponent = React.memo(({
     const handleRowClick = useCallback(() => {
         onObjectClick(objectName);
     }, [onObjectClick, objectName]);
-    const handleMenuOpen = useCallback((e) => {
-        e.stopPropagation();
-        onRowMenuOpen(e, objectName);
-    }, [onRowMenuOpen, objectName]);
-    const handleCheckboxClick = useCallback((e) => {
-        e.stopPropagation();
-    }, []);
+
+    const isFrozen = objectData.frozen === "frozen";
+    const rowActions = useMemo(() => OBJECT_ACTIONS
+        .filter((action) =>
+            (!action.kinds || action.kinds.includes(parseObjectName(objectName).kind)) &&
+            isActionAllowedForSelection(action.name, [objectName]) &&
+            (action.name !== "freeze" || !isFrozen) &&
+            (action.name !== "unfreeze" || isFrozen)
+        )
+        .map((action) => ({
+            key: action.name,
+            label: capitalize(action.name),
+            icon: actionIcon(action),
+            onSelect: () => onActionClick(action.name, true, objectName),
+        })), [objectName, isFrozen, onActionClick]);
 
     return (
-        <TableRow onClick={handleRowClick} hover sx={{cursor: "pointer"}}>
-            <TableCell sx={{
-                padding: "16px 0px 16px 16px",
-                minWidth: "60px",
-                width: "60px",
-                maxWidth: "60px",
-                boxSizing: "border-box"
-            }}>
+        <Row onActivate={handleRowClick} className={isSelected ? "bg-accent-soft" : undefined}>
+            <Cell align="center" className="w-8">
                 <Checkbox
                     checked={isSelected}
                     onChange={handleCheckboxChange}
-                    onClick={handleCheckboxClick}
+                    onClick={stopPropagation}
                     aria-label={`Select object ${objectName}`}
                 />
-            </TableCell>
-            <TableCell sx={{
-                minWidth: `${STATUS_COL_WIDTH}px`,
-                width: `${STATUS_COL_WIDTH}px`,
-                maxWidth: `${STATUS_COL_WIDTH}px`,
-                position: "relative",
-                height: "100%",
-                padding: "16px 8px",
-                boxSizing: "border-box"
-            }}>
-                <Box sx={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between"
-                }}>
-                    <StatusIcon
-                        avail={objectData.avail}
-                        isNotProvisioned={objectData.isNotProvisioned}
-                        frozen={objectData.frozen}
-                    />
-                    <GlobalExpectDisplay globalExpect={objectData.globalExpect}/>
-                </Box>
-            </TableCell>
-            <TableCell sx={{
-                minWidth: "200px",
-                width: "auto",
-                padding: "16px 8px",
-                boxSizing: "border-box",
-                overflow: "hidden",
-                textOverflow: "ellipsis"
-            }}>
-                <Typography noWrap>{objectName}</Typography>
-            </TableCell>
+            </Cell>
+            <Cell className="whitespace-nowrap">
+                <StatusMarks
+                    avail={objectData.avail}
+                    isNotProvisioned={objectData.isNotProvisioned}
+                    frozen={objectData.frozen}
+                    globalExpect={objectData.globalExpect}
+                />
+            </Cell>
+            <Cell className="text-data font-medium whitespace-nowrap">{objectName}</Cell>
             {isWideScreen &&
                 allNodes.map((node) => (
-                    <TableCell key={node} align="center" sx={{
-                        minWidth: `${NODE_COL_WIDTH}px`,
-                        width: `${NODE_COL_WIDTH}px`,
-                        maxWidth: `${NODE_COL_WIDTH}px`,
-                        position: "relative",
-                        padding: "16px 8px",
-                        boxSizing: "border-box"
-                    }}>
+                    <Cell key={node} className="whitespace-nowrap">
                         <NodeStatus objectName={objectName} node={node}/>
-                    </TableCell>
+                    </Cell>
                 ))}
-            <TableCell sx={{
-                minWidth: "100px",
-                width: "100px",
-                maxWidth: "100px",
-                padding: "16px 8px",
-                boxSizing: "border-box"
-            }}>
-                <IconButton onClick={handleMenuOpen} aria-label={`More actions for object ${objectName}`}>
-                    <MoreVertIcon/>
-                </IconButton>
-            </TableCell>
-        </TableRow>
+            <Cell align="center">
+                {/* The menu lives in the row: its clicks must not open the object. */}
+                <div className="inline-flex align-middle" onClick={stopPropagation}>
+                    <MenuButton
+                        label={`More actions for object ${objectName}`}
+                        icon={<MoreIcon className="h-4 w-4"/>}
+                        compact
+                        align="end"
+                        items={rowActions}
+                    />
+                </div>
+            </Cell>
+        </Row>
     );
 }, (prevProps, nextProps) => {
     return (
         prevProps.objectName === nextProps.objectName &&
         prevProps.isSelected === nextProps.isSelected &&
-        prevProps.isMenuOpen === nextProps.isMenuOpen &&
         prevProps.isWideScreen === nextProps.isWideScreen &&
         prevProps.allNodes.length === nextProps.allNodes.length &&
         prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
     );
 });
+
+/**
+ * A multi-valued filter of the toolbar: a popover of checkboxes, as oc3 does for its
+ * column picker. The summary tells the filter and what it keeps; a click outside or
+ * Escape closes the popover.
+ */
+const FilterPopover = ({label, options, selected, onToggle}) => {
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const onPointerDown = (event) => {
+            const details = ref.current;
+            if (details?.open && !details.contains(event.target)) details.open = false;
+        };
+        document.addEventListener("pointerdown", onPointerDown);
+        return () => document.removeEventListener("pointerdown", onPointerDown);
+    }, []);
+
+    const onKeyDown = (event) => {
+        const details = ref.current;
+        if (event.key !== "Escape" || !details?.open) return;
+        event.preventDefault();
+        event.stopPropagation();
+        details.open = false;
+        details.querySelector("summary")?.focus();
+    };
+
+    const labelOf = (value) => options.find((option) => option.value === value)?.text ?? value;
+    const summary = selected.length === 0 ? "All" : selected.map(labelOf).join(", ");
+
+    return (
+        <details ref={ref} className="relative" onKeyDown={onKeyDown}>
+            <summary
+                className="flex h-7 cursor-pointer list-none items-center gap-1 rounded-(--radius-control) border border-line bg-surface px-2 whitespace-nowrap text-ink-muted hover:border-line-strong [&::-webkit-details-marker]:hidden">
+                {label}
+                <span className="max-w-40 truncate text-ink">{summary}</span>
+                <ChevronDownIcon className="h-3.5 w-3.5"/>
+            </summary>
+            <div
+                role="group"
+                aria-label={label}
+                className="absolute top-full left-0 z-30 mt-1 flex max-h-72 min-w-44 flex-col gap-1 overflow-auto rounded-(--radius-panel) border border-line bg-surface-raised p-2 shadow-lg"
+            >
+                {options.length === 0 && <span className="text-ink-muted">None</span>}
+                {options.map((option) => (
+                    <Checkbox
+                        key={option.value}
+                        checked={selected.includes(option.value)}
+                        onChange={() => onToggle(option.value)}
+                        label={
+                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                {option.mark && <span aria-hidden="true" className="inline-flex">{option.mark}</span>}
+                                {option.text}
+                            </span>
+                        }
+                    />
+                ))}
+            </div>
+        </details>
+    );
+};
+
+/** The values on offer, plus those chosen (from the URL) that the data does not hold. */
+const withSelected = (values, selected) => [...values, ...selected.filter((value) => !values.includes(value))];
+
+const GLOBAL_STATE_MARKS = {
+    up: <StatusMark state="up"/>,
+    down: <StatusMark state="down"/>,
+    warn: <StatusMark state="warn"/>,
+    "n/a": <StatusMark state="unknown"/>,
+    unprovisioned: <AlertTriangleIcon className="h-3.5 w-3.5 text-state-down"/>,
+};
 
 const Objects = () => {
     const location = useLocation();
@@ -500,9 +294,6 @@ const Objects = () => {
     const objectInstanceStatus = useEventStore(selectObjectInstanceStatus);
     const removeObject = useEventStore(selectRemoveObject);
     const [selectedObjects, setSelectedObjects] = useState([]);
-    const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-    const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
-    const [currentObject, setCurrentObject] = useState(null);
     const [selectedNamespaces, setSelectedNamespaces] = useState(rawNamespaces);
     const [selectedKinds, setSelectedKinds] = useState(rawKinds);
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
@@ -512,9 +303,8 @@ const Objects = () => {
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
     const [statusCycleIndex, setStatusCycleIndex] = useState(0);
-    const theme = useTheme();
-    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
-    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+    const isWideScreen = useMediaQuery(WIDE_QUERY);
+    const isMobile = useMediaQuery(MOBILE_QUERY);
     const objectEventTypes = useMemo(() => [
         "ObjectStatusUpdated",
         "InstanceStatusUpdated",
@@ -541,10 +331,7 @@ const Objects = () => {
     const [loading, setLoading] = useState(false);
     const tableContainerRef = useRef(null);
 
-    const globalStateId = React.useId();
-    const namespaceId = React.useId();
-    const kindId = React.useId();
-    const nameSearchId = React.useId();
+    const filtersId = React.useId();
 
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
@@ -603,6 +390,7 @@ const Objects = () => {
                 continue;
             }
 
+            // Check kind filter (multiple selection)
             if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
                 continue;
             }
@@ -692,31 +480,12 @@ const Objects = () => {
         );
     }, []);
 
-    const handleActionsMenuOpen = useCallback((event) => {
-        setActionsMenuAnchor(event.currentTarget);
-    }, []);
-
-    const handleActionsMenuClose = useCallback(() => {
-        setActionsMenuAnchor(null);
-    }, []);
-
-    const handleRowMenuOpen = useCallback((event, objectName) => {
-        setRowMenuAnchor(event.currentTarget);
-        setCurrentObject(objectName);
-    }, []);
-
-    const handleRowMenuClose = useCallback(() => {
-        setRowMenuAnchor(null);
-        setCurrentObject(null);
-    }, []);
-
+    // The menus close themselves once an entry is chosen.
     const handleActionClick = useCallback(
         (action, isSingleObject = false, objectName = null) => {
             setPendingAction({action, target: isSingleObject ? objectName : null});
-            if (isSingleObject) handleRowMenuClose();
-            else handleActionsMenuClose();
         },
-        [handleRowMenuClose, handleActionsMenuClose]
+        []
     );
 
     const updateFrozenStatusOptimistic = useCallback((objectName, newFrozenValue) => {
@@ -866,18 +635,6 @@ const Objects = () => {
         });
     }, []);
 
-    const handleGlobalStateSelectChange = (event) => {
-        setSelectedGlobalStates(event.target.value);
-    };
-
-    const handleNamespaceSelectChange = (event) => {
-        setSelectedNamespaces(event.target.value);
-    };
-
-    const handleKindSelectChange = (event) => {
-        setSelectedKinds(event.target.value);
-    };
-
     const handleScroll = useCallback(() => {
         if (loading) return;
 
@@ -989,536 +746,194 @@ const Objects = () => {
         setPendingAction(null);
     }, []);
 
-    const filteredRowActions = useMemo(() => {
-        if (!currentObject) return [];
-        const objectData = objectStatus[currentObject];
-        const {kind: objectKind} = parseObjectName(currentObject);
-        return OBJECT_ACTIONS.filter(
-            (action) =>
-                (!action.kinds || action.kinds.includes(objectKind)) &&
-                isActionAllowedForSelection(action.name, [currentObject]) &&
-                (action.name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
-                (action.name !== "unfreeze" || objectData?.frozen === "frozen")
-        );
-    }, [currentObject, objectStatus]);
+    // The feedback message hides itself after a while, as the snackbar did.
+    useEffect(() => {
+        if (!snackbar.open) return;
+        const timer = setTimeout(handleSnackbarClose, FEEDBACK_DURATION_MS);
+        return () => clearTimeout(timer);
+    }, [snackbar, handleSnackbarClose]);
 
-    const filteredBulkActions = useMemo(() => {
-        const allSvc = selectedObjects.length > 0
-            && selectedObjects.every((obj) => parseObjectName(obj).kind === "svc");
-        return OBJECT_ACTIONS.filter(
-            (action) => !action.kinds || (allSvc && action.kinds.includes("svc"))
-        );
-    }, [selectedObjects]);
+    const globalStateOptions = useMemo(
+        () => withSelected(globalStates, selectedGlobalStates).map((state) => ({
+            value: state,
+            text: capitalize(state),
+            mark: GLOBAL_STATE_MARKS[state],
+        })),
+        [globalStates, selectedGlobalStates]
+    );
+    const namespaceOptions = useMemo(
+        () => withSelected(namespaces, selectedNamespaces).map((namespace) => ({value: namespace, text: namespace})),
+        [namespaces, selectedNamespaces]
+    );
+    const kindOptions = useMemo(
+        () => withSelected(kinds, selectedKinds).map((kind) => ({value: kind, text: kind})),
+        [kinds, selectedKinds]
+    );
+
+    // Kind-limited actions (svc-only enable / disable) are offered when the whole selection is of that kind.
+    const bulkActions = useMemo(() => {
+        const selectedKinds = new Set(selectedObjects.map((obj) => parseObjectName(obj).kind));
+        return OBJECT_ACTIONS
+            .filter((action) => !action.kinds ||
+                (selectedKinds.size > 0 && [...selectedKinds].every((kind) => action.kinds.includes(kind))))
+            .map((action) => ({
+                key: action.name,
+                label: capitalize(action.name),
+                icon: actionIcon(action),
+                disabled: !isActionAllowedForSelection(action.name, selectedObjects),
+                onSelect: () => handleActionClick(action.name),
+            }));
+    }, [selectedObjects, handleActionClick]);
+
+    const columnCount = 4 + (isWideScreen ? allNodes.length : 0);
 
     return (
-        <Box sx={{
-            height: "100%",
-            bgcolor: "background.default",
-            display: "flex",
-            flexDirection: "column",
-            p: 0,
-            position: 'relative',
-            width: '100vw',
-            margin: 0,
-            overflow: 'hidden'
-        }}>
-            <Box sx={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                bgcolor: "background.paper",
-                border: "2px solid",
-                borderColor: "divider",
-                borderRadius: 0,
-                boxShadow: 3,
-                p: {xs: 1, sm: 2, md: 3},
-                m: 0,
-                overflow: 'hidden'
-            }}>
-                <Box sx={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 10,
-                    backgroundColor: "background.paper",
-                    pt: 2,
-                    pb: 1,
-                    mb: 2,
-                    flexShrink: 0
-                }}>
-                    <Box sx={{
-                        display: "flex",
-                        flexDirection: {xs: "column", md: "row"},
-                        justifyContent: "space-between",
-                        alignItems: {xs: "stretch", md: "center"},
-                        gap: 2
-                    }}>
-                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            {isMobile && (
-                                <Button
-                                    onClick={toggleShowFilters}
-                                    aria-label={showFilters ? "Hide filters" : "Show filters"}
-                                    sx={{minWidth: 'auto', flexShrink: 0}}
-                                    startIcon={<FilterListIcon/>}
-                                >
-                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                        Filters
-                                    </Box>
-                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                                </Button>
-                            )}
-                        </Box>
-
-                        <Collapse in={!isMobile || showFilters} unmountOnExit sx={{width: '100%'}}>
-                            <Grid container spacing={2} sx={{mb: 2}}>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel id={globalStateId}>Global State</InputLabel>
-                                        <Select
-                                            labelId={globalStateId}
-                                            multiple
-                                            value={selectedGlobalStates}
-                                            onChange={handleGlobalStateSelectChange}
-                                            input={<OutlinedInput label="Global State"/>}
-                                            renderValue={(selected) => {
-                                                if (selected.length === 0) return '';
-
-                                                const getStateIcon = (state) => {
-                                                    switch (state) {
-                                                        case "up":
-                                                            return <FiberManualRecordIcon
-                                                                sx={{color: green[500], fontSize: 14, mr: 0.5}}/>;
-                                                        case "down":
-                                                            return <FiberManualRecordIcon
-                                                                sx={{color: red[500], fontSize: 14, mr: 0.5}}/>;
-                                                        case "warn":
-                                                            return <FiberManualRecordIcon
-                                                                sx={{color: orange[500], fontSize: 14, mr: 0.5}}/>;
-                                                        case "n/a":
-                                                            return <FiberManualRecordIcon
-                                                                sx={{color: grey[500], fontSize: 14, mr: 0.5}}/>;
-                                                        case "unprovisioned":
-                                                            return <PriorityHighIcon
-                                                                sx={{color: red[500], fontSize: 14, mr: 0.5}}/>;
-                                                        default:
-                                                            return null;
-                                                    }
-                                                };
-
-                                                return (
-                                                    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
-                                                        {selected.map((value) => (
-                                                            <Chip
-                                                                key={value}
-                                                                label={
-                                                                    <Box display="flex" alignItems="center">
-                                                                        {getStateIcon(value)}
-                                                                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                                                                    </Box>
-                                                                }
-                                                                onClick={() => handleGlobalStateChange(value)}
-                                                                onDelete={() => handleGlobalStateChange(value)}
-                                                                onMouseDown={(event) => {
-                                                                    event.stopPropagation();
-                                                                }}
-                                                                size="small"
-                                                                deleteIcon={<CloseIcon fontSize="small"
-                                                                                       style={{cursor: 'pointer'}}/>}
-                                                            />
-                                                        ))}
-                                                    </Box>
-                                                );
-                                            }}
-                                        >
-                                            {globalStates.map((state) => (
-                                                <MenuItem key={state} value={state}>
-                                                    <Checkbox checked={selectedGlobalStates.includes(state)}/>
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        {state === "up" &&
-                                                            <FiberManualRecordIcon
-                                                                sx={{color: green[500], fontSize: 18}}/>}
-                                                        {state === "down" &&
-                                                            <FiberManualRecordIcon
-                                                                sx={{color: red[500], fontSize: 18}}/>}
-                                                        {state === "warn" && <FiberManualRecordIcon
-                                                            sx={{color: orange[500], fontSize: 18}}/>}
-                                                        {state === "n/a" &&
-                                                            <FiberManualRecordIcon
-                                                                sx={{color: grey[500], fontSize: 18}}/>}
-                                                        {state === "unprovisioned" &&
-                                                            <PriorityHighIcon sx={{color: red[500], fontSize: 18}}/>}
-                                                        {state.charAt(0).toUpperCase() + state.slice(1)}
-                                                    </Box>
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel id={namespaceId}>Namespace</InputLabel>
-                                        <Select
-                                            labelId={namespaceId}
-                                            multiple
-                                            value={selectedNamespaces}
-                                            onChange={handleNamespaceSelectChange}
-                                            input={<OutlinedInput label="Namespace"/>}
-                                            renderValue={(selected) => (
-                                                <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
-                                                    {selected.map((value) => (
-                                                        <Chip
-                                                            key={value}
-                                                            label={value}
-                                                            onDelete={() => handleNamespaceChange(value)}
-                                                            onMouseDown={(event) => {
-                                                                event.stopPropagation();
-                                                            }}
-                                                            size="small"
-                                                            deleteIcon={<CloseIcon fontSize="small"
-                                                                                   style={{cursor: 'pointer'}}/>}
-                                                        />
-                                                    ))}
-                                                </Box>
-                                            )}
-                                        >
-                                            {namespaces.map((namespace) => (
-                                                <MenuItem key={namespace} value={namespace}>
-                                                    <Checkbox checked={selectedNamespaces.includes(namespace)}/>
-                                                    <ListItemText primary={namespace}/>
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel id={kindId}>Kind</InputLabel>
-                                        <Select
-                                            labelId={kindId}
-                                            multiple
-                                            value={selectedKinds}
-                                            onChange={handleKindSelectChange}
-                                            input={<OutlinedInput label="Kind"/>}
-                                            renderValue={(selected) => (
-                                                <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
-                                                    {selected.map((value) => (
-                                                        <Chip
-                                                            key={value}
-                                                            label={value}
-                                                            onDelete={() => handleKindChange(value)}
-                                                            onMouseDown={(event) => {
-                                                                event.stopPropagation();
-                                                            }}
-                                                            size="small"
-                                                            deleteIcon={<CloseIcon fontSize="small"
-                                                                                   style={{cursor: 'pointer'}}/>}
-                                                        />
-                                                    ))}
-                                                </Box>
-                                            )}
-                                        >
-                                            {kinds.map((kind) => (
-                                                <MenuItem key={kind} value={kind}>
-                                                    <Checkbox checked={selectedKinds.includes(kind)}/>
-                                                    <ListItemText primary={kind}/>
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={4} lg={3}>
-                                    <TextField
-                                        id={nameSearchId}
-                                        label="Name"
-                                        value={searchQuery}
-                                        onChange={handleSearchChange}
-                                        fullWidth
-                                        size={isMobile ? "small" : "medium"}
-                                    />
-                                </Grid>
-                            </Grid>
-                        </Collapse>
-
-                        <Box sx={{display: "flex", justifyContent: {xs: "center", md: "flex-end"}}}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={handleActionsMenuOpen}
-                                disabled={!selectedObjects.length}
-                                aria-label="Actions on selected objects"
-                                sx={{flexShrink: 0, whiteSpace: 'nowrap'}}
-                                fullWidth={isMobile}
-                            >
-                                Actions ({selectedObjects.length})
-                            </Button>
-                        </Box>
-                    </Box>
-
-                    <Menu
-                        open={Boolean(rowMenuAnchor)}
-                        anchorEl={rowMenuAnchor}
-                        onClose={handleRowMenuClose}
-                        onClick={(e) => e.stopPropagation()}
-                        anchorOrigin={{
-                            vertical: 'bottom',
-                            horizontal: 'right',
-                        }}
-                        transformOrigin={{
-                            vertical: 'top',
-                            horizontal: 'right',
-                        }}
-                        sx={{
-                            zIndex: 10000,
-                            "& .MuiPaper-root": {
-                                minWidth: 200,
-                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)",
-                            }
-                        }}
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
+                {isMobile && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<FilterIcon className="h-4 w-4"/>}
+                        onClick={toggleShowFilters}
+                        aria-label={showFilters ? "Hide filters" : "Show filters"}
+                        aria-expanded={showFilters}
+                        aria-controls={filtersId}
                     >
-                        {filteredRowActions.map((action) => {
-                            const {name, icon, color} = action;
-                            return (
-                                <MenuItem
-                                    key={name}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleActionClick(name, true, currentObject);
-                                    }}
-                                    sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                        color: color === "red" ? "error.main" : "inherit",
-                                    }}
-                                    aria-label={`${name} action for object ${currentObject}`}
-                                >
-                                    <ListItemIcon sx={{color: color === "red" ? "error.main" : "inherit"}}>
-                                        {icon}
-                                    </ListItemIcon>
-                                    {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </MenuItem>
-                            );
-                        })}
-                    </Menu>
-
-                    {/* Menu for global actions */}
-                    <Menu
-                        open={Boolean(actionsMenuAnchor)}
-                        anchorEl={actionsMenuAnchor}
-                        onClose={handleActionsMenuClose}
-                        anchorOrigin={{
-                            vertical: 'bottom',
-                            horizontal: 'right',
-                        }}
-                        transformOrigin={{
-                            vertical: 'top',
-                            horizontal: 'right',
-                        }}
-                        sx={{
-                            zIndex: 10000,
-                            "& .MuiPaper-root": {
-                                minWidth: 200,
-                                boxShadow: "0px 5px 15px rgba(0,0,0,0.2)"
-                            }
-                        }}
-                    >
-                        {filteredBulkActions.map((action) => {
-                            const {name, icon, color} = action;
-                            const isAllowed = isActionAllowedForSelection(name, selectedObjects);
-                            return (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => handleActionClick(name)}
-                                    disabled={!isAllowed}
-                                    sx={{
-                                        color: isAllowed
-                                            ? (color === "red" ? "error.main" : "inherit")
-                                            : "text.disabled",
-                                        "&.Mui-disabled": {opacity: 0.5}
-                                    }}
-                                    aria-label={`${name} action for selected objects`}
-                                >
-                                    <ListItemIcon sx={{
-                                        color: isAllowed
-                                            ? (color === "red" ? "error.main" : "inherit")
-                                            : "text.disabled"
-                                    }}>
-                                        {icon}
-                                    </ListItemIcon>
-                                    <ListItemText>{name.charAt(0).toUpperCase() + name.slice(1)}</ListItemText>
-                                </MenuItem>
-                            );
-                        })}
-                    </Menu>
-                </Box>
-                <TableContainer
-                    ref={tableContainerRef}
-                    sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        boxShadow: "none",
-                        border: "none",
-                        position: 'relative'
-                    }}
-                >
-                    <Table sx={{
-                        position: 'relative',
-                        tableLayout: 'fixed',
-                        width: '100%'
-                    }}>
-                        <TableHead sx={{position: "sticky", top: 0, zIndex: 20, backgroundColor: "background.paper"}}>
-                            <TableRow>
-                                <TableCell sx={{
-                                    padding: "16px 0px 16px 16px",
-                                    minWidth: "60px",
-                                    width: "60px",
-                                    maxWidth: "60px",
-                                    boxSizing: "border-box"
-                                }}>
-                                    <Checkbox
-                                        checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
-                                        onChange={handleSelectAll}
-                                        aria-label="Select all objects"
-                                    />
-                                </TableCell>
-                                <TableCell sx={{
-                                    minWidth: `${STATUS_COL_WIDTH}px`,
-                                    width: `${STATUS_COL_WIDTH}px`,
-                                    maxWidth: `${STATUS_COL_WIDTH}px`,
-                                    position: "relative",
-                                    cursor: "pointer",
-                                    padding: "16px 8px",
-                                    boxSizing: "border-box"
-                                }} onClick={() => handleSort("status")}>
-                                    <Box sx={{
-                                        width: "100%",
-                                        height: "100%",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "space-between"
-                                    }}>
-                                        <Box sx={{
-                                            width: "80px",
-                                            display: "flex",
-                                            justifyContent: "center",
-                                            alignItems: "center",
-                                            gap: 0.5
-                                        }}>
-                                            <strong>Status</strong>
-                                            {sortColumn === "status" && (sortDirection === "asc" ?
-                                                <KeyboardArrowUpIcon fontSize="small"/> :
-                                                <KeyboardArrowDownIcon fontSize="small"/>)}
-                                        </Box>
-                                        <Box sx={{width: "70px"}}></Box>
-                                    </Box>
-                                </TableCell>
-                                <TableCell sx={{
-                                    cursor: "pointer",
-                                    padding: "16px 8px",
-                                    minWidth: "200px",
-                                    width: "auto",
-                                    boxSizing: "border-box"
-                                }} onClick={() => handleSort("object")}>
-                                    <Box sx={{display: "flex", alignItems: "center", gap: 0.5}}>
-                                        <strong>Object</strong>
-                                        {sortColumn === "object" && (sortDirection === "asc" ?
-                                            <KeyboardArrowUpIcon fontSize="small"/> :
-                                            <KeyboardArrowDownIcon fontSize="small"/>)}
-                                    </Box>
-                                </TableCell>
-                                {isWideScreen && allNodes.map((node) => (
-                                    <TableCell key={node} sx={{
-                                        minWidth: `${NODE_COL_WIDTH}px`,
-                                        width: `${NODE_COL_WIDTH}px`,
-                                        maxWidth: `${NODE_COL_WIDTH}px`,
-                                        position: "relative",
-                                        cursor: "pointer",
-                                        padding: "16px 8px",
-                                        boxSizing: "border-box"
-                                    }} onClick={() => handleSort(node)}>
-                                        <Box sx={{
-                                            width: "100%",
-                                            height: "100%",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between"
-                                        }}>
-                                            <Box sx={{
-                                                width: `${NODE_ICONS_WIDTH}px`,
-                                                display: "flex",
-                                                justifyContent: "center",
-                                                alignItems: "center",
-                                                gap: 0.5
-                                            }}>
-                                                <strong>{node}</strong>
-                                                {sortColumn === node && (sortDirection === "asc" ?
-                                                    <KeyboardArrowUpIcon fontSize="small"/> :
-                                                    <KeyboardArrowDownIcon fontSize="small"/>)}
-                                            </Box>
-                                            <Box sx={{width: `${NODE_STATE_WIDTH}px`}}></Box>
-                                        </Box>
-                                    </TableCell>
-                                ))}
-                                <TableCell sx={{
-                                    padding: "16px 8px",
-                                    minWidth: "100px",
-                                    width: "100px",
-                                    maxWidth: "100px",
-                                    boxSizing: "border-box"
-                                }}>
-                                    <strong>Actions</strong>
-                                </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {visibleObjectNames.map((objectName) => (
-                                <TableRowComponent
-                                    key={objectName}
-                                    objectName={objectName}
-                                    isSelected={selectedObjects.includes(objectName)}
-                                    onSelectObject={handleSelectObject}
-                                    onObjectClick={handleObjectClick}
-                                    onRowMenuOpen={handleRowMenuOpen}
-                                    isMenuOpen={Boolean(rowMenuAnchor) && currentObject === objectName}
-                                    allNodes={allNodes}
-                                    isWideScreen={isWideScreen}
-                                    onActionClick={handleActionClick}
-                                    onRowMenuClose={handleRowMenuClose}
+                        <span className="hidden sm:inline">Filters</span>
+                        <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
+                    </Button>
+                )}
+                {(!isMobile || showFilters) && (
+                    <div id={filtersId} className="flex flex-wrap items-center gap-3">
+                        <FilterPopover
+                            label="Global State"
+                            options={globalStateOptions}
+                            selected={selectedGlobalStates}
+                            onToggle={handleGlobalStateChange}
+                        />
+                        <FilterPopover
+                            label="Namespace"
+                            options={namespaceOptions}
+                            selected={selectedNamespaces}
+                            onToggle={handleNamespaceChange}
+                        />
+                        <FilterPopover
+                            label="Kind"
+                            options={kindOptions}
+                            selected={selectedKinds}
+                            onToggle={handleKindChange}
+                        />
+                        <label className="flex items-center gap-1 text-ink-muted">
+                            Name
+                            <span className="relative flex items-center">
+                                <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5"/>
+                                <Input
+                                    type="search"
+                                    className="h-7 w-48 pl-7"
+                                    value={searchQuery}
+                                    onChange={handleSearchChange}
                                 />
-                            ))}
-                        </TableBody>
-                    </Table>
-                    {loading && (
-                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
-                            <CircularProgress size={24}/>
-                        </Box>
+                            </span>
+                        </label>
+                    </div>
+                )}
+                <div className="ml-auto flex items-center gap-3">
+                    {selectedObjects.length > 0 && (
+                        <span className="whitespace-nowrap text-ink-muted">{selectedObjects.length} selected</span>
                     )}
-                    {visibleObjectNames.length === 0 && (
-                        <Typography align="center" color="textSecondary" sx={{mt: 2, p: 3}}>
-                            No objects found matching the current filters.
-                        </Typography>
-                    )}
-                </TableContainer>
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={4000}
-                    onClose={handleSnackbarClose}
-                    anchorOrigin={{vertical: "bottom", horizontal: "center"}}
+                    <MenuButton
+                        label="Actions on selected objects"
+                        disabled={!selectedObjects.length}
+                        align="end"
+                        items={bulkActions}
+                    />
+                </div>
+            </div>
+
+            {snackbar.open && (
+                <Alert
+                    tone={TONES[snackbar.severity] ?? "info"}
+                    className="shrink-0"
+                    action={
+                        <IconButton label="Close" bare onClick={handleSnackbarClose}>
+                            <CloseIcon className="h-4 w-4"/>
+                        </IconButton>
+                    }
                 >
-                    <Alert severity={snackbar.severity} onClose={handleSnackbarClose}>
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
-                <ActionDialogManager
-                    pendingAction={pendingAction}
-                    handleConfirm={handleExecuteActionOnSelected}
-                    target={pendingAction?.target ? `object ${pendingAction.target}` : `${selectedObjects.length} objects`}
-                    supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
-                    onClose={handleClosePendingAction}
-                />
-            </Box>
+                    {snackbar.message}
+                </Alert>
+            )}
+
+            <Table ref={tableContainerRef} sticky aria-label="Objects" className="min-h-0 flex-1">
+                <thead>
+                    <HeaderRow>
+                        <HeaderCell align="center" className="w-8">
+                            <Checkbox
+                                checked={selectedObjects.length === filteredObjectNames.length && filteredObjectNames.length > 0}
+                                onChange={handleSelectAll}
+                                aria-label="Select all objects"
+                            />
+                        </HeaderCell>
+                        <SortHeaderCell
+                            label="Status"
+                            active={sortColumn === "status"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("status")}
+                        />
+                        <SortHeaderCell
+                            label="Object"
+                            active={sortColumn === "object"}
+                            direction={sortDirection}
+                            onSort={() => handleSort("object")}
+                        />
+                        {isWideScreen && allNodes.map((node) => (
+                            <SortHeaderCell
+                                key={node}
+                                label={node}
+                                active={sortColumn === node}
+                                direction={sortDirection}
+                                onSort={() => handleSort(node)}
+                            />
+                        ))}
+                        <HeaderCell align="center">Actions</HeaderCell>
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {visibleObjectNames.map((objectName) => (
+                        <TableRowComponent
+                            key={objectName}
+                            objectName={objectName}
+                            isSelected={selectedObjects.includes(objectName)}
+                            onSelectObject={handleSelectObject}
+                            onObjectClick={handleObjectClick}
+                            onActionClick={handleActionClick}
+                            allNodes={allNodes}
+                            isWideScreen={isWideScreen}
+                        />
+                    ))}
+                    {visibleObjectNames.length === 0 && (
+                        <EmptyRow colSpan={columnCount}>
+                            No objects found matching the current filters.
+                        </EmptyRow>
+                    )}
+                </tbody>
+            </Table>
+            {loading && (
+                <div className="flex shrink-0 justify-center">
+                    <Spinner label="Loading more objects"/>
+                </div>
+            )}
+
+            <ActionDialogManager
+                pendingAction={pendingAction}
+                handleConfirm={handleExecuteActionOnSelected}
+                target={pendingAction?.target ? `object ${pendingAction.target}` : `${selectedObjects.length} objects`}
+                supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
+                onClose={handleClosePendingAction}
+            />
             <EventLogger eventTypes={objectEventTypes} title="Object Events Logger" buttonLabel="Object Events"/>
-        </Box>
+        </div>
     );
 };
 

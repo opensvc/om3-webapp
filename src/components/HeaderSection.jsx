@@ -1,153 +1,91 @@
 import React from 'react';
-import {
-    Box,
-    Typography,
-    Tooltip,
-    IconButton,
-    Menu,
-    MenuItem,
-    ListItemIcon,
-    ListItemText,
-} from '@mui/material';
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import AcUnitIcon from '@mui/icons-material/AcUnit';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
-import {blue, red} from '@mui/material/colors';
+import {MenuButton} from '../ui/components/MenuButton';
+import {StatusBadge} from '../ui/components/StatusBadge';
+import {statusBadge} from '../ui/components/status';
+import {FrozenMark} from '../ui/components/FrozenMark';
+import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
+import {AlertTriangleIcon} from '../ui/icons';
 import {OBJECT_ACTIONS} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
-import logger from '../utils/logger.js';
 
+/** Icon of an action in a menu: the action icons are sized to the menu line. */
+const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
+
+
+const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+/**
+ * Record header of the object page: the kind icon and the object name, then its
+ * global state, frozen and provisioning marks, the global expectation in progress,
+ * and the object actions menu at the right edge.
+ */
 const HeaderSection = ({
                            decodedObjectName,
-                           objectKind,
+                           kind,
                            globalStatus,
                            actionInProgress,
-                           objectMenuAnchor,
-                           setObjectMenuAnchor,
                            handleObjectActionClick,
                            getObjectStatus,
-                           getColor,
-                           objectMenuAnchorRef,
                        }) => {
+    if (!globalStatus) return null;
+
     const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
-    const {globalExpect} = getObjectStatus();
+    const {avail, frozen, globalExpect} = getObjectStatus();
+    const badge = statusBadge(avail);
+    // Some actions only apply to some kinds (enable and disable to services).
     const allowedActions = OBJECT_ACTIONS.filter(
-        (action) => !action.kinds || action.kinds.includes(objectKind)
+        (action) => !action.kinds || action.kinds.includes(kind)
     );
 
     return (
-        globalStatus && (
-            <Box
-                sx={{
-                    p: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}
-            >
-                <Box sx={{flex: 1, minWidth: 0}}>
-                    <Typography variant="h4" fontWeight="bold" noWrap>
-                        {decodedObjectName}
-                    </Typography>
-                </Box>
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+                <ObjectIcon kind={om3ObjectKind(kind)} className="h-5 w-5"/>
+                <h1 className="truncate text-title font-semibold">{decodedObjectName}</h1>
+            </div>
 
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 2, position: 'relative'}}>
-                    {globalExpect && (
-                        <Box
-                            sx={{
-                                width: "70px",
-                                display: "flex",
-                                justifyContent: "center",
-                                position: "absolute",
-                                left: 0,
-                            }}
-                        >
-                            <Tooltip title={globalExpect}>
-                                <Typography variant="caption" sx={{fontSize: "0.75rem"}}>
-                                    {globalExpect}
-                                </Typography>
-                            </Tooltip>
-                        </Box>
-                    )}
-
-                    <Box sx={{ml: globalExpect ? "70px" : 0, display: 'flex', alignItems: 'center', gap: 1}}>
-                        <Tooltip title={getObjectStatus().avail || 'unknown'}>
-                            <FiberManualRecordIcon
-                                sx={{color: getColor(getObjectStatus().avail), fontSize: '1.2rem'}}
-                            />
-                        </Tooltip>
-                        {getObjectStatus().frozen === 'frozen' && (
-                            <Tooltip title="frozen">
-                                <AcUnitIcon sx={{color: blue[300], fontSize: '1.2rem'}}/>
-                            </Tooltip>
-                        )}
-                        {isNotProvisioned && (
-                            <Tooltip title="Not Provisioned">
-                                <PriorityHighIcon
-                                    sx={{color: red[500], fontSize: '1.2rem'}}
-                                    aria-label="Object is not provisioned"
-                                />
-                            </Tooltip>
-                        )}
-                    </Box>
-
-                    <IconButton
-                        onClick={(e) => {
-                            setObjectMenuAnchor(e.currentTarget);
-                            logger.info("Object menu opened at:", e.currentTarget.getBoundingClientRect());
-                        }}
-                        disabled={actionInProgress}
-                        aria-label="Object actions"
-                        ref={objectMenuAnchorRef}
+            <div className="flex items-center gap-3">
+                {globalExpect && (
+                    <span title={globalExpect} className="text-data whitespace-nowrap text-ink-muted">
+                        {globalExpect}
+                    </span>
+                )}
+                <span data-state={badge.state} title={`Object status: ${avail || "unknown"}`} className="inline-flex">
+                    <StatusBadge state={badge.state} label={badge.label ?? (avail || undefined)} className="w-auto"/>
+                </span>
+                <FrozenMark frozen={frozen === 'frozen'}/>
+                {isNotProvisioned && (
+                    <span
+                        role="img"
+                        title="Not Provisioned"
+                        aria-label="Object is not provisioned"
+                        className="text-state-down"
                     >
-                        <Tooltip title="Actions">
-                            <MoreVertIcon sx={{fontSize: '1.2rem'}}/>
-                        </Tooltip>
-                    </IconButton>
-
-                    <Menu
-                        anchorEl={objectMenuAnchor}
-                        open={Boolean(objectMenuAnchor)}
-                        onClose={() => setObjectMenuAnchor(null)}
-                    >
-                        {allowedActions.map(({name, icon, color}) => {
-                            const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
-                            return (
-                                <MenuItem
-                                    key={name}
-                                    onClick={() => {
-                                        handleObjectActionClick(name);
-                                        setObjectMenuAnchor(null);
-                                    }}
-                                    disabled={!isAllowed || actionInProgress}
-                                    sx={{
-                                        color: isAllowed
-                                            ? (color === "red" ? "error.main" : "inherit")
-                                            : "text.disabled",
-                                        '&.Mui-disabled': {opacity: 0.5},
-                                    }}
-                                    aria-label={`Object ${name} action`}
-                                >
-                                    <ListItemIcon
-                                        sx={{
-                                            minWidth: 40,
-                                            color: isAllowed
-                                                ? (color === "red" ? "error.main" : "inherit")
-                                                : "text.disabled"
-                                        }}>
-                                        {icon}
-                                    </ListItemIcon>
-                                    <ListItemText>
-                                        {name.charAt(0).toUpperCase() + name.slice(1)}
-                                    </ListItemText>
-                                </MenuItem>
-                            );
-                        })}
-                    </Menu>
-                </Box>
-            </Box>
-        )
+                        <AlertTriangleIcon className="h-4 w-4"/>
+                    </span>
+                )}
+                <MenuButton
+                    label="Object actions"
+                    align="end"
+                    disabled={actionInProgress}
+                    items={allowedActions.map(({name, icon, color}) => {
+                        const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
+                        return {
+                            key: name,
+                            label: capitalize(name),
+                            icon: (
+                                <span aria-hidden="true" className={color === "red" && isAllowed ? DANGER_ICON : ICON}>
+                                    {icon}
+                                </span>
+                            ),
+                            disabled: !isAllowed || actionInProgress,
+                            onSelect: () => handleObjectActionClick(name),
+                        };
+                    })}
+                />
+            </div>
+        </div>
     );
 };
 

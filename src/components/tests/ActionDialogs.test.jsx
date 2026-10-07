@@ -1,33 +1,11 @@
 import React from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, within} from '@testing-library/react';
 import {
     FreezeDialog, StopDialog, RestartDialog, ClearDialog, DrainDialog,
     UnprovisionDialog, PurgeDialog, DeleteDialog, SwitchDialog, GivebackDialog,
     DeleteKeyDialog, CreateKeyDialog, UpdateConfigDialog,
-    ManageConfigParamsDialog, SimpleConfirmDialog,
+    ManageConfigParamsDialog, SimpleConfirmDialog, ShutdownDialog,
 } from '../ActionDialogs';
-
-// Mock MUI components to simplify rendering and add accessibility labels
-jest.mock('@mui/material', () => ({
-    Dialog: ({open, children}) => (open ? <div data-testid="dialog">{children}</div> : null),
-    DialogTitle: ({children}) => <h2>{children}</h2>,
-    DialogContent: ({children}) => <div>{children}</div>,
-    DialogActions: ({children}) => <div>{children}</div>,
-    Button: ({onClick, disabled, children, 'aria-label': ariaLabel, variant}) =>
-        <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} data-variant={variant}>{children}</button>,
-    Checkbox: ({checked, onChange, 'aria-label': ariaLabel}) =>
-        <input type="checkbox" checked={checked} onChange={onChange} aria-label={ariaLabel}/>,
-    FormControlLabel: ({control, label}) => <label>{control}{label}</label>,
-    Typography: ({children}) => <span>{children}</span>,
-    TextField: ({value, onChange, 'aria-label': ariaLabel, multiline, placeholder, rows, sx}) => {
-        if (multiline) {
-            return <textarea aria-label={ariaLabel} value={value} onChange={onChange} placeholder={placeholder}
-                             rows={rows}/>;
-        }
-        return <input aria-label={ariaLabel} value={value} onChange={onChange} placeholder={placeholder}/>;
-    },
-    Box: ({children}) => <div>{children}</div>,
-}));
 
 describe('ActionDialogs', () => {
     const onClose = jest.fn();
@@ -37,7 +15,42 @@ describe('ActionDialogs', () => {
     afterEach(() => jest.clearAllMocks());
 
     // Helper to test dialogs with a single checkbox and a confirm button
-    function testCheckboxDialog(DialogComponent, dialogTitleText, confirmLabel = 'Confirm') {
+    function testCheckboxDialog(DialogComponent, dialogTitleText, confirmLabel = 'Confirm', {
+        checkboxName, checkboxText, confirmName, confirmText = confirmLabel, danger = false,
+    } = {}) {
+        test(`${dialogTitleText} renders a dialog with its checkbox and buttons`, () => {
+            render(
+                <DialogComponent open onClose={onClose} onConfirm={onConfirm}
+                                 checked={false} setChecked={defaultSetState} disabled={false}/>
+            );
+            const dialog = screen.getByRole('dialog', {name: dialogTitleText});
+            const checkbox = within(dialog).getByRole('checkbox', {name: checkboxName});
+            expect(checkbox).not.toBeChecked();
+            expect(within(dialog).getByLabelText(checkboxText)).toBe(checkbox);
+            const confirmBtn = within(dialog).getByRole('button', {name: confirmName});
+            expect(confirmBtn).toHaveTextContent(confirmText);
+            expect(confirmBtn).toHaveClass(danger ? 'bg-state-down' : 'bg-accent');
+            expect(within(dialog).getByRole('button', {name: 'Cancel'})).toBeEnabled();
+        });
+
+        test(`${dialogTitleText} is not rendered when closed`, () => {
+            render(
+                <DialogComponent open={false} onClose={onClose} onConfirm={onConfirm}
+                                 checked={false} setChecked={defaultSetState} disabled={false}/>
+            );
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        });
+
+        test(`${dialogTitleText} calls onClose on Escape`, () => {
+            render(
+                <DialogComponent open onClose={onClose} onConfirm={onConfirm}
+                                 checked={false} setChecked={defaultSetState} disabled={false}/>
+            );
+            fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+            expect(onClose).toHaveBeenCalledTimes(1);
+            expect(onConfirm).not.toHaveBeenCalled();
+        });
+
         test(`${dialogTitleText} enables confirm when checked`, () => {
             let checked = false;
             const setChecked = jest.fn(val => checked = val);
@@ -87,15 +100,103 @@ describe('ActionDialogs', () => {
     }
 
     // Tests for simple checkbox dialogs
-    testCheckboxDialog(FreezeDialog, 'Confirm Freeze');
-    testCheckboxDialog(StopDialog, 'Confirm Stop', 'Stop');
-    testCheckboxDialog(RestartDialog, 'Confirm Restart', 'Restart');
-    testCheckboxDialog(ClearDialog, 'Confirm Clear');
-    testCheckboxDialog(DrainDialog, 'Confirm Drain');
-    testCheckboxDialog(SwitchDialog, 'Confirm Switch');
-    testCheckboxDialog(GivebackDialog, 'Confirm Giveback');
+    testCheckboxDialog(FreezeDialog, 'Confirm Freeze', 'Confirm', {
+        checkboxName: 'Confirm failover pause',
+        checkboxText: 'I understand that the selected service orchestration will be paused.',
+        confirmName: 'Confirm freeze action',
+    });
+    testCheckboxDialog(StopDialog, 'Confirm Stop', 'Stop', {
+        checkboxName: 'Confirm service interruption',
+        checkboxText: 'I understand that this may interrupt services.',
+        confirmName: 'Confirm stop action',
+        danger: true,
+    });
+    testCheckboxDialog(RestartDialog, 'Confirm Restart', 'Restart', {
+        checkboxName: 'Confirm service interruption',
+        checkboxText: 'I understand that this may interrupt services.',
+        confirmName: 'Confirm restart action',
+        danger: true,
+    });
+    testCheckboxDialog(ClearDialog, 'Confirm Clear', 'Confirm', {
+        checkboxName: 'Confirm clear action',
+        checkboxText: 'I understand that this will clear node status and logs.',
+        confirmName: 'Confirm clear action',
+    });
+    testCheckboxDialog(DrainDialog, 'Confirm Drain', 'Confirm', {
+        checkboxName: 'Confirm service migration',
+        checkboxText: 'I understand that this will migrate services away from the selected nodes.',
+        confirmName: 'Confirm drain action',
+    });
+    testCheckboxDialog(SwitchDialog, 'Confirm Switch', 'Confirm', {
+        checkboxName: 'Confirm service unavailability',
+        checkboxText: 'I understand the selected services will be unavailable during move.',
+        confirmName: 'Confirm switch action',
+    });
+    testCheckboxDialog(GivebackDialog, 'Confirm Giveback', 'Confirm', {
+        checkboxName: 'Confirm service unavailability',
+        checkboxText: 'I understand the selected services will be unavailable during move.',
+        confirmName: 'Confirm giveback action',
+    });
+
+    test('SwitchDialog disables Cancel while disabled, the other dialogs do not', () => {
+        const {unmount} = render(
+            <SwitchDialog open onClose={onClose} onConfirm={onConfirm}
+                          checked={true} setChecked={defaultSetState} disabled={true}/>
+        );
+        expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled();
+        unmount();
+        render(
+            <GivebackDialog open onClose={onClose} onConfirm={onConfirm}
+                            checked={true} setChecked={defaultSetState} disabled={true}/>
+        );
+        expect(screen.getByRole('button', {name: 'Cancel'})).toBeEnabled();
+    });
 
     // ----- UnprovisionDialog specific tests (including isNodeAction branch) -----
+    describe('ShutdownDialog', () => {
+        const render2 = (checkboxes, setCb, disabled = false) => (
+            <ShutdownDialog open onClose={onClose} onConfirm={onConfirm}
+                            checkboxes={checkboxes} setCheckboxes={setCb} disabled={disabled}/>
+        );
+
+        afterEach(() => jest.clearAllMocks());
+
+        test('asks to acknowledge the instances shutdown and the peer takeover before a danger confirm', () => {
+            let checkboxes = {instancesDown: false, peerTakeover: false};
+            const setCb = jest.fn(updater => {
+                checkboxes = updater(checkboxes);
+            });
+            const {rerender} = render(render2(checkboxes, setCb));
+
+            const dialog = screen.getByRole('dialog', {name: 'Confirm Shutdown'});
+            expect(within(dialog).getAllByRole('checkbox').map((c) => c.getAttribute('aria-label'))).toEqual([
+                'Confirm instances shutdown', 'Confirm peer takeover',
+            ]);
+            const confirmBtn = screen.getByRole('button', {name: 'Confirm shutdown action'});
+            expect(confirmBtn).toBeDisabled();
+            expect(confirmBtn).toHaveClass('bg-state-down');
+
+            fireEvent.click(screen.getByLabelText(/all svc and vol instances on this node will be shut down/i));
+            expect(checkboxes).toEqual({instancesDown: true, peerTakeover: false});
+            rerender(render2(checkboxes, setCb));
+            expect(confirmBtn).toBeDisabled();
+
+            fireEvent.click(screen.getByLabelText(/peer nodes are not notified of a maintenance period/i));
+            expect(checkboxes).toEqual({instancesDown: true, peerTakeover: true});
+            rerender(render2(checkboxes, setCb));
+            expect(confirmBtn).not.toBeDisabled();
+            fireEvent.click(confirmBtn);
+            expect(onConfirm).toHaveBeenCalledTimes(1);
+        });
+
+        test('stays disabled while an action runs, and cancels', () => {
+            render(render2({instancesDown: true, peerTakeover: true}, jest.fn(), true));
+            expect(screen.getByRole('button', {name: 'Confirm shutdown action'})).toBeDisabled();
+            fireEvent.click(screen.getByRole('button', {name: /^Cancel$/i}));
+            expect(onClose).toHaveBeenCalled();
+        });
+    });
+
     describe('UnprovisionDialog', () => {
         const baseCheckboxes = {dataLoss: false, clusterwide: false, serviceInterruption: false};
         const setCheckboxes = jest.fn();
@@ -112,13 +213,19 @@ describe('ActionDialogs', () => {
                                    checkboxes={checkboxes} setCheckboxes={setCb} disabled={false}/>
             );
 
+            const dialog = screen.getByRole('dialog', {name: 'Confirm Unprovision'});
+            expect(within(dialog).getAllByRole('checkbox').map((c) => c.getAttribute('aria-label'))).toEqual([
+                'Confirm data loss', 'Confirm clusterwide orchestration', 'Confirm service interruption',
+            ]);
             const confirmBtn = screen.getByRole('button', {name: /Confirm unprovision action/i});
             expect(confirmBtn).toBeDisabled();
+            expect(confirmBtn).toHaveClass('bg-state-down');
 
             // Check each checkbox individually
             fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
             fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted/i));
             fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+            expect(checkboxes).toEqual({dataLoss: true, clusterwide: true, serviceInterruption: true});
 
             // Simulate state updates
             rerender(
@@ -152,6 +259,7 @@ describe('ActionDialogs', () => {
             // Check only dataLoss and serviceInterruption
             fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
             fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted/i));
+            expect(checkboxes).toEqual({dataLoss: true, clusterwide: false, serviceInterruption: true});
 
             rerender(
                 <UnprovisionDialog open pendingAction={pendingAction} onClose={onClose} onConfirm={onConfirm}
@@ -161,6 +269,16 @@ describe('ActionDialogs', () => {
             expect(confirmBtn).not.toBeDisabled();
             fireEvent.click(confirmBtn);
             expect(onConfirm).toHaveBeenCalled();
+        });
+
+        test('hides the clusterwide checkbox for a batch node action', () => {
+            render(
+                <UnprovisionDialog open pendingAction={{batch: 'nodes'}} onClose={onClose} onConfirm={onConfirm}
+                                   checkboxes={{dataLoss: true, clusterwide: false, serviceInterruption: true}}
+                                   setCheckboxes={setCheckboxes} disabled={false}/>
+            );
+            expect(screen.queryByRole('checkbox', {name: 'Confirm clusterwide orchestration'})).not.toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Confirm unprovision action'})).toBeEnabled();
         });
 
         test('calls onClose when cancel is clicked', () => {
@@ -197,12 +315,18 @@ describe('ActionDialogs', () => {
                 <PurgeDialog open onClose={onClose} onConfirm={onConfirm}
                              checkboxes={checkboxes} setCheckboxes={setCb} disabled={false}/>
             );
+            expect(screen.getByRole('dialog', {name: 'Confirm Purge'})).toBeInTheDocument();
+            expect(screen.getAllByRole('checkbox').map((c) => c.getAttribute('aria-label'))).toEqual([
+                'Confirm data loss', 'Confirm configuration loss', 'Confirm service interruption',
+            ]);
             const confirmBtn = screen.getByRole('button', {name: /Confirm purge action/i});
             expect(confirmBtn).toBeDisabled();
+            expect(confirmBtn).toHaveClass('bg-state-down');
 
             fireEvent.click(screen.getByLabelText(/I understand data will be lost/i));
             fireEvent.click(screen.getByLabelText(/I understand the configuration will be lost/i));
             fireEvent.click(screen.getByLabelText(/I understand the selected services may be temporarily interrupted/i));
+            expect(checkboxes).toEqual({dataLoss: true, configLoss: true, serviceInterruption: true});
 
             rerender(
                 <PurgeDialog open onClose={onClose} onConfirm={onConfirm}
@@ -212,6 +336,15 @@ describe('ActionDialogs', () => {
             expect(confirmBtn).not.toBeDisabled();
             fireEvent.click(confirmBtn);
             expect(onConfirm).toHaveBeenCalled();
+        });
+
+        test('confirm button disabled when disabled prop is true', () => {
+            render(
+                <PurgeDialog open onClose={onClose} onConfirm={onConfirm}
+                             checkboxes={{dataLoss: true, configLoss: true, serviceInterruption: true}}
+                             setCheckboxes={setCheckboxes} disabled={true}/>
+            );
+            expect(screen.getByRole('button', {name: /Confirm purge action/i})).toBeDisabled();
         });
 
         test('calls onClose on cancel', () => {
@@ -238,11 +371,15 @@ describe('ActionDialogs', () => {
                 <DeleteDialog open onClose={onClose} onConfirm={onConfirm}
                               checkboxes={checkboxes} setCheckboxes={setCb} disabled={false}/>
             );
+            expect(screen.getByRole('dialog', {name: 'Confirm Delete'})).toBeInTheDocument();
             const confirmBtn = screen.getByRole('button', {name: /Confirm delete action/i});
             expect(confirmBtn).toBeDisabled();
+            expect(confirmBtn).toHaveTextContent('Delete');
+            expect(confirmBtn).toHaveClass('bg-state-down');
 
             fireEvent.click(screen.getByLabelText(/I understand the configuration will be lost/i));
             fireEvent.click(screen.getByLabelText(/I understand this action will be orchestrated clusterwide/i));
+            expect(checkboxes).toEqual({configLoss: true, clusterwide: true});
 
             rerender(
                 <DeleteDialog open onClose={onClose} onConfirm={onConfirm}
@@ -269,7 +406,9 @@ describe('ActionDialogs', () => {
         test('shows key and calls onConfirm on delete, onClose on cancel', () => {
             render(<DeleteKeyDialog open onClose={onClose} onConfirm={onConfirm}
                                     keyToDelete="MY_SECRET_KEY" disabled={false}/>);
+            expect(screen.getByRole('dialog', {name: 'Confirm Key Deletion'})).toBeInTheDocument();
             expect(screen.getByText(/MY_SECRET_KEY/)).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Confirm delete key action'})).toHaveClass('bg-state-down');
 
             const deleteBtn = screen.getByRole('button', {name: /Delete/i});
             fireEvent.click(deleteBtn);
@@ -303,7 +442,10 @@ describe('ActionDialogs', () => {
         test('requires key name and file to enable Create button', () => {
             let props = {...defaultProps};
             const {rerender} = render(<CreateKeyDialog {...props} />);
+            expect(screen.getByRole('dialog', {name: 'Create New Key'})).toBeInTheDocument();
+            expect(screen.getByText('No file selected')).toBeInTheDocument();
             const nameInput = screen.getByRole('textbox', {name: /Key Name/i});
+            expect(screen.getByLabelText('Key Name')).toBe(nameInput);
             const createBtn = screen.getByRole('button', {name: /Create/i});
             expect(createBtn).toBeDisabled();
 
@@ -323,9 +465,25 @@ describe('ActionDialogs', () => {
 
             rerender(<CreateKeyDialog {...props} newKeyName="mykey" newKeyFile={file}/>);
             expect(createBtn).not.toBeDisabled();
+            expect(screen.getByText('key.pem')).toBeInTheDocument();
 
             fireEvent.click(createBtn);
             expect(onConfirm).toHaveBeenCalled();
+        });
+
+        test('Choose File opens the hidden file input', () => {
+            render(<CreateKeyDialog {...defaultProps} />);
+            const fileInput = document.getElementById('create-key-file-upload');
+            const click = jest.spyOn(fileInput, 'click');
+            fireEvent.click(screen.getByRole('button', {name: 'Choose File'}));
+            expect(click).toHaveBeenCalled();
+        });
+
+        test('name input and Choose File are disabled when disabled prop is true', () => {
+            render(<CreateKeyDialog {...defaultProps} disabled={true}/>);
+            expect(screen.getByRole('textbox', {name: /Key Name/i})).toBeDisabled();
+            expect(screen.getByRole('button', {name: 'Choose File'})).toBeDisabled();
+            expect(document.getElementById('create-key-file-upload')).toBeDisabled();
         });
 
         test('calls onClose when cancel is clicked', () => {
@@ -354,6 +512,8 @@ describe('ActionDialogs', () => {
         test('enables Update button only when a file is selected', () => {
             let props = {...defaultProps};
             const {rerender} = render(<UpdateConfigDialog {...props} />);
+            expect(screen.getByRole('dialog', {name: 'Update Configuration'})).toBeInTheDocument();
+            expect(screen.getByText('No file chosen')).toBeInTheDocument();
             const updateBtn = screen.getByRole('button', {name: /Update/i});
             expect(updateBtn).toBeDisabled();
 
@@ -365,9 +525,18 @@ describe('ActionDialogs', () => {
 
             rerender(<UpdateConfigDialog {...props} newConfigFile={file}/>);
             expect(updateBtn).not.toBeDisabled();
+            expect(screen.getByText('config.yaml')).toBeInTheDocument();
 
             fireEvent.click(updateBtn);
             expect(onConfirm).toHaveBeenCalled();
+        });
+
+        test('Choose File opens the hidden file input', () => {
+            render(<UpdateConfigDialog {...defaultProps} />);
+            const fileInput = document.getElementById('update-config-file-upload');
+            const click = jest.spyOn(fileInput, 'click');
+            fireEvent.click(screen.getByRole('button', {name: 'Choose File'}));
+            expect(click).toHaveBeenCalled();
         });
 
         test('calls onClose on cancel', () => {
@@ -400,6 +569,7 @@ describe('ActionDialogs', () => {
         test('enables Apply button when any of the three fields has content', () => {
             let props = {...defaultProps};
             const {rerender} = render(<ManageConfigParamsDialog {...props} />);
+            expect(screen.getByRole('dialog', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
             const applyBtn = screen.getByRole('button', {name: /Apply/i});
             expect(applyBtn).toBeDisabled();
 
@@ -442,6 +612,21 @@ describe('ActionDialogs', () => {
             fireEvent.change(textarea, {target: {value: 'key1=val1\nkey2=val2'}});
             expect(setParamsToSet).toHaveBeenCalledWith('key1=val1\nkey2=val2');
         });
+
+        test('unset and delete fields call their setters', () => {
+            render(<ManageConfigParamsDialog {...defaultProps} />);
+            fireEvent.change(screen.getByRole('textbox', {name: 'Parameters to unset input'}), {target: {value: 's.k'}});
+            expect(defaultProps.setParamsToUnset).toHaveBeenCalledWith('s.k');
+            fireEvent.change(screen.getByRole('textbox', {name: 'Sections to delete input'}), {target: {value: 's'}});
+            expect(defaultProps.setParamsToDelete).toHaveBeenCalledWith('s');
+            expect(screen.getByLabelText('Parameter keys to unset')).toHaveAttribute('aria-label', 'Parameters to unset input');
+            expect(screen.getByText('Delete sections (one key per line, e.g., section)')).toBeInTheDocument();
+        });
+
+        test('fields are disabled when disabled prop is true', () => {
+            render(<ManageConfigParamsDialog {...defaultProps} disabled={true}/>);
+            screen.getAllByRole('textbox').forEach((t) => expect(t).toBeDisabled());
+        });
     });
 
     // ----- SimpleConfirmDialog -----
@@ -449,7 +634,10 @@ describe('ActionDialogs', () => {
         test('renders action and target, calls onConfirm and onClose', () => {
             render(<SimpleConfirmDialog open onClose={onClose} onConfirm={onConfirm} action="reboot" target="node-1"/>);
 
+            expect(screen.getByRole('dialog', {name: 'Confirm reboot'})).toBeInTheDocument();
             expect(screen.getByText(/Confirm reboot/i)).toBeInTheDocument();
+            expect(screen.getByText('reboot', {selector: 'strong'})).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toHaveTextContent('Are you sure you want to reboot on node-1?');
 
             expect(screen.getByText(/Are you sure you want to/i)).toBeInTheDocument();
 

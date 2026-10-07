@@ -22,21 +22,7 @@ vi.mock('../components/App', () => ({
     default: () => <div data-testid="app"/>,
 }));
 
-vi.mock('@mui/material/styles', () => ({
-    ThemeProvider: ({children, theme}) => (
-        <div data-testid="theme-provider" data-mode={theme?.palette?.mode}>
-            {children}
-        </div>
-    ),
-    createTheme: (options) => ({palette: options.palette}),
-}));
-
-vi.mock('@mui/material/colors', () => ({
-    grey: {
-        900: '#212121',
-        600: '#757575',
-    },
-}));
+vi.mock('../ui/styles/index.css', () => ({}));
 
 vi.mock('../styles/main.css', () => ({}));
 
@@ -73,6 +59,8 @@ describe('index.jsx', () => {
         loggerErrorMock.mockReset();
         createRootMock.mockReturnValue({render: renderMock});
         document.body.innerHTML = '';
+        localStorage.clear();
+        document.documentElement.classList.remove('dark', 'contrast');
     });
 
     afterEach(() => {
@@ -141,83 +129,28 @@ describe('index.jsx', () => {
         expect(renderMock).toHaveBeenCalledTimes(1);
     });
 
-    test('builds the theme with the light palette by default', async () => {
+    test('applies the cached dark theme to <html> before rendering', async () => {
         const rootElement = document.createElement('div');
         rootElement.id = 'root';
         document.body.appendChild(rootElement);
+        localStorage.setItem('om3.theme', 'dark');
+        document.documentElement.classList.remove('dark', 'contrast');
 
         await importIndex();
 
-        expect(createRootMock).toHaveBeenCalledTimes(1);
+        expect(document.documentElement.classList.contains('dark')).toBe(true);
         expect(renderMock).toHaveBeenCalledTimes(1);
     });
-});
 
-describe('getDesignTokens', () => {
-    test('returns the light palette when mode is "light"', async () => {
-        const {getDesignTokens} = await importIndex();
+    test('applies the cached high-contrast palette to <html> before rendering', async () => {
+        const rootElement = document.createElement('div');
+        rootElement.id = 'root';
+        document.body.appendChild(rootElement);
+        localStorage.setItem('om3.palette', 'contrast');
+        document.documentElement.classList.remove('dark', 'contrast');
 
-        const tokens = getDesignTokens('light');
+        await importIndex();
 
-        expect(tokens).toEqual({
-            palette: {
-                mode: 'light',
-                primary: {
-                    main: '#212121',
-                    contrastText: '#fff',
-                },
-                secondary: {
-                    main: '#757575',
-                    contrastText: '#fff',
-                },
-                background: {
-                    default: '#ffffff',
-                    paper: '#f5f5f5',
-                },
-            },
-        });
-    });
-
-    test('returns the dark palette when mode is "dark"', async () => {
-        const {getDesignTokens} = await importIndex();
-
-        const tokens = getDesignTokens('dark');
-
-        expect(tokens).toEqual({
-            palette: {
-                mode: 'dark',
-                primary: {
-                    main: '#90caf9',
-                },
-                secondary: {
-                    main: '#f48fb1',
-                },
-                background: {
-                    default: '#121212',
-                    paper: '#1e1e1e',
-                },
-                text: {
-                    primary: '#ffffff',
-                    secondary: '#cccccc',
-                },
-            },
-        });
-    });
-
-    test('does not include dark-only keys (text) when mode is "light"', async () => {
-        const {getDesignTokens} = await importIndex();
-
-        const tokens = getDesignTokens('light');
-
-        expect(tokens.palette.text).toBeUndefined();
-    });
-
-    test('does not include light-only keys (contrastText) when mode is "dark"', async () => {
-        const {getDesignTokens} = await importIndex();
-
-        const tokens = getDesignTokens('dark');
-
-        expect(tokens.palette.primary.contrastText).toBeUndefined();
-        expect(tokens.palette.secondary.contrastText).toBeUndefined();
+        expect(document.documentElement.classList.contains('contrast')).toBe(true);
     });
 });

@@ -1,30 +1,33 @@
-import React, {useState} from "react";
-import {
-    Box,
-    Typography,
-    Tooltip,
-    Checkbox,
-    IconButton,
-} from "@mui/material";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
-import ArticleIcon from "@mui/icons-material/Article";
-import SyncProblemIcon from "@mui/icons-material/SyncProblem";
-import Stop from "@mui/icons-material/Stop";
-import {grey, blue, red, orange} from "@mui/material/colors";
+import React from "react";
+import {Checkbox} from "../ui/components/Field";
+import {StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
+import {IconButton} from "../ui/components/Button";
+import {MenuButton} from "../ui/components/MenuButton";
+import {StatusMark} from "../ui/components/StatusMark";
+import {toObjectState} from "../ui/components/status";
+import {FrozenMark} from "../ui/components/FrozenMark";
+import {AlertTriangleIcon, FileIcon, MoreIcon} from "../ui/icons";
 import logger from '../utils/logger.js';
 
+/** Icon of an action in a menu: the action icons are sized to the menu line. */
+const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
+const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
+
+const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+/**
+ * One instance of the object, on one 30px line: selection, state, node name,
+ * stopped, RPO-breached (else frozen) and provisioning marks, monitor state, then its actions menu and its logs.
+ * A click on the line (outside its controls) opens the instance view.
+ */
 const InstanceCard = ({
                           node,
                           nodeData = {},
                           selectedNodes = [],
                           toggleNode = () => logger.warn("toggleNode not provided"),
                           actionInProgress = false,
-                          setIndividualNodeMenuAnchor = () => logger.warn("setIndividualNodeMenuAnchor not provided"),
-                          setCurrentNode = () => logger.warn("setCurrentNode not provided"),
-                          getColor = () => grey[500],
+                          actions = [],
+                          onAction = () => logger.warn("onAction not provided"),
                           getNodeState = () => ({
                               avail: "unknown",
                               frozen: "unfrozen",
@@ -37,7 +40,6 @@ const InstanceCard = ({
                           onViewInstance,
                       }) => {
     const resolvedInstanceName = instanceName || nodeData?.instanceName || nodeData?.name || node;
-    const [isHovered, setIsHovered] = useState(false);
 
     if (!node) {
         logger.error("Node name is required");
@@ -46,142 +48,103 @@ const InstanceCard = ({
 
     const {avail, frozen, state, isStopped, isLagging} = getNodeState(node);
     const isInstanceNotProvisioned = nodeData?.provisioned === false || nodeData?.provisioned === "false";
+    const canView = typeof onViewInstance === 'function';
+    const isSelected = selectedNodes.includes(node);
 
-    const stoppedTooltip = nodeData?.stopped_at
-        ? `stopped at ${new Date(nodeData.stopped_at).toLocaleString()}`
-        : "stopped";
+    const stoppedAt = nodeData?.stopped_at;
 
     const handleCardClick = (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.no-click')) {
             return;
         }
-        if (onViewInstance && typeof onViewInstance === 'function') {
-            onViewInstance(node);
-        }
-    };
-
-    const handleMenuOpen = (e) => {
-        e.stopPropagation();
-        setCurrentNode(node);
-        setIndividualNodeMenuAnchor(e.currentTarget);
+        if (canView) onViewInstance(node);
     };
 
     return (
-        <Box
-            sx={{
-                mb: 2,
-                display: "flex",
-                flexDirection: "column",
-                width: "100%",
-                maxWidth: "1400px",
-                cursor: onViewInstance ? 'pointer' : 'default',
-                transition: 'background-color 0.2s ease',
-                position: 'relative',
-                p: 2,
-                backgroundColor: isHovered && onViewInstance ? 'action.hover' : 'transparent',
-                borderRadius: 1,
-                '&:hover': onViewInstance ? {
-                    backgroundColor: 'action.hover',
-                } : {},
-            }}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
+        <div
+            role="group"
+            aria-label={`Instance on node ${node}`}
+            className={`group flex h-[1.875rem] items-center gap-2 px-3 text-data hover:bg-surface-sunken ${
+                canView ? "cursor-pointer" : ""
+            } ${isSelected ? "bg-accent-soft" : ""}`}
             onClick={handleCardClick}
         >
-            <Box sx={{display: "flex", alignItems: "center"}}>
-                <Box sx={{display: "flex", alignItems: "center", gap: 1, flexWrap: 'wrap'}}>
-                    <Box onClick={(e) => e.stopPropagation()} className="no-click">
-                        <Checkbox
-                            checked={selectedNodes.includes(node)}
-                            onChange={() => toggleNode(node)}
-                            aria-label={`Select node ${node}`}
-                        />
-                    </Box>
-                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-                        <Typography variant="h6">
-                            {node}
-                        </Typography>
-                        {isHovered && onViewInstance && (
-                            <Typography
-                                variant="body2"
-                                color="primary"
-                                sx={{fontStyle: 'italic', ml: 1, opacity: 0.8}}
-                            >
-                                (view resources)
-                            </Typography>
-                        )}
-                    </Box>
-                </Box>
+            <span className="no-click inline-flex" onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                    checked={isSelected}
+                    onChange={() => toggleNode(node)}
+                    aria-label={`Select node ${node}`}
+                />
+            </span>
+            <StatusMark state={toObjectState(avail)} label={avail || "unknown"}/>
+            {canView ? (
+                <button
+                    type="button"
+                    onClick={() => onViewInstance(node)}
+                    title="View resources"
+                    className="truncate font-medium text-ink hover:underline"
+                >
+                    {node}
+                </button>
+            ) : (
+                <span className="truncate font-medium">{node}</span>
+            )}
+            {canView && (
+                <span aria-hidden="true" className="hidden whitespace-nowrap text-accent italic group-hover:inline">
+                    (view resources)
+                </span>
+            )}
+            {isStopped && <StoppedMark stoppedAt={stoppedAt} label={`Instance on node ${node} is stopped`}/>}
+            {/* A breached RPO says more than the freeze: it takes its place. */}
+            {isLagging ? (
+                <RpoBreachedMark label={`Instance on node ${node} is lagging`}/>
+            ) : (
+                <FrozenMark frozen={frozen === "frozen"}/>
+            )}
+            {isInstanceNotProvisioned && (
+                <span
+                    role="img"
+                    title="Not Provisioned"
+                    aria-label={`Instance on node ${node} is not provisioned`}
+                    className="text-state-down"
+                >
+                    <AlertTriangleIcon className="h-3.5 w-3.5"/>
+                </span>
+            )}
+            {state && <span className="truncate text-ink-muted">{state}</span>}
 
-                <Box sx={{display: "flex", alignItems: "center", gap: 1, ml: "auto"}} className="no-click">
-                    {isInstanceNotProvisioned && (
-                        <Tooltip title="Not Provisioned">
-                            <PriorityHighIcon
-                                sx={{color: red[500], fontSize: "1.2rem"}}
-                                aria-label={`Instance on node ${node} is not provisioned`}
-                            />
-                        </Tooltip>
-                    )}
-                    {state && <Typography variant="caption">{state}</Typography>}
-                </Box>
-
-                <Box sx={{display: "flex", alignItems: "center", gap: 2}} className="no-click">
-                    {isStopped && (
-                        <Tooltip title={stoppedTooltip}>
-                            <Stop
-                                sx={{fontSize: "1rem", color: grey[600], cursor: 'help'}}
-                                aria-label={`Instance on node ${node} is stopped`}
-                            />
-                        </Tooltip>
-                    )}
-
-                    {isLagging ? (
-                        <Tooltip title="RPO breached">
-                            <SyncProblemIcon
-                                sx={{fontSize: "1.2rem", color: orange[500]}}
-                                aria-label={`Instance on node ${node} is lagging`}
-                            />
-                        </Tooltip>
-                    ) : frozen === "frozen" ? (
-                        <Tooltip title="frozen">
-                            <AcUnitIcon sx={{fontSize: "medium", color: blue[300]}}/>
-                        </Tooltip>
-                    ) : null}
-
-                    <Tooltip title={avail || "unknown"}>
-                        <FiberManualRecordIcon
-                            sx={{
-                                fontSize: "1.2rem",
-                                color: typeof getColor === "function" ? getColor(avail) : grey[500]
-                            }}
-                        />
-                    </Tooltip>
-
-                    <IconButton
-                        onClick={handleMenuOpen}
-                        disabled={actionInProgress}
-                        aria-label={`Node ${node} actions`}
-                    >
-                        <Tooltip title="Actions">
-                            <MoreVertIcon/>
-                        </Tooltip>
-                    </IconButton>
-
-                    <Tooltip title="View instance logs">
-                        <IconButton
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenLogs(node, resolvedInstanceName);
-                            }}
-                            color="primary"
-                            aria-label={`View logs for instance ${resolvedInstanceName || node}`}
-                        >
-                            <ArticleIcon/>
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            </Box>
-        </Box>
+            <span className="no-click ml-auto flex items-center gap-1">
+                <MenuButton
+                    label={`Node ${node} actions`}
+                    icon={<MoreIcon className="h-4 w-4"/>}
+                    compact
+                    align="end"
+                    disabled={actionInProgress}
+                    className="inline-flex"
+                    items={actions.map(({name, icon, color}) => ({
+                        key: name,
+                        label: capitalize(name),
+                        icon: (
+                            <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>
+                                {icon}
+                            </span>
+                        ),
+                        disabled: actionInProgress,
+                        onSelect: () => onAction(node, name),
+                    }))}
+                />
+                <IconButton
+                    size="sm"
+                    label={`View logs for instance ${resolvedInstanceName || node} on node ${node}`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenLogs(node, resolvedInstanceName);
+                    }}
+                >
+                    <FileIcon className="h-4 w-4"/>
+                </IconButton>
+            </span>
+        </div>
     );
 };
 

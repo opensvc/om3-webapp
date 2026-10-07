@@ -9,7 +9,6 @@ import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 const {
     mockUseParams,
     mockLocalStorage,
-    mockUseTheme,
 } = vi.hoisted(() => ({
     mockUseParams: vi.fn(),
     mockLocalStorage: {
@@ -17,7 +16,6 @@ const {
         setItem: vi.fn(),
         removeItem: vi.fn(),
     },
-    mockUseTheme: vi.fn(),
 }));
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -28,102 +26,6 @@ vi.mock('react-router-dom', async (importOriginal) => {
         useParams: mockUseParams,
     };
 });
-
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    const {useState} = await import('react');
-    const mocks = {
-        ...actual,
-        useTheme: mockUseTheme,
-        Dialog: ({children, open, onClose, ...props}) => open ? (
-            <div
-                role="dialog"
-                onKeyDown={(e) => {
-                    if (e.key === 'Escape' && onClose) onClose(e, 'escapeKeyDown');
-                }}
-                {...props}
-            >
-                {children}
-            </div>
-        ) : null,
-        DialogTitle: ({children, ...props}) => <div {...props}><h2>{children}</h2></div>,
-        DialogContent: ({children, ...props}) => <div {...props}>{children}</div>,
-        DialogActions: ({children, ...props}) => <div {...props}>{children}</div>,
-        Alert: ({children, severity, ...props}) => <div role="alert"
-                                                        data-severity={severity} {...props}>{children}</div>,
-        Button: ({children, onClick, disabled, variant, component, htmlFor, ...props}) => (
-            <button onClick={onClick} disabled={disabled} data-variant={variant}
-                    {...(component === 'label' ? {htmlFor} : {})} {...props}>{children}</button>
-        ),
-        TextField: ({label, value, onChange, disabled, type, inputProps, InputLabelProps, placeholder, ...props}) => (
-            <input type={type || 'text'} role="textbox"
-                   aria-label={InputLabelProps?.['aria-label'] || label || 'autocomplete-input'}
-                   placeholder={placeholder || label || ''} value={value || ''} onChange={onChange} disabled={disabled}
-                   {...inputProps} {...props} />
-        ),
-        Autocomplete: ({options, getOptionLabel, onChange, multiple, renderInput, value, freeSolo, ...props}) => {
-            const [inputValue, setInputValue] = useState(
-                multiple
-                    ? (Array.isArray(value) ? value.map(v => getOptionLabel(v)).join(', ') : '')
-                    : (value ? (typeof value === 'string' ? value : getOptionLabel(value)) : '')
-            );
-            const handleChange = (e) => {
-                const text = e.target.value;
-                setInputValue(text);
-                const vals = multiple ? text.split(',').map(v => v.trim()).filter(Boolean) : [text.trim()];
-                const selected = vals.map(v => {
-                    const opt = options.find(o => getOptionLabel(o) === v);
-                    if (!opt) return freeSolo ? v : multiple ? (options[0]?.option ? {
-                        option: v,
-                        section: v.includes('.') ? v.split('.')[0] : ''
-                    } : v) : null;
-                    return opt;
-                }).filter(Boolean);
-                onChange({}, multiple ? selected : selected[0] || (freeSolo ? text : null));
-            };
-            const label = renderInput({}).InputLabelProps?.['aria-label'] || renderInput({}).label || 'autocomplete-input';
-            return (
-                <div data-testid="autocomplete" {...props}>
-                    {renderInput({
-                        inputProps: {
-                            'data-testid': 'autocomplete-input', value: inputValue || '', onChange: handleChange,
-                            'aria-label': label, role: 'combobox', 'aria-expanded': !!inputValue,
-                        },
-                        label,
-                    })}
-                </div>
-            );
-        },
-        CircularProgress: () => <div role="progressbar">Loading...</div>,
-        Typography: ({children, variant, fontWeight, ...props}) => <span {...props}>{children}</span>,
-        Box: ({children, sx, ...props}) => <div style={sx} {...props}>{children}</div>,
-        Tooltip: ({children, title}) => <span title={title}>{children}</span>,
-        IconButton: ({children, onClick, disabled, 'aria-label': ariaLabel, ...props}) => (
-            <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} {...props}>{children}</button>
-        ),
-        TableContainer: ({children, ...props}) => <div {...props}>{children}</div>,
-        Table: ({children, ...props}) => <table {...props}>{children}</table>,
-        TableHead: ({children, ...props}) => <thead {...props}>{children}</thead>,
-        TableBody: ({children, ...props}) => <tbody {...props}>{children}</tbody>,
-        TableRow: ({children, ...props}) => <tr {...props}>{children}</tr>,
-        TableCell: ({children, ...props}) => <td {...props}>{children}</td>,
-        Paper: ({children, ...props}) => <div {...props}>{children}</div>,
-    };
-    return mocks;
-});
-
-vi.mock('@mui/icons-material/UploadFile', () => ({
-    default: () => <span data-testid="UploadFileIcon"/>,
-}));
-vi.mock('@mui/icons-material/Edit', () => ({
-    default: () => <span data-testid="EditIcon"/>,
-}));
-vi.mock('@mui/icons-material/Info', () => ({
-    default: () => <span data-testid="InfoIcon"/>,
-}));
-vi.mock('@mui/icons-material/Delete', () => ({
-    default: () => <span data-testid="DeleteIcon"/>,
-}));
 
 Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 
@@ -137,17 +39,30 @@ const defaultProps = {
     setConfigDialogOpen: vi.fn(),
 };
 const renderConfig = (props = {}) => render(<ConfigSection {...defaultProps} {...props} />);
-const getViewConfigButton = () => screen.getByText('View Configuration');
+const getViewConfigButton = () => screen.getByRole('button', {name: 'View Configuration'});
 const getUploadButton = () => screen.getByRole('button', {name: /Upload new configuration file/i});
 const getManageButton = () => screen.getByRole('button', {name: /Manage configuration parameters/i});
 const getKeywordsButton = () => screen.getByRole('button', {name: /View configuration keywords/i});
-const getDialogByTitle = (title) => screen.getAllByRole('dialog').find(d => within(d).queryByText(title));
-const getComboboxes = () => screen.getAllByRole('combobox', {name: /autocomplete-input/i});
+const getDialogByTitle = (title) => screen.getAllByRole('dialog').find(d => within(d).queryByRole('heading', {name: title}));
+const queryLoading = () => screen.queryByRole('status', {name: /^Loading/i});
+// The "add" field: free text completed from the keywords list.
+const getAddInput = () => screen.getByRole('combobox', {name: 'Select parameter to add'});
+const getUnsetGroup = () => screen.getByRole('group', {name: 'Unset parameters'});
+const getDeleteGroup = () => screen.getByRole('group', {name: 'Delete sections'});
+const getParamsTable = () => screen.getByRole('table', {name: 'Parameters to add'});
+const queryParamsTable = () => screen.queryByRole('table', {name: 'Parameters to add'});
+// Checks an existing parameter to unset (comboIdx 1) or an existing section to delete (comboIdx 2).
+const checkExisting = (user, comboIdx, input) =>
+    user.click(within(comboIdx === 1 ? getUnsetGroup() : getDeleteGroup()).getByRole('checkbox', {name: input}));
+const addParam = async (user, input) => {
+    await act(() => user.type(getAddInput(), input));
+    await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
+};
 
 const openUpdateDialogWithFile = async (user, fileName = 'config.ini', content = '[DEFAULT]\nnodes = node2') => {
     await waitFor(() => expect(screen.getAllByRole('dialog').length).toBeGreaterThan(0));
     await act(() => user.click(getUploadButton()));
-    await waitFor(() => expect(screen.getByText(/Update Configuration/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Update Configuration'})).toBeInTheDocument());
     const file = new File([content], fileName);
     await act(() => user.upload(document.querySelector('#update-config-file-upload'), file));
     return file;
@@ -156,8 +71,8 @@ const openUpdateDialogWithFile = async (user, fileName = 'config.ini', content =
 const openManageDialog = async (user) => {
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
     await act(() => user.click(getManageButton()));
-    await waitFor(() => expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument());
-    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument());
+    await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
 };
 
 const defaultFetchMock = (url, options) => {
@@ -256,7 +171,6 @@ describe('ConfigSection Component', () => {
         vi.clearAllMocks();
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
-        mockUseTheme.mockReturnValue({palette: {mode: 'light'}});
         global.fetch = vi.fn(defaultFetchMock);
     });
 
@@ -289,7 +203,12 @@ describe('ConfigSection Component', () => {
         const setConfigDialogOpen = vi.fn();
         renderConfig({setConfigDialogOpen});
         await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        await act(() => user.click(screen.getByRole('button', {name: /Close/i})));
+        // The footer button, then the close cross of the header.
+        const [cross, footerClose] = within(screen.getByRole('dialog')).getAllByRole('button', {name: /^Close$/});
+        await act(() => user.click(footerClose));
+        expect(setConfigDialogOpen).toHaveBeenCalledWith(false);
+        setConfigDialogOpen.mockClear();
+        await act(() => user.click(cross));
         expect(setConfigDialogOpen).toHaveBeenCalledWith(false);
     });
 
@@ -344,7 +263,7 @@ describe('ConfigSection Component', () => {
         global.fetch.mockImplementation(() => new Promise(() => {
         }));
         renderConfig();
-        await waitFor(() => expect(screen.getByRole('progressbar')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('status', {name: 'Loading configuration'})).toBeInTheDocument());
     });
 
     // ── Re-fetch triggers ────────────────────────────────────────────────
@@ -439,12 +358,12 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(screen.getByText(/No instance selected to view configuration/i)).toBeInTheDocument());
     });
 
-    // ── Dark theme branch ────────────────────────────────────────────────
-    test('renders with dark theme', async () => {
-        mockUseTheme.mockReturnValue({palette: {mode: 'dark'}});
+    // ── Viewer (the theme now comes from the tokens: no dark branch left) ──
+    test('shows the configuration text as is, in a preformatted block', async () => {
         renderConfig();
-        await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-        expect(true).toBe(true);
+        const text = await screen.findByText(/nodes = \*/);
+        expect(text.tagName).toBe('PRE');
+        expect(text.textContent).toBe('[DEFAULT]\nnodes = *\norchestrate = ha\n[fs#1]\nsize = 10GB');
     });
 
     // ── Update config dialog ─────────────────────────────────────────────
@@ -466,13 +385,13 @@ describe('ConfigSection Component', () => {
                 }),
             })
         );
-        await waitFor(() => expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Update Configuration'})).not.toBeInTheDocument());
     });
 
     test('update config: Update button disabled without file', async () => {
         renderConfig();
         await act(() => user.click(getUploadButton()));
-        await waitFor(() => expect(screen.getByText(/Update Configuration/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('heading', {name: 'Update Configuration'})).toBeInTheDocument());
         expect(screen.getByRole('button', {name: /Update/i})).toBeDisabled();
     });
 
@@ -503,9 +422,9 @@ describe('ConfigSection Component', () => {
         await act(() => user.click(screen.getByRole('button', {name: /Update/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expectedMsg, severity));
         if (shouldClose) {
-            await waitFor(() => expect(screen.queryByText('Update Configuration')).not.toBeInTheDocument());
+            await waitFor(() => expect(screen.queryByRole('heading', {name: 'Update Configuration'})).not.toBeInTheDocument());
         } else {
-            expect(screen.getByText('Update Configuration')).toBeInTheDocument();
+            expect(screen.getByRole('heading', {name: 'Update Configuration'})).toBeInTheDocument();
         }
     });
 
@@ -531,7 +450,7 @@ describe('ConfigSection Component', () => {
         await openUpdateDialogWithFile(user);
         const dlg = getDialogByTitle('Update Configuration');
         await act(() => user.click(within(dlg).getByRole('button', {name: /Cancel/i})));
-        await waitFor(() => expect(screen.queryByText(/Update Configuration/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Update Configuration'})).not.toBeInTheDocument());
     });
 
     // ── Manage params dialog (add / unset / delete) ──────────────────────
@@ -541,7 +460,7 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('No selection made', 'error'));
-        expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
     });
 
     test('manage params dialog: cancel button closes it', async () => {
@@ -549,14 +468,14 @@ describe('ConfigSection Component', () => {
         await openManageDialog(user);
         const dlg = getDialogByTitle('Manage Configuration Parameters');
         await act(() => user.click(within(dlg).getByRole('button', {name: /Cancel/i})));
-        await waitFor(() => expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
 
     test('manage params: add invalid parameter shows error', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'invalid_param{Enter}'));
+        await act(() => user.type(getAddInput(), 'invalid_param{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Invalid parameter: invalid_param', 'error'));
     });
@@ -565,23 +484,23 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await act(() => user.type(screen.getByLabelText('Value'), 'new-value'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
         await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/config/file'), expect.any(Object)));
-        await waitFor(() => expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
 
     test('manage params: add fs.size with indexed section and apply', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'fs.size{Enter}'));
+        await act(() => user.type(getAddInput(), 'fs.size{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('size')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('size')).toBeInTheDocument());
         await act(() => user.type(screen.getByLabelText('Index'), '2'));
         await act(() => user.type(screen.getByLabelText('Value'), '20GB'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
@@ -590,16 +509,16 @@ describe('ConfigSection Component', () => {
             method: 'PATCH',
             headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
         }));
-        await waitFor(() => expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
 
     test('manage params: add fs.size without index and apply', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'fs.size{Enter}'));
+        await act(() => user.type(getAddInput(), 'fs.size{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('size')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('size')).toBeInTheDocument());
         await act(() => user.type(screen.getByLabelText('Value'), '30GB'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully added 1 parameter(s)', 'success'));
@@ -607,16 +526,16 @@ describe('ConfigSection Component', () => {
             method: 'PATCH',
             headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
         }));
-        await waitFor(() => expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
 
     test('manage params: TListLowercase with empty split shows error', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.roles{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.roles{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('roles')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('roles')).toBeInTheDocument());
         const valueInput = screen.getByLabelText('Value');
         await user.clear(valueInput);
         await user.type(valueInput, 'admin, , guest');
@@ -631,9 +550,9 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.roles{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.roles{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('roles')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('roles')).toBeInTheDocument());
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'admin,user,guest');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
@@ -645,9 +564,9 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         const sectionInput = screen.getByLabelText('Section (optional)');
         await user.clear(sectionInput);
         await user.type(sectionInput, 'database');
@@ -661,11 +580,11 @@ describe('ConfigSection Component', () => {
     test('manage params: remove parameter from list', async () => {
         renderConfig();
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await act(() => user.click(screen.getByRole('button', {name: /Remove parameter/i})));
-        await waitFor(() => expect(screen.queryByText('orchestrate')).not.toBeInTheDocument());
+        await waitFor(() => expect(queryParamsTable()).not.toBeInTheDocument());
     });
 
     test.each([
@@ -675,8 +594,9 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[comboIdx], `${input}{Enter}`));
-        await waitFor(() => expect(getComboboxes()[comboIdx]).toHaveValue(input));
+        await act(() => checkExisting(user, comboIdx, input));
+        await waitFor(() => expect(within(comboIdx === 1 ? getUnsetGroup() : getDeleteGroup())
+            .getByRole('checkbox', {name: input})).toBeChecked());
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(successMsg, 'success'));
         expect(global.fetch).toHaveBeenCalledWith(
@@ -686,7 +606,7 @@ describe('ConfigSection Component', () => {
                 headers: expect.objectContaining({Authorization: 'Bearer mock-token'}),
             })
         );
-        await waitFor(() => expect(screen.queryByText(/Manage Configuration Parameters/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Manage Configuration Parameters'})).not.toBeInTheDocument());
     });
 
     test.each([
@@ -706,10 +626,10 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[comboIdx], `${input}{Enter}`));
+        await act(() => checkExisting(user, comboIdx, input));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expectedError, 'error'));
-        expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
     });
 
     test('manage params: add parameter network error shows specific message', async () => {
@@ -720,9 +640,9 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'test');
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
@@ -742,7 +662,7 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[comboIdx], `${input}{Enter}`));
+        await act(() => checkExisting(user, comboIdx, input));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(errorMsg, 'error'));
     });
@@ -761,16 +681,16 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'test');
-        await act(() => user.type(getComboboxes()[1], 'nodes{Enter}'));
-        await act(() => user.type(getComboboxes()[2], 'fs#1{Enter}'));
+        await act(() => checkExisting(user, 1, 'nodes'));
+        await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith(expect.stringContaining('Error adding parameter orchestrate: HTTP 500'), 'error'));
-        expect(screen.getByText(/Manage Configuration Parameters/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Manage Configuration Parameters'})).toBeInTheDocument();
     });
 
     test.each([
@@ -782,65 +702,63 @@ describe('ConfigSection Component', () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[comboIdx], `${input}{Enter}`));
+        if (comboIdx !== 0) await act(() => checkExisting(user, comboIdx, input));
         if (comboIdx === 0) {
-            await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-            await waitFor(() => expect(screen.getByText(input.split('.')[1] || input)).toBeInTheDocument());
-            await user.clear(screen.getByPlaceholderText('Value'));
-            await user.type(screen.getByPlaceholderText('Value'), 'admin');
+            await addParam(user, input);
+            await waitFor(() => expect(within(getParamsTable()).getByText(input.split('.')[1] || input)).toBeInTheDocument());
+            await user.clear(screen.getByLabelText('Value'));
+            await user.type(screen.getByLabelText('Value'), 'admin');
         }
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Auth token not found.', 'error'));
     });
 
-    test('manage params: unset parses free-text string with a dot when no existing params match', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/config') && !url.includes('file') && !url.includes('keywords')
-                && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
-                return Promise.resolve({
-                    ok: true, status: 200,
-                    json: () => Promise.resolve({items: []}),
-                    headers: new Headers(),
-                });
-            }
-            return defaultFetchMock(url, options);
-        });
+    // The unset list offers the parameters set in the configuration: an option
+    // with its section is sent as "section.option", one without as "option".
+    test.each([
+        ['with a section', 'fs#1.size', 'unset=fs%231.size'],
+        ['without a section', 'orchestrate', 'unset=orchestrate'],
+    ])('manage params: unset an existing parameter %s', async (_, label, urlFragment) => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[1], 'standalone.param{Enter}'));
-        await waitFor(() => expect(getComboboxes()[1]).toHaveValue('standalone.param'));
+        await act(() => checkExisting(user, 1, label));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
         expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=standalone.param`),
+            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?${urlFragment}`),
             expect.objectContaining({method: 'PATCH'})
         );
     });
 
-    test('manage params: unset parses free-text string without a dot when no existing params match', async () => {
-        global.fetch.mockImplementation((url, options) => {
-            if (url.includes('/config') && !url.includes('file') && !url.includes('keywords')
-                && !url.includes('set') && !url.includes('unset') && !url.includes('delete')) {
-                return Promise.resolve({
-                    ok: true, status: 200,
-                    json: () => Promise.resolve({items: []}),
-                    headers: new Headers(),
-                });
-            }
-            return defaultFetchMock(url, options);
-        });
+    test('manage params: unchecking a parameter or a section takes it out of the selection', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[1], 'lonelyoption{Enter}'));
-        await waitFor(() => expect(getComboboxes()[1]).toHaveValue('lonelyoption'));
+        await act(() => checkExisting(user, 1, 'nodes'));
+        await act(() => checkExisting(user, 1, 'orchestrate'));
+        await act(() => checkExisting(user, 1, 'nodes'));
+        await act(() => checkExisting(user, 2, 'fs#1'));
+        await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining(`${URL_OBJECT}/root/cfg/cfg1/config?unset=lonelyoption`),
-            expect.objectContaining({method: 'PATCH'})
-        );
+        const patched = global.fetch.mock.calls.filter(([, options]) => options?.method === 'PATCH').map(([url]) => url);
+        expect(patched).toEqual([`${URL_OBJECT}/root/cfg/cfg1/config?unset=orchestrate`]);
+    });
+
+    test('manage params: existing parameters and sections are disabled while loading', async () => {
+        global.fetch.mockImplementation((url, options) => {
+            if (url.includes('/config?unset=')) return new Promise(() => {});
+            return defaultFetchMock(url, options);
+        });
+        renderConfig();
+        await openManageDialog(user);
+        await act(() => checkExisting(user, 1, 'nodes'));
+        await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
+        await waitFor(() => expect(within(getUnsetGroup()).getByRole('checkbox', {name: 'nodes'})).toBeDisabled());
+        expect(within(getDeleteGroup()).getByRole('checkbox', {name: 'fs#1'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: /Apply/i})).toBeDisabled();
+        expect(getAddInput()).toBeDisabled();
     });
 
     // ── Fetch existing params edge cases ─────────────────────────────────
@@ -866,7 +784,7 @@ describe('ConfigSection Component', () => {
         });
     });
 
-    test('getExistingSections: null existingParams renders empty delete combobox', async () => {
+    test('getExistingSections: null existingParams renders no parameter nor section to choose', async () => {
         global.fetch.mockImplementation((url) => {
             if (url.includes('/config') && !url.includes('file') && !url.includes('set') && !url.includes('unset') && !url.includes('delete'))
                 return Promise.resolve({
@@ -879,14 +797,16 @@ describe('ConfigSection Component', () => {
         });
         renderConfig();
         await openManageDialog(user);
-        await waitFor(() => expect(getComboboxes()[2]).toHaveValue(''));
+        await waitFor(() => expect(within(getDeleteGroup()).getByText('No sections.')).toBeInTheDocument());
+        expect(within(getUnsetGroup()).getByText('No parameters set.')).toBeInTheDocument();
+        expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     });
 
     // ── Keywords dialog ──────────────────────────────────────────────────
     test('keywords dialog: displays table with keywords', async () => {
         renderConfig();
         await act(() => user.click(getKeywordsButton()));
-        await waitFor(() => expect(screen.getByText(/Configuration Keywords/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('heading', {name: 'Configuration Keywords'})).toBeInTheDocument());
         const kd = getDialogByTitle('Configuration Keywords');
         await waitFor(() => expect(within(kd).getByRole('table')).toBeInTheDocument());
     });
@@ -1004,11 +924,11 @@ describe('ConfigSection Component', () => {
     test('keywords dialog: close button closes it', async () => {
         renderConfig();
         await act(() => user.click(getKeywordsButton()));
-        await waitFor(() => expect(screen.getByText(/Configuration Keywords/i)).toBeInTheDocument());
-        await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('heading', {name: 'Configuration Keywords'})).toBeInTheDocument());
+        await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
         const kd = getDialogByTitle('Configuration Keywords');
-        await act(() => user.click(within(kd).getByRole('button', {name: /Close/i})));
-        await waitFor(() => expect(screen.queryByText(/Configuration Keywords/i)).not.toBeInTheDocument());
+        await act(() => user.click(within(kd).getAllByRole('button', {name: /^Close$/}).at(-1)));
+        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Configuration Keywords'})).not.toBeInTheDocument());
     });
 
     test('getUniqueSections: null keywordsData renders empty add combobox', async () => {
@@ -1023,16 +943,16 @@ describe('ConfigSection Component', () => {
         });
         renderConfig();
         await openManageDialog(user);
-        await waitFor(() => expect(getComboboxes()[0]).toHaveValue(''));
+        await waitFor(() => expect(getAddInput()).toHaveValue(''));
     });
 
     test('add parameter without section (empty section)', async () => {
         const openSnackbar = vi.fn();
         renderConfig({openSnackbar});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'debug{Enter}'));
+        await act(() => user.type(getAddInput(), 'debug{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('debug')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('debug')).toBeInTheDocument());
         expect(screen.getByLabelText('Section (optional)')).toBeInTheDocument();
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'true');
@@ -1046,9 +966,9 @@ describe('ConfigSection Component', () => {
         const setConfigDialogOpen = vi.fn();
         renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[0], 'DEFAULT.orchestrate{Enter}'));
+        await act(() => user.type(getAddInput(), 'DEFAULT.orchestrate{Enter}'));
         await act(() => user.click(screen.getByRole('button', {name: /Add Parameter/i})));
-        await waitFor(() => expect(screen.getByText('orchestrate')).toBeInTheDocument());
+        await waitFor(() => expect(within(getParamsTable()).getByText('orchestrate')).toBeInTheDocument());
         await user.clear(screen.getByLabelText('Value'));
         await user.type(screen.getByLabelText('Value'), 'new-value');
         const fetchCallsBefore = global.fetch.mock.calls.length;
@@ -1065,7 +985,7 @@ describe('ConfigSection Component', () => {
         const setConfigDialogOpen = vi.fn();
         renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[1], 'nodes{Enter}'));
+        await act(() => checkExisting(user, 1, 'nodes'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully unset 1 parameter(s)', 'success'));
         const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));
@@ -1078,7 +998,7 @@ describe('ConfigSection Component', () => {
         const setConfigDialogOpen = vi.fn();
         renderConfig({openSnackbar, configNode: '', setConfigDialogOpen});
         await openManageDialog(user);
-        await act(() => user.type(getComboboxes()[2], 'fs#1{Enter}'));
+        await act(() => checkExisting(user, 2, 'fs#1'));
         await act(() => user.click(screen.getByRole('button', {name: /Apply/i})));
         await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith('Successfully deleted 1 section(s)', 'success'));
         const configFileCalls = global.fetch.mock.calls.filter(call => call[0].includes('/config/file'));

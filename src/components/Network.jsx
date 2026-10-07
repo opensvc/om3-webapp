@@ -1,22 +1,29 @@
 import React, {useEffect, useState, useRef, useMemo} from "react";
 import {useNavigate} from "react-router-dom";
-import {
-    Box,
-    Typography,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    LinearProgress,
-    Tooltip
-} from "@mui/material";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_NETWORK} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {UsageBar} from "../ui/components/UsageBar";
+
+const COLUMNS = [
+    {key: "name", label: "Name"},
+    {key: "type", label: "Type"},
+    {key: "network", label: "Network"},
+    {key: "usage", label: "Usage", align: "right"},
+];
+
+/** The usage percentage, a small bar beside it: the row keeps one line. */
+const Usage = ({network}) => {
+    if (!network.size) return "N/A";
+    return (
+        <UsageBar
+            value={(network.used / network.size) * 100}
+            title={`${network.used}/${network.size}`}
+            label={`Usage of ${network.name}`}
+        />
+    );
+};
 
 const Network = () => {
     const [networks, setNetworks] = useState([]);
@@ -79,136 +86,41 @@ const Network = () => {
     };
 
     return (
-        <Box
-            sx={{
-                height: "100vh",
-                bgcolor: 'background.default',
-                display: 'flex',
-                flexDirection: 'column',
-                p: 0,
-                width: '100vw',
-                margin: 0,
-                overflow: 'hidden',
-            }}
-        >
-            <Box
-                ref={containerRef}
-                sx={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: 3,
-                    m: 0,
-                    overflow: 'hidden',
-                }}
-            >
-                <TableContainer
-                    sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        width: "100%"
-                    }}
-                >
-                    <Table sx={{minWidth: 700}}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Name</strong>
-                                        {sortColumn === "name" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center"}}>
-                                        <strong>Type</strong>
-                                        {sortColumn === "type" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("network")}
-                                           sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Network</strong>
-                                        {sortColumn === "network" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                                <TableCell align="center" onClick={() => handleSort("usage")} sx={{cursor: "pointer"}}>
-                                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                        <strong>Usage</strong>
-                                        {sortColumn === "usage" &&
-                                            (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                <KeyboardArrowDownIcon/>)}
-                                    </Box>
-                                </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {sortedNetworks.map((network) => {
-                                const usedPercentage = network.size
-                                    ? ((network.used / network.size) * 100).toFixed(1)
-                                    : "N/A";
-                                return (
-                                    <TableRow
-                                        key={network.name}
-                                        onClick={() => navigate(`/network/${network.name}`)}
-                                        sx={{cursor: "pointer", "&:hover": {backgroundColor: "action.hover"}}}
-                                    >
-                                        <TableCell>
-                                            <Typography>{network.name}</Typography>
-                                        </TableCell>
-                                        <TableCell>{network.type}</TableCell>
-                                        <TableCell align="center">{network.network}</TableCell>
-                                        <TableCell align="center">
-                                            {usedPercentage === "N/A" ? (
-                                                <Typography>N/A</Typography>
-                                            ) : (
-                                                <Tooltip title={`${network.used}/${network.size}`}>
-                                                    <Box sx={{
-                                                        display: "flex",
-                                                        flexDirection: "column",
-                                                        alignItems: "center",
-                                                        gap: 0.5
-                                                    }}>
-                                                        <Typography variant="body2">{usedPercentage}%</Typography>
-                                                        <LinearProgress
-                                                            variant="determinate"
-                                                            value={Math.min(usedPercentage, 100)}
-                                                            sx={{mt: 1, height: 4, width: "100%"}}
-                                                            color={
-                                                                usedPercentage > 80 ? "error" :
-                                                                    usedPercentage > 50 ? "warning" : "success"
-                                                            }
-                                                        />
-                                                    </Box>
-                                                </Tooltip>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                            {sortedNetworks.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={4} align="center">
-                                        No networks available.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Box>
-        </Box>
+        <div ref={containerRef} className="p-4 space-y-3">
+            <Table sticky>
+                <caption className="sr-only">Networks</caption>
+                <thead>
+                    <HeaderRow>
+                        {COLUMNS.map(({key, label, align}) => (
+                            <SortHeaderCell
+                                key={key}
+                                label={label}
+                                align={align}
+                                active={sortColumn === key}
+                                direction={sortDirection}
+                                onSort={() => handleSort(key)}
+                            />
+                        ))}
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {sortedNetworks.map((network) => (
+                        <Row
+                            key={network.name}
+                            onActivate={() => navigate(`/network/${network.name}`)}
+                        >
+                            <Cell className="font-medium">{network.name}</Cell>
+                            <Cell>{network.type}</Cell>
+                            <Cell>{network.network}</Cell>
+                            <Cell numeric><Usage network={network}/></Cell>
+                        </Row>
+                    ))}
+                    {sortedNetworks.length === 0 && (
+                        <EmptyRow colSpan={COLUMNS.length}>No networks available.</EmptyRow>
+                    )}
+                </tbody>
+            </Table>
+        </div>
     );
 };
 

@@ -1,16 +1,8 @@
 import React, {useEffect} from "react";
-import {
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Button,
-    Box,
-    Typography,
-    Stack,
-    CircularProgress
-} from "@mui/material";
-import {FaKey, FaUserShield} from "react-icons/fa";
+import opensvcLogo from "../ui/assets/opensvc-logo.svg";
+import {Button} from "../ui/components/Button";
+import {Spinner} from "../ui/components/Spinner";
+import {KeyIcon, UserIcon} from "../ui/icons";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import {useNavigate} from "react-router-dom";
@@ -53,52 +45,49 @@ function AuthChoice({authInfo: authInfoProp}) {
     }, [authInfo, recreateUserManager, userManager]);
 
     return (
-        <Dialog open={true} maxWidth="xs" fullWidth>
-            <DialogTitle>
-                <Typography fontWeight="bold" textAlign="center">
+        <section
+            aria-labelledby="auth-choice-title"
+            className="mx-auto mt-[15vh] max-w-sm space-y-3 rounded-(--radius-panel) border border-line bg-surface-raised p-4"
+        >
+            <div className="flex items-center gap-2">
+                <img src={opensvcLogo} alt="" className="h-8 w-8"/>
+                <h1 id="auth-choice-title" className="text-title font-semibold">
                     Authentication Methods
-                </Typography>
-            </DialogTitle>
-            <DialogContent>
-                <Typography variant="body2" textAlign="center" color="textSecondary" gutterBottom>
-                    Please select one of the authentication methods the cluster advertises.
-                </Typography>
+                </h1>
+            </div>
+            <p className="text-ink-muted">
+                Please select one of the authentication methods the cluster advertises.
+            </p>
 
-                {!authInfo ? (
-                    <Box display="flex" justifyContent="center" mt={3}>
-                        <CircularProgress size={32}/>
-                    </Box>
-                ) : (
-                    <Stack spacing={2} mt={2}>
-                        {authInfo.openid?.issuer && (
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<FaKey/>}
-                                fullWidth
-                                onClick={() => handleAuthChoice("openid")}
-                            >
-                                OpenID
-                            </Button>
-                        )}
-                        {authInfo.methods?.includes("basic") && (
-                            <Button
-                                variant="contained"
-                                color="secondary"
-                                startIcon={<FaUserShield/>}
-                                fullWidth
-                                onClick={() => handleAuthChoice("basic")}
-                            >
-                                Login
-                            </Button>
-                        )}
-                    </Stack>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Box flexGrow={1}/>
-            </DialogActions>
-        </Dialog>
+            {!authInfo ? (
+                <div className="flex justify-center py-2">
+                    <Spinner label="Loading authentication methods"/>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    {authInfo.openid?.issuer && (
+                        <Button
+                            variant="primary"
+                            icon={<KeyIcon/>}
+                            className="w-full"
+                            onClick={() => handleAuthChoice("openid")}
+                        >
+                            OpenID
+                        </Button>
+                    )}
+                    {authInfo.methods?.includes("basic") && (
+                        <Button
+                            variant="secondary"
+                            icon={<UserIcon/>}
+                            className="w-full"
+                            onClick={() => handleAuthChoice("basic")}
+                        >
+                            Login
+                        </Button>
+                    )}
+                </div>
+            )}
+        </section>
     );
 }
 

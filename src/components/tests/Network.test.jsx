@@ -40,6 +40,9 @@ const mockNetworks = [
     {name: 'mid', type: 'bridge', network: '172.16.0.0/16', size: 100, used: 60, free: 40},
 ];
 
+// The usage bar is a progressbar named after its network, carrying data-state; its fill is its child.
+const usageBar = (row) => within(row).queryByRole('progressbar');
+
 describe('Network Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -48,10 +51,15 @@ describe('Network Component', () => {
 
     test('renders table headers correctly', () => {
         render(<Network/>, {wrapper: MemoryRouter});
-        const headers = ['Name', 'Type', 'Network', 'Usage'];
-        headers.forEach((header) => {
-            expect(screen.getByText(header)).toBeInTheDocument();
+        const headers = screen.getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+        expect(headers).toEqual(['Name', 'Type', 'Network', 'Usage']);
+        ['Name', 'Type', 'Network', 'Usage'].forEach((name) => {
+            expect(screen.getByRole('button', {name})).toBeInTheDocument();
         });
+        // Default sort: name ascending
+        expect(screen.getByRole('columnheader', {name: 'Name'})).toHaveAttribute('aria-sort', 'ascending');
+        expect(screen.getByRole('columnheader', {name: 'Usage'})).toHaveAttribute('aria-sort', 'none');
+        expect(screen.getByRole('table', {name: 'Networks'})).toBeInTheDocument();
     });
 
     test('displays network data correctly when API call succeeds', async () => {
@@ -76,7 +84,7 @@ describe('Network Component', () => {
             expect(loRow).toHaveTextContent('50.0%');
         });
         await waitFor(() => {
-            expect(within(loRow).getByRole('progressbar')).toBeInTheDocument();
+            expect(usageBar(loRow)).toBeInTheDocument();
         });
 
         const defaultRow = screen.getByRole('row', {name: /default/i});
@@ -91,7 +99,7 @@ describe('Network Component', () => {
             expect(defaultRow).toHaveTextContent('50.0%');
         });
         await waitFor(() => {
-            expect(within(defaultRow).getByRole('progressbar')).toBeInTheDocument();
+            expect(usageBar(defaultRow)).toBeInTheDocument();
         });
 
         expect(axios.get).toHaveBeenCalledWith(URL_NETWORK, {
@@ -99,7 +107,7 @@ describe('Network Component', () => {
         });
     });
 
-    test('displays tooltip with used/size on percentage or progress bar hover', async () => {
+    test('displays tooltip with used/size on percentage and progress bar', async () => {
         axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
 
         render(<Network/>, {wrapper: MemoryRouter});
@@ -108,28 +116,16 @@ describe('Network Component', () => {
             expect(screen.getByText('lo')).toBeInTheDocument();
         });
 
-        // First row (lo)
+        // The title covers both the percentage and the bar beside it
         const loRow = screen.getByRole('row', {name: /lo/i});
-        const loPercentage = within(loRow).getByText('50.0%');
+        const loUsage = within(loRow).getByTitle('50/100');
+        expect(loUsage).toContainElement(within(loRow).getByText('50.0%'));
+        expect(loUsage).toContainElement(usageBar(loRow));
 
-        // Hover over percentage
-        fireEvent.mouseOver(loPercentage);
-        expect(await screen.findByText('50/100')).toBeInTheDocument();
-
-        // Hover over progress bar
-        const loProgressBar = within(loRow).getByRole('progressbar');
-        fireEvent.mouseOver(loProgressBar);
-        expect(await screen.findByText('50/100')).toBeInTheDocument();
-
-        // Second row (default)
         const defaultRow = screen.getByRole('row', {name: /default/i});
-        const defaultPercentage = within(defaultRow).getByText('50.0%');
-        fireEvent.mouseOver(defaultPercentage);
-        expect(await screen.findByText('100/200')).toBeInTheDocument();
-
-        const defaultProgressBar = within(defaultRow).getByRole('progressbar');
-        fireEvent.mouseOver(defaultProgressBar);
-        expect(await screen.findByText('100/200')).toBeInTheDocument();
+        const defaultUsage = within(defaultRow).getByTitle('100/200');
+        expect(defaultUsage).toContainElement(within(defaultRow).getByText('50.0%'));
+        expect(defaultUsage).toContainElement(usageBar(defaultRow));
     });
 
     test('handles API error gracefully', async () => {
@@ -176,7 +172,7 @@ describe('Network Component', () => {
             expect(usageCell).toHaveTextContent('N/A');
         });
         await waitFor(() => {
-            expect(within(testRow).queryByRole('progressbar')).not.toBeInTheDocument();
+            expect(usageBar(testRow)).toBeNull();
         });
     });
 
@@ -231,7 +227,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const nameHeader = screen.getByText('Name');
+        const nameHeader = screen.getByRole('button', {name: 'Name'});
         fireEvent.click(nameHeader);
 
         await waitFor(() => {
@@ -255,7 +251,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const typeHeader = screen.getByText('Type');
+        const typeHeader = screen.getByRole('button', {name: 'Type'});
         fireEvent.click(typeHeader);
 
         await waitFor(() => {
@@ -288,7 +284,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const typeHeader = screen.getByText('Type');
+        const typeHeader = screen.getByRole('button', {name: 'Type'});
         fireEvent.click(typeHeader); // to asc
         fireEvent.click(typeHeader); // to desc
 
@@ -313,7 +309,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const networkHeader = screen.getByText('Network');
+        const networkHeader = screen.getByRole('button', {name: 'Network'});
         fireEvent.click(networkHeader);
 
         await waitFor(() => {
@@ -346,7 +342,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const networkHeader = screen.getByText('Network');
+        const networkHeader = screen.getByRole('button', {name: 'Network'});
         fireEvent.click(networkHeader); // to asc
         fireEvent.click(networkHeader); // to desc
 
@@ -371,7 +367,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const usageHeader = screen.getByText('Usage');
+        const usageHeader = screen.getByRole('button', {name: 'Usage'});
         fireEvent.click(usageHeader);
 
         await waitFor(() => {
@@ -404,7 +400,7 @@ describe('Network Component', () => {
             expect(screen.getByText('apple')).toBeInTheDocument();
         });
 
-        const usageHeader = screen.getByText('Usage');
+        const usageHeader = screen.getByRole('button', {name: 'Usage'});
         fireEvent.click(usageHeader); // to asc
         fireEvent.click(usageHeader); // to desc
 
@@ -426,8 +422,13 @@ describe('Network Component', () => {
         });
 
         const loRow = screen.getByRole('row', {name: /lo/i});
-        const progressBar = within(loRow).getByRole('progressbar');
-        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('success')});
+        const bar = usageBar(loRow);
+        const fill = bar.firstElementChild;
+        expect(bar).toHaveAccessibleName('Usage of lo');
+        expect(bar).toHaveAttribute('aria-valuenow', '50');
+        expect(bar).toHaveAttribute('data-state', 'up');
+        expect(fill).toHaveClass('bg-state-up');
+        expect(fill).toHaveStyle({width: '50%'});
     });
 
     test('sets progress bar color to warning when usage > 50% and <= 80%', async () => {
@@ -440,8 +441,11 @@ describe('Network Component', () => {
         });
 
         const midRow = screen.getByRole('row', {name: /mid/i});
-        const progressBar = within(midRow).getByRole('progressbar');
-        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('warning')});
+        const bar = usageBar(midRow);
+        const fill = bar.firstElementChild;
+        expect(bar).toHaveAttribute('data-state', 'warn');
+        expect(fill).toHaveClass('bg-state-warn');
+        expect(fill).toHaveStyle({width: '60%'});
     });
 
     test('sets progress bar color to error when usage > 80%', async () => {
@@ -454,8 +458,11 @@ describe('Network Component', () => {
         });
 
         const testRow = screen.getByRole('row', {name: /test/i});
-        const progressBar = within(testRow).getByRole('progressbar');
-        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('error')});
+        const bar = usageBar(testRow);
+        const fill = bar.firstElementChild;
+        expect(bar).toHaveAttribute('data-state', 'down');
+        expect(fill).toHaveClass('bg-state-down');
+        expect(fill).toHaveStyle({width: '90%'});
     });
 
     test('handles usage > 100% by capping progress bar at 100%', async () => {
@@ -472,13 +479,12 @@ describe('Network Component', () => {
 
         const overRow = screen.getByRole('row', {name: /over/i});
         expect(overRow).toHaveTextContent('120.0%');
-        const progressBar = within(overRow).getByRole('progressbar');
-        expect(progressBar).toHaveAttribute('aria-valuenow', '100');
-        expect(progressBar).toHaveStyle({backgroundColor: expect.stringContaining('error')});
+        const bar = usageBar(overRow);
+        const fill = bar.firstElementChild;
+        expect(fill).toHaveStyle({width: '100%'});
+        expect(bar).toHaveAttribute('data-state', 'down');
 
-        const percentage = within(overRow).getByText('120.0%');
-        fireEvent.mouseOver(percentage);
-        expect(await screen.findByText('120/100')).toBeInTheDocument();
+        expect(within(overRow).getByTitle('120/100')).toContainElement(within(overRow).getByText('120.0%'));
     });
 
     test('navigates to network details on row click', async () => {
@@ -503,5 +509,41 @@ describe('Network Component', () => {
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith('/network/default');
         });
+    });
+
+    test('navigates to network details with the keyboard', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('lo')).toBeInTheDocument();
+        });
+
+        const loRow = screen.getByRole('row', {name: /lo/i});
+        expect(loRow).toHaveAttribute('tabindex', '0');
+        fireEvent.keyDown(loRow, {key: 'Enter'});
+        expect(mockNavigate).toHaveBeenCalledWith('/network/lo');
+    });
+
+    test('toggles the sort direction and marks the sorted column', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(<Network/>, {wrapper: MemoryRouter});
+
+        await waitFor(() => {
+            expect(screen.getByText('lo')).toBeInTheDocument();
+        });
+
+        const header = (name) => screen.getByRole('columnheader', {name});
+        fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+        expect(header('Name')).toHaveAttribute('aria-sort', 'descending');
+
+        fireEvent.click(screen.getByRole('button', {name: 'Usage'}));
+        expect(header('Usage')).toHaveAttribute('aria-sort', 'ascending');
+        expect(header('Name')).toHaveAttribute('aria-sort', 'none');
+
+        fireEvent.click(screen.getByRole('button', {name: 'Usage'}));
+        expect(header('Usage')).toHaveAttribute('aria-sort', 'descending');
     });
 });

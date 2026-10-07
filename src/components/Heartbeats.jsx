@@ -1,104 +1,68 @@
-import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
+import React, {
+    useEffect,
+    useState,
+    useMemo,
+    useCallback,
+    useRef,
+    useDeferredValue,
+    useSyncExternalStore,
+} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
-import {
-    Box,
-    Table,
-    TableHead,
-    TableRow,
-    TableCell,
-    TableBody,
-    TableContainer,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    Button,
-    Tooltip,
-    CircularProgress,
-    Typography,
-    Collapse,
-    useMediaQuery,
-    useTheme,
-} from "@mui/material";
-import Grid from "@mui/material/Grid";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import PauseCircleIcon from "@mui/icons-material/PauseCircle";
-import ErrorIcon from "@mui/icons-material/Error";
-import WarningIcon from "@mui/icons-material/Warning";
-import HelpIcon from "@mui/icons-material/Help";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import FilterListIcon from "@mui/icons-material/FilterList";
-import {green, yellow, red, grey} from "@mui/material/colors";
 
 import useEventStore from "../hooks/useEventStore.js";
 import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {StatusMark} from "../ui/components/StatusMark";
+import {Select} from "../ui/components/Field";
+import {Button} from "../ui/components/Button";
+import {Spinner} from "../ui/components/Spinner";
+import {ChevronDownIcon, FilterIcon} from "../ui/icons";
 
-const StateIcon = React.memo(({state}) => {
-    switch (state) {
-        case "running":
-            return <CheckCircleIcon sx={{color: green[500]}}/>;
-        case "stopped":
-            return <PauseCircleIcon sx={{color: yellow[700]}}/>;
-        case "failed":
-            return <ErrorIcon sx={{color: red[500]}}/>;
-        case "warning":
-            return <WarningIcon sx={{color: yellow[800]}}/>;
-        default:
-            return <HelpIcon sx={{color: grey[500]}}/>;
-    }
-}, (prev, next) => prev.state === next.state);
+// The breakpoints of the MUI theme the view used: below md (900px) the filters fold
+// behind a button, from lg (1200px) they are always shown at first.
+const MOBILE_QUERY = "(max-width:899.95px)";
+const WIDE_QUERY = "(min-width:1200px)";
 
-const BeatingIcon = React.memo(({isBeating, isSingleNode}) => {
-    if (isSingleNode) {
-        return <CheckCircleIcon sx={{color: green[500]}}/>;
-    }
-    return isBeating ? (
-        <CheckCircleIcon sx={{color: green[500]}}/>
-    ) : (
-        <CancelIcon sx={{color: red[500]}}/>
-    );
-}, (prev, next) => prev.isBeating === next.isBeating && prev.isSingleNode === next.isSingleNode);
+/** Whether a media query matches, kept up to date; false where matchMedia is missing. */
+const useMediaQuery = (query) => useSyncExternalStore(
+    useCallback((onChange) => {
+        if (typeof window.matchMedia !== "function") return () => {};
+        const list = window.matchMedia(query);
+        list.addEventListener("change", onChange);
+        return () => list.removeEventListener("change", onChange);
+    }, [query]),
+    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
+);
 
-const tableCellStyle = {
-    padding: "8px 16px",
-    textAlign: "center",
-    verticalAlign: "middle",
-};
+/** A running stream is up, a stopped or failed one down, a warning one warn. */
+const STREAM_STATUS = {running: "up", warning: "warn", stopped: "down", failed: "down"};
 
-const leftAlignedCellStyle = {
-    ...tableCellStyle,
-    textAlign: "left",
-};
+const StateMark = React.memo(({state}) => (
+    <StatusMark state={STREAM_STATUS[state] ?? "unknown"} label={`State ${state || "unknown"}`}/>
+), (prev, next) => prev.state === next.state);
+
+/** A beating peer is up, a stale one down. A single node has no peer to miss: up. */
+const BeatingMark = React.memo(({isBeating, isSingleNode}) => (
+    isSingleNode || isBeating
+        ? <StatusMark state="up" label={isSingleNode ? "Healthy (single node)" : "Beating"}/>
+        : <StatusMark state="down" label="Stale"/>
+), (prev, next) => prev.isBeating === next.isBeating && prev.isSingleNode === next.isSingleNode);
 
 const HeartbeatRow = React.memo(({row, isSingleNode}) => {
     return (
-        <TableRow key={`${row.node}-${row.id}-${row.peer}`} hover>
-            <TableCell sx={tableCellStyle}>
-                <Tooltip title={row.state} arrow>
-                    <span><StateIcon state={row.state}/></span>
-                </Tooltip>
-            </TableCell>
-            <TableCell sx={tableCellStyle}>
-                <Tooltip
-                    title={isSingleNode ? "Healthy (Single Node)" : row.isBeating ? "Beating" : "Stale"}
-                    arrow
-                >
-                    <span><BeatingIcon isBeating={row.isBeating} isSingleNode={isSingleNode}/></span>
-                </Tooltip>
-            </TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.id}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.node}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.peer}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.type}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.desc}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.changedAt}</TableCell>
-            <TableCell sx={leftAlignedCellStyle}>{row.lastBeatingAt}</TableCell>
-        </TableRow>
+        <Row>
+            <Cell align="center"><StateMark state={row.state}/></Cell>
+            <Cell align="center"><BeatingMark isBeating={row.isBeating} isSingleNode={isSingleNode}/></Cell>
+            <Cell>{row.id}</Cell>
+            <Cell>{row.node}</Cell>
+            <Cell>{row.peer}</Cell>
+            <Cell>{row.type}</Cell>
+            <Cell>{row.desc}</Cell>
+            {/* The dates stay on one line: wrapped, they would make the row taller than the others. */}
+            <Cell className="whitespace-nowrap">{row.changedAt}</Cell>
+            <Cell className="whitespace-nowrap">{row.lastBeatingAt}</Cell>
+        </Row>
     );
 }, (prev, next) => {
     return (
@@ -116,9 +80,8 @@ const Heartbeats = () => {
     const navigate = useNavigate();
     const eventStarted = useRef(false);
     const tableContainerRef = useRef(null);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-    const isWideScreen = useMediaQuery(theme.breakpoints.up("lg"));
+    const isMobile = useMediaQuery(MOBILE_QUERY);
+    const isWideScreen = useMediaQuery(WIDE_QUERY);
 
     const heartbeatStatus = useEventStore((state) => state.heartbeatStatus);
     const [stoppedStreamsCache, setStoppedStreamsCache] = useState({});
@@ -451,203 +414,88 @@ const Heartbeats = () => {
         {label: "LAST_BEATING_AT", key: "last_beating_at", align: "left"}
     ];
 
+    const filterSelect = (label, value, setter, options) => (
+        <label className="flex items-center gap-1 text-ink-muted">
+            {label}
+            <Select className="h-7" value={value} onChange={handleFilterChange(setter)}>
+                <option value="all">All</option>
+                {options.map(([optionValue, optionLabel]) => (
+                    <option key={optionValue} value={optionValue}>{optionLabel}</option>
+                ))}
+            </Select>
+        </label>
+    );
+
     return (
-        <Box
-            sx={{
-                height: "100vh",
-                bgcolor: 'background.default',
-                display: 'flex',
-                flexDirection: 'column',
-                p: 0,
-                position: 'relative',
-                width: '100vw',
-                margin: 0,
-                overflow: 'hidden',
-            }}
-        >
-            <Box
-                sx={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: {xs: 1, sm: 2, md: 3},
-                    m: 0,
-                    overflow: 'hidden',
-                }}
-            >
-                <Box sx={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 20,
-                    backgroundColor: "background.paper",
-                    pb: 2,
-                    mb: 2,
-                    flexShrink: 0,
-                }}>
-                    <Box sx={{
-                        display: "flex",
-                        flexDirection: {xs: "column", md: "row"},
-                        justifyContent: "space-between",
-                        alignItems: {xs: "stretch", md: "center"},
-                        gap: 2,
-                    }}>
-                        <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                            {isMobile && (
-                                <Button
-                                    onClick={toggleShowFilters}
-                                    sx={{minWidth: 'auto', flexShrink: 0}}
-                                    startIcon={<FilterListIcon/>}
-                                >
-                                    <Box component="span" sx={{display: {xs: 'none', sm: 'inline'}}}>
-                                        Filters
-                                    </Box>
-                                    {showFilters ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                                </Button>
-                            )}
-                        </Box>
-
-                        <Collapse in={showFilters} sx={{width: '100%'}}>
-                            <Grid container spacing={2} sx={{mb: 2}}>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel>Filter by Running</InputLabel>
-                                        <Select
-                                            value={filterState}
-                                            label="Filter by Running"
-                                            onChange={handleFilterChange(setFilterState)}
-                                        >
-                                            <MenuItem value="all">All</MenuItem>
-                                            {availableStates.filter(s => s !== "all").map(state => (
-                                                <MenuItem key={state}
-                                                          value={state}>{state.charAt(0).toUpperCase() + state.slice(1)}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel>Filter by Beating</InputLabel>
-                                        <Select
-                                            value={filterBeating}
-                                            label="Filter by Beating"
-                                            onChange={handleFilterChange(setFilterBeating)}
-                                        >
-                                            <MenuItem value="all">All</MenuItem>
-                                            <MenuItem value="beating">Beating</MenuItem>
-                                            <MenuItem value="stale">Stale</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel>Filter by Node</InputLabel>
-                                        <Select
-                                            value={filterNode}
-                                            label="Filter by Node"
-                                            onChange={handleFilterChange(setFilterNode)}
-                                        >
-                                            <MenuItem value="all">All</MenuItem>
-                                            {nodes.map(node => <MenuItem key={node} value={node}>{node}</MenuItem>)}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                                        <InputLabel>Filter by ID</InputLabel>
-                                        <Select
-                                            value={filterId}
-                                            label="Filter by ID"
-                                            onChange={handleFilterChange(setFilterId)}
-                                        >
-                                            <MenuItem value="all">All</MenuItem>
-                                            {availableIds.map(id => <MenuItem key={id} value={id}>{id}</MenuItem>)}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                            </Grid>
-                        </Collapse>
-                    </Box>
-                </Box>
-
-                <TableContainer
-                    ref={tableContainerRef}
-                    sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        boxShadow: "none",
-                        border: "none",
-                        position: 'relative',
-                    }}
+        <div className="flex h-full flex-col p-4 space-y-3">
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
+                {isMobile && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<FilterIcon className="h-4 w-4"/>}
+                        onClick={toggleShowFilters}
+                        aria-label={showFilters ? "Hide filters" : "Show filters"}
+                        aria-expanded={showFilters}
+                        aria-controls="heartbeats-filters"
+                    >
+                        <span className="hidden sm:inline">Filters</span>
+                        <ChevronDownIcon className={showFilters ? "h-4 w-4 rotate-180" : "h-4 w-4"}/>
+                    </Button>
+                )}
+                <div
+                    id="heartbeats-filters"
+                    hidden={!showFilters}
+                    className="flex flex-wrap items-center gap-3"
                 >
-                    <Table size="small" sx={{position: 'relative'}}>
-                        <TableHead sx={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 30,
-                            backgroundColor: "background.paper"
-                        }}>
-                            <TableRow>
-                                {columns.map(({label, key, align}) => (
-                                    <TableCell
-                                        key={label}
-                                        sx={{
-                                            fontWeight: "bold",
-                                            textAlign: align,
-                                            cursor: "pointer",
-                                            paddingLeft: 2,
-                                            paddingRight: 2,
-                                        }}
-                                        onClick={() => handleSort(key)}
-                                    >
-                                        <Box sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: align === "left" ? "flex-start" : "center"
-                                        }}>
-                                            {label}
-                                            {sortColumn === key &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon fontSize="small"/> :
-                                                    <KeyboardArrowDownIcon fontSize="small"/>)}
-                                        </Box>
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {visibleRows.map(row => (
-                                <HeartbeatRow
-                                    key={`${row.node}-${row.id}-${row.peer}`}
-                                    row={row}
-                                    isSingleNode={isSingleNode}
-                                />
-                            ))}
-                        </TableBody>
-                    </Table>
-                    {loading && (
-                        <Box sx={{display: 'flex', justifyContent: 'center', padding: 2}}>
-                            <CircularProgress size={24}/>
-                        </Box>
-                    )}
+                    {filterSelect("Running", filterState, setFilterState, availableStates
+                        .filter(s => s !== "all")
+                        .map(state => [state, state.charAt(0).toUpperCase() + state.slice(1)]))}
+                    {filterSelect("Beating", filterBeating, setFilterBeating, [["beating", "Beating"], ["stale", "Stale"]])}
+                    {filterSelect("Node", filterNode, setFilterNode, nodes.map(node => [node, node]))}
+                    {filterSelect("ID", filterId, setFilterId, availableIds.map(id => [id, id]))}
+                </div>
+            </div>
+
+            <Table sticky ref={tableContainerRef} className="min-h-0 overflow-auto">
+                <thead>
+                    <HeaderRow>
+                        {columns.map(({label, key, align}) => (
+                            <SortHeaderCell
+                                key={key}
+                                label={label}
+                                align={align}
+                                active={sortColumn === key}
+                                direction={sortDirection}
+                                onSort={() => handleSort(key)}
+                            />
+                        ))}
+                    </HeaderRow>
+                </thead>
+                <tbody>
+                    {visibleRows.map(row => (
+                        <HeartbeatRow
+                            key={`${row.node}-${row.id}-${row.peer}`}
+                            row={row}
+                            isSingleNode={isSingleNode}
+                        />
+                    ))}
                     {visibleRows.length === 0 && (
-                        <Typography align="center" color="textSecondary" sx={{mt: 2, p: 3}}>
+                        <EmptyRow colSpan={columns.length}>
                             No heartbeats found matching the current filters.
-                        </Typography>
+                        </EmptyRow>
                     )}
-                </TableContainer>
-            </Box>
+                </tbody>
+            </Table>
+            {loading && (
+                <div className="flex shrink-0 justify-center">
+                    <Spinner label="Loading more heartbeats"/>
+                </div>
+            )}
 
             <EventLogger eventTypes={heartbeatEventTypes} title="Heartbeat Events Logger"
                          buttonLabel="Heartbeat Events"/>
-        </Box>
+        </div>
     );
 };
 

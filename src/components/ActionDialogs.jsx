@@ -1,483 +1,375 @@
-import React from 'react';
-import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    FormControlLabel,
-    Checkbox,
-    Typography,
-    TextField,
-    Box,
-} from '@mui/material';
+import React, {useRef} from 'react';
+import {Dialog} from '../ui/components/Dialog';
+import {Button} from '../ui/components/Button';
+import {Checkbox, Field, Input, Textarea} from '../ui/components/Field';
+
+// Cancel and confirm buttons at the foot of a dialog.
+const DialogFooter = ({onClose, cancelDisabled = false, onConfirm, confirmDisabled, confirmLabel, variant = 'primary', children}) => (
+    <>
+        <Button variant="secondary" onClick={onClose} disabled={cancelDisabled}>
+            Cancel
+        </Button>
+        <Button variant={variant} onClick={onConfirm} disabled={confirmDisabled} aria-label={confirmLabel}>
+            {children}
+        </Button>
+    </>
+);
+
+// Acknowledgement checkboxes, one per line.
+const Acknowledgements = ({children}) => <div className="flex flex-col gap-2 text-ink">{children}</div>;
+
+// Dialog with a single acknowledgement checkbox
+const SingleCheckDialog = ({
+                               open, onClose, onConfirm, checked, setChecked, disabled,
+                               title, checkboxLabel, checkboxAriaLabel, confirmAriaLabel, confirmText,
+                               variant = 'primary', cancelDisabled = false,
+                           }) => (
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title={title}
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                cancelDisabled={cancelDisabled}
+                onConfirm={onConfirm}
+                confirmDisabled={!checked || disabled}
+                confirmLabel={confirmAriaLabel}
+                variant={variant}
+            >
+                {confirmText}
+            </DialogFooter>
+        }
+    >
+        <Acknowledgements>
+            <Checkbox
+                checked={checked}
+                onChange={(e) => setChecked(e.target.checked)}
+                aria-label={checkboxAriaLabel}
+                label={checkboxLabel}
+            />
+        </Acknowledgements>
+    </Dialog>
+);
+
+// Hidden file input behind a "Choose File" button, the chosen file name beside it
+const FilePicker = ({id, onChange, disabled, file, emptyText}) => {
+    const input = useRef(null);
+    return (
+        <div>
+            <input
+                ref={input}
+                id={id}
+                type="file"
+                hidden
+                onChange={onChange}
+                disabled={disabled}
+            />
+            <div className="flex items-center gap-3">
+                <Button variant="secondary" onClick={() => input.current?.click()} disabled={disabled}>
+                    Choose File
+                </Button>
+                <span className={file ? 'text-ink' : 'text-ink-muted'}>
+                    {file ? file.name : emptyText}
+                </span>
+            </div>
+        </div>
+    );
+};
 
 // Dialog for the "freeze" action
 export const FreezeDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Freeze</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm failover pause"
-                    />
-                }
-                label="I understand that the selected service orchestration will be paused."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm freeze action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Freeze"
+        checkboxAriaLabel="Confirm failover pause"
+        checkboxLabel="I understand that the selected service orchestration will be paused."
+        confirmAriaLabel="Confirm freeze action"
+        confirmText="Confirm"
+    />
 );
 
 // Dialog for the "stop" action
 export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Stop</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm service interruption"
-                    />
-                }
-                label="I understand that this may interrupt services."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm stop action"
-            >
-                Stop
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Stop"
+        checkboxAriaLabel="Confirm service interruption"
+        checkboxLabel="I understand that this may interrupt services."
+        confirmAriaLabel="Confirm stop action"
+        confirmText="Stop"
+        variant="danger"
+    />
 );
 
+// Dialog for the "shutdown" action
 export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Shutdown</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.instancesDown}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({...prev, instancesDown: e.target.checked}))
-                        }
-                        aria-label="Confirm instances shutdown"
-                    />
-                }
-                label="I understand all svc and vol instances on this node will be shut down and the daemon will be stopped."
-            />
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.peerTakeover}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({...prev, peerTakeover: e.target.checked}))
-                        }
-                        aria-label="Confirm peer takeover"
-                    />
-                }
-                label="I understand peer nodes are not notified of a maintenance period and will try to take over services as soon as the instances are down."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Confirm Shutdown"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={
                     !checkboxes.instancesDown ||
                     !checkboxes.peerTakeover ||
                     disabled
                 }
-                onClick={onConfirm}
-                aria-label="Confirm shutdown action"
+                confirmLabel="Confirm shutdown action"
+                variant="danger"
             >
                 Shutdown
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <Acknowledgements>
+            <Checkbox
+                checked={checkboxes.instancesDown}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, instancesDown: e.target.checked}))
+                }
+                aria-label="Confirm instances shutdown"
+                label="I understand all svc and vol instances on this node will be shut down and the daemon will be stopped."
+            />
+            <Checkbox
+                checked={checkboxes.peerTakeover}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, peerTakeover: e.target.checked}))
+                }
+                aria-label="Confirm peer takeover"
+                label="I understand peer nodes are not notified of a maintenance period and will try to take over services as soon as the instances are down."
+            />
+        </Acknowledgements>
     </Dialog>
 );
 
 // Dialog for the "restart" action
 export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Restart</DialogTitle>
-        <DialogContent sx={{padding: 3}}>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm service interruption"
-                    />
-                }
-                label="I understand that this may interrupt services."
-            />
-        </DialogContent>
-        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={false} variant="outlined">
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm restart action"
-            >
-                Restart
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Restart"
+        checkboxAriaLabel="Confirm service interruption"
+        checkboxLabel="I understand that this may interrupt services."
+        confirmAriaLabel="Confirm restart action"
+        confirmText="Restart"
+        variant="danger"
+    />
 );
 
 // Dialog for the "clear" action
 export const ClearDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Clear</DialogTitle>
-        <DialogContent sx={{padding: 3}}>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm clear action"
-                    />
-                }
-                label="I understand that this will clear node status and logs."
-            />
-        </DialogContent>
-        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={false} variant="outlined">
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm clear action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Clear"
+        checkboxAriaLabel="Confirm clear action"
+        checkboxLabel="I understand that this will clear node status and logs."
+        confirmAriaLabel="Confirm clear action"
+        confirmText="Confirm"
+    />
 );
 
 // Dialog for the "drain" action
 export const DrainDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{textAlign: "center", fontWeight: "bold"}}>Confirm Drain</DialogTitle>
-        <DialogContent sx={{padding: 3}}>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm service migration"
-                    />
-                }
-                label="I understand that this will migrate services away from the selected nodes."
-            />
-        </DialogContent>
-        <DialogActions sx={{justifyContent: "center", px: 3, pb: 2}}>
-            <Button onClick={onClose} disabled={false} variant="outlined">
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm drain action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Drain"
+        checkboxAriaLabel="Confirm service migration"
+        checkboxLabel="I understand that this will migrate services away from the selected nodes."
+        confirmAriaLabel="Confirm drain action"
+        confirmText="Confirm"
+    />
 );
+
+const SERVICE_INTERRUPTION_LABEL =
+    "I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured.";
 
 // Dialog for the "unprovision" action
 export const UnprovisionDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled, pendingAction}) => {
     const isNodeAction = pendingAction?.node || pendingAction?.batch === 'nodes';
 
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-            <DialogTitle>Confirm Unprovision</DialogTitle>
-            <DialogContent>
-                <FormControlLabel
-                    control={
-                        <Checkbox
-                            checked={checkboxes.dataLoss}
-                            onChange={(e) =>
-                                setCheckboxes((prev) => ({...prev, dataLoss: e.target.checked}))
-                            }
-                            aria-label="Confirm data loss"
-                        />
-                    }
-                    label="I understand data will be lost."
-                />
-                {!isNodeAction && (
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={checkboxes.clusterwide}
-                                onChange={(e) =>
-                                    setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
-                                }
-                                aria-label="Confirm clusterwide orchestration"
-                            />
-                        }
-                        label="I understand this action will be orchestrated clusterwide."
-                    />
-                )}
-                <FormControlLabel
-                    control={
-                        <Checkbox
-                            checked={checkboxes.serviceInterruption}
-                            onChange={(e) =>
-                                setCheckboxes((prev) => ({
-                                    ...prev,
-                                    serviceInterruption: e.target.checked,
-                                }))
-                            }
-                            aria-label="Confirm service interruption"
-                        />
-                    }
-                    label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
-                />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={false}>
-                    Cancel
-                </Button>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    disabled={
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title="Confirm Unprovision"
+            footer={
+                <DialogFooter
+                    onClose={onClose}
+                    onConfirm={onConfirm}
+                    confirmDisabled={
                         !checkboxes.dataLoss ||
                         !checkboxes.serviceInterruption ||
                         (!isNodeAction && !checkboxes.clusterwide) ||
                         disabled
                     }
-                    onClick={onConfirm}
-                    aria-label="Confirm unprovision action"
+                    confirmLabel="Confirm unprovision action"
+                    variant="danger"
                 >
                     Confirm
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-};
-
-// Dialog for the "purge" action
-export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Purge</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.dataLoss}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({...prev, dataLoss: e.target.checked}))
-                        }
-                        aria-label="Confirm data loss"
-                    />
-                }
-                label="I understand data will be lost."
-            />
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.configLoss}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
-                        }
-                        aria-label="Confirm configuration loss"
-                    />
-                }
-                label="I understand the configuration will be lost."
-            />
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.serviceInterruption}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({
-                                ...prev,
-                                serviceInterruption: e.target.checked,
-                            }))
-                        }
-                        aria-label="Confirm service interruption"
-                    />
-                }
-                label="I understand the selected services may be temporarily interrupted during failover, or durably interrupted if no failover is configured."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={
-                    !checkboxes.dataLoss ||
-                    !checkboxes.configLoss ||
-                    !checkboxes.serviceInterruption ||
-                    disabled
-                }
-                onClick={onConfirm}
-                aria-label="Confirm purge action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
-);
-
-// Dialog for the "delete" action
-export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checkboxes.configLoss}
-                        onChange={(e) =>
-                            setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
-                        }
-                        aria-label="Confirm configuration loss"
-                    />
-                }
-                label="I understand the configuration will be lost."
-            />
-            <FormControlLabel
-                control={
+                </DialogFooter>
+            }
+        >
+            <Acknowledgements>
+                <Checkbox
+                    checked={checkboxes.dataLoss}
+                    onChange={(e) =>
+                        setCheckboxes((prev) => ({...prev, dataLoss: e.target.checked}))
+                    }
+                    aria-label="Confirm data loss"
+                    label="I understand data will be lost."
+                />
+                {!isNodeAction && (
                     <Checkbox
                         checked={checkboxes.clusterwide}
                         onChange={(e) =>
                             setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
                         }
                         aria-label="Confirm clusterwide orchestration"
+                        label="I understand this action will be orchestrated clusterwide."
                     />
+                )}
+                <Checkbox
+                    checked={checkboxes.serviceInterruption}
+                    onChange={(e) =>
+                        setCheckboxes((prev) => ({
+                            ...prev,
+                            serviceInterruption: e.target.checked,
+                        }))
+                    }
+                    aria-label="Confirm service interruption"
+                    label={SERVICE_INTERRUPTION_LABEL}
+                />
+            </Acknowledgements>
+        </Dialog>
+    );
+};
+
+// Dialog for the "purge" action
+export const PurgeDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Confirm Purge"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={
+                    !checkboxes.dataLoss ||
+                    !checkboxes.configLoss ||
+                    !checkboxes.serviceInterruption ||
+                    disabled
                 }
-                label="I understand this action will be orchestrated clusterwide."
+                confirmLabel="Confirm purge action"
+                variant="danger"
+            >
+                Confirm
+            </DialogFooter>
+        }
+    >
+        <Acknowledgements>
+            <Checkbox
+                checked={checkboxes.dataLoss}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, dataLoss: e.target.checked}))
+                }
+                aria-label="Confirm data loss"
+                label="I understand data will be lost."
             />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checkboxes.configLoss || !checkboxes.clusterwide || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm delete action"
+            <Checkbox
+                checked={checkboxes.configLoss}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
+                }
+                aria-label="Confirm configuration loss"
+                label="I understand the configuration will be lost."
+            />
+            <Checkbox
+                checked={checkboxes.serviceInterruption}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({
+                        ...prev,
+                        serviceInterruption: e.target.checked,
+                    }))
+                }
+                aria-label="Confirm service interruption"
+                label={SERVICE_INTERRUPTION_LABEL}
+            />
+        </Acknowledgements>
+    </Dialog>
+);
+
+// Dialog for the "delete" action
+export const DeleteDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Confirm Delete"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={!checkboxes.configLoss || !checkboxes.clusterwide || disabled}
+                confirmLabel="Confirm delete action"
+                variant="danger"
             >
                 Delete
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <Acknowledgements>
+            <Checkbox
+                checked={checkboxes.configLoss}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, configLoss: e.target.checked}))
+                }
+                aria-label="Confirm configuration loss"
+                label="I understand the configuration will be lost."
+            />
+            <Checkbox
+                checked={checkboxes.clusterwide}
+                onChange={(e) =>
+                    setCheckboxes((prev) => ({...prev, clusterwide: e.target.checked}))
+                }
+                aria-label="Confirm clusterwide orchestration"
+                label="I understand this action will be orchestrated clusterwide."
+            />
+        </Acknowledgements>
     </Dialog>
 );
 
 // Dialog for the "switch" action
 export const SwitchDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Switch</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm service unavailability"
-                    />
-                }
-                label="I understand the selected services will be unavailable during move."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={disabled}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm switch action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        cancelDisabled={disabled}
+        title="Confirm Switch"
+        checkboxAriaLabel="Confirm service unavailability"
+        checkboxLabel="I understand the selected services will be unavailable during move."
+        confirmAriaLabel="Confirm switch action"
+        confirmText="Confirm"
+    />
 );
 
 // Dialog for the "giveback" action
 export const GivebackDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Giveback</DialogTitle>
-        <DialogContent>
-            <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={checked}
-                        onChange={(e) => setChecked(e.target.checked)}
-                        aria-label="Confirm service unavailability"
-                    />
-                }
-                label="I understand the selected services will be unavailable during move."
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                disabled={!checked || disabled}
-                onClick={onConfirm}
-                aria-label="Confirm giveback action"
-            >
-                Confirm
-            </Button>
-        </DialogActions>
-    </Dialog>
+    <SingleCheckDialog
+        open={open} onClose={onClose} onConfirm={onConfirm}
+        checked={checked} setChecked={setChecked} disabled={disabled}
+        title="Confirm Giveback"
+        checkboxAriaLabel="Confirm service unavailability"
+        checkboxLabel="I understand the selected services will be unavailable during move."
+        confirmAriaLabel="Confirm giveback action"
+        confirmText="Confirm"
+    />
 );
 
 // Dialog for the "delete key" action
@@ -488,27 +380,25 @@ export const DeleteKeyDialog = ({
                                     keyToDelete,
                                     disabled,
                                 }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Key Deletion</DialogTitle>
-        <DialogContent>
-            <Typography variant="body1">
-                Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
-            </Typography>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled}
-                aria-label="Confirm delete key action"
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Confirm Key Deletion"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={disabled}
+                confirmLabel="Confirm delete key action"
+                variant="danger"
             >
                 Delete
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <p className="text-ink">
+            Are you sure you want to delete the key <strong>{keyToDelete}</strong>?
+        </p>
     </Dialog>
 );
 
@@ -523,60 +413,40 @@ export const CreateKeyDialog = ({
                                     setNewKeyFile,
                                     disabled,
                                 }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Create New Key</DialogTitle>
-        <DialogContent>
-            <TextField
-                autoFocus
-                margin="dense"
-                label="Key Name"
-                fullWidth
-                variant="outlined"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
-                disabled={disabled}
-                aria-label="Key name input"
-            />
-            <Box sx={{mt: 2}}>
-                <input
-                    id="create-key-file-upload"
-                    type="file"
-                    hidden
-                    onChange={(e) => setNewKeyFile(e.target.files[0])}
-                    disabled={disabled}
-                />
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <Button
-                        variant="outlined"
-                        component="label"
-                        htmlFor="create-key-file-upload"
-                        disabled={disabled}
-                    >
-                        Choose File
-                    </Button>
-                    <Typography
-                        variant="body2"
-                        color={newKeyFile ? 'textPrimary' : 'textSecondary'}
-                    >
-                        {newKeyFile ? newKeyFile.name : 'No file selected'}
-                    </Typography>
-                </Box>
-            </Box>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled || !newKeyName || !newKeyFile}
-                aria-label="Confirm create key action"
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Create New Key"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={disabled || !newKeyName || !newKeyFile}
+                confirmLabel="Confirm create key action"
             >
                 Create
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <Field label="Key Name">
+            {(control) => (
+                <Input
+                    {...control}
+                    autoFocus
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    disabled={disabled}
+                    aria-label="Key name input"
+                />
+            )}
+        </Field>
+        <FilePicker
+            id="create-key-file-upload"
+            onChange={(e) => setNewKeyFile(e.target.files[0])}
+            disabled={disabled}
+            file={newKeyFile}
+            emptyText="No file selected"
+        />
     </Dialog>
 );
 
@@ -590,49 +460,28 @@ export const UpdateConfigDialog = ({
                                        setNewConfigFile,
                                        disabled,
                                    }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Update Configuration</DialogTitle>
-        <DialogContent>
-            <Box sx={{mt: 2}}>
-                <input
-                    id="update-config-file-upload"
-                    type="file"
-                    hidden
-                    onChange={(e) => setNewConfigFile(e.target.files[0])}
-                    disabled={disabled}
-                />
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <Button
-                        variant="outlined"
-                        component="label"
-                        htmlFor="update-config-file-upload"
-                        disabled={disabled}
-                    >
-                        Choose File
-                    </Button>
-                    <Typography
-                        variant="body2"
-                        color={newConfigFile ? 'textPrimary' : 'textSecondary'}
-                    >
-                        {newConfigFile ? newConfigFile.name : 'No file chosen'}
-                    </Typography>
-                </Box>
-            </Box>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled || !newConfigFile}
-                aria-label="Confirm update config action"
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Update Configuration"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={disabled || !newConfigFile}
+                confirmLabel="Confirm update config action"
             >
                 Update
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <FilePicker
+            id="update-config-file-upload"
+            onChange={(e) => setNewConfigFile(e.target.files[0])}
+            disabled={disabled}
+            file={newConfigFile}
+            emptyText="No file chosen"
+        />
     </Dialog>
 );
 
@@ -649,128 +498,83 @@ export const ManageConfigParamsDialog = ({
                                              setParamsToDelete,
                                              disabled,
                                          }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Manage Configuration Parameters</DialogTitle>
-        <DialogContent>
-            <Typography variant="subtitle1" gutterBottom>
-                Add parameters (one per line, e.g., section.param=value)
-            </Typography>
-            <TextField
-                autoFocus
-                margin="dense"
-                label="Parameters to set"
-                fullWidth
-                variant="outlined"
-                multiline
-                rows={4}
-                value={paramsToSet}
-                onChange={(e) => setParamsToSet(e.target.value)}
-                disabled={disabled}
-                placeholder="section.param1=value1
-                section.param2=value2"
-                aria-label="Parameters to set input"
-            />
-            <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                Unset parameters (one key per line, e.g., section.param)
-            </Typography>
-            <TextField
-                margin="dense"
-                label="Parameter keys to unset"
-                fullWidth
-                variant="outlined"
-                multiline
-                rows={4}
-                value={paramsToUnset}
-                onChange={(e) => setParamsToUnset(e.target.value)}
-                disabled={disabled}
-                placeholder="section.param1&#10;section.param2"
-                aria-label="Parameters to unset input"
-                sx={{
-                    "& .MuiInputBase-root": {
-                        padding: "8px",
-                        lineHeight: "1.5",
-                        minHeight: "100px",
-                    },
-                    "& .MuiInputBase-input": {
-                        overflow: "auto",
-                        boxSizing: "border-box",
-                    },
-                    "& .MuiInputLabel-root": {
-                        backgroundColor: "white",
-                        padding: "0 4px",
-                    },
-                }}
-            />
-            <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>
-                Delete sections (one key per line, e.g., section)
-            </Typography>
-            <TextField
-                margin="dense"
-                label="Section keys to delete"
-                fullWidth
-                variant="outlined"
-                multiline
-                rows={4}
-                value={paramsToDelete}
-                onChange={(e) => setParamsToDelete(e.target.value)}
-                disabled={disabled}
-                placeholder="section1&#10;section2"
-                aria-label="Sections to delete input"
-                sx={{
-                    "& .MuiInputBase-root": {
-                        padding: "8px",
-                        lineHeight: "1.5",
-                        minHeight: "100px",
-                    },
-                    "& .MuiInputBase-input": {
-                        overflow: "auto",
-                        boxSizing: "border-box",
-                    },
-                    "& .MuiInputLabel-root": {
-                        backgroundColor: "white",
-                        padding: "0 4px",
-                    },
-                }}
-            />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                disabled={disabled || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
-                aria-label="Apply configuration changes"
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Manage Configuration Parameters"
+        size="md"
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmDisabled={disabled || (!paramsToSet && !paramsToUnset && !paramsToDelete)}
+                confirmLabel="Apply configuration changes"
             >
                 Apply
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <Field label="Parameters to set" hint="Add parameters (one per line, e.g., section.param=value)">
+            {(control) => (
+                <Textarea
+                    {...control}
+                    autoFocus
+                    rows={4}
+                    value={paramsToSet}
+                    onChange={(e) => setParamsToSet(e.target.value)}
+                    disabled={disabled}
+                    placeholder={"section.param1=value1\nsection.param2=value2"}
+                    aria-label="Parameters to set input"
+                />
+            )}
+        </Field>
+        <Field label="Parameter keys to unset" hint="Unset parameters (one key per line, e.g., section.param)">
+            {(control) => (
+                <Textarea
+                    {...control}
+                    rows={4}
+                    value={paramsToUnset}
+                    onChange={(e) => setParamsToUnset(e.target.value)}
+                    disabled={disabled}
+                    placeholder={"section.param1\nsection.param2"}
+                    aria-label="Parameters to unset input"
+                />
+            )}
+        </Field>
+        <Field label="Section keys to delete" hint="Delete sections (one key per line, e.g., section)">
+            {(control) => (
+                <Textarea
+                    {...control}
+                    rows={4}
+                    value={paramsToDelete}
+                    onChange={(e) => setParamsToDelete(e.target.value)}
+                    disabled={disabled}
+                    placeholder={"section1\nsection2"}
+                    aria-label="Sections to delete input"
+                />
+            )}
+        </Field>
     </Dialog>
 );
 
 // Simple dialog for other actions
 export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm {action}</DialogTitle>
-        <DialogContent>
-            <Typography>
-                Are you sure you want to <strong>{action}</strong> on {target}?
-            </Typography>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={false}>
-                Cancel
-            </Button>
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={onConfirm}
-                aria-label={`Confirm ${action} action`}
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title={<>Confirm {action}</>}
+        footer={
+            <DialogFooter
+                onClose={onClose}
+                onConfirm={onConfirm}
+                confirmLabel={`Confirm ${action} action`}
             >
                 Confirm
-            </Button>
-        </DialogActions>
+            </DialogFooter>
+        }
+    >
+        <p className="text-ink">
+            Are you sure you want to <strong>{action}</strong> on {target}?
+        </p>
     </Dialog>
 );

@@ -1,32 +1,27 @@
 import {useTranslation} from "react-i18next"
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import DialogContentText from '@mui/material/DialogContentText'
-import DialogTitle from '@mui/material/DialogTitle'
-import Button from '@mui/material/Button'
+import {Button} from "../ui/components/Button"
+import {Spinner} from "../ui/components/Spinner"
 
 function Authenticating() {
     const {t} = useTranslation()
     return (
-        <Dialog
-            open={true}
+        <section
             aria-labelledby="dialog-title"
+            className="mx-auto mt-[15vh] flex max-w-sm flex-col items-center gap-3 p-4 text-center"
         >
-            <DialogTitle id="dialog-title">
+            <h1 id="dialog-title" className="text-title font-semibold">
                 {t("Authentication")}
-            </DialogTitle>
-            <DialogContent>
-                <DialogContentText>
+            </h1>
+            <div className="flex items-center gap-2">
+                <Spinner label={t("Loading...")}/>
+                <p className="text-ink-muted">
                     {t("You are being redirected to the openid provider.")}
-                </DialogContentText>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={() => window.location.reload()}>
-                    {t("Reload")}
-                </Button>
-            </DialogActions>
-        </Dialog>
+                </p>
+            </div>
+            <Button onClick={() => window.location.reload()}>
+                {t("Reload")}
+            </Button>
+        </section>
     )
 }
 

@@ -1,90 +1,23 @@
-import {Link, useNavigate, useLocation} from "react-router-dom";
-import {AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, ListItemIcon, ListItemText} from "@mui/material";
-import {
-    FaUser,
-    FaBars,
-    FaHome,
-    FaList,
-    FaHeartbeat,
-    FaServer,
-    FaDatabase,
-    FaCubes,
-    FaNetworkWired,
-    FaTag
-} from "react-icons/fa";
+import {Link, useLocation} from "react-router-dom";
+import {SidebarIcon, UserIcon} from "../ui/icons";
+import opensvcLogo from "../ui/assets/opensvc-logo.svg";
 import {useAuth} from "../context/AuthProvider.jsx";
-import {useEffect, useState, useMemo, useCallback} from "react";
+import {useEffect, useState, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
-import useEventStore from "../hooks/useEventStore.js";
 import useOnlineStatus from "../hooks/useOnlineStatus";
 import logger from '../utils/logger.js';
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import {red, orange} from "@mui/material/colors";
-import Tooltip from "@mui/material/Tooltip";
 
-const NavBar = () => {
-    const navigate = useNavigate();
+// Header icon buttons, as in the oc3 top bar: muted ink, darker on hover.
+const HEADER_BUTTON =
+    "flex h-7 w-7 shrink-0 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink";
+
+const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false}) => {
     const auth = useAuth();
     const location = useLocation();
-    const {clusterName, fetchNodes, loading, daemon} = useFetchDaemonStatus();
+    const {clusterName, fetchNodes, loading} = useFetchDaemonStatus();
     const [breadcrumb, setBreadcrumb] = useState([]);
-    const [menuAnchor, setMenuAnchor] = useState(null);
-    const objectStatus = useEventStore((state) => state.objectStatus);
-    const objectInstanceStatus = useEventStore((state) => state.objectInstanceStatus);
-    const instanceMonitor = useEventStore((state) => state.instanceMonitor);
-    const [downCount, setDownCount] = useState(0);
-    const [warnCount, setWarnCount] = useState(0);
     const [storedClusterName, setStoredClusterName] = useState(null);
     const online = useOnlineStatus();
-
-    const navRoutes = [
-        {path: "/cluster", name: "Cluster", icon: <FaHome/>},
-        {path: "/namespaces", name: "Namespaces", icon: <FaList/>},
-        {path: "/heartbeats", name: "Heartbeats", icon: <FaHeartbeat/>},
-        {path: "/nodes", name: "Nodes", icon: <FaServer/>},
-        {path: "/pools", name: "Pools", icon: <FaDatabase/>},
-        {path: "/network", name: "Networks", icon: <FaNetworkWired/>},
-        {path: "/objects", name: "Objects", icon: <FaCubes/>},
-        {path: "/kinds", name: "Kinds", icon: <FaTag/>},
-        {path: "/whoami", name: "Who Am I", icon: <FaUser/>},
-    ];
-
-    const getObjectStatus = useCallback((objectName, objs) => {
-        const obj = objs[objectName] || {};
-        const rawAvail = obj?.avail;
-        const validStatuses = ["up", "down", "warn"];
-        const avail = validStatuses.includes(rawAvail) ? rawAvail : "n/a";
-        const frozen = obj?.frozen;
-        const provisioned = obj?.provisioned;
-        let globalExpect = null;
-        const nodes = Object.keys(objectInstanceStatus[objectName] || {});
-        for (const node of nodes) {
-            const monitorKey = `${node}:${objectName}`;
-            const monitor = instanceMonitor[monitorKey] || {};
-            if (monitor.global_expect && monitor.global_expect !== "none") {
-                globalExpect = monitor.global_expect;
-                break;
-            }
-        }
-        return {avail, frozen, globalExpect, provisioned};
-    }, [objectInstanceStatus, instanceMonitor]);
-
-    const objects = useMemo(
-        () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
-        [objectStatus, daemon]
-    );
-
-    useEffect(() => {
-        let down = 0;
-        let warn = 0;
-        Object.keys(objects).forEach((key) => {
-            const status = getObjectStatus(key, objects);
-            if (status.avail === "down") down++;
-            if (status.avail === "warn") warn++;
-        });
-        setDownCount(down);
-        setWarnCount(warn);
-    }, [objects, getObjectStatus]);
 
     const getPathBreadcrumbs = useCallback(() => {
         const pathParts = location.pathname.split("/").filter(Boolean);
@@ -114,7 +47,7 @@ const NavBar = () => {
             const token = auth?.authToken || localStorage.getItem("authToken");
             if (!token) {
                 setBreadcrumb([
-                    {name: "Cluster", path: "/cluster"},
+                    {name: "Cluster", path: "/"},
                     ...getPathBreadcrumbs(),
                 ]);
                 return;
@@ -145,7 +78,7 @@ const NavBar = () => {
         if (pathParts[0] !== "login") {
             breadcrumbItems.push({
                 name: storedClusterName || (loading ? "Loading..." : "Cluster"),
-                path: "/cluster",
+                path: "/",
             });
 
             if (pathParts.length > 1 || (pathParts.length === 1 && pathParts[0] !== "cluster")) {
@@ -188,188 +121,70 @@ const NavBar = () => {
         setBreadcrumb(breadcrumbItems);
     }, [location.pathname, storedClusterName, loading]);
 
-    const handleMenuOpen = (event) => {
-        setMenuAnchor(event.currentTarget);
-    };
-
-    const handleMenuClose = () => {
-        setMenuAnchor(null);
-    };
-
-    const handleMenuItemClick = (path) => {
-        navigate(path);
-        handleMenuClose();
-    };
-
     return (
-        <AppBar
-            position="sticky"
-            sx={{
-                width: "100vw",
-                left: 0,
-                right: 0,
-                boxSizing: "border-box"
-            }}
-        >
-            <Toolbar sx={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1}}>
-                    <Button
-                        onClick={handleMenuOpen}
-                        aria-label="Open navigation menu"
-                        sx={{
-                            color: "white",
-                            minWidth: "auto",
-                            padding: "8px",
-                            borderRadius: 2,
-                            backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            "&:hover": {backgroundColor: "rgba(255, 255, 255, 0.2)"},
-                        }}
-                    >
-                        <FaBars/>
-                    </Button>
+        // The oc3 top bar (AppShell): 44px, raised, a line under it. No stacking order
+        // of its own: side panels and dialogs slide over the whole height, as in oc3.
+        <header className="flex h-11 shrink-0 items-center gap-4 border-b border-line bg-surface-raised px-3 text-ink">
+            {showSidebarToggle && (
+                <button
+                    type="button"
+                    onClick={onToggleSidebar}
+                    aria-expanded={sidebarOpen}
+                    aria-controls="app-sidebar"
+                    aria-label={sidebarOpen ? "Hide menu" : "Show menu"}
+                    title={sidebarOpen ? "Hide menu" : "Show menu"}
+                    className={HEADER_BUTTON}
+                >
+                    <SidebarIcon open={sidebarOpen} width={18} height={18}/>
+                </button>
+            )}
 
-                    <Menu
-                        anchorEl={menuAnchor}
-                        open={Boolean(menuAnchor)}
-                        onClose={handleMenuClose}
-                    >
-                        {navRoutes.map(({path, name, icon}) => (
-                            <MenuItem
-                                key={path}
-                                onClick={() => handleMenuItemClick(path)}
-                                selected={location.pathname === path}
-                                aria-selected={location.pathname === path}
-                            >
-                                <ListItemIcon>{icon}</ListItemIcon>
-                                <ListItemText primary={name}/>
-                            </MenuItem>
-                        ))}
-                    </Menu>
+            {/* The oc3 top bar link: logo and product name, back to the home view. */}
+            <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight text-ink">
+                {/* Decorative: the name that follows already names the link. */}
+                <img src={opensvcLogo} alt="" width={24} height={24} className="h-6 w-6"/>
+                OpenSVC
+            </Link>
 
-                    {breadcrumb.length > 0 && location.pathname !== '/login' && (
-                        <Box sx={{display: "flex", alignItems: "center", flexWrap: "wrap"}}>
-                            {breadcrumb.map((item, index) => (
-                                <Box key={index} sx={{display: "flex", alignItems: "center"}}>
-                                    {item.path ? (
-                                        <Typography
-                                            component={Link}
-                                            to={item.path}
-                                            sx={{
-                                                color: "inherit",
-                                                textDecoration: "none",
-                                                fontWeight: 500,
-                                                fontSize: "1.1rem",
-                                                "&:hover": {textDecoration: "underline"},
-                                            }}
-                                            aria-label={`Navigate to ${item.name}`}
-                                        >
-                                            {item.name}
-                                        </Typography>
-                                    ) : (
-                                        <Typography
-                                            sx={{
-                                                color: "inherit",
-                                                textDecoration: "none",
-                                                fontWeight: 500,
-                                                fontSize: "1.1rem",
-                                                cursor: "default",
-                                            }}
-                                        >
-                                            {item.name}
-                                        </Typography>
-                                    )}
-
-                                    {index < breadcrumb.length - 1 && (
-                                        <Typography sx={{mx: 0.5, fontSize: "1.1rem"}}>{">"}</Typography>
-                                    )}
-                                </Box>
-                            ))}
-                        </Box>
-                    )}
-
-                    {(downCount > 0 || warnCount > 0) && (
-                        <Box sx={{display: "flex", alignItems: "center", gap: 2, ml: 2}}>
-                            {downCount > 0 && (
-                                <Tooltip title="Number of down objects">
-                                    <Typography
-                                        component={Link}
-                                        to="/objects?globalState=down"
-                                        sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 0.5,
-                                            color: "inherit",
-                                            textDecoration: "none"
-                                        }}
-                                    >
-                                        <FiberManualRecordIcon sx={{color: red[500]}}/>
-                                        {downCount}
-                                    </Typography>
-                                </Tooltip>
+            {breadcrumb.length > 0 && location.pathname !== '/login' && (
+                <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 overflow-hidden font-medium whitespace-nowrap">
+                    {breadcrumb.map((item, index) => (
+                        <span key={index} className="flex min-w-0 items-center gap-1">
+                            {item.path ? (
+                                <Link
+                                    to={item.path}
+                                    aria-label={`Navigate to ${item.name}`}
+                                    className="truncate hover:underline"
+                                >
+                                    {item.name}
+                                </Link>
+                            ) : (
+                                <span className="truncate">{item.name}</span>
                             )}
-                            {warnCount > 0 && (
-                                <Tooltip title="Number of warn objects">
-                                    <Typography
-                                        component={Link}
-                                        to="/objects?globalState=warn"
-                                        sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 0.5,
-                                            color: "inherit",
-                                            textDecoration: "none"
-                                        }}
-                                    >
-                                        <FiberManualRecordIcon sx={{color: orange[500]}}/>
-                                        {warnCount}
-                                    </Typography>
-                                </Tooltip>
+                            {index < breadcrumb.length - 1 && (
+                                <span aria-hidden="true" className="text-ink-muted">{">"}</span>
                             )}
-                        </Box>
-                    )}
-                </Box>
+                        </span>
+                    ))}
+                </nav>
+            )}
 
-                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                    {!online && (
-                        <Tooltip title="You are offline — some features may be limited">
-                            <Typography
-                                variant="body2"
-                                sx={{
-                                    px: 1,
-                                    py: 0.5,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: 'rgba(255, 0, 0, 0.12)',
-                                    color: 'white',
-                                    fontWeight: 600,
-                                }}
-                            >
-                                <FiberManualRecordIcon sx={{color: red[500], fontSize: '0.8rem'}}/>
-                                Offline
-                            </Typography>
-                        </Tooltip>
-                    )}
-
-                    <Button
-                        component={Link}
-                        to="/whoami"
-                        sx={{
-                            color: "white",
-                            minWidth: "auto",
-                            padding: "8px",
-                            borderRadius: 2,
-                            backgroundColor: "rgba(255, 255, 255, 0.1)",
-                            "&:hover": {backgroundColor: "rgba(255, 255, 255, 0.2)"},
-                        }}
-                        aria-label="View user information"
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+                {!online && (
+                    <span
+                        title="You are offline — some features may be limited"
+                        className="inline-flex items-center gap-1 rounded-(--radius-control) bg-state-down-soft px-2 py-0.5 text-data font-semibold text-state-down"
                     >
-                        <FaUser/>
-                    </Button>
-                </Box>
-            </Toolbar>
-        </AppBar>
+                        <span aria-hidden="true" className="text-[0.625rem]">■</span>
+                        Offline
+                    </span>
+                )}
+
+                <Link to="/whoami" aria-label="View user information" title="View user information" className={HEADER_BUTTON}>
+                    <UserIcon width={16} height={16}/>
+                </Link>
+            </div>
+        </header>
     );
 };
 

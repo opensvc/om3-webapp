@@ -1,21 +1,12 @@
 import React, {useEffect, useState, useMemo} from "react";
-import {
-    Box,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    CircularProgress,
-    Button,
-    Alert
-} from "@mui/material";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import axios from "axios";
 import {URL_POOL} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
+import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
+import {Alert} from "../ui/components/Alert";
+import {Button} from "../ui/components/Button";
+import {Spinner} from "../ui/components/Spinner";
+import {UsageBar} from "../ui/components/UsageBar";
 
 /**
  * @typedef {Object} Pool
@@ -26,6 +17,26 @@ import logger from '../utils/logger.js';
  * @property {number} [used]
  * @property {string} [head]
  */
+
+const COLUMNS = [
+    {key: "name", label: "Name"},
+    {key: "type", label: "Type"},
+    {key: "volume_count", label: "Volume Count", align: "right"},
+    {key: "usage", label: "Usage", align: "right"},
+    {key: "head", label: "Head"},
+];
+
+/** The usage percentage, a small bar beside it: the row keeps one line. */
+const Usage = ({pool}) => {
+    if (!(pool.size && pool.used >= 0)) return "N/A";
+    return (
+        <UsageBar
+            value={(pool.used / pool.size) * 100}
+            title={`${pool.used}/${pool.size}`}
+            label={`Usage of ${pool.name || "N/A"}`}
+        />
+    );
+};
 
 const Pools = () => {
     /** @type {[Pool[], function]} */
@@ -127,142 +138,57 @@ const Pools = () => {
         }
     };
 
-    const renderTableRows = () => {
-        if (sortedPools.length === 0) {
-            return (
-                <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{color: 'text.secondary'}}>
-                        No pools available.
-                    </TableCell>
-                </TableRow>
-            );
-        }
-
-        return sortedPools.map((pool) => {
-            const usedPercentage = pool.size && pool.used >= 0
-                ? ((pool.used / pool.size) * 100).toFixed(1)
-                : "N/A";
-            return (
-                <TableRow key={pool.name || Math.random()}>
-                    <TableCell>{pool.name || "N/A"}</TableCell>
-                    <TableCell>{pool.type || "N/A"}</TableCell>
-                    <TableCell align="center">{pool.volume_count ?? "N/A"}</TableCell>
-                    <TableCell align="center">{usedPercentage}%</TableCell>
-                    <TableCell>{pool.head || "N/A"}</TableCell>
-                </TableRow>
-            );
-        });
-    };
-
     return (
-        <Box
-            sx={{
-                height: "100vh",
-                bgcolor: 'background.default',
-                display: 'flex',
-                flexDirection: 'column',
-                p: 0,
-                width: '100vw',
-                margin: 0,
-                overflow: 'hidden',
-            }}
-        >
-            <Box
-                sx={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    bgcolor: "background.paper",
-                    border: "2px solid",
-                    borderColor: "divider",
-                    borderRadius: 0,
-                    boxShadow: 3,
-                    p: 3,
-                    m: 0,
-                    overflow: 'hidden',
-                }}
-            >
-
-                {loading ? (
-                    <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}>
-                        <CircularProgress/>
-                    </Box>
-                ) : error ? (
-                    <Box sx={{maxWidth: '600px', mx: 'auto', mb: 3}}>
-                        <Alert
-                            severity="error"
-                            action={
-                                <Button color="inherit" size="small" onClick={handleRetry}>
-                                    Retry
-                                </Button>
-                            }
-                        >
-                            {String(error)}
-                        </Alert>
-                    </Box>
-                ) : (
-                    <TableContainer
-                        sx={{
-                            flex: 1,
-                            minHeight: 0,
-                            overflow: "auto",
-                        }}
-                    >
-                        <Table sx={{minWidth: 700}} aria-label="pools table">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell onClick={() => handleSort("name")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
-                                            <strong>Name</strong>
-                                            {sortColumn === "name" &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell onClick={() => handleSort("type")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
-                                            <strong>Type</strong>
-                                            {sortColumn === "type" &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell align="center" onClick={() => handleSort("volume_count")}
-                                               sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                            <strong>Volume Count</strong>
-                                            {sortColumn === "volume_count" &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell align="center" onClick={() => handleSort("usage")}
-                                               sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "center"}}>
-                                            <strong>Usage</strong>
-                                            {sortColumn === "usage" &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell onClick={() => handleSort("head")} sx={{cursor: "pointer"}}>
-                                        <Box sx={{display: "flex", alignItems: "center"}}>
-                                            <strong>Head</strong>
-                                            {sortColumn === "head" &&
-                                                (sortDirection === "asc" ? <KeyboardArrowUpIcon/> :
-                                                    <KeyboardArrowDownIcon/>)}
-                                        </Box>
-                                    </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {renderTableRows()}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                )}
-            </Box>
-        </Box>
+        <div className="p-4 space-y-3">
+            {loading ? (
+                <div className="flex justify-center py-8">
+                    <Spinner label="Loading pools"/>
+                </div>
+            ) : error ? (
+                <Alert
+                    action={
+                        <Button size="sm" onClick={handleRetry}>
+                            Retry
+                        </Button>
+                    }
+                >
+                    {String(error)}
+                </Alert>
+            ) : (
+                <Table sticky>
+                    <caption className="sr-only">Pools</caption>
+                    <thead>
+                        <HeaderRow>
+                            {COLUMNS.map(({key, label, align}) => (
+                                <SortHeaderCell
+                                    key={key}
+                                    label={label}
+                                    align={align}
+                                    active={sortColumn === key}
+                                    direction={sortDirection}
+                                    onSort={() => handleSort(key)}
+                                />
+                            ))}
+                        </HeaderRow>
+                    </thead>
+                    <tbody>
+                        {sortedPools.length === 0 ? (
+                            <EmptyRow colSpan={COLUMNS.length}>No pools available.</EmptyRow>
+                        ) : (
+                            sortedPools.map((pool) => (
+                                <Row key={pool.name || Math.random()}>
+                                    <Cell className="font-medium">{pool.name || "N/A"}</Cell>
+                                    <Cell>{pool.type || "N/A"}</Cell>
+                                    <Cell numeric>{pool.volume_count ?? "N/A"}</Cell>
+                                    <Cell numeric><Usage pool={pool}/></Cell>
+                                    <Cell>{pool.head || "N/A"}</Cell>
+                                </Row>
+                            ))
+                        )}
+                    </tbody>
+                </Table>
+            )}
+        </div>
     );
 };
 

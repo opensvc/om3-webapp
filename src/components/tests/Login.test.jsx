@@ -60,8 +60,8 @@ const setupLogin = () => {
     const utils = render(<Login/>);
     const getUsernameInput = () => screen.getByLabelText('Username');
     const getPasswordInput = () => screen.getByLabelText('Password');
-    const getSubmitButton = () => screen.getByText('Submit');
-    const getChangeMethodButton = () => screen.getByText('Change Method');
+    const getSubmitButton = () => screen.getByRole('button', {name: 'Submit'});
+    const getChangeMethodButton = () => screen.getByRole('button', {name: 'Change Method'});
 
     const fillForm = (username, password) => {
         fireEvent.change(getUsernameInput(), {target: {value: username}});
@@ -86,11 +86,15 @@ describe('Login Component', () => {
 
     test('renders login form correctly', () => {
         setupLogin();
-        expect(screen.getByText('Login')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Login'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: 'Login'})).toBeInTheDocument();
+        expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+        expect(screen.getByLabelText('Username')).toHaveFocus();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(screen.getByLabelText('Username')).toBeInTheDocument();
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
-        expect(screen.getByText('Submit')).toBeInTheDocument();
-        expect(screen.getByText('Change Method')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Submit'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Change Method'})).toBeInTheDocument();
     });
 
     test('handles form input changes and disables submit when empty', () => {
@@ -119,7 +123,7 @@ describe('Login Component', () => {
         const {getPasswordInput} = setupLogin();
         fireEvent.keyDown(getPasswordInput(), {key: 'Enter'});
         await waitFor(() => {
-            expect(screen.getByText('Please enter both username and password')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent('Please enter both username and password');
         });
         expect(fetch).not.toHaveBeenCalled();
     });
@@ -166,7 +170,7 @@ describe('Login Component', () => {
         fireEvent.click(getSubmitButton());
 
         await waitFor(() => {
-            expect(screen.getByText('Incorrect username or password')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent('Incorrect username or password');
         });
     });
 
@@ -178,10 +182,32 @@ describe('Login Component', () => {
         fireEvent.click(getSubmitButton());
 
         await waitFor(() => {
-            expect(screen.getByText('Network error')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent('Network error');
         });
 
         expect(console.error).toHaveBeenCalledWith('Authentication error:', expect.any(Error));
+    });
+
+    test('disables the form and shows Loading... while the login is pending', async () => {
+        let resolveFetch;
+        fetch.mockReturnValueOnce(new Promise((resolve) => {
+            resolveFetch = resolve;
+        }));
+
+        const {fillForm, getUsernameInput, getPasswordInput} = setupLogin();
+        fillForm('testuser', 'testpass');
+        fireEvent.click(screen.getByRole('button', {name: 'Submit'}));
+
+        const loadingButton = await screen.findByRole('button', {name: 'Loading...'});
+        expect(loadingButton).toBeDisabled();
+        expect(getUsernameInput()).toBeDisabled();
+        expect(getPasswordInput()).toBeDisabled();
+        expect(screen.getByRole('button', {name: 'Change Method'})).toBeDisabled();
+
+        resolveFetch({ok: false});
+        await waitFor(() => {
+            expect(screen.getByRole('button', {name: 'Submit'})).not.toBeDisabled();
+        });
     });
 
     test('handles change method button click', () => {

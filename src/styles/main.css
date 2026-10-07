@@ -1,212 +1,61 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-/* Light mode (default) */
-:root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f5f5f5;
-    --bg-tertiary: #fafafa;
-    --text-primary: #000000;
-    --text-secondary: #666666;
-    --border-color: #e0e0e0;
-}
-
-/* Dark mode */
-.dark {
-    --bg-primary: #121212;
-    --bg-secondary: #1e1e1e;
-    --bg-tertiary: #2d2d2d;
-    --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --border-color: #333333;
-}
-
-html, body {
-    height: 100%;
-    overflow: hidden !important;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-}
-
-#root {
-    height: 100%;
-    overflow: hidden !important;
-    position: relative;
-}
-
-#app-root-container {
-    height: 100vh;
-    width: 100vw;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-#app-scroll-container {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    background-color: inherit;
-    padding: 0;
-    margin: 0;
-}
-
-#app-scroll-container > * {
-    margin-top: 0;
-    margin-bottom: 0;
-}
-
-#app-scroll-container,
-#app-scroll-container * {
-    min-height: auto;
-}
-
-/* Dark mode background forcé */
-.dark body,
-.dark #root,
-.dark #app-root-container {
-    background-color: var(--bg-primary) !important;
-}
-
-/* Paper components in dark mode */
-.dark .MuiPaper-root:not(.MuiAppBar-root) {
-    background-color: var(--bg-secondary) !important;
-    color: var(--text-primary) !important;
-}
-
-.dark .MuiTableCell-root {
-    color: var(--text-primary) !important;
-    border-color: var(--border-color) !important;
-    background-color: var(--bg-secondary) !important;
-}
-
-.dark .MuiTableRow-root {
-    background-color: var(--bg-secondary) !important;
-}
-
-.dark .MuiTableRow-hover:hover {
-    background-color: var(--bg-tertiary) !important;
-}
-
-.dark .MuiTableRow-root.MuiTableRow-hover:hover {
-    background-color: var(--bg-tertiary) !important;
-}
-
-.dark .MuiTableRow-hover:hover .MuiTableCell-root {
-    background-color: var(--bg-tertiary) !important;
-}
-
-.dark .MuiTableRow-root.MuiTableRow-hover:hover .MuiTableCell-root {
-    background-color: var(--bg-tertiary) !important;
-}
-
-.dark .MuiInputBase-root {
-    color: var(--text-primary) !important;
-    background-color: var(--bg-secondary) !important;
-}
-
-.dark .MuiOutlinedInput-notchedOutline {
-    border-color: var(--border-color) !important;
-}
-
-.dark .MuiChip-root[style*="background-color"],
-.dark .MuiChip-root[style*="background"] {
-    background-color: inherit !important;
-}
-
-.dark .MuiChip-root[style*="background-color"] .MuiChip-label,
-.dark .MuiChip-root[style*="background"] .MuiChip-label {
-    color: white !important;
-}
-
-.dark .MuiTypography-root {
-    color: var(--text-primary) !important;
-}
-
-.MuiAppBar-root {
-    background-color: #121212 !important;
-}
-
-.MuiChip-colorSuccess,
-.MuiChip-colorError,
-.MuiChip-colorWarning,
-[style*="background-color: green"],
-[style*="background-color: red"],
-[style*="background-color: orange"],
-[style*="background-color: grey"] {
-}
-
-.dark [style*="background-color: green"],
-.dark [style*="background-color: red"],
-.dark [style*="background-color: orange"],
-.dark [style*="background-color: grey"] {
-    color: white !important;
-}
-
-.dark a {
-    color: #90caf9 !important;
-}
-
-.dark a:hover {
-    color: #bbdefb !important;
-}
-
-.dark input:-webkit-autofill,
-.dark input:-webkit-autofill:hover,
-.dark input:-webkit-autofill:focus,
-.dark input:-webkit-autofill:active,
-.dark textarea:-webkit-autofill,
-.dark textarea:-webkit-autofill:hover,
-.dark textarea:-webkit-autofill:focus,
-.dark textarea:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
-    -webkit-text-fill-color: var(--text-primary) !important;
-    caret-color: var(--text-primary) !important;
-    transition: background-color 5000s ease-in-out 0s;
-}
-
-.dark .MuiInputBase-input:-webkit-autofill,
-.dark .MuiOutlinedInput-input:-webkit-autofill {
-    -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
-    -webkit-text-fill-color: var(--text-primary) !important;
-    caret-color: var(--text-primary) !important;
-}
-
-@keyframes dark-autofill-fix {
-    to {
-        background-color: var(--bg-secondary);
-        color: var(--text-primary);
+/*
+ * App layout rules. Colours, typeface and dark mode come from the oc3 tokens
+ * (src/ui/styles). Everything here sits in the `base` layer, so the Tailwind
+ * utilities of the converted components win over it.
+ */
+@layer base {
+    html, body {
+        height: 100%;
+        overflow: hidden !important;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
     }
-}
 
-.dark input:-webkit-autofill,
-.dark input:-webkit-autofill:hover,
-.dark input:-webkit-autofill:focus,
-.dark textarea:-webkit-autofill {
-    animation: dark-autofill-fix 1s forwards !important;
-}
+    #root {
+        height: 100%;
+        overflow: hidden !important;
+        position: relative;
+    }
 
-.dark input:autofill,
-.dark textarea:autofill,
-.dark .MuiInputBase-input:autofill {
-    background-color: var(--bg-secondary) !important;
-    color: var(--text-primary) !important;
-}
+    #app-root-container {
+        height: 100vh;
+        width: 100vw;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background-color: var(--surface);
+        color: var(--ink);
+    }
 
-.dark .MuiInputLabel-root.Mui-focused {
-    color: var(--text-secondary) !important;
+    #app-scroll-container {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background-color: inherit;
+        padding: 0;
+        margin: 0;
+    }
+
+    #app-scroll-container > * {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+    #app-scroll-container,
+    #app-scroll-container * {
+        min-height: auto;
+    }
+
+    /* Browser autofill keeps the token surfaces instead of its own yellow or white. */
+    input:autofill,
+    textarea:autofill {
+        -webkit-box-shadow: 0 0 0 1000px var(--surface-raised) inset !important;
+        -webkit-text-fill-color: var(--ink) !important;
+        caret-color: var(--ink) !important;
+        transition: background-color 5000s ease-in-out 0s;
+    }
 }

@@ -6,6 +6,7 @@ import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
 import NavBar from './NavBar';
+import {Sidebar, useSidebarOpen} from './Sidebar';
 import {OidcProvider, useOidc} from "../context/OidcAuthContext.tsx";
 import {
     AuthProvider,
@@ -18,8 +19,6 @@ import {
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
-import {useDarkMode} from "../context/DarkModeContext";
-import {ThemeProvider, createTheme} from '@mui/material/styles';
 import {prepareForNavigation} from "../eventSourceManager";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
@@ -29,7 +28,6 @@ const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
 const ObjectDetails = lazy(() => import("./ObjectDetails"));
 const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
-const ClusterOverview = lazy(() => import("./Cluster"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Kinds = lazy(() => import("./Kinds"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
@@ -44,34 +42,6 @@ const Loading = () => (
         <div style={{fontSize: '1.125rem'}}>Loading...</div>
     </div>
 );
-
-const DynamicThemeProvider = ({children}) => {
-    const {isDarkMode} = useDarkMode();
-
-    const theme = React.useMemo(
-        () =>
-            createTheme({
-                palette: {
-                    mode: isDarkMode ? 'dark' : 'light',
-                    ...(isDarkMode
-                        ? {
-                            primary: {main: '#90caf9'},
-                            secondary: {main: '#f48fb1'},
-                            background: {default: '#121212', paper: '#1e1e1e'},
-                            text: {primary: '#ffffff', secondary: '#cccccc'},
-                        }
-                        : {
-                            primary: {main: '#1976d2'},
-                            secondary: {main: '#dc004e'},
-                            background: {default: '#ffffff', paper: '#f5f5f5'},
-                        }),
-                },
-            }),
-        [isDarkMode],
-    );
-
-    return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
-};
 
 const isTokenValid = (token) => {
     if (!token) {
@@ -300,12 +270,17 @@ const ProtectedRoute = ({children}) => {
     return children;
 };
 
+const AUTH_PATHS = ['/auth', '/login', '/silent-renew'];
+
 const App = () => {
     logger.info("App init");
     const location = useLocation();
     const mainRef = useRef(null);
 
     const authInfo = useAuthInfo();
+    const [sidebarOpen, toggleSidebar] = useSidebarOpen();
+    // The sign-in screens have no view to navigate to: no menu there.
+    const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
 
     useEffect(() => {
         if (mainRef.current) {
@@ -332,11 +307,13 @@ const App = () => {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        backgroundColor: 'background.default',
+        backgroundColor: 'var(--surface)',
+        color: 'var(--ink)',
     };
 
     const mainStyle = {
         flex: 1,
+        minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
@@ -346,15 +323,18 @@ const App = () => {
         <AuthProvider>
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
-                    <DynamicThemeProvider>
-                        <div id="app-root-container" style={appContainerStyle}>
-                            <NavBar/>
+                    <div id="app-root-container" style={appContainerStyle}>
+                        <NavBar
+                            sidebarOpen={sidebarOpen}
+                            onToggleSidebar={toggleSidebar}
+                            showSidebarToggle={showSidebar}
+                        />
+                        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+                            {showSidebar && <Sidebar open={sidebarOpen}/>}
                             <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
                                 <Suspense fallback={<Loading/>}>
                                     <Routes>
-                                        <Route path="/" element={<Navigate to="/cluster" replace/>}/>
-                                        <Route path="/cluster"
-                                               element={<ProtectedRoute><ClusterOverview/></ProtectedRoute>}/>
+                                        <Route path="/" element={<Navigate to="/objects" replace/>}/>
                                         <Route path="/namespaces"
                                                element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
                                         <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
@@ -379,7 +359,7 @@ const App = () => {
                                 </Suspense>
                             </main>
                         </div>
-                    </DynamicThemeProvider>
+                    </div>
                 </OidcInitializer>
             </OidcProvider>
         </AuthProvider>

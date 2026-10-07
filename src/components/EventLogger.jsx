@@ -1,26 +1,11 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {
-    Box,
-    Button,
-    Checkbox,
-    Chip,
-    Divider,
-    Drawer,
-    IconButton,
-    Tooltip,
-    Typography,
-    useTheme,
-    CircularProgress
-} from "@mui/material";
-import {
-    Sensors,
-    Close,
-    DeleteOutline,
-    ExpandMore,
-    Pause,
-    PlayArrow,
-    Settings
-} from "@mui/icons-material";
+import {Button, IconButton} from "../ui/components/Button";
+import {Checkbox} from "../ui/components/Field";
+import {SlideOver} from "../ui/components/SlideOver";
+import {Spinner} from "../ui/components/Spinner";
+import {useAnyPanelOpen} from "../ui/components/slide-over-open";
+import {CaretRightIcon, ChevronDownIcon, CloseIcon, GearIcon, PauseIcon, RssIcon, TrashIcon} from "../ui/icons";
+import {cn} from "../ui/cn";
 import useEventLogStore from "../hooks/useEventLogStore";
 import logger from "../utils/logger.js";
 import {startLoggerReception, closeLoggerEventSource} from "../eventSourceManager";
@@ -55,11 +40,12 @@ export const hashCode = (str) => {
     return Math.abs(hash).toString(36);
 };
 
+/** Larger tap targets on narrow screens. */
+const TOOL = "max-md:h-9 max-md:w-9";
+
 const SubscriptionDialog = ({
                                 open,
                                 onClose,
-                                isDarkMode,
-                                theme,
                                 subscribedEventTypes,
                                 setManualSubscriptions,
                                 filteredEventTypes,
@@ -95,311 +81,225 @@ const SubscriptionDialog = ({
         setTempSubscribedEventTypes([]);
     };
 
-    const EventTypeItem = ({eventType, checked, onChange, eventCount}) => (
-        <Box key={eventType} sx={{display: 'flex', alignItems: 'center', py: 0.5, pl: 2}}>
-            <Checkbox checked={checked} onChange={onChange} size="small"/>
-            <Box sx={{flex: 1}}>
-                <Typography variant="body2">{eventType}</Typography>
-                <Typography variant="caption">{eventCount} events received</Typography>
-            </Box>
-        </Box>
-    );
-
     const renderEventTypeList = (eventTypes, isPageEvents = false) => (
-        <Box sx={{mb: 3}}>
-            <Typography
-                variant="subtitle2"
-                color={isDarkMode ? (isPageEvents ? '#90caf9' : '#a5d6a7') : (isPageEvents ? 'primary.main' : 'success.dark')}
-                sx={{mb: 1}}
-            >
+        <section className="space-y-1">
+            <h3 className={cn("font-semibold", isPageEvents ? "text-accent" : "text-ink-muted")}>
                 {isPageEvents ? 'Page Events' : 'Additional Events'} ({eventTypes.length})
-            </Typography>
+            </h3>
             {eventTypes.sort().map(eventType => (
-                <EventTypeItem
-                    key={String(eventType)}
-                    eventType={eventType}
-                    checked={tempSubscribedEventTypes.includes(eventType)}
-                    onChange={(e) => {
-                        setTempSubscribedEventTypes(prev =>
-                            e.target.checked
-                                ? [...new Set([...prev, eventType])]
-                                : prev.filter(et => et !== eventType)
-                        );
-                    }}
-                    eventCount={eventStats[eventType] || 0}
-                />
+                <div key={String(eventType)} className="py-0.5 pl-2">
+                    <Checkbox
+                        checked={tempSubscribedEventTypes.includes(eventType)}
+                        onChange={(e) => {
+                            const checked = e.target.checked;
+                            setTempSubscribedEventTypes(prev =>
+                                checked
+                                    ? [...new Set([...prev, eventType])]
+                                    : prev.filter(et => et !== eventType)
+                            );
+                        }}
+                        label={
+                            <span className="flex flex-col leading-tight">
+                                <span>{eventType}</span>
+                                <span className="text-data text-ink-muted">
+                                    {eventStats[eventType] || 0} events received
+                                </span>
+                            </span>
+                        }
+                    />
+                </div>
             ))}
-        </Box>
+        </section>
     );
 
     return (
-        <Drawer
-            anchor="right"
-            open={open}
-            onClose={onClose}
-            sx={{
-                '& .MuiDrawer-paper': {
-                    width: 500,
-                    maxWidth: '90vw',
-                    p: 2,
-                    backgroundColor: isDarkMode ? theme.palette.background.paper : '#ffffff'
-                }
-            }}
-        >
-            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Typography variant="h6" color={isDarkMode ? '#ffffff' : 'inherit'}>
-                    Event Subscriptions
-                </Typography>
-                <IconButton onClick={onClose} aria-label="Close">
-                    <Close sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}/>
-                </IconButton>
-            </Box>
-            <Divider sx={{mb: 2}}/>
-            <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mb: 2}}>
-                Select which event types you want to SUBSCRIBE to (future events only):
-            </Typography>
-            <Box sx={{mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap'}}>
-                <Button size="small" variant="outlined" onClick={handleSubscribeAll}>
-                    Subscribe to All
-                </Button>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={handleSubscribePageEvents}
-                    disabled={filteredEventTypes.length === 0}
-                >
-                    Subscribe to Page Events
-                </Button>
-                <Button size="small" variant="outlined" color="error" onClick={handleUnsubscribeAll}>
-                    Unsubscribe from All
-                </Button>
-            </Box>
-            <Box sx={{maxHeight: '60vh', overflow: 'auto'}}>
-                {filteredEventTypes.length > 0 && renderEventTypeList(filteredEventTypes, true)}
-                {otherEventTypes.length > 0 && renderEventTypeList(otherEventTypes, false)}
-                {tempSubscribedEventTypes.length === 0 && (
-                    <Typography sx={{textAlign: 'center', py: 4}}>
-                        No event types selected. You won't receive any events.
-                    </Typography>
-                )}
-            </Box>
-            <Box sx={{mt: 'auto', pt: 2}}>
-                <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={() => {
-                        setManualSubscriptions(tempSubscribedEventTypes);
-                        clearLogs();
-                        onClose();
-                    }}
-                >
-                    Apply Subscriptions ({tempSubscribedEventTypes.length})
-                </Button>
-            </Box>
-        </Drawer>
+        // Above the bottom panel of the event logger.
+        <div className="relative z-[1250]">
+            <SlideOver
+                open={open}
+                onClose={onClose}
+                title="Event Subscriptions"
+                closeLabel="Close subscriptions"
+            >
+                <div className="flex min-h-full flex-col gap-4">
+                    <p className="text-ink-muted">
+                        Select which event types you want to SUBSCRIBE to (future events only):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={handleSubscribeAll}>
+                            Subscribe to All
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={handleSubscribePageEvents}
+                            disabled={filteredEventTypes.length === 0}
+                        >
+                            Subscribe to Page Events
+                        </Button>
+                        <Button size="sm" className="text-state-down" onClick={handleUnsubscribeAll}>
+                            Unsubscribe from All
+                        </Button>
+                    </div>
+                    <div className="space-y-4">
+                        {filteredEventTypes.length > 0 && renderEventTypeList(filteredEventTypes, true)}
+                        {otherEventTypes.length > 0 && renderEventTypeList(otherEventTypes, false)}
+                        {tempSubscribedEventTypes.length === 0 && (
+                            <p className="py-8 text-center text-ink-muted">
+                                No event types selected. You won't receive any events.
+                            </p>
+                        )}
+                    </div>
+                    <div className="sticky bottom-0 mt-auto bg-surface-raised pt-2">
+                        <Button
+                            variant="primary"
+                            className="w-full"
+                            onClick={() => {
+                                setManualSubscriptions(tempSubscribedEventTypes);
+                                clearLogs();
+                                onClose();
+                            }}
+                        >
+                            Apply Subscriptions ({tempSubscribedEventTypes.length})
+                        </Button>
+                    </div>
+                </div>
+            </SlideOver>
+        </div>
     );
 };
 
-const SimpleJSONView = ({data}) => {
-    const jsonString = useMemo(() => {
-        try {
-            return JSON.stringify(data, null, 0);
-        } catch {
-            return String(data);
+/** Text of the JSON, or what the value says of itself when it cannot be serialised. */
+const toJSON = (data, indent) => {
+    try {
+        return JSON.stringify(data, null, indent) ?? String(data);
+    } catch {
+        return String(data);
+    }
+};
+
+const JSON_TOKEN = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g;
+
+/** Class names written out in full, for Tailwind. */
+const TOKEN_CLASSES = {
+    key: "text-code-key font-semibold",
+    string: "text-code-string",
+    number: "text-code-number",
+    boolean: "text-code-keyword font-semibold",
+    null: "text-code-keyword font-semibold",
+};
+
+/** Splits a JSON text into coloured tokens; between them, only punctuation and spaces. */
+const highlightJSON = (json) => {
+    const parts = [];
+    let last = 0;
+    for (const match of json.matchAll(JSON_TOKEN)) {
+        const text = match[0];
+        if (match.index > last) {
+            parts.push({kind: "punct", text: json.slice(last, match.index)});
         }
-    }, [data]);
+        if (text.startsWith('"')) {
+            if (match[3]) {
+                const colon = text.length - match[3].length;
+                parts.push({kind: "key", text: text.slice(0, colon)});
+                parts.push({kind: "punct", text: text.slice(colon)});
+            } else {
+                parts.push({kind: "string", text});
+            }
+        } else if (text === "true" || text === "false") {
+            parts.push({kind: "boolean", text});
+        } else if (text === "null") {
+            parts.push({kind: "null", text});
+        } else {
+            parts.push({kind: "number", text});
+        }
+        last = match.index + text.length;
+    }
+    if (last < json.length) parts.push({kind: "punct", text: json.slice(last)});
+    return parts;
+};
+
+const FullJSONView = ({data}) => {
+    const parts = useMemo(() => highlightJSON(toJSON(data, 2)), [data]);
     return (
-        <pre style={{
-            fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-            fontSize: "0.80rem",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            margin: 0,
-            lineHeight: 1.2,
-            opacity: 0.9,
-            maxHeight: 160,
-            overflow: "hidden",
-            backgroundColor: 'transparent',
-            color: 'inherit'
-        }}>
-            {jsonString}
+        <pre className="m-0 font-mono text-data leading-snug break-words whitespace-pre-wrap text-ink">
+            {parts.map((part, i) => (
+                <span
+                    key={i}
+                    data-token={part.kind}
+                    className={part.kind === "punct" ? "text-code-punct" : TOKEN_CLASSES[part.kind]}
+                >
+                    {part.text}
+                </span>
+            ))}
         </pre>
     );
 };
 
-const FullJSONView = ({data, isDarkMode, theme}) => {
-    const escapeHtml = (text) => {
-        if (typeof text !== 'string') return text;
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    };
-    const syntaxHighlightJSON = (json) => {
-        /* istanbul ignore next */
-        if (typeof json !== 'string') {
-            try {
-                json = JSON.stringify(json, null, 2);
-            } catch {
-                json = String(json);
-            }
-        }
-        const escapedJson = escapeHtml(json);
-        return escapedJson.replace(
-            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-            (match) => {
-                let cls = 'json-number';
-                /* istanbul ignore next */
-                if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'json-key';
-                    } else {
-                        cls = 'json-string';
-                    }
-                } else if (/true|false/.test(match)) {
-                    cls = 'json-boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'json-null';
-                }
-                return `<span class="${cls}">${match}</span>`;
-            }
-        );
-    };
-    const jsonString = useMemo(() => {
-        try {
-            return JSON.stringify(data, null, 2);
-        } catch {
-            return String(data);
-        }
-    }, [data]);
-    const coloredJSON = useMemo(() => syntaxHighlightJSON(jsonString), [jsonString]);
-    return (
-        <pre
-            style={{
-                fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                fontSize: "0.78rem",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                margin: 0,
-                lineHeight: 1.4,
-                backgroundColor: 'transparent',
-                color: isDarkMode ? '#ffffff' : theme.palette.text.primary
-            }}
-            dangerouslySetInnerHTML={{__html: coloredJSON}}
-        />
-    );
+const formatTimestamp = (ts) => {
+    try {
+        return new Date(ts).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            fractionalSecondDigits: 3
+        });
+    } catch {
+        return "INVALID_DATE";
+    }
 };
 
-const LogRow = React.memo(({
-                               log,
-                               isOpen,
-                               onToggle,
-                               isDarkMode,
-                               theme
-                           }) => {
-    const formatTimestamp = (ts) => {
-        try {
-            return new Date(ts).toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                fractionalSecondDigits: 3
-            });
-        } catch {
-            return "INVALID_DATE";
-        }
-    };
-    const getEventColor = (eventType = "") => {
-        if (eventType.includes("ERROR")) return "error";
-        if (eventType.includes("UPDATED")) return "primary";
-        if (eventType.includes("DELETED")) return "warning";
-        if (eventType.includes("CONNECTION")) return "info";
-        return "default";
-    };
-    const EventTypeChip = ({eventType}) => {
-        const color = getEventColor(eventType);
-        return (
-            <Chip
-                label={eventType}
-                size="small"
-                color={color === "default" ? "default" : color}
-                sx={{
-                    fontWeight: '600',
-                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                    color: isDarkMode ? '#ffffff' : undefined
-                }}
-            />
-        );
-    };
+/** Tone of an event type: the label itself tells the type, the colour only doubles it. */
+const getEventTone = (eventType = "") => {
+    if (eventType.includes("ERROR")) return "error";
+    if (eventType.includes("UPDATED")) return "primary";
+    if (eventType.includes("DELETED")) return "warning";
+    if (eventType.includes("CONNECTION")) return "info";
+    return "default";
+};
+
+const TONE_CLASSES = {
+    error: "text-state-down",
+    primary: "text-accent",
+    warning: "text-state-warn",
+    info: "text-ink-muted",
+    default: "text-ink",
+};
+
+const LogRow = React.memo(({log, isOpen, onToggle}) => {
+    const tone = getEventTone(log.eventType);
+    const preview = useMemo(() => (isOpen ? "" : toJSON(log.data, 0)), [isOpen, log.data]);
     return (
-        <Box
-            onClick={onToggle}
-            sx={{
-                cursor: "pointer",
-                borderBottom: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
-                mb: 1,
-                borderRadius: 1,
-                "&:hover": {
-                    bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.palette.action.hover
-                },
-                bgcolor: isOpen
-                    ? isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.palette.action.selected
-                    : "transparent",
-                transition: "background-color 0.2s ease",
-                touchAction: 'manipulation',
-                p: 1
-            }}
-        >
-            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                <EventTypeChip eventType={log.eventType}/>
-                <Typography variant="caption" color={isDarkMode ? '#cccccc' : 'textSecondary'}>
-                    {formatTimestamp(log.timestamp)}
-                </Typography>
-                <ExpandMore sx={{
-                    marginLeft: "auto",
-                    transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "0.2s",
-                    color: isDarkMode ? '#ffffff' : theme.palette.text.secondary
-                }}/>
-            </Box>
-            {!isOpen && (
-                <Box sx={{
-                    maxHeight: 160,
-                    overflow: "hidden",
-                    backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
-                    borderRadius: 1,
-                    mt: 1,
-                    p: 1
-                }}>
-                    <SimpleJSONView data={log.data}/>
-                </Box>
-            )}
+        <li className={cn("border-b border-line", isOpen && "bg-surface-sunken")}>
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={isOpen}
+                className="flex h-[30px] w-full touch-manipulation items-center gap-2 px-3 text-left text-data hover:bg-surface-sunken"
+            >
+                <span className="shrink-0 tabular-nums text-ink-muted">{formatTimestamp(log.timestamp)}</span>
+                <span data-tone={tone} className={cn("shrink-0 font-semibold", TONE_CLASSES[tone])}>
+                    {log.eventType}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-ink-muted">{preview}</span>
+                <ChevronDownIcon
+                    className={cn("ml-auto shrink-0 text-ink-muted transition-transform", isOpen && "rotate-180")}
+                />
+            </button>
             {isOpen && (
-                <Box sx={{
-                    borderTop: `1px solid ${isDarkMode ? theme.palette.divider : theme.palette.divider}`,
-                    backgroundColor: isDarkMode ? theme.palette.grey[800] : theme.palette.background.default,
-                    borderRadius: 1,
-                    mt: 1,
-                    p: 1
-                }}>
-                    <FullJSONView data={log.data} isDarkMode={isDarkMode} theme={theme}/>
-                </Box>
+                <div className="border-t border-line bg-surface px-3 py-2">
+                    <FullJSONView data={log.data}/>
+                </div>
             )}
-        </Box>
+        </li>
     );
 }, (prevProps, nextProps) => {
     return prevProps.log === nextProps.log &&
-        prevProps.isOpen === nextProps.isOpen &&
-        prevProps.isDarkMode === nextProps.isDarkMode;
+        prevProps.isOpen === nextProps.isOpen;
 });
 
 const EventDrawerContent = ({
                                 eventTypes,
                                 objectName,
-                                isDarkMode,
-                                theme,
                                 onClose,
                                 title
                             }) => {
@@ -576,182 +476,129 @@ const EventDrawerContent = ({
 
     return (
         <>
-            <Box sx={{p: 1, display: "flex", alignItems: "center", justifyContent: "space-between"}}>
-                <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                    <Typography variant="h6" sx={{fontSize: "1rem", color: isDarkMode ? '#ffffff' : 'inherit'}}>
-                        {title}
-                    </Typography>
-                    <Chip
-                        label={`${visibleLogs.length}/${filteredLogs.length} events`}
-                        size="small"
-                        variant="outlined"
-                        sx={{
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : undefined,
-                            color: isDarkMode ? '#ffffff' : undefined,
-                            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : undefined
-                        }}
-                    />
-                    {isPaused && (
-                        <Chip
-                            label="PAUSED"
-                            color="warning"
-                            size="small"
-                            sx={{
-                                backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : undefined,
-                                color: isDarkMode ? '#ff9800' : undefined
-                            }}
-                        />
-                    )}
-                </Box>
-                <Box sx={{display: 'flex', gap: 0.5, alignItems: "center"}}>
-                    <Tooltip title="Manage subscriptions">
-                        <IconButton
-                            onClick={() => setSubscriptionDialogOpen(true)}
-                            size="small"
-                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                        >
-                            <Settings/>
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title={isPaused ? "Resume" : "Pause"}>
-                        <IconButton
-                            onClick={() => setPaused(!isPaused)}
-                            color={isPaused ? "warning" : "primary"}
-                            size="small"
-                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                        >
-                            {isPaused ? <PlayArrow/> : <Pause/>}
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Clear logs">
-                        <IconButton
-                            onClick={handleClear}
-                            size="small"
-                            disabled={eventLogs.length === 0}
-                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                        >
-                            <DeleteOutline/>
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Close">
-                        <IconButton
-                            onClick={onClose}
-                            size="small"
-                            sx={{color: isDarkMode ? '#ffffff' : undefined}}
-                        >
-                            <Close/>
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            </Box>
-            <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
+            <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
+                <h2 className="truncate font-semibold">{title}</h2>
+                <span className="shrink-0 rounded-full border border-line px-2 text-data text-ink-muted tabular-nums">
+                    {`${visibleLogs.length}/${filteredLogs.length} events`}
+                </span>
+                {isPaused && (
+                    <span
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-state-warn bg-state-warn-soft px-2 text-data font-semibold text-state-warn">
+                        <PauseIcon className="h-3 w-3"/>
+                        PAUSED
+                    </span>
+                )}
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <IconButton
+                        label="Manage subscriptions"
+                        className={TOOL}
+                        onClick={() => setSubscriptionDialogOpen(true)}
+                    >
+                        <GearIcon/>
+                    </IconButton>
+                    <IconButton
+                        label={isPaused ? "Resume" : "Pause"}
+                        className={cn(TOOL, isPaused && "border-state-warn text-state-warn")}
+                        onClick={() => setPaused(!isPaused)}
+                    >
+                        {isPaused ? <CaretRightIcon/> : <PauseIcon/>}
+                    </IconButton>
+                    <IconButton
+                        label="Clear logs"
+                        className={TOOL}
+                        onClick={handleClear}
+                        disabled={eventLogs.length === 0}
+                    >
+                        <TrashIcon/>
+                    </IconButton>
+                    <IconButton label="Close" className={TOOL} onClick={onClose}>
+                        <CloseIcon/>
+                    </IconButton>
+                </div>
+            </div>
 
             {availableEventTypes.length > 0 && (
-                <Box sx={{p: 1, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
-                    <Typography variant="body2" color={isDarkMode ? '#cccccc' : 'text.secondary'} sx={{mr: 1}}>
-                        Filter by type:
-                    </Typography>
+                <div
+                    role="group"
+                    aria-label="Filter by type"
+                    className="flex max-h-24 shrink-0 flex-wrap items-center gap-1.5 overflow-y-auto border-b border-line px-3 py-1.5 text-data"
+                >
+                    <span aria-hidden="true" className="mr-1 text-ink-muted">Filter by type:</span>
                     {availableEventTypes.map((eventType) => {
                         const isPageEvent = filteredEventTypes.includes(eventType);
                         const isSelected = selectedEventTypes.includes(eventType);
-
-                        let chipSx = {
-                            cursor: 'pointer',
-                            fontWeight: 500,
-                            borderColor: isDarkMode ? 'rgba(255,255,255,0.2)' : undefined,
-                            '&:hover': {
-                                filter: 'brightness(0.95)'
-                            }
-                        };
-
-                        if (isSelected) {
-                            if (isPageEvent) {
-                                chipSx.backgroundColor = isDarkMode ? '#90caf9' : '#1976d2';
-                                chipSx.color = isDarkMode ? '#000000' : '#ffffff';
-                            } else {
-                                /* istanbul ignore next */
-                                chipSx.backgroundColor = isDarkMode ? '#a5d6a7' : '#2e7d32';
-                                chipSx.color = isDarkMode ? '#000000' : '#ffffff';
-                            }
-                        } else {
-                            if (isPageEvent) {
-                                chipSx.backgroundColor = isDarkMode ? 'rgba(144, 202, 249, 0.2)' : 'rgba(25, 118, 210, 0.1)';
-                                chipSx.color = isDarkMode ? '#90caf9' : '#1976d2';
-                            } else {
-                                chipSx.backgroundColor = isDarkMode ? 'rgba(165, 214, 167, 0.2)' : 'rgba(46, 125, 50, 0.1)';
-                                chipSx.color = isDarkMode ? '#a5d6a7' : '#2e7d32';
-                            }
-                        }
-
                         return (
-                            <Chip
+                            <button
                                 key={eventType}
-                                label={`${eventType} (${eventStats[eventType] || 0})`}
-                                size="small"
+                                type="button"
+                                aria-pressed={isSelected}
+                                data-page-event={isPageEvent}
+                                title={isPageEvent ? "Event of this page" : "Additional event"}
                                 onClick={() => toggleEventTypeFilter(eventType)}
-                                sx={chipSx}
-                            />
+                                className={cn(
+                                    "inline-flex h-6 items-center rounded-full border px-2 font-medium whitespace-nowrap max-md:h-8",
+                                    isPageEvent
+                                        ? (isSelected
+                                            ? "border-accent bg-accent text-accent-ink"
+                                            : "border-accent bg-accent-soft text-accent hover:brightness-95")
+                                        : (isSelected
+                                            ? "border-ink bg-ink text-surface-raised"
+                                            : "border-dashed border-line-strong bg-surface text-ink hover:bg-surface-sunken")
+                                )}
+                            >
+                                {`${eventType} (${eventStats[eventType] || 0})`}
+                            </button>
                         );
                     })}
-                </Box>
+                </div>
             )}
 
-            <Divider sx={{backgroundColor: isDarkMode ? theme.palette.divider : undefined}}/>
-
-            <Box
+            <div
                 ref={logsContainerRef}
                 onScroll={handleScroll}
-                sx={{
-                    flex: 1,
-                    overflow: "auto",
-                    backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.grey[50],
-                    padding: 1,
-                    WebkitOverflowScrolling: 'touch',
-                    position: 'relative'
-                }}
+                role="region"
+                aria-label="Event list"
+                tabIndex={0}
+                className="relative min-h-0 flex-1 overflow-auto bg-surface outline-none"
             >
                 {initialLoading ? (
-                    <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%'}}>
-                        <CircularProgress size={40}/>
-                    </Box>
+                    <div className="flex h-full items-center justify-center">
+                        <Spinner label="Loading events"/>
+                    </div>
                 ) : visibleLogs.length === 0 ? (
-                    <Box sx={{p: 4, textAlign: "center"}}>
-                        <Typography color={isDarkMode ? '#cccccc' : 'textSecondary'}>
-                            {eventLogs.length === 0
-                                ? "No events logged"
-                                : "No events match current filters"}
-                        </Typography>
-                    </Box>
+                    <p className="p-8 text-center text-ink-muted">
+                        {eventLogs.length === 0
+                            ? "No events logged"
+                            : "No events match current filters"}
+                    </p>
                 ) : (
                     <>
-                        {visibleLogs.map((log) => {
-                            const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
-                            const isOpen = expandedLogIds.includes(safeId);
-                            return (
-                                <LogRow
-                                    key={safeId}
-                                    log={log}
-                                    isOpen={isOpen}
-                                    onToggle={() => toggleExpand(safeId)}
-                                    isDarkMode={isDarkMode}
-                                    theme={theme}
-                                />
-                            );
-                        })}
+                        <ul>
+                            {visibleLogs.map((log) => {
+                                const safeId = log.id ?? `log-${log.timestamp}-${log.eventType}`;
+                                const isOpen = expandedLogIds.includes(safeId);
+                                return (
+                                    <LogRow
+                                        key={safeId}
+                                        log={log}
+                                        isOpen={isOpen}
+                                        onToggle={() => toggleExpand(safeId)}
+                                    />
+                                );
+                            })}
+                        </ul>
                         {loadingMore && (
-                            <Box sx={{display: 'flex', justifyContent: 'center', py: 1}}>
-                                <CircularProgress size={24}/>
-                            </Box>
+                            <div className="flex justify-center py-1">
+                                <Spinner label="Loading more events"/>
+                            </div>
                         )}
                     </>
                 )}
-            </Box>
+            </div>
 
             <SubscriptionDialog
                 open={subscriptionDialogOpen}
                 onClose={() => setSubscriptionDialogOpen(false)}
-                isDarkMode={isDarkMode}
-                theme={theme}
                 subscribedEventTypes={manualSubscriptions}
                 setManualSubscriptions={setManualSubscriptions}
                 filteredEventTypes={filteredEventTypes}
@@ -768,8 +615,7 @@ const EventLogger = React.memo(({
                                     title = "Event Logger",
                                     buttonLabel = "Events"
                                 }) => {
-    const theme = useTheme();
-    const isDarkMode = theme.palette.mode === 'dark';
+    const anyPanelOpen = useAnyPanelOpen();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [drawerHeight, setDrawerHeight] = useState(320);
     const [isResizing, setIsResizing] = useState(false);
@@ -848,144 +694,53 @@ const EventLogger = React.memo(({
         };
     }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-    const paperStyle = {
-        height: drawerHeight,
-        maxHeight: "80vh",
-        overflow: "hidden",
-        borderTopLeftRadius: 8,
-        borderTopRightRadius: 8,
-        backgroundColor: isDarkMode ? theme.palette.grey[900] : theme.palette.background.paper,
-        touchAction: 'none'
-    };
-
     return (
         <>
-            {!drawerOpen && (
-                <Tooltip title={title}>
-                    <Button
-                        variant="contained"
-                        startIcon={<Sensors/>}
-                        onClick={() => setDrawerOpen(true)}
-                        sx={{
-                            position: "fixed",
-                            bottom: 16,
-                            right: 16,
-                            zIndex: 9999,
-                            borderRadius: "20px",
-                            px: 2,
-                            backgroundColor: isDarkMode
-                                ? 'rgba(30, 30, 30, 0.88)'
-                                : 'rgba(255, 255, 255, 0.88)',
-                            color: isDarkMode ? '#ffffff' : '#000000',
-                            '&:hover': {
-                                backgroundColor: isDarkMode
-                                    ? 'rgba(30, 30, 30, 0.96)'
-                                    : 'rgba(255, 255, 255, 0.96)',
-                            },
-                            '& .MuiButton-startIcon': {
-                                color: isDarkMode ? '#ffffff' : '#000000'
-                            }
-                        }}
-                    >
-                        {buttonLabel}
-                    </Button>
-                </Tooltip>
-            )}
-            {/* istanbul ignore next */}
-            <Drawer
-                anchor="bottom"
-                open={drawerOpen}
-                onClose={() => setDrawerOpen(false)}
-                variant="persistent"
-                slotProps={{
-                    /* istanbul ignore next */
-                    paper: {
-                        style: paperStyle
-                    }
-                }}
-            >
-                <div
-                    onMouseDown={handleResizeStart}
-                    onTouchStart={handleResizeStart}
-                    style={{
-                        width: "100%",
-                        height: 24,
-                        minHeight: 24,
-                        backgroundColor: isResizing
-                            ? (isDarkMode ? theme.palette.primary.dark : theme.palette.primary.light)
-                            : (isDarkMode ? theme.palette.grey[700] : theme.palette.grey[300]),
-                        cursor: "row-resize",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        touchAction: "none",
-                        userSelect: "none",
-                        WebkitUserSelect: "none",
-                        MozUserSelect: "none",
-                        msUserSelect: "none",
-                        position: "relative",
-                        zIndex: 2,
-                        transition: "background-color 0.2s ease"
-                    }}
-                    className="resize-handle"
-                    aria-label="Resize handle"
+            {/* Hidden while a side panel is open, as oc3 hides its floating controls:
+                it would sit over the bottom of the panel. */}
+            {!drawerOpen && !anyPanelOpen && (
+                <button
+                    type="button"
+                    title={title}
+                    onClick={() => setDrawerOpen(true)}
+                    className="fixed right-4 bottom-4 z-[1200] inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-3 font-medium text-ink shadow hover:bg-surface-sunken max-md:h-9"
                 >
-                    <div style={{
-                        width: 60,
-                        height: 6,
-                        backgroundColor: isDarkMode ? theme.palette.grey[500] : theme.palette.grey[500],
-                        borderRadius: 3,
-                        opacity: isResizing ? 0.8 : 1
-                    }}/>
-                </div>
-                {drawerOpen && (
+                    <RssIcon className="shrink-0 text-ink-muted"/>
+                    {buttonLabel}
+                </button>
+            )}
+            {drawerOpen && (
+                <section
+                    aria-label={title}
+                    style={{height: drawerHeight}}
+                    className="fixed inset-x-0 bottom-0 z-[1200] flex max-h-[80vh] touch-none flex-col overflow-hidden rounded-t-(--radius-panel) border-t border-line bg-surface-raised text-ink shadow-lg max-md:max-h-[90vh]"
+                >
+                    <div
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label="Resize handle"
+                        title="Drag to resize"
+                        data-resizing={isResizing}
+                        onMouseDown={handleResizeStart}
+                        onTouchStart={handleResizeStart}
+                        className={cn(
+                            "flex h-6 shrink-0 cursor-row-resize touch-none items-center justify-center select-none transition-colors max-md:h-8",
+                            isResizing ? "bg-accent-soft" : "hover:bg-surface-sunken"
+                        )}
+                    >
+                        <span
+                            aria-hidden="true"
+                            className={cn("h-1 w-12 rounded-full", isResizing ? "bg-accent" : "bg-line-strong")}
+                        />
+                    </div>
                     <EventDrawerContent
                         eventTypes={eventTypes}
                         objectName={objectName}
-                        isDarkMode={isDarkMode}
-                        theme={theme}
                         onClose={() => setDrawerOpen(false)}
                         title={title}
                     />
-                )}
-            </Drawer>
-            <style>{`
-                .json-key { color: ${isDarkMode ? '#90caf9' : theme.palette.primary.main}; font-weight: 600; }
-                .json-string { color: ${isDarkMode ? '#a5d6a7' : theme.palette.success.dark}; }
-                .json-number { color: ${isDarkMode ? '#80cbc4' : theme.palette.info.main}; font-weight: 500; }
-                .json-boolean { color: ${isDarkMode ? '#ffcc80' : theme.palette.warning.dark}; font-weight: 600; }
-                .json-null { color: ${isDarkMode ? theme.palette.grey[400] : theme.palette.grey[500]}; font-weight: 600; }
-                @media (max-width: 768px) {
-                    .MuiDrawer-paper {
-                        max-height: 90vh !important;
-                        touch-action: none;
-                    }
-                    .resize-handle {
-                        height: 32px !important;
-                        min-height: 32px !important;
-                    }
-                    .MuiChip-root {
-                        font-size: 0.7rem !important;
-                    }
-                    .MuiTypography-body2 {
-                        font-size: 0.8rem !important;
-                    }
-                    .MuiButton-root {
-                        padding: 6px 12px !important;
-                        min-height: 36px !important;
-                    }
-                    .MuiIconButton-root {
-                        padding: 6px !important;
-                        min-width: 36px !important;
-                        min-height: 36px !important;
-                    }
-                }
-                @media screen and (max-width: 768px) {
-                    input, select, textarea {
-                        font-size: 16px !important;
-                    }
-                }
-            `}</style>
+                </section>
+            )}
         </>
     );
 });

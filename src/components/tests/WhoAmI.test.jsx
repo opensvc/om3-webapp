@@ -4,7 +4,6 @@ import {MemoryRouter} from 'react-router-dom';
 import WhoAmI from '../WhoAmI';
 import {URL_AUTH_WHOAMI} from '../../config/apiPath';
 import {DarkModeProvider} from '../../context/DarkModeContext';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
 
 const {
@@ -72,10 +71,6 @@ vi.mock('../../context/DarkModeContext', async (importOriginal) => {
     };
 });
 
-vi.mock('@mui/material/useMediaQuery', () => ({
-    default: vi.fn(),
-}));
-
 Object.defineProperty(window, 'localStorage', {value: mockLocalStorage});
 
 global.fetch = vi.fn();
@@ -126,9 +121,6 @@ describe('WhoAmI', () => {
             fetchNodes: mockFetchNodes,
         });
 
-        const mockMediaQuery = vi.mocked(useMediaQuery);
-        mockMediaQuery.mockReturnValue(overrides.isMobile ?? false);
-
         global.fetch.mockImplementation((url) => {
             if (url.includes('github')) {
                 if (overrides.githubError) {
@@ -165,7 +157,7 @@ describe('WhoAmI', () => {
     test('shows loading state initially', () => {
         setupMocks();
         renderComponent();
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading user information');
     });
 
     test('displays error alert on fetch failure', async () => {
@@ -437,16 +429,15 @@ describe('WhoAmI', () => {
         });
     });
 
-    describe('mobile layout', () => {
-        test('renders mobile layout when viewport is small', async () => {
-            setupMocks({isMobile: true});
+    describe('layout', () => {
+        test('renders one panel per section, named by its heading', async () => {
+            setupMocks();
             renderComponent();
 
             await waitFor(() => {
-                expect(screen.getAllByText('My Information')[0]).toBeInTheDocument();
-                expect(screen.getByText('testuser')).toBeInTheDocument();
-                expect(screen.getByText('Permission Details')).toBeInTheDocument();
-                expect(screen.getByText('Server Information')).toBeInTheDocument();
+                expect(screen.getByRole('region', {name: 'My Information'})).toHaveTextContent('testuser');
+                expect(screen.getByRole('region', {name: 'Permission Details'})).toHaveTextContent('root');
+                expect(screen.getByRole('region', {name: 'Server Information'})).toHaveTextContent('test-node');
                 expect(screen.getByRole('button', {name: /dark mode/i})).toBeInTheDocument();
                 expect(screen.getByRole('button', {name: /logout/i})).toBeInTheDocument();
             });

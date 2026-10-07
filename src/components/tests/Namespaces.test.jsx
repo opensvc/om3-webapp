@@ -47,81 +47,20 @@ vi.mock('../../hooks/useNamespaceData', () => ({
     useNamespaceData: mockUseNamespaceData,
 }));
 
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        Box: vi.fn(({children, ...props}) => <div data-testid="box" {...props}>{children}</div>),
-        Table: vi.fn(({children, ...props}) => <table data-testid="table" {...props}>{children}</table>),
-        TableHead: vi.fn(({children, ...props}) => <thead data-testid="table-head" {...props}>{children}</thead>),
-        TableBody: vi.fn(({children, ...props}) => <tbody data-testid="table-body" {...props}>{children}</tbody>),
-        TableRow: vi.fn(({children, onClick, hover, ...props}) => (
-            <tr data-testid="table-row" onClick={onClick} {...props}>{children}</tr>
-        )),
-        TableCell: vi.fn(({children, onClick, justifyContent, alignItems, ...props}) => (
-            <td data-testid="table-cell" onClick={onClick} {...props}>{children}</td>
-        )),
-        TableContainer: vi.fn(({children, ...props}) => (
-            <div data-testid="table-container" {...props}>{children}</div>
-        )),
-        Typography: vi.fn(({children, ...props}) => <div data-testid="typography" {...props}>{children}</div>),
-        Autocomplete: vi.fn(({options, value, onChange, renderInput, ...props}) => (
-            <div data-testid="autocomplete" {...props}>
-                <input
-                    data-testid="autocomplete-input"
-                    value={value}
-                    onChange={(e) => onChange && onChange(e, e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') onChange && onChange(e, e.target.value);
-                    }}
-                />
-                {renderInput && renderInput({})}
-            </div>
-        )),
-        TextField: vi.fn(({label, inputProps, ...props}) => (
-            <div data-testid="text-field">
-                {label && <label>{label}</label>}
-                <input {...inputProps} {...props} />
-            </div>
-        )),
-        Drawer: vi.fn(({children, open, anchor, onClose, ...props}) =>
-            open ? <div role="complementary" {...props}>{children}</div> : null
-        ),
-        CircularProgress: vi.fn((props) => <div role="progressbar" {...props} />),
-    };
-});
-
-vi.mock('@mui/icons-material/KeyboardArrowUp', () => ({
-    __esModule: true,
-    default: (props) => <span data-testid="arrow-up" {...props} />,
-}));
-vi.mock('@mui/icons-material/KeyboardArrowDown', () => ({
-    __esModule: true,
-    default: (props) => <span data-testid="arrow-down" {...props} />,
-}));
-vi.mock('@mui/icons-material/FiberManualRecord', () => ({
-    __esModule: true,
-    default: ({sx = {}, ...props}) => {
-        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
-        return <span data-testid="status-icon" style={{color}} {...props} />;
-    },
-}));
-vi.mock('@mui/icons-material/PriorityHigh', () => ({
-    __esModule: true,
-    default: ({sx = {}, ...props}) => {
-        const color = typeof sx.color === 'string' ? sx.color : 'inherit';
-        return <span data-testid="status-icon" style={{color}} {...props} />;
-    },
-}));
-
 // ── Helpers ─────────────────────────────────────────────────────────────
-const getHeaderCellFor = (columnName) => {
-    const head = screen.getByTestId('table-head');
-    const headRow = within(head).getByTestId('table-row');
-    const headCells = within(headRow).getAllByTestId('table-cell');
-    const regex = new RegExp(columnName, 'i');
-    return headCells.find(cell => within(cell).queryByText(regex) !== null);
-};
+// The sort button of a column header (its arrow is hidden from the accessible name).
+const getHeaderCellFor = (columnName) => screen.getByRole('button', {name: columnName});
+
+const getColumnHeader = (columnName) =>
+    screen.getAllByRole('columnheader').find(th => within(th).queryByRole('button', {name: columnName}));
+
+const getBody = () => screen.getAllByRole('rowgroup')[1];
+
+const getBodyRows = () => within(getBody()).getAllByRole('row');
+
+const getCells = (row) => within(row).getAllByRole('cell');
+
+const getFilter = () => screen.getByRole('combobox', {name: /Filter by/i});
 
 const buildStatusByNamespace = (objectStatus) => {
     const statusByNamespace = {};
@@ -198,16 +137,17 @@ describe('Namespaces', () => {
 
     test('renders table with headers', () => {
         renderComponent();
-        expect(screen.getByTestId('table')).toBeInTheDocument();
+        expect(screen.getByRole('table')).toBeInTheDocument();
         ['Namespace', 'Up', 'Down', 'Warn', 'N/A', 'Total'].forEach(text =>
-            expect(screen.getByText(text)).toBeInTheDocument()
+            expect(screen.getByRole('columnheader', {name: text})).toBeInTheDocument()
         );
     });
 
     test('displays namespace counts correctly', () => {
         renderComponent();
         const rootRow = screen.getByRole('row', {name: /root/i});
-        const cells = within(rootRow).getAllByTestId('table-cell');
+        const cells = getCells(rootRow);
+        expect(cells[0]).toHaveTextContent('root');
         expect(cells[1]).toHaveTextContent('1');
         expect(cells[2]).toHaveTextContent('1');
         expect(cells[3]).toHaveTextContent('0');
@@ -215,13 +155,19 @@ describe('Namespaces', () => {
         expect(cells[5]).toHaveTextContent('2');
     });
 
-    test('shows status icons with correct colors', () => {
+    test('shows status marks by state', () => {
         renderComponent();
-        const rootIcons = within(screen.getByRole('row', {name: /root/i})).getAllByTestId('status-icon');
-        expect(rootIcons[0]).toHaveStyle({color: '#4caf50'});
-        expect(rootIcons[1]).toHaveStyle({color: '#f44336'});
-        expect(rootIcons[2]).toHaveStyle({color: '#ff9800'});
-        expect(rootIcons[3]).toHaveStyle({color: '#9e9e9e'});
+        const rootRow = screen.getByRole('row', {name: /root/i});
+        const marks = rootRow.querySelectorAll('[data-state]');
+        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'unknown']);
+        expect(marks[0]).toHaveTextContent('up');
+        expect(marks[1]).toHaveTextContent('down');
+        expect(marks[2]).toHaveTextContent('warn');
+        expect(marks[3]).toHaveTextContent('n/a');
+        expect(marks[0]).toHaveClass('text-state-up');
+        expect(marks[1]).toHaveClass('text-state-down');
+        expect(marks[2]).toHaveClass('text-state-warn');
+        expect(marks[3]).toHaveClass('text-state-unknown');
     });
 
     test('navigates to objects on row click', () => {
@@ -230,32 +176,39 @@ describe('Namespaces', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
     });
 
-    test('navigates with up status on cell click', () => {
+    test('navigates to objects on row Enter key', () => {
         renderComponent();
-        const rootRow = screen.getByRole('row', {name: /root/i});
-        fireEvent.click(within(rootRow).getAllByTestId('table-cell')[1]);
+        fireEvent.keyDown(screen.getByRole('row', {name: /root/i}), {key: 'Enter'});
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
+    });
+
+    test('navigates with up status on count click', () => {
+        renderComponent();
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 up object of root'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=up');
+        // the click does not reach the row
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with down status', () => {
         renderComponent();
-        const rootRow = screen.getByRole('row', {name: /root/i});
-        fireEvent.click(within(rootRow).getAllByTestId('table-cell')[2]);
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 down object of root'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=down');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with warn status', () => {
         renderComponent();
-        const prodRow = screen.getByRole('row', {name: /prod/i});
-        fireEvent.click(within(prodRow).getAllByTestId('table-cell')[3]);
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 warn object of prod'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=prod&globalState=warn');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('navigates with n/a status', () => {
         renderComponent();
-        const rootRow = screen.getByRole('row', {name: /root/i});
-        fireEvent.click(within(rootRow).getAllByTestId('table-cell')[4]);
+        fireEvent.click(screen.getByRole('button', {name: 'Show the 0 n/a objects of root'}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=n/a');
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
     });
 
     test('starts event reception on mount with token', async () => {
@@ -283,47 +236,63 @@ describe('Namespaces', () => {
     test('shows no namespaces message when empty', () => {
         setup({data: {statusByNamespace: {}, namespaces: []}});
         renderComponent();
-        expect(screen.getByText(/No namespaces available/i)).toBeInTheDocument();
+        expect(screen.getByTestId('no-namespaces-message')).toHaveTextContent('No namespaces available');
     });
 
     test('shows filter mismatch message', () => {
         setup({data: {statusByNamespace: {}, namespaces: []}, search: '?namespace=nonexistent'});
         renderComponent();
-        expect(screen.getByText(/No namespaces match the selected filter/i)).toBeInTheDocument();
+        expect(screen.getByTestId('no-namespaces-message')).toHaveTextContent('No namespaces match the selected filter');
+        expect(getFilter()).toHaveValue('nonexistent');
     });
 
-    test('filters by namespace via autocomplete', () => {
+    test('lists all and every namespace in the filter', () => {
         renderComponent();
-        const input = screen.getByTestId('autocomplete-input');
-        fireEvent.change(input, {target: {value: 'prod'}});
-        fireEvent.keyDown(input, {key: 'Enter'});
+        const options = within(getFilter()).getAllByRole('option').map(option => option.value);
+        expect(options).toEqual(['all', 'root', 'prod', 'dev']);
+    });
+
+    test('filters by namespace via the select', () => {
+        renderComponent();
+        fireEvent.change(getFilter(), {target: {value: 'prod'}});
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces?namespace=prod');
+        expect(getBodyRows()).toHaveLength(1);
+        expect(screen.getByRole('row', {name: /prod/i})).toBeInTheDocument();
     });
 
-    test('resets to all when clearing autocomplete', () => {
+    test('resets to all when selecting all', () => {
+        setup({search: '?namespace=prod'});
         renderComponent();
-        const input = screen.getByTestId('autocomplete-input');
-        fireEvent.change(input, {target: {value: null}});
+        fireEvent.change(getFilter(), {target: {value: 'all'}});
         expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
     });
 
     test('reads initial namespace from URL', () => {
         setup({search: '?namespace=prod'});
         renderComponent();
-        expect(screen.getByTestId('autocomplete-input')).toHaveValue('prod');
+        expect(getFilter()).toHaveValue('prod');
+        expect(getBodyRows()).toHaveLength(1);
     });
 
     test('handles empty namespace parameter in URL', () => {
         setup({search: '?namespace='});
         renderComponent();
-        expect(screen.getByTestId('autocomplete-input')).toHaveValue('all');
+        expect(getFilter()).toHaveValue('all');
     });
 
     test('clicking different column resets direction', () => {
         renderComponent();
         fireEvent.click(getHeaderCellFor('Up'));
+        fireEvent.click(getHeaderCellFor('Up'));
+        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'descending');
         fireEvent.click(getHeaderCellFor('Down'));
-        expect(screen.getByTestId('table-body')).toBeInTheDocument();
+        expect(getColumnHeader('Down')).toHaveAttribute('aria-sort', 'ascending');
+        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'none');
+    });
+
+    test('marks the namespace column sorted ascending by default', () => {
+        renderComponent();
+        expect(getColumnHeader('Namespace')).toHaveAttribute('aria-sort', 'ascending');
     });
 
     describe('sorting order verification', () => {
@@ -333,8 +302,8 @@ describe('Namespaces', () => {
         });
 
         const getNamespaceNames = () => {
-            const rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
-            return rows.map(row => within(row).getAllByTestId('table-cell')[0].textContent);
+            const rows = getBodyRows();
+            return rows.map(row => within(row).getAllByRole('cell')[0].textContent);
         };
 
         test('default sort by namespace ascending', async () => {
@@ -391,8 +360,8 @@ describe('Namespaces', () => {
             vi.useFakeTimers();
             setup({data: generateLargeData(60)});
             renderComponent();
-            await screen.findByTestId('table-body');
-            let rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+            await screen.findAllByRole('rowgroup');
+            let rows = getBodyRows();
             expect(rows).toHaveLength(50);
 
             const container = screen.getByTestId('table-container');
@@ -405,13 +374,13 @@ describe('Namespaces', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
 
             act(() => {
                 vi.advanceTimersByTime(100);
             });
             await waitFor(() => {
-                rows = within(screen.getByTestId('table-body')).getAllByTestId('table-row');
+                rows = getBodyRows();
                 expect(rows).toHaveLength(60);
             });
             vi.useRealTimers();
@@ -431,13 +400,13 @@ describe('Namespaces', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.getByRole('progressbar')).toBeInTheDocument();
+            expect(screen.getByText(/Loading more/i)).toBeInTheDocument();
 
             fireEvent.scroll(container);
             act(() => {
                 vi.advanceTimersByTime(100);
             });
-            expect(within(screen.getByTestId('table-body')).getAllByTestId('table-row')).toHaveLength(60);
+            expect(getBodyRows()).toHaveLength(60);
             vi.useRealTimers();
         });
 
@@ -455,7 +424,7 @@ describe('Namespaces', () => {
             act(() => {
                 vi.advanceTimersByTime(0);
             });
-            expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+            expect(screen.queryByText(/Loading more/i)).not.toBeInTheDocument();
             vi.useRealTimers();
         });
 
@@ -474,13 +443,14 @@ describe('Namespaces', () => {
         const data = buildStatusByNamespace({'ns/svc': {avail: 'unknown'}});
         setup({data: {statusByNamespace: data, namespaces: Object.keys(data)}});
         renderComponent();
-        const cells = within(screen.getByRole('row', {name: /ns/i})).getAllByTestId('table-cell');
+        const cells = getCells(getBodyRows()[0]);
         expect(cells[4]).toHaveTextContent('1');
     });
 
-    test('renderTextField displays correct label', () => {
+    test('labels the namespace filter', () => {
         renderComponent();
         expect(screen.getByText('Filter by namespace')).toBeInTheDocument();
+        expect(getFilter()).toBeInTheDocument();
     });
 });
 

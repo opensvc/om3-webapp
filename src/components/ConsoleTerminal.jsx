@@ -1,15 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from "react";
-import {
-    Alert,
-    Box,
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Link,
-    Typography,
-} from "@mui/material";
+import {Alert} from "../ui/components/Alert";
+import {Dialog} from "../ui/components/Dialog";
 import {Terminal} from "@xterm/xterm";
 import {FitAddon} from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -21,6 +12,45 @@ import {
     requestConsoleTicket,
 } from "../services/console-service.js";
 import logger from "../utils/logger.js";
+
+// The colours of the terminal, read from the design tokens: xterm draws in a
+// canvas, where CSS classes do not reach. An empty value (tokens not loaded)
+// leaves the xterm default.
+const TERMINAL_COLOURS = {
+    background: "--surface-sunken",
+    foreground: "--ink",
+    cursor: "--accent",
+    cursorAccent: "--surface-sunken",
+    selectionBackground: "--accent-soft",
+    black: "--ink-muted",
+    red: "--state-down",
+    green: "--state-up",
+    yellow: "--state-warn",
+    blue: "--code-key",
+    magenta: "--code-keyword",
+    cyan: "--accent",
+    white: "--ink",
+    brightBlack: "--ink-muted",
+    brightRed: "--state-down",
+    brightGreen: "--state-up",
+    brightYellow: "--state-warn",
+    brightBlue: "--code-key",
+    brightMagenta: "--code-keyword",
+    brightCyan: "--accent",
+    brightWhite: "--ink",
+};
+
+const terminalTheme = () => {
+    const style = getComputedStyle(document.documentElement);
+    const theme = {};
+    for (const [key, token] of Object.entries(TERMINAL_COLOURS)) {
+        const value = style.getPropertyValue(token).trim();
+        if (value) {
+            theme[key] = value;
+        }
+    }
+    return theme;
+};
 
 export const CONSOLE_STATUS = {
     connecting: "connecting",
@@ -76,7 +106,7 @@ const ConsoleTerminal = ({open, target, onClose}) => {
         setMessage("");
         setCertificateUrl("");
 
-        const term = new Terminal({cursorBlink: true, fontSize: 14, scrollback: 5000});
+        const term = new Terminal({cursorBlink: true, fontSize: 14, scrollback: 5000, theme: terminalTheme()});
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         fitRef.current = fitAddon;
@@ -91,6 +121,14 @@ const ConsoleTerminal = ({open, target, onClose}) => {
         const dataListener = term.onData((data) => session?.send(data));
         const resizeListener = term.onResize(({cols, rows}) => session?.resize(cols, rows));
         window.addEventListener("resize", fit);
+        // The theme (light, dark, high contrast) is a class of the root element:
+        // the terminal takes the new colours when it changes.
+        const themeObserver = typeof MutationObserver === "function"
+            ? new MutationObserver(() => {
+                term.options.theme = terminalTheme();
+            })
+            : null;
+        themeObserver?.observe(document.documentElement, {attributes: true, attributeFilter: ["class", "data-theme"]});
 
         const token = localStorage.getItem("authToken");
         if (!token) {
@@ -141,6 +179,7 @@ const ConsoleTerminal = ({open, target, onClose}) => {
         return () => {
             cancelled = true;
             window.removeEventListener("resize", fit);
+            themeObserver?.disconnect();
             dataListener?.dispose();
             resizeListener?.dispose();
             session?.close();
@@ -153,47 +192,42 @@ const ConsoleTerminal = ({open, target, onClose}) => {
         <Dialog
             open={open}
             onClose={onClose}
-            maxWidth="lg"
-            fullWidth
-            TransitionProps={{onEntered: fit}}
-            aria-labelledby="console-terminal-title"
+            size="xl"
+            title={
+                <>
+                    Console {rid ? `${rid} ` : ""}{node ? `on ${node}` : ""}
+                </>
+            }
         >
-            <DialogTitle id="console-terminal-title">
-                Console {rid ? `${rid} ` : ""}{node ? `on ${node}` : ""}
-            </DialogTitle>
-            <DialogContent>
-                {status === CONSOLE_STATUS.connecting && (
-                    <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                        Opening console...
-                    </Typography>
-                )}
-                {status === CONSOLE_STATUS.ended && (
-                    <Alert severity="info" sx={{mb: 1}}>{message}</Alert>
-                )}
-                {status === CONSOLE_STATUS.failed && (
-                    <Alert severity="error" sx={{mb: 1}}>
-                        {message}
-                        {certificateUrl && (
-                            <>
-                                {" "}If the certificate of the console port is not trusted by this browser,
-                                open{" "}
-                                <Link href={certificateUrl} target="_blank" rel="noopener noreferrer">
-                                    {certificateUrl}
-                                </Link>
-                                {" "}to accept it, then open the console again.
-                            </>
-                        )}
-                    </Alert>
-                )}
-                <Box
-                    ref={setContainer}
-                    data-testid="console-terminal"
-                    sx={{height: "60vh", backgroundColor: "#000", padding: "4px"}}
-                />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Close</Button>
-            </DialogActions>
+            {status === CONSOLE_STATUS.connecting && (
+                <p className="text-ink-muted">Opening console...</p>
+            )}
+            {status === CONSOLE_STATUS.ended && <Alert tone="info">{message}</Alert>}
+            {status === CONSOLE_STATUS.failed && (
+                <Alert tone="error">
+                    {message}
+                    {certificateUrl && (
+                        <>
+                            {" "}If the certificate of the console port is not trusted by this browser,
+                            open{" "}
+                            <a
+                                href={certificateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-all text-accent underline"
+                            >
+                                {certificateUrl}
+                            </a>
+                            {" "}to accept it, then open the console again.
+                        </>
+                    )}
+                </Alert>
+            )}
+            <div
+                ref={setContainer}
+                data-testid="console-terminal"
+                className="h-[60vh] overflow-hidden rounded-(--radius-control) border border-line bg-surface-sunken p-1"
+            />
         </Dialog>
     );
 };

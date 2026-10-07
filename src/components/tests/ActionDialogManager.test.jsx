@@ -1,41 +1,9 @@
 import React from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, within} from '@testing-library/react';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
-import ActionDialogManager, {ConsoleDialog, SimpleConfirmDialog} from '../ActionDialogManager';
+import ActionDialogManager, {SimpleConfirmDialog} from '../ActionDialogManager';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
-vi.mock('@mui/material', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        Dialog: ({open, children, ...props}) =>
-            open ? (
-                <div data-testid="mock-dialog" {...props}>
-                    {children}
-                </div>
-            ) : null,
-        TextField: ({label, value, onChange, helperText, inputProps, ...props}) => {
-            const testId = label?.toLowerCase()?.replace(/\s+/g, '-') + '-input';
-            const helperTestId = label?.toLowerCase()?.replace(/\s+/g, '-') + '-helper';
-            const inputId = props.id || `textfield-${label}`;
-            return (
-                <div>
-                    <label htmlFor={inputId}>{label}</label>
-                    <input
-                        id={inputId}
-                        type="text"
-                        value={value}
-                        onChange={onChange}
-                        data-testid={testId}
-                        {...inputProps}
-                    />
-                    {helperText && <span data-testid={helperTestId}>{helperText}</span>}
-                </div>
-            );
-        },
-    };
-});
-
 vi.mock('../ActionDialogs', () => ({
     FreezeDialog: vi.fn((props) =>
         props.open ? (
@@ -176,7 +144,7 @@ describe('ActionDialogManager', () => {
         target: 'test-target',
         supportedActions: [
             'freeze', 'stop', 'shutdown', 'unprovision', 'purge',
-            'delete', 'switch', 'giveback', 'console', 'other',
+            'delete', 'switch', 'giveback','other',
         ],
         onClose: vi.fn(),
     };
@@ -197,18 +165,18 @@ describe('ActionDialogManager', () => {
 
     test('renders without crashing when no pendingAction is provided', () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={null}/>);
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         expect(defaultProps.onClose).toHaveBeenCalled();
     });
 
     test('handles null pendingAction without onClose prop', () => {
         render(<ActionDialogManager {...defaultProps} onClose={undefined} pendingAction={null}/>);
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     test('handles invalid pendingAction without onClose prop', () => {
         render(<ActionDialogManager {...defaultProps} onClose={undefined} pendingAction={{}}/>);
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     test('handles pendingAction with null action without onClose prop', () => {
@@ -219,7 +187,7 @@ describe('ActionDialogManager', () => {
                 pendingAction={{action: null}}
             />
         );
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     test('handles pendingAction with non-string action without onClose prop', () => {
@@ -230,7 +198,7 @@ describe('ActionDialogManager', () => {
                 pendingAction={{action: 42}}
             />
         );
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     test('handles unsupported action without onClose prop', () => {
@@ -242,7 +210,7 @@ describe('ActionDialogManager', () => {
                 supportedActions={['freeze']}
             />
         );
-        expect(screen.queryByTestId('mock-dialog')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     test('logs warning for invalid non-null pendingAction', () => {
@@ -257,15 +225,31 @@ describe('ActionDialogManager', () => {
         expect(dialog).toBeInTheDocument();
     });
 
-    test('opens ShutdownDialog when pendingAction is shutdown', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
-        const dialog = await screen.findByTestId('shutdown-dialog');
-        expect(dialog).toBeInTheDocument();
+    test('renders nothing for invalid or unsupported actions', () => {
+        const {container, rerender} = render(<ActionDialogManager {...defaultProps} pendingAction={{}}/>);
+        expect(container).toBeEmptyDOMElement();
+        rerender(<ActionDialogManager {...defaultProps} pendingAction={{action: 'invalid'}} supportedActions={['freeze']}/>);
+        expect(container).toBeEmptyDOMElement();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    test('matches the action case-insensitively and passes props to the dialog', async () => {
+        const {FreezeDialog} = await import('../ActionDialogs');
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'FREEZE'}}/>);
+        await screen.findByTestId('freeze-dialog');
+        const props = FreezeDialog.mock.calls[FreezeDialog.mock.calls.length - 1][0];
+        expect(props).toMatchObject({open: true, disabled: false, checked: false, target: 'test-target'});
+        expect(screen.getByText('test-target')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('FREEZE');
     });
 
     test('opens SimpleConfirmDialog for unknown action', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
+        expect(await screen.findByRole('dialog', {name: 'Confirm Other'})).toBeInTheDocument();
         expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Confirm'})).toBeEnabled();
+        expect(screen.getByRole('button', {name: 'Cancel'})).toBeEnabled();
         expect(screen.getByText(/Are you sure you want to other on test-target\?/)).toBeInTheDocument();
     });
 
@@ -380,53 +364,6 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('giveback');
     });
 
-    test('handles console dialog with detailed information', async () => {
-        const consoleProps = {
-            ...defaultProps,
-            pendingAction: {action: 'console', rid: 'test-resource', node: 'test-node'},
-            seats: 1, setSeats: vi.fn(), greetTimeout: '5s', setGreetTimeout: vi.fn(),
-        };
-        render(<ActionDialogManager {...consoleProps} />);
-        await screen.findByTestId('mock-dialog');
-        expect(screen.getByRole('heading', {level: 2, name: 'Open Console'})).toBeInTheDocument();
-        const dialogContent = screen.getByTestId('mock-dialog').textContent;
-        expect(dialogContent).toMatch(/Resource:.*test-resource/);
-        expect(dialogContent).toMatch(/Node:.*test-node/);
-
-        const seatsInput = screen.getByTestId('number-of-seats-input');
-        const greetTimeoutInput = screen.getByTestId('greet-timeout-input');
-
-        fireEvent.change(seatsInput, {target: {value: '2'}});
-        expect(consoleProps.setSeats).toHaveBeenCalledWith(2);
-
-        consoleProps.setSeats.mockClear();
-        fireEvent.change(seatsInput, {target: {value: ''}});
-        expect(consoleProps.setSeats).toHaveBeenCalledWith(1);
-
-        consoleProps.setSeats.mockClear();
-        fireEvent.change(seatsInput, {target: {value: 'abc'}});
-        expect(consoleProps.setSeats).toHaveBeenCalledWith(1);
-
-        fireEvent.change(greetTimeoutInput, {target: {value: '10s'}});
-        expect(consoleProps.setGreetTimeout).toHaveBeenCalledWith('10s');
-
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('console');
-    });
-
-    test('handles console dialog without resource and node information', async () => {
-        const consoleProps = {
-            ...defaultProps,
-            pendingAction: {action: 'console'},
-            seats: 1, setSeats: vi.fn(), greetTimeout: '5s', setGreetTimeout: vi.fn(),
-        };
-        render(<ActionDialogManager {...consoleProps} />);
-        await screen.findByTestId('mock-dialog');
-        expect(screen.getByRole('heading', {level: 2, name: 'Open Console'})).toBeInTheDocument();
-        expect(screen.queryByText(/Resource:/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Node:/)).not.toBeInTheDocument();
-    });
-
     test('handles simpleConfirm fallback dialog', async () => {
         render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>);
         expect(await screen.findByText('Confirm Other')).toBeInTheDocument();
@@ -507,7 +444,6 @@ describe('ActionDialogManager', () => {
     const dialogCases = [
         {action: 'freeze', checkbox: 'freeze-checkbox', dialog: 'freeze-dialog'},
         {action: 'stop', checkbox: 'stop-checkbox', dialog: 'stop-dialog'},
-        {action: 'shutdown', checkbox: 'shutdown-instancesDown-checkbox', dialog: 'shutdown-dialog'},
         {action: 'unprovision', checkbox: 'unprovision-dataLoss-checkbox', dialog: 'unprovision-dialog'},
         {action: 'purge', checkbox: 'purge-dataLoss-checkbox', dialog: 'purge-dialog'},
         {action: 'delete', checkbox: 'delete-configLoss-checkbox', dialog: 'delete-dialog'},
@@ -558,43 +494,6 @@ describe('ActionDialogManager', () => {
         }
     );
 
-    test('covers both branches of if (onClose) for console dialog', async () => {
-        const baseConsoleProps = {
-            ...defaultProps, seats: 1, setSeats: vi.fn(), greetTimeout: '5s', setGreetTimeout: vi.fn(),
-        };
-        let {unmount} = render(
-            <ActionDialogManager {...baseConsoleProps} pendingAction={{action: 'console'}}/>
-        );
-        await screen.findByTestId('mock-dialog');
-        fireEvent.click(screen.getByText('Cancel'));
-        expect(defaultProps.onClose).toHaveBeenCalled();
-        unmount();
-
-        defaultProps.onClose.mockClear();
-        ({unmount} = render(
-            <ActionDialogManager {...baseConsoleProps} pendingAction={{action: 'console'}}/>
-        ));
-        await screen.findByTestId('mock-dialog');
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        expect(defaultProps.onClose).toHaveBeenCalled();
-        unmount();
-
-        const propsNoClose = {...baseConsoleProps, onClose: undefined};
-        ({unmount} = render(
-            <ActionDialogManager {...propsNoClose} pendingAction={{action: 'console'}}/>
-        ));
-        await screen.findByTestId('mock-dialog');
-        fireEvent.click(screen.getByText('Cancel'));
-        unmount();
-
-        ({unmount} = render(
-            <ActionDialogManager {...propsNoClose} pendingAction={{action: 'console'}}/>
-        ));
-        await screen.findByTestId('mock-dialog');
-        fireEvent.click(screen.getByRole('button', {name: 'Open Console'}));
-        unmount();
-    });
-
     test('covers both branches of if (onClose) for simpleConfirm dialog', async () => {
         let {unmount} = render(
             <ActionDialogManager {...defaultProps} pendingAction={{action: 'other'}}/>
@@ -628,40 +527,35 @@ describe('ActionDialogManager', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
         unmount();
     });
-
-    test('covers default setSeats and setGreetTimeout functions', async () => {
-        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'console'}}/>);
-        await screen.findByTestId('mock-dialog');
-        const seatsInput = screen.getByTestId('number-of-seats-input');
-        const greetTimeoutInput = screen.getByTestId('greet-timeout-input');
-        fireEvent.change(seatsInput, {target: {value: '3'}});
-        fireEvent.change(greetTimeoutInput, {target: {value: '15s'}});
-    });
-});
-
-describe('ConsoleDialog', () => {
-    test('renders with disabled state', () => {
-        render(
-            <ConsoleDialog
-                open={true}
-                onClose={vi.fn()}
-                onConfirm={vi.fn()}
-                seats={1}
-                setSeats={vi.fn()}
-                greetTimeout="5s"
-                setGreetTimeout={vi.fn()}
-                disabled={true}
-                pendingAction={{rid: 'res', node: 'node'}}
-            />
-        );
-        const cancelButton = screen.getByRole('button', {name: 'Cancel'});
-        const confirmButton = screen.getByRole('button', {name: 'Open Console'});
-        expect(cancelButton).toBeDisabled();
-        expect(confirmButton).toBeDisabled();
-    });
 });
 
 describe('SimpleConfirmDialog', () => {
+    test('is not rendered when closed', () => {
+        render(<SimpleConfirmDialog open={false} onClose={vi.fn()} onConfirm={vi.fn()} action="start" target="t"/>);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    test('calls onConfirm and onClose from its buttons and onClose on Escape', () => {
+        const onClose = vi.fn();
+        const onConfirm = vi.fn();
+        render(<SimpleConfirmDialog open onClose={onClose} onConfirm={onConfirm} action="start" target="t"
+                                    disabled={false} cancelDisabled={false}/>);
+        const dialog = screen.getByRole('dialog', {name: 'Confirm Start'});
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(dialog, {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
+    test('disables its buttons with disabled and cancelDisabled', () => {
+        render(<SimpleConfirmDialog open onClose={vi.fn()} onConfirm={vi.fn()} action="start" target="t"
+                                    disabled={true} cancelDisabled={true}/>);
+        expect(screen.getByRole('button', {name: 'Confirm'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled();
+    });
+
     test('renders with non-string action (covers typeof !== string branch)', () => {
         render(
             <SimpleConfirmDialog

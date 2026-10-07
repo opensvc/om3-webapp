@@ -1,31 +1,11 @@
-import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback} from "react";
-import {
-    Box,
-    Typography,
-    Tooltip,
-    IconButton,
-    CircularProgress,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    TextField,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Autocomplete,
-    useTheme,
-} from "@mui/material";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import EditIcon from "@mui/icons-material/Edit";
-import InfoIcon from "@mui/icons-material/Info";
-import DeleteIcon from "@mui/icons-material/Delete";
+import React, {useState, useEffect, useRef, useMemo, useReducer, useCallback, useId} from "react";
+import {Dialog} from "../ui/components/Dialog";
+import {Button, IconButton} from "../ui/components/Button";
+import {Field, Input, Checkbox} from "../ui/components/Field";
+import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
+import {Alert} from "../ui/components/Alert";
+import {Spinner} from "../ui/components/Spinner";
+import {FileIcon, PencilIcon, LifeRingIcon, PlusIcon, TrashIcon} from "../ui/icons";
 import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 
@@ -208,6 +188,36 @@ const useExistingParams = (decodedObjectName) => {
     return {...state, fetchExistingParams};
 };
 
+/** "section.option", or "option" alone for a keyword without section. */
+const keywordLabel = (keyword) => `${keyword.section ? `${keyword.section}.` : ""}${keyword.option}`;
+
+/**
+ * File picker: the native input, hidden but focusable, behind a label drawn as a
+ * secondary button; the chosen file name beside it.
+ */
+const FilePicker = ({id, file, onChange, disabled, emptyText}) => (
+    <div className="flex items-center gap-3">
+        <input
+            id={id}
+            type="file"
+            className="peer sr-only"
+            onChange={(e) => onChange(e.target.files[0])}
+            disabled={disabled}
+        />
+        <label
+            htmlFor={id}
+            className={
+                disabled
+                    ? "inline-flex h-8 items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium opacity-60"
+                    : "inline-flex h-8 cursor-pointer items-center rounded-(--radius-control) border border-line bg-surface-raised px-3 font-medium hover:bg-surface-sunken peer-focus-visible:outline-2 peer-focus-visible:outline-(--focus-ring)"
+            }
+        >
+            Choose File
+        </label>
+        <span className={file ? "text-ink" : "text-ink-muted"}>{file ? file.name : emptyText}</span>
+    </div>
+);
+
 const UpdateConfigDialog = ({
                                 open,
                                 onClose,
@@ -216,88 +226,99 @@ const UpdateConfigDialog = ({
                                 actionLoading,
                                 handleUpdateConfig,
                             }) => (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Update Configuration</DialogTitle>
-        <DialogContent>
-            <Box sx={{mt: 2}}>
-                <input
-                    id="update-config-file-upload"
-                    type="file"
-                    hidden
-                    onChange={(e) => setNewConfigFile(e.target.files[0])}
-                    disabled={actionLoading}
-                />
-                <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
-                    <Button
-                        variant="outlined"
-                        component="label"
-                        htmlFor="update-config-file-upload"
-                        disabled={actionLoading}
-                    >
-                        Choose File
-                    </Button>
-                    <Typography variant="body2" color={newConfigFile ? "textPrimary" : "textSecondary"}>
-                        {newConfigFile ? newConfigFile.name : "No file chosen"}
-                    </Typography>
-                </Box>
-            </Box>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
-            <Button
-                variant="contained"
-                onClick={handleUpdateConfig}
-                disabled={actionLoading || !newConfigFile}
-                startIcon={actionLoading ? <CircularProgress size={20}/> : null}
-            >
-                Update
-            </Button>
-        </DialogActions>
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Update Configuration"
+        size="md"
+        footer={
+            <>
+                <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
+                <Button
+                    variant="primary"
+                    onClick={handleUpdateConfig}
+                    disabled={actionLoading || !newConfigFile}
+                    icon={actionLoading ? <Spinner label="Updating"/> : undefined}
+                >
+                    Update
+                </Button>
+            </>
+        }
+    >
+        <FilePicker
+            id="update-config-file-upload"
+            file={newConfigFile}
+            onChange={setNewConfigFile}
+            disabled={actionLoading}
+            emptyText="No file chosen"
+        />
     </Dialog>
 );
 
 const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsError}) => (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle>Configuration Keywords</DialogTitle>
-        <DialogContent>
-            {keywordsLoading && <CircularProgress size={24}/>}
-            {keywordsError && <Alert severity="error" sx={{mb: 2}}>{keywordsError}</Alert>}
-            {!keywordsLoading && !keywordsError && !keywordsData && (
-                <Typography color="textSecondary">No keywords available.</Typography>
-            )}
-            {!keywordsLoading && !keywordsError && keywordsData && (
-                <TableContainer component={Paper} sx={{maxWidth: "100%", overflowX: "auto"}}>
-                    <Table aria-label="configuration keywords table">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Keyword</TableCell>
-                                <TableCell>Description</TableCell>
-                                <TableCell>Default</TableCell>
-                                <TableCell>Type</TableCell>
-                                <TableCell>Section</TableCell>
-                                <TableCell>Scopable</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {keywordsData.map((keyword, index) => (
-                                <TableRow key={`${keyword.section || "default"}.${keyword.option}-${index}`}>
-                                    <TableCell>{keyword.option}</TableCell>
-                                    <TableCell>{keyword.text || "N/A"}</TableCell>
-                                    <TableCell>{keyword.default || "None"}</TableCell>
-                                    <TableCell>{keyword.converter || "N/A"}</TableCell>
-                                    <TableCell>{keyword.section || "N/A"}</TableCell>
-                                    <TableCell>{keyword.scopable ? "Yes" : "No"}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            )}
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={keywordsLoading}>Close</Button>
-        </DialogActions>
+    <Dialog
+        open={open}
+        onClose={onClose}
+        title="Configuration Keywords"
+        size="lg"
+        footer={<Button onClick={onClose} disabled={keywordsLoading}>Close</Button>}
+    >
+        {keywordsLoading && <Spinner/>}
+        {keywordsError && <Alert>{keywordsError}</Alert>}
+        {!keywordsLoading && !keywordsError && !keywordsData && (
+            <p className="text-ink-muted">No keywords available.</p>
+        )}
+        {!keywordsLoading && !keywordsError && keywordsData && (
+            <Table aria-label="configuration keywords table">
+                <thead>
+                <HeaderRow>
+                    <HeaderCell>Keyword</HeaderCell>
+                    <HeaderCell>Description</HeaderCell>
+                    <HeaderCell>Default</HeaderCell>
+                    <HeaderCell>Type</HeaderCell>
+                    <HeaderCell>Section</HeaderCell>
+                    <HeaderCell>Scopable</HeaderCell>
+                </HeaderRow>
+                </thead>
+                <tbody>
+                {keywordsData.map((keyword, index) => (
+                    <Row key={`${keyword.section || "default"}.${keyword.option}-${index}`}>
+                        <Cell className="font-mono whitespace-nowrap">{keyword.option}</Cell>
+                        <Cell>{keyword.text || "N/A"}</Cell>
+                        <Cell className="font-mono">{keyword.default || "None"}</Cell>
+                        <Cell className="whitespace-nowrap">{keyword.converter || "N/A"}</Cell>
+                        <Cell className="whitespace-nowrap">{keyword.section || "N/A"}</Cell>
+                        <Cell>{keyword.scopable ? "Yes" : "No"}</Cell>
+                    </Row>
+                ))}
+                </tbody>
+            </Table>
+        )}
     </Dialog>
+);
+
+/** A group of checkboxes, one per choice, in a bordered scrolling box. */
+const CheckboxGroup = ({legend, hint, choices, isChecked, onToggle, disabled, emptyText}) => (
+    <fieldset className="space-y-1">
+        <legend className="mb-1 font-semibold">{legend}</legend>
+        {choices.length === 0 ? (
+            <p className="text-ink-muted">{emptyText}</p>
+        ) : (
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-(--radius-control) border border-line bg-surface px-2 py-1">
+                {choices.map(({key, label, value}) => (
+                    <div key={key}>
+                        <Checkbox
+                            label={<span className="font-mono">{label}</span>}
+                            checked={isChecked(value)}
+                            onChange={() => onToggle(value)}
+                            disabled={disabled}
+                        />
+                    </div>
+                ))}
+            </div>
+        )}
+        <p className="text-data text-ink-muted">{hint}</p>
+    </fieldset>
 );
 
 const ManageParamsDialog = ({
@@ -319,7 +340,15 @@ const ManageParamsDialog = ({
                                 handleManageParamsSubmit,
                                 openSnackbar,
                             }) => {
-    const [selectedKeyword, setSelectedKeyword] = useState(null);
+    const listId = useId();
+    // The text of the "add" field: a keyword when it names one, else free text.
+    const [keywordInput, setKeywordInput] = useState("");
+
+    const selectedKeyword = useMemo(() => {
+        const text = keywordInput.trim();
+        if (!text) return null;
+        return (keywordsData || []).find((keyword) => keywordLabel(keyword) === text) || text;
+    }, [keywordInput, keywordsData]);
 
     const existingKeywords = useMemo(() => {
         if (!existingParams) return [];
@@ -386,7 +415,7 @@ const ManageParamsDialog = ({
                 };
                 setParamsToSet([...paramsToSet, newParam]);
             }
-            setSelectedKeyword(null);
+            setKeywordInput("");
         }
     };
 
@@ -413,241 +442,196 @@ const ManageParamsDialog = ({
         setParamsToSet(updated);
     };
 
-    return (
-        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle>Manage Configuration Parameters</DialogTitle>
-            <DialogContent>
-                {(keywordsLoading || existingParamsLoading) && <CircularProgress size={24}/>}
-                {keywordsError && <Alert severity="error" sx={{mb: 2}}>{keywordsError}</Alert>}
-                {existingParamsError && <Alert severity="error" sx={{mb: 2}}>{existingParamsError}</Alert>}
+    const toggleUnset = (keyword) => {
+        const label = keywordLabel(keyword);
+        const selected = paramsToUnset.some((item) => keywordLabel(item) === label)
+            ? paramsToUnset.filter((item) => keywordLabel(item) !== label)
+            : [...paramsToUnset, keyword];
+        setParamsToUnset(selected.map((item, index) => ({...item, id: `unset-${item.option}-${index}`})));
+    };
 
-                <Typography variant="subtitle1" gutterBottom>Add parameters</Typography>
-                <Autocomplete
-                    freeSolo
-                    options={keywordsData || []}
-                    value={selectedKeyword}
-                    getOptionLabel={(option) => {
-                        if (typeof option === 'string') return option;
-                        return option && option.option ? `${option.section ? `${option.section}.` : ""}${option.option}` : '';
-                    }}
-                    renderInput={(params) => (
-                        <TextField
-                            {...params}
-                            label="Select parameter to add"
-                            placeholder="Select parameter"
-                            helperText="Select a parameter to add, then click Add"
-                            slotProps={{inputLabel: {"aria-label": "Select parameter to add"}}}
-                        />
-                    )}
-                    onChange={(_event, newValue) => setSelectedKeyword(newValue)}
-                    disabled={actionLoading || keywordsLoading}
-                    sx={{mb: 2}}
-                />
-                <Button
-                    variant="contained"
-                    onClick={addParameter}
-                    disabled={!selectedKeyword || actionLoading}
-                    sx={{mb: 2}}
-                >
-                    Add Parameter
-                </Button>
+    const toggleDelete = (section) => {
+        setParamsToDelete(
+            paramsToDelete.includes(section)
+                ? paramsToDelete.filter((item) => item !== section)
+                : [...paramsToDelete, section]
+        );
+    };
+
+    return (
+        <Dialog
+            open={open}
+            onClose={onClose}
+            title="Manage Configuration Parameters"
+            size="lg"
+            footer={
+                <>
+                    <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
+                    <Button
+                        variant="primary"
+                        onClick={handleManageParamsSubmit}
+                        disabled={actionLoading}
+                        icon={actionLoading ? <Spinner label="Applying"/> : undefined}
+                    >
+                        Apply
+                    </Button>
+                </>
+            }
+        >
+            {(keywordsLoading || existingParamsLoading) && <Spinner/>}
+            {keywordsError && <Alert>{keywordsError}</Alert>}
+            {existingParamsError && <Alert>{existingParamsError}</Alert>}
+
+            <section className="space-y-2">
+                <h3 className="font-semibold">Add parameters</h3>
+                <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1">
+                        <Field label="Select parameter to add" hint="Select a parameter to add, then click Add">
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    list={`${listId}-keywords`}
+                                    placeholder="Select parameter"
+                                    autoComplete="off"
+                                    className="font-mono"
+                                    value={keywordInput}
+                                    onChange={(e) => setKeywordInput(e.target.value)}
+                                    disabled={actionLoading || keywordsLoading}
+                                />
+                            )}
+                        </Field>
+                        <datalist id={`${listId}-keywords`}>
+                            {(keywordsData || []).map((keyword, index) => (
+                                <option key={`${keywordLabel(keyword)}-${index}`} value={keywordLabel(keyword)}/>
+                            ))}
+                        </datalist>
+                    </div>
+                    {/* Aligned with the field, above its hint. */}
+                    <div className="mb-6">
+                        <Button
+                            icon={<PlusIcon/>}
+                            onClick={addParameter}
+                            disabled={!selectedKeyword || actionLoading}
+                        >
+                            Add Parameter
+                        </Button>
+                    </div>
+                </div>
 
                 {paramsToSet.length > 0 && (
-                    <Box sx={{mb: 2}}>
-                        <Box sx={{display: "flex", alignItems: "center", mb: 1, gap: 2}}>
-                            <Box sx={{flex: "0 0 25%"}}>
-                                <Typography variant="body2" fontWeight="bold">Section</Typography>
-                            </Box>
-                            <Box sx={{flex: "0 0 20%"}}>
-                                <Typography variant="body2" fontWeight="bold">Parameter</Typography>
-                            </Box>
-                            <Box sx={{flex: "0 0 20%"}}>
-                                <Typography variant="body2" fontWeight="bold">Value</Typography>
-                            </Box>
-                            <Box sx={{flex: 1}}>
-                                <Typography variant="body2" fontWeight="bold">Description</Typography>
-                            </Box>
-                            <Box sx={{flex: "0 0 40px"}}></Box>
-                        </Box>
+                    <Table aria-label="Parameters to add">
+                        <thead>
+                        <HeaderRow>
+                            <HeaderCell className="w-1/4">Section</HeaderCell>
+                            <HeaderCell>Parameter</HeaderCell>
+                            <HeaderCell className="w-1/4">Value</HeaderCell>
+                            <HeaderCell>Description</HeaderCell>
+                            <HeaderCell><span className="sr-only">Actions</span></HeaderCell>
+                        </HeaderRow>
+                        </thead>
+                        <tbody>
                         {paramsToSet.map((param, index) => {
                             const keyword = param.keyword;
                             const hasSectionPrefix = param.sectionPrefix !== undefined;
+                            const sectionListId = `${listId}-sections-${index}`;
                             return (
-                                <Box key={param.id} sx={{display: "flex", alignItems: "center", mb: 2, gap: 2}}>
-                                    <Box sx={{flex: "0 0 25%"}}>
+                                <Row key={param.id}>
+                                    <Cell>
                                         {hasSectionPrefix ? (
-                                            <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
-                                                <Typography variant="body2" sx={{whiteSpace: "nowrap"}}>
-                                                    {param.sectionPrefix}#
-                                                </Typography>
-                                                <Autocomplete
-                                                    freeSolo
-                                                    options={existingSectionSuffixes[param.sectionPrefix] || []}
-                                                    getOptionLabel={(option) => typeof option === 'string' ? option : ''}
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-mono whitespace-nowrap">{param.sectionPrefix}#</span>
+                                                <Input
+                                                    aria-label="Index"
+                                                    list={sectionListId}
+                                                    autoComplete="off"
+                                                    placeholder="e.g., prod, 1, data"
+                                                    className="h-7 font-mono"
                                                     value={param.sectionSuffix}
-                                                    inputValue={param.sectionSuffix}
-                                                    onInputChange={(event, newInputValue) => {
-                                                        updateParamSectionSuffix(index, newInputValue);
-                                                    }}
-                                                    onChange={(event, newValue) => {
-                                                        updateParamSectionSuffix(index, newValue || "");
-                                                    }}
-                                                    renderInput={(params) => (
-                                                        <TextField
-                                                            {...params}
-                                                            label="Index"
-                                                            size="small"
-                                                            placeholder="e.g., prod, 1, data"
-                                                            inputProps={{
-                                                                ...params.inputProps,
-                                                                'aria-label': 'Index'
-                                                            }}
-                                                        />
-                                                    )}
+                                                    onChange={(e) => updateParamSectionSuffix(index, e.target.value)}
                                                     disabled={actionLoading}
-                                                    sx={{width: "100%"}}
                                                 />
-                                            </Box>
+                                                <datalist id={sectionListId}>
+                                                    {(existingSectionSuffixes[param.sectionPrefix] || []).map((suffix) => (
+                                                        <option key={suffix} value={suffix}/>
+                                                    ))}
+                                                </datalist>
+                                            </div>
                                         ) : (
-                                            <Autocomplete
-                                                freeSolo
-                                                options={existingSections}
-                                                getOptionLabel={(option) => typeof option === 'string' ? option : ''}
-                                                value={param.section || ""}
-                                                inputValue={param.section || ""}
-                                                onInputChange={(event, newInputValue) => {
-                                                    updateParamSection(index, newInputValue);
-                                                }}
-                                                onChange={(event, newValue) => {
-                                                    updateParamSection(index, newValue || "");
-                                                }}
-                                                renderInput={(params) => (
-                                                    <TextField
-                                                        {...params}
-                                                        label="Section (optional)"
-                                                        size="small"
-                                                        placeholder="e.g., database, fs#data"
-                                                        inputProps={{
-                                                            ...params.inputProps,
-                                                            'aria-label': 'Section (optional)'
-                                                        }}
-                                                    />
-                                                )}
-                                                disabled={actionLoading}
-                                                sx={{width: "100%"}}
-                                            />
+                                            <>
+                                                <Input
+                                                    aria-label="Section (optional)"
+                                                    list={sectionListId}
+                                                    autoComplete="off"
+                                                    placeholder="e.g., database, fs#data"
+                                                    className="h-7 font-mono"
+                                                    value={param.section || ""}
+                                                    onChange={(e) => updateParamSection(index, e.target.value)}
+                                                    disabled={actionLoading}
+                                                />
+                                                <datalist id={sectionListId}>
+                                                    {existingSections.map((section) => (
+                                                        <option key={section} value={section}/>
+                                                    ))}
+                                                </datalist>
+                                            </>
                                         )}
-                                    </Box>
-                                    <Box sx={{flex: "0 0 20%"}}>
-                                        <Tooltip title={keyword?.text || ""} arrow>
-                                            <Typography sx={{
-                                                overflow: "hidden",
-                                                textOverflow: "ellipsis",
-                                                whiteSpace: "nowrap"
-                                            }}>
-                                                {param.option}
-                                            </Typography>
-                                        </Tooltip>
-                                    </Box>
-                                    <Box sx={{flex: "0 0 20%"}}>
-                                        <TextField
-                                            fullWidth
-                                            label="Value"
+                                    </Cell>
+                                    <Cell className="font-mono whitespace-nowrap" title={keyword?.text || ""}>
+                                        {param.option}
+                                    </Cell>
+                                    <Cell>
+                                        <Input
+                                            aria-label="Value"
+                                            className="h-7 font-mono"
                                             value={param.value}
                                             onChange={(e) => updateParamValue(index, e.target.value)}
                                             disabled={actionLoading}
-                                            size="small"
-                                            slotProps={{inputLabel: {"aria-label": "Value"}}}
                                         />
-                                    </Box>
-                                    <Box sx={{flex: 1}}>
-                                        <Typography
-                                            variant="caption"
-                                            color="textSecondary"
-                                            sx={{
-                                                whiteSpace: "normal",
-                                                maxHeight: "60px",
-                                                overflowY: "auto",
-                                                display: "block"
-                                            }}
-                                            title={keyword?.text || ""}
+                                    </Cell>
+                                    <Cell className="max-w-60 truncate text-ink-muted" title={keyword?.text || ""}>
+                                        {keyword?.text || "N/A"}
+                                    </Cell>
+                                    <Cell align="right">
+                                        <IconButton
+                                            size="sm"
+                                            label="Remove parameter"
+                                            onClick={() => removeParameter(index)}
+                                            disabled={actionLoading}
                                         >
-                                            {keyword?.text || "N/A"}
-                                        </Typography>
-                                    </Box>
-                                    <IconButton onClick={() => removeParameter(index)} disabled={actionLoading}
-                                                aria-label="Remove parameter">
-                                        <DeleteIcon/>
-                                    </IconButton>
-                                </Box>
+                                            <TrashIcon/>
+                                        </IconButton>
+                                    </Cell>
+                                </Row>
                             );
                         })}
-                    </Box>
+                        </tbody>
+                    </Table>
                 )}
+            </section>
 
-                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>Unset parameters</Typography>
-                <Autocomplete
-                    multiple
-                    options={existingKeywords}
-                    value={paramsToUnset}
-                    getOptionLabel={(option) => `${option.section ? `${option.section}.` : ""}${option.option}`}
-                    renderInput={(params) => (
-                        <TextField
-                            {...params}
-                            label="Select parameters to unset"
-                            placeholder="Select parameters"
-                            helperText="Select existing parameters to remove their values"
-                            slotProps={{inputLabel: {"aria-label": "Select parameters to unset"}}}
-                        />
-                    )}
-                    onChange={(_event, newValue) => {
-                        const formattedParams = (newValue || []).map((item, index) => {
-                            if (typeof item === "string") {
-                                const parts = item.split(".");
-                                return {
-                                    section: parts.length > 1 ? parts[0] : "",
-                                    option: parts.length > 1 ? parts.slice(1).join(".") : item,
-                                    id: `unset-${item}-${index}`,
-                                };
-                            }
-                            return {...item, id: `unset-${item.option}-${index}`};
-                        });
-                        setParamsToUnset(formattedParams);
-                    }}
-                    disabled={actionLoading || existingParamsLoading}
-                    sx={{mb: 2}}
-                />
+            <CheckboxGroup
+                legend="Unset parameters"
+                hint="Select existing parameters to remove their values"
+                emptyText="No parameters set."
+                choices={existingKeywords.map((keyword) => ({
+                    key: keywordLabel(keyword),
+                    label: keywordLabel(keyword),
+                    value: keyword,
+                }))}
+                isChecked={(keyword) => paramsToUnset.some((item) => keywordLabel(item) === keywordLabel(keyword))}
+                onToggle={toggleUnset}
+                disabled={actionLoading || existingParamsLoading}
+            />
 
-                <Typography variant="subtitle1" gutterBottom sx={{mt: 2}}>Delete sections</Typography>
-                <Autocomplete
-                    multiple
-                    options={existingSections}
-                    value={paramsToDelete}
-                    getOptionLabel={(option) => option}
-                    renderInput={(params) => (
-                        <TextField
-                            {...params}
-                            label="Select sections to delete"
-                            placeholder="Select sections"
-                            helperText="Select existing sections to delete"
-                            slotProps={{inputLabel: {"aria-label": "Select sections to delete"}}}
-                        />
-                    )}
-                    onChange={(_event, newValue) => setParamsToDelete(newValue)}
-                    disabled={actionLoading || existingParamsLoading}
-                />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={actionLoading}>Cancel</Button>
-                <Button
-                    variant="contained"
-                    onClick={handleManageParamsSubmit}
-                    disabled={actionLoading}
-                    startIcon={actionLoading ? <CircularProgress size={20}/> : null}
-                >
-                    Apply
-                </Button>
-            </DialogActions>
+            <CheckboxGroup
+                legend="Delete sections"
+                hint="Select existing sections to delete"
+                emptyText="No sections."
+                choices={existingSections.map((section) => ({key: section, label: section, value: section}))}
+                isChecked={(section) => paramsToDelete.includes(section)}
+                onToggle={toggleDelete}
+                disabled={actionLoading || existingParamsLoading}
+            />
         </Dialog>
     );
 };
@@ -661,9 +645,6 @@ const ConfigSection = ({
                            setConfigDialogOpen,
                            configRefreshTrigger = 0,
                        }) => {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === 'dark';
-
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
@@ -914,115 +895,64 @@ const ConfigSection = ({
         }
     };
 
-    return (
-        <Box sx={{mb: 2, width: "100%", display: 'flex', justifyContent: 'flex-end'}}>
-            <Box sx={{width: '100%', overflow: 'hidden'}}>
-                <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => setConfigDialogOpen(true)}
-                    sx={{
-                        display: 'block',
-                        minWidth: 0,
-                        width: '100%',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    View Configuration
-                </Button>
-            </Box>
+    const closeConfigDialog = () => setConfigDialogOpen(false);
 
-            <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="lg" fullWidth>
-                <DialogTitle>Configuration</DialogTitle>
-                <DialogContent>
-                    <Box sx={{mt: 2}}>
-                        <Box sx={{display: "flex", justifyContent: "flex-end", mb: 2, gap: 1}}>
-                            <Tooltip title="Upload a new configuration file">
-                                <IconButton
-                                    color="primary"
-                                    onClick={() => setUpdateConfigDialogOpen(true)}
-                                    disabled={actionLoading}
-                                    aria-label="Upload new configuration file"
-                                    size="small"
-                                >
-                                    <UploadFileIcon/>
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Manage configuration parameters (add, unset, delete)">
-                                <IconButton
-                                    color="primary"
-                                    onClick={handleOpenManageParamsDialog}
-                                    disabled={actionLoading}
-                                    aria-label="Manage configuration parameters"
-                                    size="small"
-                                >
-                                    <EditIcon/>
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="View available configuration keywords">
-                                <IconButton
-                                    color="primary"
-                                    onClick={handleOpenKeywordsDialog}
-                                    disabled={actionLoading}
-                                    aria-label="View configuration keywords"
-                                    size="small"
-                                >
-                                    <InfoIcon/>
-                                </IconButton>
-                            </Tooltip>
-                        </Box>
-                        {!configNode && !configLoading && !configError && (
-                            <Typography color="textSecondary" variant="body2">
-                                No instance selected to view configuration.
-                            </Typography>
-                        )}
-                        {configLoading && <CircularProgress size={24}/>}
-                        {configError && <Alert severity="error" sx={{mb: 2}}>{configError}</Alert>}
-                        {!configLoading && !configError && configData === null && configNode && (
-                            <Typography color="textSecondary" variant="body2">No configuration available.</Typography>
-                        )}
-                        {!configLoading && !configError && configData !== null && (
-                            <Box
-                                sx={{
-                                    p: 2,
-                                    bgcolor: isDark ? 'grey.900' : 'grey.200',
-                                    borderRadius: 1,
-                                    maxWidth: "100%",
-                                    overflowX: "auto",
-                                    boxSizing: "border-box",
-                                    scrollbarWidth: "thin",
-                                    "&::-webkit-scrollbar": {height: "8px"},
-                                    "&::-webkit-scrollbar-thumb": {
-                                        backgroundColor: isDark ? 'grey.600' : 'grey.400',
-                                        borderRadius: "4px"
-                                    },
-                                }}
-                            >
-                                <Box
-                                    component="pre"
-                                    key={configData}
-                                    sx={{
-                                        whiteSpace: "pre-wrap",
-                                        fontFamily: "Monospace",
-                                        bgcolor: "inherit",
-                                        p: 1,
-                                        m: 0,
-                                        minWidth: "max-content",
-                                        fontSize: '0.875rem',
-                                        color: 'text.primary',
-                                    }}
-                                >
-                                    {configData}
-                                </Box>
-                            </Box>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfigDialogOpen(false)}>Close</Button>
-                </DialogActions>
+    return (
+        <div className="w-full">
+            <Button
+                size="sm"
+                icon={<FileIcon/>}
+                onClick={() => setConfigDialogOpen(true)}
+                className="w-full min-w-0 overflow-hidden text-ellipsis"
+            >
+                View Configuration
+            </Button>
+
+            <Dialog
+                open={configDialogOpen}
+                onClose={closeConfigDialog}
+                title="Configuration"
+                size="lg"
+                footer={<Button onClick={closeConfigDialog}>Close</Button>}
+            >
+                <div className="flex items-center justify-end gap-1">
+                    <IconButton
+                        label="Upload new configuration file"
+                        onClick={() => setUpdateConfigDialogOpen(true)}
+                        disabled={actionLoading}
+                    >
+                        <FileIcon/>
+                    </IconButton>
+                    <IconButton
+                        label="Manage configuration parameters"
+                        onClick={handleOpenManageParamsDialog}
+                        disabled={actionLoading}
+                    >
+                        <PencilIcon/>
+                    </IconButton>
+                    <IconButton
+                        label="View configuration keywords"
+                        onClick={handleOpenKeywordsDialog}
+                        disabled={actionLoading}
+                    >
+                        <LifeRingIcon/>
+                    </IconButton>
+                </div>
+                {!configNode && !configLoading && !configError && (
+                    <p className="text-ink-muted">No instance selected to view configuration.</p>
+                )}
+                {configLoading && <Spinner label="Loading configuration"/>}
+                {configError && <Alert>{configError}</Alert>}
+                {!configLoading && !configError && configData === null && configNode && (
+                    <p className="text-ink-muted">No configuration available.</p>
+                )}
+                {!configLoading && !configError && configData !== null && (
+                    <div className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2">
+                        <pre key={configData} className="m-0 font-mono text-data whitespace-pre-wrap text-ink">
+                            {configData}
+                        </pre>
+                    </div>
+                )}
             </Dialog>
 
             <UpdateConfigDialog
@@ -1059,7 +989,7 @@ const ConfigSection = ({
                 keywordsLoading={keywordsLoading}
                 keywordsError={keywordsError}
             />
-        </Box>
+        </div>
     );
 };
 

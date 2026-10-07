@@ -174,18 +174,22 @@ vi.mock('../ConfigSection', () => ({
 
 vi.mock('../../constants/actions', () => ({
     OBJECT_ACTIONS: [
-        {name: 'start', icon: 'StartIcon'},
-        {name: 'stop', icon: 'StopIcon'},
-        {name: 'freeze', icon: 'FreezeIcon'},
-        {name: 'unprovision', icon: 'UnprovisionIcon'},
-        {name: 'purge', icon: 'PurgeIcon'},
+        {name: 'start', icon: 'StartIcon', endpoint: 'action/start'},
+        {name: 'stop', icon: 'StopIcon', endpoint: 'action/stop'},
+        {name: 'freeze', icon: 'FreezeIcon', endpoint: 'action/freeze'},
+        {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'action/unprovision'},
+        {name: 'purge', icon: 'PurgeIcon', endpoint: 'action/purge'},
+        {name: 'enable', icon: 'EnableIcon', endpoint: 'enable', kinds: ['svc']},
+        {name: 'disable', icon: 'DisableIcon', endpoint: 'disable', kinds: ['svc'], color: 'red'},
     ],
     INSTANCE_ACTIONS: [
-        {name: 'start', icon: 'StartIcon'},
-        {name: 'stop', icon: 'StopIcon'},
-        {name: 'freeze', icon: 'FreezeIcon'},
-        {name: 'unprovision', icon: 'UnprovisionIcon'},
-        {name: 'purge', icon: 'PurgeIcon'},
+        {name: 'start', icon: 'StartIcon', endpoint: 'start'},
+        {name: 'stop', icon: 'StopIcon', endpoint: 'stop'},
+        {name: 'freeze', icon: 'FreezeIcon', endpoint: 'freeze'},
+        {name: 'unprovision', icon: 'UnprovisionIcon', endpoint: 'unprovision'},
+        {name: 'purge', icon: 'PurgeIcon', endpoint: 'purge'},
+        {name: 'start standby', icon: 'StartStandbyIcon', endpoint: 'startstandby'},
+        {name: 'pg reset', icon: 'PgResetIcon', endpoint: 'pg/reset'},
     ],
     RESOURCE_ACTIONS: [
         {name: 'start', icon: 'StartIcon'},
@@ -360,12 +364,12 @@ const fullMockState = {
         'node1:root/cfg/cfg1': {
             state: 'running',
             global_expect: 'placed@node1',
-            resources: {res1: {restart: {remaining: 0}}},
+            resources: {res1: {restart: {remaining: 0}}}
         },
         'node1:root/svc/svc1': {
             state: 'running',
             global_expect: 'placed@node1',
-            resources: {res1: {restart: {remaining: 0}}},
+            resources: {res1: {restart: {remaining: 0}}}
         },
         'node2:root/svc/svc1': {state: 'idle', global_expect: 'none', resources: {res3: {restart: {remaining: 0}}}},
     },
@@ -412,11 +416,23 @@ const setStoreState = (state) => {
 };
 
 // ── Action helpers ────────────────────────────────────────────────────────
+const getMenuItemByLabel = (label, menu = null) => {
+    const scope = menu ? within(menu) : screen;
+    return scope.getByText(new RegExp(`^${label}$`));
+};
+
+const queryMenuItemByLabel = (label, menu = null) => {
+    const scope = menu ? within(menu) : screen;
+    return scope.queryByText(new RegExp(`^${label}$`));
+};
+
+const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 const confirmDialog = async (dialog) => {
     const cb = within(dialog).queryByRole('checkbox', {name: /confirm/i});
     if (cb) await userEvent.click(cb);
     await userEvent.click(
-        within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept/i})
+        within(dialog).getByRole('button', {name: /confirm|submit|ok|execute|apply|proceed|accept|stop|delete/i})
     );
 };
 
@@ -733,7 +749,7 @@ describe('ObjectDetail Component', () => {
         expect(batchBtn).not.toBeDisabled();
         await user.click(batchBtn);
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-        await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+        await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
         await confirmDialog(await screen.findByRole('dialog'));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
@@ -751,7 +767,7 @@ describe('ObjectDetail Component', () => {
         await renderReadySvc();
         await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-        await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /stop/i}));
+        await user.click(getMenuItemByLabel('Stop', screen.getAllByRole('menu')[0]));
         await confirmDialog(await screen.findByRole('dialog'));
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
@@ -776,7 +792,7 @@ describe('ObjectDetail Component', () => {
             mockNetworkFailure('/action/');
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await screen.findByRole('dialog'));
             await waitFor(() =>
                 expect(screen.getAllByRole('alert').some((a) => a.textContent.includes('Network error'))).toBe(true)
@@ -787,7 +803,7 @@ describe('ObjectDetail Component', () => {
             mockActionFailure(status, msg);
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             await confirmDialog(await screen.findByRole('dialog'));
             await waitFor(() =>
                 expect(screen.getAllByRole('alert').some((a) => a.textContent.includes(`HTTP error! status: ${status}`))).toBe(true)
@@ -798,7 +814,7 @@ describe('ObjectDetail Component', () => {
             mockLocalStorage.getItem.mockReturnValue(null);
             await renderReadySvc();
             await openMenu();
-            await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+            await userEvent.click(getMenuItemByLabel('Start'));
             const dialog = await screen.findByRole('dialog');
             await userEvent.click(within(dialog).getByRole('button', {name: /confirm/i}));
             await waitFor(() =>
@@ -818,7 +834,7 @@ describe('ObjectDetail Component', () => {
                     await user.click(screen.getByLabelText(/select node node2/i));
                     await user.click(screen.getByRole('button', {name: /Actions on selected nodes/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
                 },
             ],
             [
@@ -827,7 +843,7 @@ describe('ObjectDetail Component', () => {
                 async () => {
                     await user.click(screen.getByRole('button', {name: /Node node1 actions/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(within(screen.getAllByRole('menu')[0]).getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start', screen.getAllByRole('menu')[0]));
                 },
             ],
             [
@@ -836,7 +852,7 @@ describe('ObjectDetail Component', () => {
                 async () => {
                     await user.click(screen.getByRole('button', {name: /object actions/i}));
                     await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
-                    await user.click(screen.getByRole('menuitem', {name: /start/i}));
+                    await user.click(getMenuItemByLabel('Start'));
                 },
             ],
         ])('%s action rejection is logged via logger.error', async (label, fnName, triggerAction) => {
@@ -866,7 +882,7 @@ describe('ObjectDetail Component', () => {
         for (const action of ['start', 'freeze', 'stop', 'unprovision', 'purge']) {
             await user.click(screen.getByRole('button', {name: /object actions/i}));
             await screen.findByRole('menu');
-            await user.click(screen.getByRole('menuitem', {name: new RegExp(action, 'i')}));
+            await user.click(getMenuItemByLabel(capitalize(action)));
             const dialog = await screen.findByRole('dialog');
             const cancelBtn = within(dialog).queryByRole('button', {name: /cancel/i});
             if (cancelBtn) {
@@ -891,7 +907,7 @@ describe('ObjectDetail Component', () => {
         await renderReadySvc();
         await userEvent.click(screen.getByRole('button', {name: /object actions/i}));
         await screen.findByRole('menu');
-        await userEvent.click(screen.getByRole('menuitem', {name: /start/i}));
+        await userEvent.click(getMenuItemByLabel('Start'));
         await confirmDialog(await screen.findByRole('dialog'));
         const closeButtons = screen.getAllByTestId('alert-close-button');
         if (closeButtons.length > 0) await user.click(closeButtons[0]);
@@ -1017,6 +1033,145 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => expect(screen.getByRole('complementary')).toBeInTheDocument());
         const instanceTitle = screen.queryByText(/Instance Logs -/i);
         if (instanceTitle) expect(instanceTitle).toBeInTheDocument();
+    });
+
+    // ── per-node stopped / RPO-breached indicators ───────────────────────
+    describe('per-node stopped and RPO-breached indicators', () => {
+        test('shows the stopped indicator on the node card when stopped_at is set', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'down', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'down',
+                            frozen_at: null,
+                            stopped_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is stopped')).toBeInTheDocument();
+        });
+
+        test('does not show the stopped indicator when stopped_at is the zero sentinel', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            stopped_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is stopped')).not.toBeInTheDocument();
+        });
+
+        test('shows the RPO-breached indicator on the node card when rpo_breached_at is set', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            rpo_breached_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is lagging')).toBeInTheDocument();
+        });
+
+        test('does not show the RPO-breached indicator when rpo_breached_at is the zero sentinel', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            rpo_breached_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is lagging')).not.toBeInTheDocument();
+        });
+
+        test('shows stopped and RPO-breached indicators simultaneously', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'down', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'down',
+                            frozen_at: null,
+                            stopped_at: '2025-05-16T10:00:00Z',
+                            rpo_breached_at: '2025-05-16T10:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.getByLabelText('Instance on node node1 is stopped')).toBeInTheDocument();
+            expect(screen.getByLabelText('Instance on node node1 is lagging')).toBeInTheDocument();
+        });
+
+        test('healthy node shows neither stopped nor RPO-breached indicators', async () => {
+            setStoreState({
+                objectStatus: {'root/svc/svc1': {avail: 'up', frozen: null}},
+                objectInstanceStatus: {
+                    'root/svc/svc1': {
+                        node1: {
+                            avail: 'up',
+                            frozen_at: null,
+                            stopped_at: '0001-01-01T00:00:00Z',
+                            rpo_breached_at: '0001-01-01T00:00:00Z',
+                            resources: {},
+                        },
+                    },
+                },
+                instanceMonitor: {},
+                instanceConfig: {},
+                ...BASE_FNS(),
+            });
+            renderSvc();
+            await waitForNode('node1');
+            expect(screen.queryByLabelText('Instance on node node1 is stopped')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Instance on node node1 is lagging')).not.toBeInTheDocument();
+        });
     });
 
     // ── instanceConfig subscription ──────────────────────────────────────
@@ -1150,8 +1305,8 @@ describe('ObjectDetail Component', () => {
         await user.click(screen.getByRole('button', {name: /Actions on selected nodes/i}));
         await waitFor(() => expect(screen.queryAllByRole('menu').length).toBeGreaterThan(0));
         const menu = screen.getAllByRole('menu')[0];
-        expect(!!within(menu).queryByRole('menuitem', {name: /^freeze/i})).toBe(expectFreeze);
-        if (expectStart) expect(within(menu).queryByRole('menuitem', {name: /start/i})).toBeTruthy();
+        expect(!!queryMenuItemByLabel('Freeze', menu)).toBe(expectFreeze);
+        if (expectStart) expect(queryMenuItemByLabel('Start', menu)).toBeTruthy();
     });
 
     // ── Fallback fetch ───────────────────────────────────────────────────
@@ -1246,7 +1401,6 @@ describe('ObjectDetail Component', () => {
 
             act(() => vi.advanceTimersByTime(5000));
 
-            // The fallback fetch does start (we passed the hasFallbackFired guard)
             await waitFor(() => {
                 expect(global.fetch).toHaveBeenCalledWith(
                     expect.stringMatching(/\/api\/object\/path\/root(%2F|\/)svc(%2F|\/)svc1/),
@@ -1258,8 +1412,6 @@ describe('ObjectDetail Component', () => {
                 );
             });
 
-            // hasInstances === true (Object.keys(...).length > 0, line 211), so
-            // we must not overwrite the already present data.
             await waitFor(() => {
                 expect(storeStateWithInstances.setObjectStatuses).not.toHaveBeenCalled();
                 expect(storeStateWithInstances.setInstanceStatuses).not.toHaveBeenCalled();

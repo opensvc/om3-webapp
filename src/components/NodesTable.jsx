@@ -80,7 +80,6 @@ const NodesTable = () => {
         "CONNECTION_CLOSED"
     ], []);
 
-    // Hauteur de la barre de navigation (AppBar) avec safe area
     const appBarHeight = `calc(${theme.mixins.toolbar.minHeight || 64}px + env(safe-area-inset-top, 0px))`;
 
     const getZoomLevel = () => {
@@ -227,10 +226,9 @@ const NodesTable = () => {
     };
 
     const postActionUrl = (node, action) => {
-        if (action === "restart daemon") {
-            return `${URL_NODE}/${node}/daemon/action/restart`;
-        }
-        return `${URL_NODE}/${node}/action/${action}`;
+        const def = NODE_ACTIONS.find((a) => a.name === action);
+        const endpoint = def?.endpoint ?? `action/${action}`;
+        return `${URL_NODE}/${node}/${endpoint}`;
     };
 
     const handleDialogConfirm = async (action) => {

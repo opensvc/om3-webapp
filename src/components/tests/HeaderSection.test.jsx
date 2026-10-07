@@ -15,6 +15,11 @@ vi.mock('../../constants/actions', () => ({
     OBJECT_ACTIONS: [
         {name: 'delete', icon: 'delete-icon', color: 'red'},
         {name: 'edit', icon: 'edit-icon'},
+        // svc-only actions — filtered by action.kinds
+        {name: 'enable', icon: 'enable-icon', kinds: ['svc']},
+        {name: 'disable', icon: 'disable-icon', kinds: ['svc'], color: 'red'},
+        // vol-only action — used to verify filtering for other kinds
+        {name: 'snapshot', icon: 'snapshot-icon', kinds: ['vol']},
     ],
 }));
 
@@ -85,6 +90,7 @@ Object.defineProperty(global, 'localStorage', {value: mockLocalStorage});
 describe('HeaderSection Component', () => {
     const defaultProps = {
         decodedObjectName: 'root/svc/svc1',
+        objectKind: 'svc',
         globalStatus: {avail: 'up', frozen: 'frozen', provisioned: 'true'},
         actionInProgress: false,
         objectMenuAnchor: null,
@@ -155,11 +161,7 @@ describe('HeaderSection Component', () => {
     });
 
     test('disables menu button when actionInProgress is true', async () => {
-        const props = {
-            ...defaultProps,
-            actionInProgress: true,
-        };
-
+        const props = {...defaultProps, actionInProgress: true};
         render(<HeaderSection {...props} />);
 
         const objectMenuButton = screen.getByRole('button', {name: 'Object actions'});
@@ -167,11 +169,7 @@ describe('HeaderSection Component', () => {
     });
 
     test('does not render when globalStatus is undefined', async () => {
-        const props = {
-            ...defaultProps,
-            globalStatus: undefined,
-        };
-
+        const props = {...defaultProps, globalStatus: undefined};
         render(<HeaderSection {...props} />);
 
         expect(screen.queryByText('root/svc/svc1')).not.toBeInTheDocument();
@@ -187,66 +185,80 @@ describe('HeaderSection Component', () => {
         await userEvent.click(button);
 
         expect(mockSetObjectMenuAnchor).toHaveBeenCalledWith(expect.anything());
-        expect(console.info).toHaveBeenCalledWith(
-            'Object menu opened at:',
-            expect.any(Object)
-        );
+        expect(console.info).toHaveBeenCalledWith('Object menu opened at:', expect.any(Object));
     });
 
-    test('renders menu when objectMenuAnchor is set', () => {
-        const mockAnchor = {
-            getBoundingClientRect: vi.fn(() => ({})),
-        };
-        const props = {
-            ...defaultProps,
-            objectMenuAnchor: mockAnchor,
-        };
-        render(<HeaderSection {...props} />);
+    // ── kind-based filtering ────────────────────────────────────────────
+    // ── kind-based filtering ────────────────────────────────────────────
+    describe('action filtering by objectKind', () => {
+        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
 
-        expect(screen.getByRole('menu')).toBeInTheDocument();
-        expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+        // The MenuItem mock concatenates the icon string and the label, so
+        // we assert against the visible label via `includes` rather than a
+        // strict equality on textContent.
+        const labels = () =>
+            screen.getAllByRole('menuitem').map((i) => i.textContent);
+
+        test('svc shows all non-kinds actions + svc-only actions', () => {
+            render(<HeaderSection {...defaultProps} objectMenuAnchor={mockAnchor}/>);
+            const names = labels();
+            expect(names.some((n) => n.includes('Delete'))).toBe(true);
+            expect(names.some((n) => n.includes('Edit'))).toBe(true);
+            expect(names.some((n) => n.includes('Enable'))).toBe(true);
+            expect(names.some((n) => n.includes('Disable'))).toBe(true);
+            expect(names.some((n) => n.includes('Snapshot'))).toBe(false);
+        });
+
+        test('vol shows only vol-restricted action, not enable/disable', () => {
+            render(<HeaderSection {...defaultProps} objectKind="vol" objectMenuAnchor={mockAnchor}/>);
+            const names = labels();
+            expect(names.some((n) => n.includes('Delete'))).toBe(true);
+            expect(names.some((n) => n.includes('Edit'))).toBe(true);
+            expect(names.some((n) => n.includes('Snapshot'))).toBe(true);
+            expect(names.some((n) => n.includes('Enable'))).toBe(false);
+            expect(names.some((n) => n.includes('Disable'))).toBe(false);
+        });
+
+        test('unknown kind shows only actions without a kinds restriction', () => {
+            render(<HeaderSection {...defaultProps} objectKind="cfg" objectMenuAnchor={mockAnchor}/>);
+            const names = labels();
+            expect(names.some((n) => n.includes('Delete'))).toBe(true);
+            expect(names.some((n) => n.includes('Edit'))).toBe(true);
+            expect(names.some((n) => n.includes('Enable'))).toBe(false);
+            expect(names.some((n) => n.includes('Disable'))).toBe(false);
+            expect(names.some((n) => n.includes('Snapshot'))).toBe(false);
+        });
+
+        test('renders menu when objectMenuAnchor is set (svc by default)', () => {
+            render(<HeaderSection {...defaultProps} objectMenuAnchor={mockAnchor}/>);
+            expect(screen.getByRole('menu')).toBeInTheDocument();
+            // 2 unrestricted + 2 svc-only (vol-only filtered out)
+            expect(screen.getAllByRole('menuitem')).toHaveLength(4);
+        });
     });
 
     test('handles object action click', async () => {
-        const mockAnchor = {
-            getBoundingClientRect: vi.fn(() => ({})),
-        };
-        const props = {
-            ...defaultProps,
-            objectMenuAnchor: mockAnchor,
-        };
+        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
+        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
         render(<HeaderSection {...props} />);
-
         const menuItems = screen.getAllByRole('menuitem');
         await userEvent.click(menuItems[0]);
-
         expect(mockHandleObjectActionClick).toHaveBeenCalledWith('delete');
         expect(mockSetObjectMenuAnchor).toHaveBeenCalledWith(null);
     });
 
     test('disables menu items when not allowed', () => {
         vi.mocked(isActionAllowedForSelection).mockReturnValue(false);
-        const mockAnchor = {
-            getBoundingClientRect: vi.fn(() => ({})),
-        };
-        const props = {
-            ...defaultProps,
-            objectMenuAnchor: mockAnchor,
-        };
+        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
+        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
         render(<HeaderSection {...props} />);
-
         const menuItems = screen.getAllByRole('menuitem');
         expect(menuItems[0]).toHaveAttribute('data-disabled', 'true');
     });
 
     test('closes menu when onClose is triggered', async () => {
-        const mockAnchor = {
-            getBoundingClientRect: vi.fn(() => ({})),
-        };
-        const props = {
-            ...defaultProps,
-            objectMenuAnchor: mockAnchor,
-        };
+        const mockAnchor = {getBoundingClientRect: vi.fn(() => ({}))};
+        const props = {...defaultProps, objectMenuAnchor: mockAnchor};
         render(<HeaderSection {...props} />);
 
         const closeButton = screen.getByRole('button', {name: 'close-menu'});

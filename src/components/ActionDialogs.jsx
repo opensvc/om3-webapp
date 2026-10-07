@@ -78,6 +78,56 @@ export const StopDialog = ({open, onClose, onConfirm, checked, setChecked, disab
     </Dialog>
 );
 
+export const ShutdownDialog = ({open, onClose, onConfirm, checkboxes, setCheckboxes, disabled}) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Shutdown</DialogTitle>
+        <DialogContent>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checkboxes.instancesDown}
+                        onChange={(e) =>
+                            setCheckboxes((prev) => ({...prev, instancesDown: e.target.checked}))
+                        }
+                        aria-label="Confirm instances shutdown"
+                    />
+                }
+                label="I understand all svc and vol instances on this node will be shut down and the daemon will be stopped."
+            />
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={checkboxes.peerTakeover}
+                        onChange={(e) =>
+                            setCheckboxes((prev) => ({...prev, peerTakeover: e.target.checked}))
+                        }
+                        aria-label="Confirm peer takeover"
+                    />
+                }
+                label="I understand peer nodes are not notified of a maintenance period and will try to take over services as soon as the instances are down."
+            />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={false}>
+                Cancel
+            </Button>
+            <Button
+                variant="contained"
+                color="primary"
+                disabled={
+                    !checkboxes.instancesDown ||
+                    !checkboxes.peerTakeover ||
+                    disabled
+                }
+                onClick={onConfirm}
+                aria-label="Confirm shutdown action"
+            >
+                Shutdown
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
 // Dialog for the "restart" action
 export const RestartDialog = ({open, onClose, onConfirm, checked, setChecked, disabled}) => (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -724,4 +774,3 @@ export const SimpleConfirmDialog = ({open, onClose, onConfirm, action, target}) 
         </DialogActions>
     </Dialog>
 );
-

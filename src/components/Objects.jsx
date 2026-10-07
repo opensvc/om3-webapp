@@ -34,6 +34,8 @@ import Grid from "@mui/material/Grid";
 import AcUnit from "@mui/icons-material/AcUnit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import CloseIcon from "@mui/icons-material/Close";
+import SyncProblemIcon from "@mui/icons-material/SyncProblem";
+import Stop from "@mui/icons-material/Stop";
 import {green, red, blue, orange, grey} from "@mui/material/colors";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
@@ -47,12 +49,14 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
 import {closeEventSource, startEventReception, forceFlush} from "../eventSourceManager";
 import {URL_OBJECT} from "../config/apiPath.js";
-import {extractNamespace, extractKind, isActionAllowedForSelection} from "../utils/objectUtils";
+import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
-import {useNodeData} from "../hooks/useNodeData";
+
+const ZERO_TIME = "0001-01-01T00:00:00Z";
+const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
 
 const parseObjectName = (objectName) => {
     const parts = objectName.split("/");
@@ -72,6 +76,11 @@ const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
 const selectRemoveObject = (state) => state.removeObject;
 
+const STATUS_COL_WIDTH = 150;
+const NODE_COL_WIDTH = 150;
+const NODE_ICONS_WIDTH = 100;
+const NODE_STATE_WIDTH = 50;
+
 const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
     return (
         <Box sx={{
@@ -82,7 +91,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
             alignItems: "center",
             gap: 0.5
         }}>
-            {/* Not provisioned indicator - left side */}
             <Box sx={{
                 width: "24px",
                 height: "24px",
@@ -127,7 +135,6 @@ const StatusIcon = React.memo(({avail, isNotProvisioned, frozen}) => {
                 )}
             </Box>
 
-            {/* Frozen indicator - right side */}
             <Box sx={{
                 width: "24px",
                 height: "24px",
@@ -173,84 +180,127 @@ const GlobalExpectDisplay = React.memo(({globalExpect}) => {
     );
 }, (prev, next) => prev.globalExpect === next.globalExpect);
 
-const NodeStatusIcons = React.memo(({nodeAvail, isNodeNotProvisioned, nodeFrozen, node}) => {
-    return (
-        <Box sx={{
-            width: "80px",
-            height: "24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 0.5
-        }}>
-            {/* Not provisioned indicator - left side */}
+const NodeStatusIcons = React.memo(({
+                                        nodeAvail,
+                                        isNodeNotProvisioned,
+                                        isFrozen,
+                                        isStopped,
+                                        isLagging,
+                                        stoppedAt,
+                                        node,
+                                    }) => {
+        return (
             <Box sx={{
-                width: "24px",
+                width: `${NODE_ICONS_WIDTH}px`,
                 height: "24px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                visibility: isNodeNotProvisioned ? "visible" : "hidden"
+                justifyContent: "space-between",
+                gap: 0.25,
             }}>
-                {isNodeNotProvisioned && (
-                    <Tooltip title="Not Provisioned">
-                        <PriorityHighIcon sx={{color: red[500], fontSize: 20}}
-                                          aria-label={`Node ${node} is not provisioned`}/>
-                    </Tooltip>
-                )}
-            </Box>
+                <Box sx={{
+                    width: "20px",
+                    height: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    visibility: isNodeNotProvisioned ? "visible" : "hidden"
+                }}>
+                    {isNodeNotProvisioned && (
+                        <Tooltip title="Not Provisioned">
+                            <PriorityHighIcon sx={{color: red[500], fontSize: 18}}
+                                              aria-label={`Node ${node} is not provisioned`}/>
+                        </Tooltip>
+                    )}
+                </Box>
 
-            {/* Node status icon - center */}
-            <Box sx={{
-                width: "24px",
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-            }}>
-                {nodeAvail === "up" && (
-                    <Tooltip title="up">
-                        <FiberManualRecordIcon sx={{color: green[500], fontSize: 24}}
-                                               aria-label={`Node ${node} is up`}/>
-                    </Tooltip>
-                )}
-                {nodeAvail === "down" && (
-                    <Tooltip title="down">
-                        <FiberManualRecordIcon sx={{color: red[500], fontSize: 24}}
-                                               aria-label={`Node ${node} is down`}/>
-                    </Tooltip>
-                )}
-                {nodeAvail === "warn" && (
-                    <Tooltip title="warn">
-                        <FiberManualRecordIcon sx={{color: orange[500], fontSize: 24}}
-                                               aria-label={`Node ${node} has warning`}/>
-                    </Tooltip>
-                )}
-            </Box>
+                <Box sx={{
+                    width: "20px",
+                    height: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    {nodeAvail === "up" && (
+                        <Tooltip title="up">
+                            <FiberManualRecordIcon sx={{color: green[500], fontSize: 20}}
+                                                   aria-label={`Node ${node} is up`}/>
+                        </Tooltip>
+                    )}
+                    {nodeAvail === "down" && (
+                        <Tooltip title="down">
+                            <FiberManualRecordIcon sx={{color: red[500], fontSize: 20}}
+                                                   aria-label={`Node ${node} is down`}/>
+                        </Tooltip>
+                    )}
+                    {nodeAvail === "warn" && (
+                        <Tooltip title="warn">
+                            <FiberManualRecordIcon sx={{color: orange[500], fontSize: 20}}
+                                                   aria-label={`Node ${node} has warning`}/>
+                        </Tooltip>
+                    )}
+                    {!nodeAvail && (
+                        <Tooltip title="n/a">
+                            <FiberManualRecordIcon sx={{color: grey[500], fontSize: 20}}
+                                                   aria-label={`Node ${node} status is n/a`}/>
+                        </Tooltip>
+                    )}
+                </Box>
 
-            {/* Frozen indicator - right side */}
-            <Box sx={{
-                width: "24px",
-                height: "24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                visibility: nodeFrozen === "frozen" ? "visible" : "hidden"
-            }}>
-                {nodeFrozen === "frozen" && (
-                    <Tooltip title="frozen">
-                        <AcUnit sx={{color: blue[600], fontSize: 20}} aria-label={`Node ${node} is frozen`}/>
-                    </Tooltip>
-                )}
+                <Box sx={{
+                    width: "20px",
+                    height: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    visibility: isStopped ? "visible" : "hidden"
+                }}>
+                    {isStopped && (
+                        <Tooltip title={stoppedAt ? `stopped at ${new Date(stoppedAt).toLocaleString()}` : "stopped"}>
+                            <Stop
+                                sx={{color: grey[600], fontSize: 16, cursor: 'help'}}
+                                aria-label={`Node ${node} is stopped`}
+                            />
+                        </Tooltip>
+                    )}
+                </Box>
+
+                <Box sx={{
+                    width: "20px",
+                    height: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                }}>
+                    {isLagging ? (
+                        <Tooltip title="RPO breached">
+                            <SyncProblemIcon
+                                sx={{color: orange[500], fontSize: 18}}
+                                aria-label={`Node ${node} RPO breached`}
+                            />
+                        </Tooltip>
+                    ) : isFrozen ? (
+                        <Tooltip title="frozen">
+                            <AcUnit sx={{color: blue[600], fontSize: 18}} aria-label={`Node ${node} is frozen`}/>
+                        </Tooltip>
+                    ) : null}
+                </Box>
             </Box>
-        </Box>
-    );
-}, (prev, next) => prev.nodeAvail === next.nodeAvail && prev.isNodeNotProvisioned === next.isNodeNotProvisioned && prev.nodeFrozen === next.nodeFrozen && prev.node === next.node);
+        );
+    }, (prev, next) =>
+        prev.nodeAvail === next.nodeAvail &&
+        prev.isNodeNotProvisioned === next.isNodeNotProvisioned &&
+        prev.isFrozen === next.isFrozen &&
+        prev.isStopped === next.isStopped &&
+        prev.isLagging === next.isLagging &&
+        prev.stoppedAt === next.stoppedAt &&
+        prev.node === next.node
+);
 
 const NodeStateDisplay = React.memo(({nodeState, node}) => {
     return (
         <Box sx={{
-            width: "50px",
+            width: `${NODE_STATE_WIDTH}px`,
             display: "flex",
             justifyContent: "center",
             alignItems: "center"
@@ -260,7 +310,7 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
                     <Typography variant="caption" sx={{
                         fontSize: "0.75rem",
                         lineHeight: "1.2",
-                        maxWidth: "50px",
+                        maxWidth: `${NODE_STATE_WIDTH}px`,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -275,13 +325,19 @@ const NodeStateDisplay = React.memo(({nodeState, node}) => {
 }, (prev, next) => prev.nodeState === next.nodeState && prev.node === next.node);
 
 const NodeStatus = React.memo(({objectName, node}) => {
-    const nodeData = useNodeData(objectName, node);
+    const nodeData = useEventStore(
+        (s) => s.objectInstanceStatus?.[objectName]?.[node]
+    );
+
     const hasData = Boolean(nodeData?.avail);
     const isNodeNotProvisioned = hasData && (nodeData.provisioned === "false" || nodeData.provisioned === false);
+    const isStopped = hasData && hasTimestamp(nodeData.stopped_at);
+    const isLagging = hasData && hasTimestamp(nodeData.rpo_breached_at);
+    const isFrozen = hasData && hasTimestamp(nodeData.frozen_at);
 
     return (
         <Box sx={{
-            width: "130px",
+            width: `${NODE_COL_WIDTH}px`,
             height: "100%",
             display: "flex",
             alignItems: "center",
@@ -291,16 +347,19 @@ const NodeStatus = React.memo(({objectName, node}) => {
                 <NodeStatusIcons
                     nodeAvail={nodeData.avail}
                     isNodeNotProvisioned={isNodeNotProvisioned}
-                    nodeFrozen={nodeData.frozen}
+                    isFrozen={isFrozen}
+                    isStopped={isStopped}
+                    isLagging={isLagging}
+                    stoppedAt={nodeData.stopped_at}
                     node={node}
                 />
             ) : (
-                <Box sx={{width: "80px"}}/>
+                <Box sx={{width: `${NODE_ICONS_WIDTH}px`}}/>
             )}
             {hasData ? (
                 <NodeStateDisplay nodeState={nodeData.state} node={node}/>
             ) : (
-                <Box sx={{width: "50px"}}/>
+                <Box sx={{width: `${NODE_STATE_WIDTH}px`}}/>
             )}
         </Box>
     );
@@ -347,9 +406,9 @@ const TableRowComponent = React.memo(({
                 />
             </TableCell>
             <TableCell sx={{
-                minWidth: "150px",
-                width: "150px",
-                maxWidth: "150px",
+                minWidth: `${STATUS_COL_WIDTH}px`,
+                width: `${STATUS_COL_WIDTH}px`,
+                maxWidth: `${STATUS_COL_WIDTH}px`,
                 position: "relative",
                 height: "100%",
                 padding: "16px 8px",
@@ -383,9 +442,9 @@ const TableRowComponent = React.memo(({
             {isWideScreen &&
                 allNodes.map((node) => (
                     <TableCell key={node} align="center" sx={{
-                        minWidth: "130px",
-                        width: "130px",
-                        maxWidth: "130px",
+                        minWidth: `${NODE_COL_WIDTH}px`,
+                        width: `${NODE_COL_WIDTH}px`,
+                        maxWidth: `${NODE_COL_WIDTH}px`,
                         position: "relative",
                         padding: "16px 8px",
                         boxSizing: "border-box"
@@ -482,7 +541,6 @@ const Objects = () => {
     const [loading, setLoading] = useState(false);
     const tableContainerRef = useRef(null);
 
-    // Generate unique IDs for form labels
     const globalStateId = React.useId();
     const namespaceId = React.useId();
     const kindId = React.useId();
@@ -505,7 +563,7 @@ const Objects = () => {
         for (let i = 0; i < allObjectNames.length; i++) {
             const name = allObjectNames[i];
             nsSet.add(extractNamespace(name));
-            kindSet.add(extractKind(name));
+            kindSet.add(parseObjectName(name).kind);
         }
 
         return {
@@ -545,8 +603,7 @@ const Objects = () => {
                 continue;
             }
 
-            // Check kind filter (multiple selection)
-            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(extractKind(name))) {
+            if (deferredSelectedKinds.length > 0 && !deferredSelectedKinds.includes(parseObjectName(name).kind)) {
                 continue;
             }
 
@@ -695,7 +752,8 @@ const Objects = () => {
                     errorCount++;
                     return;
                 }
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/action/${action}`;
+                const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
+                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/${endpoint}`;
                 try {
                     const response = await fetch(url, {
                         method: "POST",
@@ -934,13 +992,23 @@ const Objects = () => {
     const filteredRowActions = useMemo(() => {
         if (!currentObject) return [];
         const objectData = objectStatus[currentObject];
+        const {kind: objectKind} = parseObjectName(currentObject);
         return OBJECT_ACTIONS.filter(
             (action) =>
+                (!action.kinds || action.kinds.includes(objectKind)) &&
                 isActionAllowedForSelection(action.name, [currentObject]) &&
                 (action.name !== "freeze" || !objectData?.frozen || objectData.frozen !== "frozen") &&
                 (action.name !== "unfreeze" || objectData?.frozen === "frozen")
         );
     }, [currentObject, objectStatus]);
+
+    const filteredBulkActions = useMemo(() => {
+        const allSvc = selectedObjects.length > 0
+            && selectedObjects.every((obj) => parseObjectName(obj).kind === "svc");
+        return OBJECT_ACTIONS.filter(
+            (action) => !action.kinds || (allSvc && action.kinds.includes("svc"))
+        );
+    }, [selectedObjects]);
 
     return (
         <Box sx={{
@@ -1185,7 +1253,6 @@ const Objects = () => {
                         </Box>
                     </Box>
 
-                    {/* Menu for row actions (per object) */}
                     <Menu
                         open={Boolean(rowMenuAnchor)}
                         anchorEl={rowMenuAnchor}
@@ -1254,7 +1321,7 @@ const Objects = () => {
                             }
                         }}
                     >
-                        {OBJECT_ACTIONS.map((action) => {
+                        {filteredBulkActions.map((action) => {
                             const {name, icon, color} = action;
                             const isAllowed = isActionAllowedForSelection(name, selectedObjects);
                             return (
@@ -1315,9 +1382,9 @@ const Objects = () => {
                                     />
                                 </TableCell>
                                 <TableCell sx={{
-                                    minWidth: "150px",
-                                    width: "150px",
-                                    maxWidth: "150px",
+                                    minWidth: `${STATUS_COL_WIDTH}px`,
+                                    width: `${STATUS_COL_WIDTH}px`,
+                                    maxWidth: `${STATUS_COL_WIDTH}px`,
                                     position: "relative",
                                     cursor: "pointer",
                                     padding: "16px 8px",
@@ -1361,9 +1428,9 @@ const Objects = () => {
                                 </TableCell>
                                 {isWideScreen && allNodes.map((node) => (
                                     <TableCell key={node} sx={{
-                                        minWidth: "130px",
-                                        width: "130px",
-                                        maxWidth: "130px",
+                                        minWidth: `${NODE_COL_WIDTH}px`,
+                                        width: `${NODE_COL_WIDTH}px`,
+                                        maxWidth: `${NODE_COL_WIDTH}px`,
                                         position: "relative",
                                         cursor: "pointer",
                                         padding: "16px 8px",
@@ -1377,7 +1444,7 @@ const Objects = () => {
                                             justifyContent: "space-between"
                                         }}>
                                             <Box sx={{
-                                                width: "80px",
+                                                width: `${NODE_ICONS_WIDTH}px`,
                                                 display: "flex",
                                                 justifyContent: "center",
                                                 alignItems: "center",
@@ -1388,7 +1455,7 @@ const Objects = () => {
                                                     <KeyboardArrowUpIcon fontSize="small"/> :
                                                     <KeyboardArrowDownIcon fontSize="small"/>)}
                                             </Box>
-                                            <Box sx={{width: "50px"}}></Box>
+                                            <Box sx={{width: `${NODE_STATE_WIDTH}px`}}></Box>
                                         </Box>
                                     </TableCell>
                                 ))}

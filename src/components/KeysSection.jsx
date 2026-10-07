@@ -29,6 +29,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import {URL_OBJECT} from "../config/apiPath.js";
@@ -331,6 +332,10 @@ const KeyFormDialog = ({
 };
 
 const KeysSection = ({decodedObjectName, openSnackbar}) => {
+    const {kind} = parseObjectPath(decodedObjectName);
+    const isSecret = kind === "sec";
+    const showKeys = ["cfg", "sec"].includes(kind);
+
     const [keys, setKeys] = useState([]);
     const [keysLoading, setKeysLoading] = useState(false);
     const [keysError, setKeysError] = useState(null);
@@ -343,6 +348,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const [keyToView, setKeyToView] = useState(null);
     const [keyViewContent, setKeyViewContent] = useState(null);
     const [keyViewLoading, setKeyViewLoading] = useState(false);
+    const [revealSecret, setRevealSecret] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
     const [updateInitialName, setUpdateInitialName] = useState("");
@@ -532,6 +538,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         setKeyViewLoading(true);
         setViewDialogOpen(true);
         setKeyViewContent(null);
+        setRevealSecret(false);
 
         const result = await fetchKeyContent(keyName);
         if (result.type !== 'error') {
@@ -545,10 +552,20 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
     const openUpdateDialog = async (keyName) => {
         setUpdateInitialName(keyName);
         setUpdateDialogOpen(true);
-        setUpdateContentLoading(true);
         setUpdateInitialContent("");
         setUpdateInitialInputMode("file");
 
+        if (isSecret) {
+            // Never fetch secret content to the client
+            setUpdateContentLoading(false);
+            openSnackbar(
+                "Secret content is hidden. Provide new content to update it.",
+                "info"
+            );
+            return;
+        }
+
+        setUpdateContentLoading(true);
         const result = await fetchKeyContent(keyName);
         if (result.type === "text") {
             setUpdateInitialContent(result.content);
@@ -556,7 +573,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         } else if (result.type === "binary") {
             openSnackbar("Key is binary – please use file upload to update.", "info");
         }
-
         setUpdateContentLoading(false);
     };
 
@@ -568,8 +584,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         }
     }, [decodedObjectName, fetchKeys]);
 
-    const {kind} = parseObjectPath(decodedObjectName);
-    const showKeys = ["cfg", "sec"].includes(kind);
     if (!showKeys) return null;
 
     const hasKeysError = Boolean(keysError);
@@ -676,21 +690,58 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     )}
                     {!keyViewLoading && keyViewContent && (
                         <Box>
-                            <Typography variant="caption" color="textSecondary" sx={{mb: 1}}>
-                                Type: {keyViewContent.type === "text" ? "Text" : "Binary (Hex View)"}
-                            </Typography>
-                            <TextField
-                                multiline
-                                fullWidth
-                                variant="outlined"
-                                value={keyViewContent.content}
-                                slotProps={{
-                                    input: {readOnly: true, sx: {fontFamily: 'monospace', fontSize: '0.875rem'}}
-                                }}
-                                minRows={10}
-                                maxRows={20}
-                                sx={{mt: 1}}
-                            />
+                            <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1}}>
+                                <Typography variant="caption" color="textSecondary">
+                                    Type: {keyViewContent.type === "text" ? "Text" : "Binary (Hex View)"}
+                                </Typography>
+                                {isSecret && (
+                                    <Tooltip title={revealSecret ? "Hide secret" : "Reveal secret"}>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => setRevealSecret(v => !v)}
+                                            aria-label={revealSecret ? "Hide secret" : "Reveal secret"}
+                                        >
+                                            {revealSecret ? <VisibilityOffIcon/> : <VisibilityIcon/>}
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
+                            </Box>
+
+                            {isSecret && !revealSecret ? (
+                                <Box
+                                    sx={{
+                                        mt: 1,
+                                        p: 3,
+                                        border: '1px dashed',
+                                        borderColor: 'divider',
+                                        borderRadius: 1,
+                                        bgcolor: 'action.hover',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    <Typography variant="body2" color="textSecondary">
+                                        🔒 The content of this secret is hidden by default.
+                                        <br/>
+                                        Click the 👁 icon to reveal it.
+                                    </Typography>
+                                </Box>
+                            ) : (
+                                <TextField
+                                    multiline
+                                    fullWidth
+                                    variant="outlined"
+                                    value={keyViewContent.content}
+                                    slotProps={{
+                                        input: {
+                                            readOnly: true,
+                                            sx: {fontFamily: 'monospace', fontSize: '0.875rem'}
+                                        }
+                                    }}
+                                    minRows={10}
+                                    maxRows={20}
+                                    sx={{mt: 1}}
+                                />
+                            )}
                         </Box>
                     )}
                 </DialogContent>

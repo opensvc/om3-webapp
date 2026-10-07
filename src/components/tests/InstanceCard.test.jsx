@@ -64,6 +64,22 @@ vi.mock('@mui/icons-material/Article', () => ({
 vi.mock('@mui/icons-material/PriorityHigh', () => ({
     default: () => <span data-testid="PriorityHighIcon"/>,
 }));
+vi.mock('@mui/icons-material/FiberManualRecord', () => ({
+    default: () => <span data-testid="FiberManualRecordIcon"/>,
+}));
+vi.mock('@mui/icons-material/Stop', () => ({
+    default: () => <span data-testid="StopIcon"/>,
+}));
+vi.mock('@mui/icons-material/SyncProblem', () => ({
+    default: () => <span data-testid="SyncProblemIcon"/>,
+}));
+
+// Helper: returns the title attribute of the Tooltip wrapping a given icon
+const tooltipTitleFor = (iconTestId) => {
+    const icon = screen.getByTestId(iconTestId);
+    const wrapper = icon.closest('[title]');
+    return wrapper ? wrapper.getAttribute('title') : null;
+};
 
 describe('InstanceCard Component', () => {
     const user = userEvent.setup();
@@ -296,5 +312,256 @@ describe('InstanceCard Component', () => {
         await user.click(logsButton);
 
         expect(onOpenLogs).toHaveBeenCalledWith('node1', 'node1');
+    });
+
+    // ─── stopped indicator ──────────────────────────────────────────────
+    describe('stopped indicator', () => {
+        test('shows the stopped icon when isStopped is true', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: true,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('StopIcon')).toBeInTheDocument();
+        });
+
+        test('does not show the stopped icon when isStopped is false', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: false,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.queryByTestId('StopIcon')).not.toBeInTheDocument();
+        });
+
+        test('does not show the stopped icon by default (getNodeState without the flag)', () => {
+            const getNodeState = vi.fn(() => ({avail: 'up', frozen: 'unfrozen', state: null}));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.queryByTestId('StopIcon')).not.toBeInTheDocument();
+        });
+
+        test('stopped tooltip contains the stopped_at date when provided', () => {
+            const nodeData = {stopped_at: '2025-05-16T10:00:00Z'};
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: true,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" nodeData={nodeData} getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            const title = tooltipTitleFor('StopIcon');
+            expect(title).toEqual(expect.stringContaining('stopped at'));
+        });
+
+        test('stopped tooltip is just "stopped" when no stopped_at is provided', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: true,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(tooltipTitleFor('StopIcon')).toBe('stopped');
+        });
+    });
+
+    // ─── RPO-breached indicator ─────────────────────────────────────────
+    describe('RPO-breached indicator', () => {
+        test('shows the sync-problem icon when isLagging is true', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: false,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('SyncProblemIcon')).toBeInTheDocument();
+        });
+
+        test('does not show the sync-problem icon when isLagging is false', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: false,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.queryByTestId('SyncProblemIcon')).not.toBeInTheDocument();
+        });
+
+        test('does not show the sync-problem icon by default (getNodeState without the flag)', () => {
+            const getNodeState = vi.fn(() => ({avail: 'up', frozen: 'unfrozen', state: null}));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.queryByTestId('SyncProblemIcon')).not.toBeInTheDocument();
+        });
+
+        test('lagging tooltip is "RPO breached" and does NOT contain a date', () => {
+            const nodeData = {rpo_breached_at: '2025-05-16T10:00:00Z'};
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: false,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" nodeData={nodeData} getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            const title = tooltipTitleFor('SyncProblemIcon');
+            expect(title).toBe('RPO breached');
+            expect(title).not.toEqual(expect.stringContaining('2025'));
+        });
+    });
+
+    // ─── precedence and coexistence ─────────────────────────────────────
+    describe('indicator precedence and coexistence', () => {
+        test('RPO-breached takes precedence over frozen', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'frozen',
+                state: null,
+                isStopped: false,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('SyncProblemIcon')).toBeInTheDocument();
+            expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
+        });
+
+        test('frozen is shown when isLagging is false', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'frozen',
+                state: null,
+                isStopped: false,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('AcUnitIcon')).toBeInTheDocument();
+            expect(screen.queryByTestId('SyncProblemIcon')).not.toBeInTheDocument();
+        });
+
+        test('stopped and RPO-breached are shown simultaneously', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: true,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('StopIcon')).toBeInTheDocument();
+            expect(screen.getByTestId('SyncProblemIcon')).toBeInTheDocument();
+        });
+
+        test('stopped + RPO-breached + frozen: frozen is hidden by lagging precedence', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'frozen',
+                state: null,
+                isStopped: true,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('StopIcon')).toBeInTheDocument();
+            expect(screen.getByTestId('SyncProblemIcon')).toBeInTheDocument();
+            expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
+        });
+
+        test('healthy node shows none of the special indicators', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'up',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: false,
+                isLagging: false,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.queryByTestId('StopIcon')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('SyncProblemIcon')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('AcUnitIcon')).not.toBeInTheDocument();
+        });
+
+        test('availability dot remains visible alongside stopped and lagging', () => {
+            const getNodeState = vi.fn(() => ({
+                avail: 'down',
+                frozen: 'unfrozen',
+                state: null,
+                isStopped: true,
+                isLagging: true,
+            }));
+            render(
+                <MemoryRouter>
+                    <InstanceCard node="node1" getNodeState={getNodeState}/>
+                </MemoryRouter>
+            );
+            expect(screen.getByTestId('FiberManualRecordIcon')).toBeInTheDocument();
+            expect(screen.getByTestId('StopIcon')).toBeInTheDocument();
+            expect(screen.getByTestId('SyncProblemIcon')).toBeInTheDocument();
+        });
     });
 });

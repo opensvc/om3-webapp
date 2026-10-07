@@ -10,6 +10,7 @@ import {
 import {
     FreezeDialog,
     StopDialog,
+    ShutdownDialog,
     UnprovisionDialog,
     PurgeDialog,
     DeleteDialog,
@@ -57,6 +58,7 @@ const ActionDialogManager = ({
     const [checkboxState, setCheckboxState] = useState({
         freeze: false,
         stop: false,
+        shutdown: {instancesDown: false, peerTakeover: false},
         unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
         purge: {dataLoss: false, configLoss: false, serviceInterruption: false},
         "delete": {configLoss: false, clusterwide: false},
@@ -65,6 +67,7 @@ const ActionDialogManager = ({
         simpleConfirm: false,
     });
     const [lastAction, setLastAction] = useState(null);
+
     const dialogConfig = useMemo(() => ({
         freeze: {
             component: FreezeDialog,
@@ -97,6 +100,43 @@ const ActionDialogManager = ({
                 checked: checkboxState.stop,
                 setChecked: (value) => {
                     setCheckboxState((prev) => ({...prev, stop: value}));
+                },
+                pendingAction,
+                target,
+            },
+        },
+        shutdown: {
+            component: ShutdownDialog,
+            props: {
+                onClose: () => {
+                    if (onClose) onClose();
+                },
+                onConfirm: () => {
+                    handleConfirm(pendingAction?.action);
+                    if (onClose) onClose();
+                },
+                checkboxes: checkboxState.shutdown,
+                setCheckboxes: (value) => {
+                    let updates;
+                    if (typeof value === 'function') {
+                        updates = value(checkboxState.shutdown);
+                    } else if (typeof value === 'object' && value !== null) {
+                        updates = value;
+                    } else {
+                        logger.error('setCheckboxes for shutdown received invalid value:', value);
+                        return;
+                    }
+                    const validKeys = ['instancesDown', 'peerTakeover'];
+                    const validUpdates = Object.keys(updates).reduce((acc, key) => {
+                        if (validKeys.includes(key)) {
+                            acc[key] = updates[key];
+                        }
+                        return acc;
+                    }, {});
+                    setCheckboxState((prev) => ({
+                        ...prev,
+                        shutdown: {...prev.shutdown, ...validUpdates},
+                    }));
                 },
                 pendingAction,
                 target,
@@ -292,6 +332,10 @@ const ActionDialogManager = ({
             const initCheckbox = {
                 freeze: () => setCheckboxState((prev) => ({...prev, freeze: false})),
                 stop: () => setCheckboxState((prev) => ({...prev, stop: false})),
+                shutdown: () => setCheckboxState((prev) => ({
+                    ...prev,
+                    shutdown: {instancesDown: false, peerTakeover: false},
+                })),
                 unprovision: () => setCheckboxState((prev) => ({
                     ...prev,
                     unprovision: {dataLoss: false, serviceInterruption: false, clusterwide: false},
@@ -317,8 +361,6 @@ const ActionDialogManager = ({
         }
     }, [pendingAction, supportedActions, onClose, lastAction]);
 
-    // Garde cohérente avec useEffect : rejeter les pendingAction invalides
-    // et les actions non supportées.
     if (!pendingAction || typeof pendingAction.action !== 'string' || !pendingAction.action) {
         return null;
     }

@@ -63,6 +63,22 @@ vi.mock('../ActionDialogs', () => ({
             </div>
         ) : null
     ),
+    ShutdownDialog: vi.fn((props) =>
+        props.open ? (
+            <div data-testid="shutdown-dialog">
+                <button onClick={props.onClose}>Cancel</button>
+                <button onClick={props.onConfirm} disabled={props.disabled}>Confirm</button>
+                <input type="checkbox" checked={props.checkboxes.instancesDown}
+                       onChange={(e) => props.setCheckboxes({...props.checkboxes, instancesDown: e.target.checked})}
+                       data-testid="shutdown-instancesDown-checkbox"/>
+                <input type="checkbox" checked={props.checkboxes.peerTakeover}
+                       onChange={(e) => props.setCheckboxes({...props.checkboxes, peerTakeover: e.target.checked})}
+                       data-testid="shutdown-peerTakeover-checkbox"/>
+                <span>{props.pendingAction?.action}</span>
+                <span>{props.target}</span>
+            </div>
+        ) : null
+    ),
     UnprovisionDialog: vi.fn((props) =>
         props.open ? (
             <div data-testid="unprovision-dialog">
@@ -159,8 +175,8 @@ describe('ActionDialogManager', () => {
         handleConfirm: vi.fn(),
         target: 'test-target',
         supportedActions: [
-            'freeze', 'stop', 'unprovision', 'purge',
-            'delete', 'switch', 'giveback', 'other',
+            'freeze', 'stop', 'shutdown', 'unprovision', 'purge',
+            'delete', 'switch', 'giveback','other',
         ],
         onClose: vi.fn(),
     };
@@ -262,6 +278,31 @@ describe('ActionDialogManager', () => {
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('freeze');
     });
 
+    test('handles shutdown checkboxes properly', async () => {
+        render(
+            <ActionDialogManager
+                {...defaultProps}
+                pendingAction={{action: 'shutdown', node: 'test-node'}}
+            />
+        );
+        const instancesDownCheckbox = await screen.findByTestId('shutdown-instancesDown-checkbox');
+        const peerTakeoverCheckbox = await screen.findByTestId('shutdown-peerTakeover-checkbox');
+        fireEvent.click(instancesDownCheckbox);
+        fireEvent.click(peerTakeoverCheckbox);
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(defaultProps.handleConfirm).toHaveBeenCalledWith('shutdown');
+    });
+
+    test('handles invalid setCheckboxes value for shutdown', async () => {
+        const {ShutdownDialog} = await import('../ActionDialogs');
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
+        await screen.findByTestId('shutdown-dialog');
+        const mockCall = ShutdownDialog.mock.calls[0];
+        expect(mockCall[0].setCheckboxes).toBeDefined();
+        mockCall[0].setCheckboxes(null);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for shutdown received invalid value:', null);
+    });
+
     test('handles unprovision checkboxes properly', async () => {
         render(
             <ActionDialogManager
@@ -348,6 +389,17 @@ describe('ActionDialogManager', () => {
         fireEvent.click(screen.getByTestId('purge-serviceInterruption-checkbox'));
         fireEvent.click(screen.getByText('Confirm'));
         expect(defaultProps.handleConfirm).toHaveBeenCalledWith('purge');
+    });
+
+    test('covers setCheckboxes branches for shutdown', async () => {
+        const {ShutdownDialog} = await import('../ActionDialogs');
+        render(<ActionDialogManager {...defaultProps} pendingAction={{action: 'shutdown'}}/>);
+        await screen.findByTestId('shutdown-dialog');
+        const setCheckboxes = ShutdownDialog.mock.calls[ShutdownDialog.mock.calls.length - 1][0].setCheckboxes;
+        setCheckboxes((prev) => ({...prev, instancesDown: true, extra: true}));
+        setCheckboxes({peerTakeover: true, invalidKey: false});
+        setCheckboxes(42);
+        expect(console.error).toHaveBeenCalledWith('setCheckboxes for shutdown received invalid value:', 42);
     });
 
     test('covers setCheckboxes branches for unprovision', async () => {

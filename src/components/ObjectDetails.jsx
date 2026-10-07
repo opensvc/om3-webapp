@@ -37,6 +37,9 @@ const DEFAULT_STOP_CHECKBOX = false;
 const DEFAULT_UNPROVISION_CHECKBOXES = {dataLoss: false, serviceInterruption: false};
 const DEFAULT_PURGE_CHECKBOXES = {dataLoss: false, configLoss: false, serviceInterruption: false};
 
+const ZERO_TIME = "0001-01-01T00:00:00Z";
+const hasTimestamp = (v) => !!v && v !== ZERO_TIME;
+
 export const getResourceType = (rid, nodeData) => {
     if (!rid || !nodeData) return '';
     const topLevelType = nodeData?.resources?.[rid]?.type;
@@ -130,17 +133,22 @@ const ObjectDetail = () => {
         const avail = objectStatus?.avail || "n/a";
         const frozen = objectStatus?.frozen === "frozen" ? "frozen" : "unfrozen";
         let globalExpect = null;
+        let hasAnyNodeStopped = false;
+        let hasAnyNodeLagging = false;
+
         if (objectInstanceStatus) {
             for (const node of Object.keys(objectInstanceStatus)) {
                 const monitorKey = `${node}:${decodedObjectName}`;
                 const monitor = instanceMonitor[monitorKey] || {};
-                if (monitor.global_expect && monitor.global_expect !== "none") {
+                if (!globalExpect && monitor.global_expect && monitor.global_expect !== "none") {
                     globalExpect = monitor.global_expect;
-                    break;
                 }
+                const ns = objectInstanceStatus[node] || {};
+                if (hasTimestamp(ns.stopped_at)) hasAnyNodeStopped = true;
+                if (hasTimestamp(ns.rpo_breached_at)) hasAnyNodeLagging = true;
             }
         }
-        return {avail, frozen, globalExpect};
+        return {avail, frozen, globalExpect, hasAnyNodeStopped, hasAnyNodeLagging};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     const nodesList = useMemo(() => {
@@ -291,7 +299,8 @@ const ObjectDetail = () => {
 
     const postActionUrl = useCallback(({node, objectName, action}) => {
         const {namespace, kind, name} = parseObjectPath(objectName);
-        return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
+        const endpoint = INSTANCE_ACTIONS.find((a) => a.name === action)?.endpoint ?? action;
+        return `${URL_NODE}/${encodeURIComponent(node)}/instance/path/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${endpoint}`;
     }, []);
 
     const postObjectAction = useCallback(async ({action}) => {
@@ -299,7 +308,8 @@ const ObjectDetail = () => {
         if (!token) return openSnackbar("Auth token not found.", "error");
         setActionInProgress(true);
         openSnackbar(`Executing ${action} on object…`, "info");
-        const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/action/${encodeURIComponent(action)}`;
+        const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
+        const url = `${URL_OBJECT}/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}/${endpoint}`;
         try {
             const res = await fetch(url, {method: "POST", headers: {Authorization: `Bearer ${token}`}});
             if (!res.ok) {
@@ -437,9 +447,11 @@ const ObjectDetail = () => {
         const nodeStatus = objectInstanceStatus?.[node] || {};
         const monitor = instanceMonitor[`${node}:${decodedObjectName}`] || {};
         const avail = nodeStatus.avail || '';
-        const frozen = nodeStatus.frozen_at && nodeStatus.frozen_at !== "0001-01-01T00:00:00Z" ? "frozen" : "unfrozen";
+        const frozen = nodeStatus.frozen_at && nodeStatus.frozen_at !== ZERO_TIME ? "frozen" : "unfrozen";
         const state = monitor.state !== "idle" ? monitor.state : null;
-        return {avail, frozen, state};
+        const isStopped = hasTimestamp(nodeStatus.stopped_at);
+        const isLagging = hasTimestamp(nodeStatus.rpo_breached_at);
+        return {avail, frozen, state, isStopped, isLagging};
     }, [objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     const filterActionsForNode = useCallback((actions, node) => {
@@ -627,6 +639,7 @@ const ObjectDetail = () => {
                         <Grid item xs={12} md={10}>
                             <HeaderSection
                                 decodedObjectName={decodedObjectName}
+                                objectKind={kind}
                                 globalStatus={objectStatus}
                                 actionInProgress={actionInProgress}
                                 objectMenuAnchor={objectMenuAnchor}

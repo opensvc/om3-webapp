@@ -747,6 +747,237 @@ describe('Objects Component', () => {
         });
     });
 
+    // ─── svc-only enable / disable ───────────────────────────────────────
+    describe('svc enable/disable actions', () => {
+        test('Enable and Disable appear in the bulk menu when svc objects are selected', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).getByText('Enable')).toBeInTheDocument();
+            expect(within(menu).getByText('Disable')).toBeInTheDocument();
+        });
+
+        test('Enable URL uses the object-path endpoint (no /action prefix)', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Enable');
+            await confirmDialog(/Confirm/i);
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(/test-ns\/svc\/test1\/enable$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test('Disable URL uses the object-path endpoint (no /action prefix)', async () => {
+            setup();
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            openActionsMenu();
+            await clickMenuItem('Disable');
+            await confirmDialog(/Confirm/i);
+            await waitFor(() =>
+                expect(global.fetch).toHaveBeenCalledWith(
+                    expect.stringMatching(/test-ns\/svc\/test1\/disable$/),
+                    expect.any(Object)
+                )
+            );
+        });
+
+        test('Enable is not present in the row menu for a non-svc object', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    ...defaultState.objectInstanceStatus,
+                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                },
+            });
+            await waitForLoad();
+            const row = screen.getByRole('row', {name: /test-ns\/cfg\/cfg1/});
+            fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
+            await screen.findByRole('menu');
+            expect(screen.queryByText('Enable')).not.toBeInTheDocument();
+            expect(screen.queryByText('Disable')).not.toBeInTheDocument();
+        });
+
+        test('Enable/Disable not offered when a mixed-kind selection is made', async () => {
+            setup({
+                objectStatus: {
+                    ...defaultState.objectStatus,
+                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    ...defaultState.objectInstanceStatus,
+                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                },
+            });
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            selectRow('test-ns/cfg/cfg1');
+            openActionsMenu();
+            const menu = await screen.findByRole('menu');
+            expect(within(menu).queryByText('Enable')).not.toBeInTheDocument();
+            expect(within(menu).queryByText('Disable')).not.toBeInTheDocument();
+        });
+    });
+
+    describe('per-node stopped and RPO-breached indicators', () => {
+        const wideScreen = {isWideScreen: true, isMobile: false};
+
+        const setupNode = (nodeStatus) => setup(
+            {
+                objectStatus: {
+                    'test-ns/svc/test1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                },
+                objectInstanceStatus: {
+                    'test-ns/svc/test1': {node1: nodeStatus},
+                },
+            },
+            '',
+            wideScreen,
+        );
+
+        test('shows the stopped indicator when stopped_at is set', async () => {
+            setupNode({
+                avail: 'down',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+        });
+
+        test('does not show the stopped indicator when stopped_at is the zero sentinel', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
+        });
+
+        test('does not show the stopped indicator when stopped_at is missing', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
+        });
+
+        test('keeps the availability dot visible alongside the stopped indicator', async () => {
+            setupNode({
+                avail: 'down',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            // The availability dot (down) must still be rendered
+            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
+            // And the stopped indicator on top of it
+            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+        });
+
+        test('shows the RPO-breached indicator when rpo_breached_at is set', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+                rpo_breached_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+        });
+
+        test('does not show the RPO-breached indicator when rpo_breached_at is the zero sentinel', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+                rpo_breached_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+        });
+
+        test('does not show the RPO-breached indicator when rpo_breached_at is missing', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+        });
+
+        test('RPO-breached takes precedence over frozen when both are set', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '2025-05-16T10:00:00Z',
+                rpo_breached_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+            expect(screen.queryByLabelText('Node node1 is frozen')).not.toBeInTheDocument();
+        });
+
+        test('frozen is shown when only frozen_at is set', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '2025-05-16T10:00:00Z',
+                rpo_breached_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 is frozen')).toBeInTheDocument();
+            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+        });
+
+        test('availability, stopped and RPO-breached indicators are visible simultaneously', async () => {
+            setupNode({
+                avail: 'down',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '2025-05-16T10:00:00Z',
+                rpo_breached_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 is down')).toBeInTheDocument();
+            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+        });
+
+        test('stopped and RPO-breached indicators are shown together', async () => {
+            setupNode({
+                avail: 'down',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '2025-05-16T10:00:00Z',
+                rpo_breached_at: '2025-05-16T10:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 is stopped')).toBeInTheDocument();
+            expect(screen.getByLabelText('Node node1 RPO breached')).toBeInTheDocument();
+        });
+
+        test('no indicators are shown for a healthy node', async () => {
+            setupNode({
+                avail: 'up',
+                frozen_at: '0001-01-01T00:00:00Z',
+                stopped_at: '0001-01-01T00:00:00Z',
+                rpo_breached_at: '0001-01-01T00:00:00Z',
+            });
+            await waitForLoad();
+            expect(screen.getByLabelText('Node node1 is up')).toBeInTheDocument();
+            expect(screen.queryByLabelText('Node node1 is stopped')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Node node1 RPO breached')).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Node node1 is frozen')).not.toBeInTheDocument();
+        });
+    });
+
     test('row click navigates', async () => {
         setup();
         await waitForLoad();

@@ -618,9 +618,15 @@ describe('KeysSection', () => {
         try {
             fireEvent.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
             expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
-            expect(within(dialog).getByText(/Shown for 10 seconds/)).toBeInTheDocument();
+            expect(within(dialog).getByText(/Masked again in 10 seconds/)).toBeInTheDocument();
 
-            act(() => vi.advanceTimersByTime(9_999));
+            act(() => vi.advanceTimersByTime(3_000));
+            expect(within(dialog).getByText(/Masked again in 7 seconds/)).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(6_000));
+            expect(within(dialog).getByText(/Masked again in 1 second\./)).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(999));
             expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
 
             act(() => vi.advanceTimersByTime(1));

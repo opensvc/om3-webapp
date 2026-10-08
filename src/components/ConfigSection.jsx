@@ -6,7 +6,7 @@ import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {EyeIcon, EyeOffIcon, FileIcon, PencilIcon, LifeRingIcon, PlusIcon, TrashIcon} from "../ui/icons";
-import {SECRET_REVEAL_MS, useAutoHide} from "../ui/lib/reveal";
+import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 
@@ -664,7 +664,7 @@ const ConfigSection = ({
         if (configDialogOpen) setShowSecrets(false);
     }, [configDialogOpen]);
     // Shown secrets are masked again on their own after a few seconds.
-    useAutoHide(showSecrets, () => setShowSecrets(false));
+    const secondsLeft = useAutoHide(showSecrets, () => setShowSecrets(false));
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
@@ -940,7 +940,7 @@ const ConfigSection = ({
                     {configData !== null && !configLoading && (
                         <p className="mr-auto text-data text-ink-muted">
                             {showSecrets
-                                ? `Secrets shown for ${SECRET_REVEAL_MS / 1000} seconds.`
+                                ? `Secrets masked again in ${formatSeconds(secondsLeft)}.`
                                 : "Secret values are shown as ********."}
                         </p>
                     )}

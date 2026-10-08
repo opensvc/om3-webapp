@@ -1,6 +1,6 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { SECRET_REVEAL_MS, useAutoHide } from "../lib/reveal";
+import { SECRET_REVEAL_MS, formatSeconds, useAutoHide } from "../lib/reveal";
 
 describe("useAutoHide", () => {
   beforeEach(() => {
@@ -53,5 +53,27 @@ describe("useAutoHide", () => {
     expect(hide).not.toHaveBeenCalled();
     vi.advanceTimersByTime(2_000);
     expect(hide).toHaveBeenCalledTimes(1);
+  });
+
+  test("counts the seconds left down while shown", () => {
+    const { result, rerender } = renderHook(({ shown }) => useAutoHide(shown, () => {}), {
+      initialProps: { shown: false },
+    });
+    expect(result.current).toBeNull();
+    rerender({ shown: true });
+    expect(result.current).toBe(10);
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(result.current).toBe(9);
+    act(() => vi.advanceTimersByTime(7_500));
+    expect(result.current).toBe(2);
+    rerender({ shown: false });
+    expect(result.current).toBeNull();
+    rerender({ shown: true });
+    expect(result.current).toBe(10);
+  });
+
+  test("formats the seconds", () => {
+    expect(formatSeconds(1)).toBe("1 second");
+    expect(formatSeconds(7)).toBe("7 seconds");
   });
 });

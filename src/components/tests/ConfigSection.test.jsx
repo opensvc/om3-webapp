@@ -388,8 +388,12 @@ describe('ConfigSection Component', () => {
                 await act(async () => {});
                 expect(configFileGets().at(-1)[0]).toContain('redact-secrets=false');
                 expect(screen.getByRole('button', {name: 'Hide secrets'})).toBeInTheDocument();
+                expect(screen.getByText('Secrets masked again in 10 seconds.')).toBeInTheDocument();
 
-                await act(async () => vi.advanceTimersByTime(9_999));
+                await act(async () => vi.advanceTimersByTime(4_000));
+                expect(screen.getByText('Secrets masked again in 6 seconds.')).toBeInTheDocument();
+
+                await act(async () => vi.advanceTimersByTime(5_999));
                 expect(screen.getByRole('button', {name: 'Hide secrets'})).toBeInTheDocument();
 
                 await act(async () => vi.advanceTimersByTime(1));

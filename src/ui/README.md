@@ -48,6 +48,7 @@ Tests: `npx vitest run src/ui`.
 | `UsageBar` | om3 | determinate LinearProgress |
 | `StoppedMark`, `RpoBreachedMark` (`StateMarks`) | om3 | stopped and RPO breached icons |
 | `lib/media` (`useMediaQuery`) | om3 | MUI useMediaQuery |
+| `lib/reveal` (`useAutoHide`, `SECRET_REVEAL_MS`) | om3 | masks a revealed secret again after 10 seconds |
 | `DateTime`, `RelativeTime`, `lib/format` | copied | date formatting |
 | `YamlCode`, `lib/yaml-tokens` | copied | config viewers |
 | `UnifiedDiff` | copied, fixed: a final newline adds no empty line | config diffs |

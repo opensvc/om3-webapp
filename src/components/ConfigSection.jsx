@@ -5,11 +5,17 @@ import {Field, Input, Checkbox} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {FileIcon, PencilIcon, LifeRingIcon, PlusIcon, TrashIcon} from "../ui/icons";
-import {URL_OBJECT, URL_NODE} from "../config/apiPath.js";
+import {EyeIcon, EyeOffIcon, FileIcon, PencilIcon, LifeRingIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
+import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 
-const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger) => {
+/**
+ * The object configuration file, its secrets redacted unless `showSecrets`: the
+ * object endpoint takes `redact-secrets` (the instance endpoint ignores it), and
+ * forwards the request to a node holding an instance when the one answering has none.
+ */
+const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger, showSecrets = false) => {
     const initialState = {
         data: null,
         loading: false,
@@ -39,7 +45,8 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
             dispatch({type: "RESET"});
             return;
         }
-        const key = `${decodedObjectName}:${node}`;
+        // The redaction is part of the key: switching it must not be throttled away.
+        const key = `${decodedObjectName}:${node}:${showSecrets}`;
         const now = Date.now();
         if (!forceBypassThrottle && lastFetch.current[key] && now - lastFetch.current[key] < 1000) return;
         lastFetch.current[key] = now;
@@ -48,7 +55,7 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
         dispatch({type: "FETCH_START"});
         setConfigNode(node);
         try {
-            const response = await fetch(`${URL_NODE}/${node}/instance/path/${namespace}/${kind}/${name}/config/file`, {
+            const response = await fetch(`${URL_OBJECT}/${namespace}/${kind}/${name}/config/file?redact-secrets=${!showSecrets}`, {
                 headers: {Authorization: `Bearer ${token}`},
                 cache: "no-cache",
             });
@@ -62,15 +69,21 @@ const useConfig = (decodedObjectName, configNode, setConfigNode, refreshTrigger)
         } catch (err) {
             dispatch({type: "FETCH_ERROR", payload: `Failed to fetch config: ${err.message}`});
         }
-    }, [decodedObjectName, setConfigNode]);
+    }, [decodedObjectName, setConfigNode, showSecrets]);
 
+    // Showing or hiding the secrets always reloads, throttle or not, and drops the
+    // text first: a revealed secret must not stay on screen while hiding them.
+    const prevShowSecrets = useRef(showSecrets);
     useEffect(() => {
+        const secretsToggled = prevShowSecrets.current !== showSecrets;
+        prevShowSecrets.current = showSecrets;
+        if (secretsToggled) dispatch({type: "RESET"});
         if (configNode) {
-            void fetchConfig(configNode);
+            void fetchConfig(configNode, secretsToggled);
         } else {
             dispatch({type: "RESET"});
         }
-    }, [configNode, decodedObjectName, fetchConfig]);
+    }, [configNode, decodedObjectName, fetchConfig, showSecrets]);
 
     const prevRefreshTrigger = useRef(refreshTrigger);
     useEffect(() => {
@@ -645,11 +658,19 @@ const ConfigSection = ({
                            setConfigDialogOpen,
                            configRefreshTrigger = 0,
                        }) => {
+    // Secrets stay hidden until asked for, and hidden again each time the dialog opens.
+    const [showSecrets, setShowSecrets] = useState(false);
+    useEffect(() => {
+        if (configDialogOpen) setShowSecrets(false);
+    }, [configDialogOpen]);
+    // Shown secrets are masked again on their own after a few seconds.
+    const secondsLeft = useAutoHide(showSecrets, () => setShowSecrets(false));
     const {data: configData, loading: configLoading, error: configError, fetchConfig} = useConfig(
         decodedObjectName,
         configNode,
         setConfigNode,
         configRefreshTrigger,
+        showSecrets,
     );
     const {
         data: keywordsData,
@@ -916,6 +937,21 @@ const ConfigSection = ({
                 footer={<Button onClick={closeConfigDialog}>Close</Button>}
             >
                 <div className="flex items-center justify-end gap-1">
+                    {configData !== null && !configLoading && (
+                        <p className="mr-auto text-data text-ink-muted">
+                            {showSecrets
+                                ? `Secrets masked again in ${formatSeconds(secondsLeft)}.`
+                                : "Secret values are shown as ********."}
+                        </p>
+                    )}
+                    <IconButton
+                        label={showSecrets ? "Hide secrets" : "Show secrets"}
+                        aria-pressed={showSecrets}
+                        onClick={() => setShowSecrets((shown) => !shown)}
+                        disabled={configLoading}
+                    >
+                        {showSecrets ? <EyeOffIcon/> : <EyeIcon/>}
+                    </IconButton>
                     <IconButton
                         label="Upload new configuration file"
                         onClick={() => setUpdateConfigDialogOpen(true)}

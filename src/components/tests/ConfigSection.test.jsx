@@ -164,6 +164,11 @@ const defaultFetchMock = (url, options) => {
 };
 
 // ── Tests ───────────────────────────────────────────────────────────────
+/** The GET requests of the configuration file made so far. */
+const configFileGets = () => global.fetch.mock.calls.filter(
+    ([url, options]) => url.includes('/config/file') && (options?.method ?? 'GET') === 'GET'
+);
+
 describe('ConfigSection Component', () => {
     const user = userEvent.setup();
 
@@ -269,11 +274,9 @@ describe('ConfigSection Component', () => {
     // ── Re-fetch triggers ────────────────────────────────────────────────
     test('configNode change triggers config re-fetch', async () => {
         const {rerender} = renderConfig();
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('node1'), expect.any(Object)));
-        const before = global.fetch.mock.calls.length;
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
         rerender(<ConfigSection {...defaultProps} configNode="node2"/>);
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('node2'), expect.any(Object)));
-        expect(global.fetch.mock.calls.length).toBeGreaterThan(before);
+        await waitFor(() => expect(configFileGets()).toHaveLength(2));
     });
 
     test('decodedObjectName change triggers config re-fetch', async () => {
@@ -295,24 +298,17 @@ describe('ConfigSection Component', () => {
 
     test('throttle blocks immediate re-fetch for same node', async () => {
         const {rerender} = renderConfig();
-        await waitFor(() => {
-            const calls = global.fetch.mock.calls.filter(c => c[0].includes('/node1/'));
-            expect(calls.length).toBe(1);
-        });
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
         global.fetch.mockClear();
 
         rerender(<ConfigSection {...defaultProps} configNode="node2"/>);
-        await waitFor(() => {
-            const node2Calls = global.fetch.mock.calls.filter(c => c[0].includes('/node2/'));
-            expect(node2Calls.length).toBe(1);
-        });
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
         global.fetch.mockClear();
 
+        // Back to node1 within a second of its fetch: throttled.
         rerender(<ConfigSection {...defaultProps} configNode="node1"/>);
         await act(() => new Promise(r => setTimeout(r, 100)));
-
-        const node1Calls = global.fetch.mock.calls.filter(c => c[0].includes('/node1/'));
-        expect(node1Calls.length).toBe(0);
+        expect(configFileGets()).toHaveLength(0);
     });
 
     test('refreshTrigger change triggers fetchConfig with forceBypassThrottle=true', async () => {
@@ -320,21 +316,104 @@ describe('ConfigSection Component', () => {
         await waitFor(() => expect(global.fetch).toHaveBeenCalled());
         global.fetch.mockClear();
         rerender(<ConfigSection {...defaultProps} configRefreshTrigger={1}/>);
-        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('node1'), expect.any(Object)));
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
     });
 
     test('refreshTrigger bypasses throttle even with recent fetch', async () => {
         const {rerender} = renderConfig();
-        await waitFor(() => {
-            const calls = global.fetch.mock.calls.filter(c => c[0].includes('/node1/'));
-            expect(calls.length).toBe(1);
-        });
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
         global.fetch.mockClear();
 
         rerender(<ConfigSection {...defaultProps} configRefreshTrigger={1}/>);
-        await waitFor(() => {
-            const calls = global.fetch.mock.calls.filter(c => c[0].includes('/node1/'));
-            expect(calls.length).toBe(1);
+        await waitFor(() => expect(configFileGets()).toHaveLength(1));
+    });
+
+    // ── Secrets ──────────────────────────────────────────────────────────
+    describe('secrets', () => {
+        test('loads the object configuration with its secrets redacted by default', async () => {
+            renderConfig();
+            await waitFor(() => expect(configFileGets()).toHaveLength(1));
+            expect(configFileGets()[0][0]).toBe(`${URL_OBJECT}/root/cfg/cfg1/config/file?redact-secrets=true`);
+        });
+
+        test('shows the secrets on demand, and hides them again', async () => {
+            renderConfig({configDialogOpen: true});
+            await waitFor(() => expect(configFileGets()).toHaveLength(1));
+            expect(await screen.findByText('Secret values are shown as ********.')).toBeInTheDocument();
+            const show = screen.getByRole('button', {name: 'Show secrets'});
+            expect(show).toHaveAttribute('aria-pressed', 'false');
+
+            await act(() => user.click(show));
+            await waitFor(() => expect(configFileGets().at(-1)[0]).toContain('redact-secrets=false'));
+            const hide = await screen.findByRole('button', {name: 'Hide secrets'});
+            expect(hide).toHaveAttribute('aria-pressed', 'true');
+            await waitFor(() => expect(screen.queryByText('Secret values are shown as ********.')).toBeNull());
+
+            // Hidden again at once, within the throttle second: still reloaded.
+            await act(() => user.click(hide));
+            await waitFor(() => expect(configFileGets().at(-1)[0]).toContain('redact-secrets=true'));
+            expect(await screen.findByRole('button', {name: 'Show secrets'})).toBeInTheDocument();
+        });
+
+        test('never leaves a revealed secret on screen once hidden', async () => {
+            // The daemon redacts on demand: the real value only without redact-secrets.
+            global.fetch.mockImplementation((url, options) => {
+                if (url.includes('/config/file') && (options?.method ?? 'GET') === 'GET') {
+                    const value = url.includes('redact-secrets=false') ? 's3cr3t-value' : '********';
+                    return Promise.resolve({
+                        ok: true, status: 200,
+                        text: () => Promise.resolve(`[cluster]\nsecret = ${value}`),
+                    });
+                }
+                return defaultFetchMock(url, options);
+            });
+            renderConfig({configDialogOpen: true});
+            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
+
+            await act(() => user.click(screen.getByRole('button', {name: 'Show secrets'})));
+            expect(await screen.findByText(/secret = s3cr3t-value/)).toBeInTheDocument();
+
+            await act(() => user.click(screen.getByRole('button', {name: 'Hide secrets'})));
+            expect(await screen.findByText(/secret = \*{8}/)).toBeInTheDocument();
+            expect(screen.queryByText(/s3cr3t-value/)).toBeNull();
+        });
+
+        test('masks the shown secrets again on their own after 10 seconds', async () => {
+            renderConfig({configDialogOpen: true});
+            const show = await screen.findByRole('button', {name: 'Show secrets'});
+            vi.useFakeTimers();
+            try {
+                fireEvent.click(show);
+                await act(async () => {});
+                expect(configFileGets().at(-1)[0]).toContain('redact-secrets=false');
+                expect(screen.getByRole('button', {name: 'Hide secrets'})).toBeInTheDocument();
+                expect(screen.getByText('Secrets masked again in 10 seconds.')).toBeInTheDocument();
+
+                await act(async () => vi.advanceTimersByTime(4_000));
+                expect(screen.getByText('Secrets masked again in 6 seconds.')).toBeInTheDocument();
+
+                await act(async () => vi.advanceTimersByTime(5_999));
+                expect(screen.getByRole('button', {name: 'Hide secrets'})).toBeInTheDocument();
+
+                await act(async () => vi.advanceTimersByTime(1));
+                expect(screen.getByRole('button', {name: 'Show secrets'})).toBeInTheDocument();
+                expect(configFileGets().at(-1)[0]).toContain('redact-secrets=true');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        test('hides the secrets again each time the dialog opens', async () => {
+            const {rerender} = renderConfig({configDialogOpen: true});
+            const show = await screen.findByRole('button', {name: 'Show secrets'});
+            await act(() => user.click(show));
+            await waitFor(() => expect(configFileGets().at(-1)[0]).toContain('redact-secrets=false'));
+
+            rerender(<ConfigSection {...defaultProps} configDialogOpen={false}/>);
+            rerender(<ConfigSection {...defaultProps} configDialogOpen={true}/>);
+            expect(await screen.findByRole('button', {name: 'Show secrets'})).toBeInTheDocument();
+            await waitFor(() => expect(configFileGets().at(-1)[0]).toContain('redact-secrets=true'));
         });
     });
 

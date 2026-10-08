@@ -604,6 +604,40 @@ describe('KeysSection', () => {
         expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
     });
 
+    test('a revealed secret is masked again on its own after 10 seconds', async () => {
+        mockFetch({
+            keys: [{name: 'sk', node: 'n', size: 11}],
+            keyBlob: makeMockBlob(encodeText('supersecret')),
+        });
+        await renderAndWait('root/sec/sec1', 1);
+        await openDialog('view', 'sk');
+        const dialog = screen.getByRole('dialog');
+        await waitFor(() => expect(queryLoading(within(dialog))).not.toBeInTheDocument());
+
+        vi.useFakeTimers();
+        try {
+            fireEvent.click(within(dialog).getByRole('button', {name: /reveal secret/i}));
+            expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
+            expect(within(dialog).getByText(/Masked again in 10 seconds/)).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(3_000));
+            expect(within(dialog).getByText(/Masked again in 7 seconds/)).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(6_000));
+            expect(within(dialog).getByText(/Masked again in 1 second\./)).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(999));
+            expect(within(dialog).getByDisplayValue('supersecret')).toBeInTheDocument();
+
+            act(() => vi.advanceTimersByTime(1));
+            expect(within(dialog).queryByDisplayValue('supersecret')).not.toBeInTheDocument();
+            expect(within(dialog).getByText(/hidden by default/i)).toBeInTheDocument();
+            expect(within(dialog).getByRole('button', {name: /reveal secret/i})).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     test('cfg view does not show reveal button and displays content directly', async () => {
         mockFetch({
             keys: [{name: 'ck', node: 'n', size: 5}],

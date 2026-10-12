@@ -40,7 +40,7 @@ describe("Table", () => {
     expect(screen.getByRole("cell", { name: "1" })).toHaveClass("tabular-nums");
   });
 
-  test("centers every column, its title as its values, text and numbers alike", () => {
+  test("aligns every column left, its title as its values, text and numbers alike", () => {
     render(
       <Table>
         <thead>
@@ -57,9 +57,9 @@ describe("Table", () => {
         </tbody>
       </Table>,
     );
-    for (const header of screen.getAllByRole("columnheader")) expect(header).toHaveClass("text-center");
-    for (const cell of screen.getAllByRole("cell")) expect(cell).toHaveClass("text-center");
-    expect(screen.getByRole("button", { name: "Size" })).toHaveClass("text-center");
+    for (const header of screen.getAllByRole("columnheader")) expect(header).toHaveClass("text-left");
+    for (const cell of screen.getAllByRole("cell")) expect(cell).toHaveClass("text-left");
+    expect(screen.getByRole("button", { name: "Size" })).toHaveClass("text-left");
   });
 
   test("hangs the sort arrow past the title, so sorting does not move it", () => {

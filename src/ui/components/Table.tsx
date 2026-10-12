@@ -66,17 +66,17 @@ export function HeaderRow({ className, ...props }: HTMLAttributes<HTMLTableRowEl
 }
 
 /**
- * Every column is centered, its title as its values, whatever they hold: the
- * value sits under the name of its column in all the tables.
+ * Every column is aligned left, its title as its values, whatever they hold: the
+ * value starts under the name of its column in all the tables.
  */
-const CENTER = "text-center";
+const ALIGN = "text-left";
 
 /** Header cell, `scope="col"`. */
 export function HeaderCell({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
       scope="col"
-      className={cn("h-[1.875rem] px-2 py-1 font-medium whitespace-nowrap", CENTER, className)}
+      className={cn("h-[1.875rem] px-2 py-1 font-medium whitespace-nowrap", ALIGN, className)}
       {...props}
     />
   );
@@ -87,7 +87,7 @@ export type SortDirection = "asc" | "desc";
 /**
  * Sortable header cell: the whole label is a button, the order shown by an arrow
  * and announced by `aria-sort`, as in oc3. The arrow hangs past the end of the
- * label, so that sorting on a column does not move its centered title.
+ * label, so that sorting on a column does not move its title.
  */
 export function SortHeaderCell({
   label,
@@ -106,14 +106,15 @@ export function SortHeaderCell({
     <th
       scope="col"
       aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}
-      className={cn("h-[1.875rem] p-0", CENTER, className)}
+      className={cn("h-[1.875rem] p-0", ALIGN, className)}
     >
       <button
         type="button"
         onClick={onSort}
         className={cn(
-          "w-full px-4 py-1 font-medium whitespace-nowrap hover:text-ink",
-          CENTER,
+          // The padding of the body cells: the title starts where the values do.
+          "w-full px-2 py-1 font-medium whitespace-nowrap hover:text-ink",
+          ALIGN,
           active && "text-ink",
         )}
       >
@@ -170,7 +171,7 @@ export function Row({
 }
 
 /**
- * Body cell, centered under its column title. `numeric` marks a number, set in
+ * Body cell, aligned left under its column title. `numeric` marks a number, set in
  * tabular digits so that the figures of a column line up. What the cell holds sits in
  * the middle of the line rather than on its baseline: an inline control (a checkbox,
  * a small button, a mark) would otherwise add the room of a descender under it and
@@ -185,7 +186,7 @@ export function Cell({
     <td
       className={cn(
         "px-2 py-1 [&>*]:align-middle",
-        CENTER,
+        ALIGN,
         numeric && "tabular-nums",
         className,
       )}

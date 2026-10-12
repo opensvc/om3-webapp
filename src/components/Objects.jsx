@@ -3,7 +3,9 @@ import {useLocation, useNavigate} from "react-router-dom";
 import useEventStore from "../hooks/useEventStore.js";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
 import logger from '../utils/logger.js';
-import {closeEventSource, startEventReception, forceFlush} from "../eventSourceManager";
+import {retainEventReception, forceFlush} from "../eventSourceManager";
+import {usePanelSearch} from "../app/panel-search";
+import {ObjectDetailPanel} from "./RecordPanels";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS, actionLabel} from "../constants/actions";
@@ -165,6 +167,7 @@ const stopPropagation = (e) => e.stopPropagation();
 const TableRowComponent = React.memo(({
                                           objectName,
                                           isSelected,
+                                          isOpen = false,
                                           onSelectObject,
                                           onObjectClick,
                                           allNodes,
@@ -180,7 +183,7 @@ const TableRowComponent = React.memo(({
     }, [onObjectClick, objectName]);
 
     return (
-        <Row onActivate={handleRowClick} className={isSelected ? "bg-accent-soft" : undefined}>
+        <Row onActivate={handleRowClick} selected={isOpen} className={isSelected ? "bg-accent-soft" : undefined}>
             <Cell className="w-8">
                 <Checkbox
                     checked={isSelected}
@@ -211,6 +214,7 @@ const TableRowComponent = React.memo(({
     return (
         prevProps.objectName === nextProps.objectName &&
         prevProps.isSelected === nextProps.isSelected &&
+        prevProps.isOpen === nextProps.isOpen &&
         prevProps.isWideScreen === nextProps.isWideScreen &&
         prevProps.allNodes.length === nextProps.allNodes.length &&
         prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
@@ -294,6 +298,9 @@ const Objects = () => {
     const {t} = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
+    // The object whose panel is open, and its tab, in the URL as the filters are.
+    const panel = usePanelSearch();
+    const {select: selectObject} = panel;
     const isMounted = useRef(true);
     const queryParams = new URLSearchParams(location.search);
     const globalStates = useMemo(() => ["up", "down", "warn", "n/a", "unprovisioned"], []);
@@ -599,9 +606,9 @@ const Objects = () => {
 
     const handleObjectClick = useCallback(
         (objectName) => {
-            if (objectInstanceStatus[objectName]) navigate(`/objects/${encodeURIComponent(objectName)}`);
+            if (objectInstanceStatus[objectName]) selectObject(objectName);
         },
-        [objectInstanceStatus, navigate]
+        [objectInstanceStatus, selectObject]
     );
 
     const handleSort = useCallback((column) => {
@@ -717,7 +724,9 @@ const Objects = () => {
                 return;
             }
 
-            const newQueryParams = new URLSearchParams();
+            // The other parameters, the open panel's, stay as they are.
+            const newQueryParams = new URLSearchParams(location.search);
+            ["globalState", "namespace", "kind", "name"].forEach((key) => newQueryParams.delete(key));
             if (selectedGlobalStates.length > 0) newQueryParams.set("globalState", selectedGlobalStates.join(','));
             if (selectedNamespaces.length > 0) newQueryParams.set("namespace", selectedNamespaces.join(','));
             if (selectedKinds.length > 0) newQueryParams.set("kind", selectedKinds.join(','));
@@ -742,8 +751,9 @@ const Objects = () => {
     const eventStarted = useRef(false);
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let release = null;
         if (token && !eventStarted.current) {
-            startEventReception(token, [
+            release = retainEventReception(token, [
                 "ObjectStatusUpdated",
                 "InstanceStatusUpdated",
                 "ObjectDeleted",
@@ -752,7 +762,7 @@ const Objects = () => {
             eventStarted.current = true;
         }
         return () => {
-            closeEventSource();
+            release?.();
             eventStarted.current = false;
         };
     }, []);
@@ -943,6 +953,7 @@ const Objects = () => {
                             key={objectName}
                             objectName={objectName}
                             isSelected={selectedObjects.includes(objectName)}
+                            isOpen={panel.sel === objectName}
                             onSelectObject={handleSelectObject}
                             onObjectClick={handleObjectClick}
                             allNodes={allNodes}
@@ -973,6 +984,13 @@ const Objects = () => {
             />
             <EventLogger eventTypes={objectEventTypes} title={t("objects.events.title")}
                          buttonLabel={t("objects.events.button")}/>
+
+            <ObjectDetailPanel
+                path={panel.sel}
+                tab={panel.tab}
+                onTabChange={panel.setTab}
+                onClose={() => selectObject(undefined)}
+            />
         </div>
     );
 };

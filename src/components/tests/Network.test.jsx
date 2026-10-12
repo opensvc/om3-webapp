@@ -15,6 +15,13 @@ vi.mock('axios', () => ({
     },
 }));
 
+// The panel of a network, on its own tested elsewhere: here, which network it is given.
+vi.mock('../RecordPanels', () => ({
+    NetworkDetailPanel: ({name, onClose}) => (name ? (
+        <div data-testid="network-panel">{name}<button onClick={onClose}>close</button></div>
+    ) : null),
+}));
+
 // Mock useNavigate from react-router-dom
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -500,7 +507,7 @@ describe('Network Component', () => {
         expect(within(overRow).getByTitle('120/100')).toContainElement(within(overRow).getByText('120.0%'));
     });
 
-    test('navigates to network details on row click', async () => {
+    test('opens the network panel over the list on row click', async () => {
         axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
 
         render(<Network/>, {wrapper: MemoryRouter});
@@ -511,20 +518,15 @@ describe('Network Component', () => {
 
         const loRow = screen.getByRole('row', {name: /lo/i});
         fireEvent.click(loRow);
+        expect(await screen.findByTestId('network-panel')).toHaveTextContent('lo');
+        expect(loRow).toHaveAttribute('aria-current', 'true');
 
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith('/network/lo');
-        });
-
-        const defaultRow = screen.getByRole('row', {name: /default/i});
-        fireEvent.click(defaultRow);
-
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith('/network/default');
-        });
+        fireEvent.click(screen.getByRole('row', {name: /default/i}));
+        expect(await screen.findByTestId('network-panel')).toHaveTextContent('default');
+        expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    test('navigates to network details with the keyboard', async () => {
+    test('opens the network panel with the keyboard', async () => {
         axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
 
         render(<Network/>, {wrapper: MemoryRouter});
@@ -536,7 +538,21 @@ describe('Network Component', () => {
         const loRow = screen.getByRole('row', {name: /lo/i});
         expect(loRow).toHaveAttribute('tabindex', '0');
         fireEvent.keyDown(loRow, {key: 'Enter'});
-        expect(mockNavigate).toHaveBeenCalledWith('/network/lo');
+        expect(await screen.findByTestId('network-panel')).toHaveTextContent('lo');
+    });
+
+    test('the panel of the network in the URL is open, and closes', async () => {
+        axios.get.mockResolvedValueOnce({data: {items: mockNetworks}});
+
+        render(
+            <MemoryRouter initialEntries={['/network?sel=lo']}>
+                <Network/>
+            </MemoryRouter>
+        );
+
+        expect(await screen.findByTestId('network-panel')).toHaveTextContent('lo');
+        fireEvent.click(screen.getByRole('button', {name: 'close'}));
+        await waitFor(() => expect(screen.queryByTestId('network-panel')).not.toBeInTheDocument());
     });
 
     test('toggles the sort direction and marks the sorted column', async () => {

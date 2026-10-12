@@ -744,7 +744,8 @@
       "ip": "IP",
       "loading": "Chargement des détails du réseau",
       "caption": "Détails du réseau",
-      "empty": "Aucune adresse IP pour ce réseau."
+      "empty": "Aucune adresse IP pour ce réseau.",
+      "type": "Type : {{type}}"
     }
   },
   "nodes": {
@@ -922,5 +923,41 @@
     "lightMode": "Thème clair",
     "darkMode": "Thème sombre",
     "logout": "Se déconnecter"
+  },
+  "panel": {
+    "resize": "Redimensionner le panneau",
+    "tabs": {
+      "status": "État",
+      "resources": "Ressources",
+      "logs": "Journaux"
+    },
+    "crossLink": "Afficher la fiche ici ({{kind}})",
+    "kinds": {
+      "object": "objet",
+      "instance": "instance",
+      "network": "réseau",
+      "namespace": "espace de noms"
+    },
+    "instanceTitle": "{{path}} sur {{node}}",
+    "logs": {
+      "noNode": "Aucune instance dont lire les journaux."
+    }
+  },
+  "panelHistory": {
+    "label": "Historique des panneaux",
+    "title": "Historique",
+    "clear": "Vider l'historique",
+    "remove": "Retirer {{name}} de l'historique",
+    "menu_one": "Historique : {{count}} fiche",
+    "menu_other": "Historique : {{count}} fiches",
+    "show": "Afficher {{name}}",
+    "reopen_one": "Rouvrir {{name}}",
+    "reopen_other": "Rouvrir {{name}} et l'historique ({{count}} fiches)",
+    "sections": {
+      "now": "Maintenant",
+      "hour": "Dernière heure",
+      "day": "Dernier jour",
+      "week": "Dernière semaine"
+    }
   }
 }

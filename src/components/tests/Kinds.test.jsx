@@ -10,16 +10,16 @@ const {
     mockNavigate,
     mockUseNavigate,
     mockUseLocation,
-    mockStartEventReception,
-    mockCloseEventSource,
+    mockRetainEventReception,
+    mockReleaseEventReception,
     mockUseEventStore,
     mockUseKindData,
 } = vi.hoisted(() => ({
     mockNavigate: vi.fn(),
     mockUseNavigate: vi.fn(() => mockNavigate),
     mockUseLocation: vi.fn(() => ({pathname: '/kinds', search: ''})),
-    mockStartEventReception: vi.fn(),
-    mockCloseEventSource: vi.fn(),
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
     mockUseEventStore: vi.fn(),
     mockUseKindData: vi.fn(),
 }));
@@ -40,8 +40,10 @@ vi.mock('../../hooks/useEventStore.js', () => ({
 }));
 
 vi.mock('../../eventSourceManager.jsx', () => ({
-    startEventReception: mockStartEventReception,
-    closeEventSource: mockCloseEventSource,
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
 }));
 
 vi.mock('../../hooks/useKindData', () => ({
@@ -215,7 +217,7 @@ describe('Kinds', () => {
     test('starts event reception on mount with token', async () => {
         renderComponent();
         await waitFor(() => {
-            expect(mockStartEventReception).toHaveBeenCalledWith(
+            expect(mockRetainEventReception).toHaveBeenCalledWith(
                 'valid-token',
                 ['ObjectStatusUpdated', 'InstanceStatusUpdated', 'ObjectDeleted', 'InstanceConfigUpdated']
             );
@@ -225,13 +227,13 @@ describe('Kinds', () => {
     test('closes event source on unmount', async () => {
         const {unmount} = renderComponent();
         await act(() => unmount());
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('does not start event reception without token', () => {
         setup({token: null});
         renderComponent();
-        expect(mockStartEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     test('shows no kinds message when empty', () => {

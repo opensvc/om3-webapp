@@ -744,7 +744,8 @@
       "ip": "IP",
       "loading": "Loading network details",
       "caption": "Network details",
-      "empty": "No IP details available for this network."
+      "empty": "No IP details available for this network.",
+      "type": "Type: {{type}}"
     }
   },
   "nodes": {
@@ -922,5 +923,41 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "logout": "Logout"
+  },
+  "panel": {
+    "resize": "Resize the panel",
+    "tabs": {
+      "status": "Status",
+      "resources": "Resources",
+      "logs": "Logs"
+    },
+    "crossLink": "Show the {{kind}} here",
+    "kinds": {
+      "object": "object",
+      "instance": "instance",
+      "network": "network",
+      "namespace": "namespace"
+    },
+    "instanceTitle": "{{path}} on {{node}}",
+    "logs": {
+      "noNode": "No instance to read the logs of."
+    }
+  },
+  "panelHistory": {
+    "label": "Panel history",
+    "title": "History",
+    "clear": "Clear the history",
+    "remove": "Remove {{name}} from the history",
+    "menu_one": "History: {{count}} record",
+    "menu_other": "History: {{count}} records",
+    "show": "Show {{name}}",
+    "reopen_one": "Reopen {{name}}",
+    "reopen_other": "Reopen {{name}} and the history ({{count}} records)",
+    "sections": {
+      "now": "Now",
+      "hour": "Last hour",
+      "day": "Last day",
+      "week": "Last week"
+    }
   }
 }

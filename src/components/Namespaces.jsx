@@ -1,7 +1,7 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useNavigate, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {useNamespaceData} from "../hooks/useNamespaceData";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
@@ -9,9 +9,9 @@ import {StatusCount} from "../ui/components/StatusCount";
 import {Select} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
 import {IconButton} from "../ui/components/Button";
-import {SlideOver} from "../ui/components/SlideOver";
 import {CodeIcon} from "../ui/icons";
-import NamespaceMetrics from "./NamespaceMetrics";
+import {usePanelSearch} from "../app/panel-search";
+import {NamespaceDetailPanel} from "./RecordPanels";
 
 const STATUSES = ["up", "down", "warn", "n/a"];
 
@@ -114,7 +114,8 @@ const Namespaces = () => {
     const [selectedNamespace, setSelectedNamespace] = useState(urlNamespace || "all");
     const [visibleCount, setVisibleCount] = useState(50);
     const [loading, setLoading] = useState(false);
-    const [metricsNamespace, setMetricsNamespace] = useState(null);
+    // The namespace whose usage panel is open, in the URL.
+    const {sel: metricsNamespace, select: selectNamespace} = usePanelSearch();
 
     const {statusByNamespace, namespaces} = useNamespaceData();
 
@@ -131,11 +132,9 @@ const Namespaces = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token, namespaceEventTypes);
-        }
+        const release = token ? retainEventReception(token, namespaceEventTypes) : null;
         return () => {
-            closeEventSource();
+            release?.();
         };
     }, [namespaceEventTypes]);
 
@@ -214,12 +213,12 @@ const Namespaces = () => {
     }, [navigate]);
 
     const handleOpenMetrics = useCallback((namespace) => {
-        setMetricsNamespace(namespace);
-    }, []);
+        selectNamespace(namespace);
+    }, [selectNamespace]);
 
     const handleCloseMetrics = useCallback(() => {
-        setMetricsNamespace(null);
-    }, []);
+        selectNamespace(undefined);
+    }, [selectNamespace]);
 
     const handleScroll = useCallback(() => {
         if (loading) return;
@@ -340,16 +339,7 @@ const Namespaces = () => {
                 </div>
             )}
 
-            <SlideOver
-                open={metricsNamespace !== null}
-                title={metricsNamespace !== null ? t("namespaces.metricsOf", {namespace: metricsNamespace}) : t("namespaces.metricsTitle")}
-                onClose={handleCloseMetrics}
-                closeLabel={t("common.close")}
-                size="wide"
-                resizeLabel={t("namespaces.resizeDrawer")}
-            >
-                {metricsNamespace !== null && <NamespaceMetrics namespace={metricsNamespace}/>}
-            </SlideOver>
+            <NamespaceDetailPanel name={metricsNamespace ?? undefined} onClose={handleCloseMetrics}/>
 
             <EventLogger
                 eventTypes={namespaceEventTypes}

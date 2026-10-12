@@ -9,8 +9,8 @@ import i18n from '../../i18n';
 const {
     mockUseFetchDaemonStatus,
     mockUseEventStore,
-    mockStartEventReception,
-    mockCloseEventSource,
+    mockRetainEventReception,
+    mockReleaseEventReception,
     mockStartLoggerReception,
     mockCloseLoggerEventSource,
     mockNavigate,
@@ -18,8 +18,8 @@ const {
 } = vi.hoisted(() => ({
     mockUseFetchDaemonStatus: vi.fn(),
     mockUseEventStore: vi.fn(),
-    mockStartEventReception: vi.fn(),
-    mockCloseEventSource: vi.fn(),
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
     mockStartLoggerReception: vi.fn(),
     mockCloseLoggerEventSource: vi.fn(),
     mockNavigate: vi.fn(),
@@ -98,8 +98,10 @@ vi.mock('../../hooks/useEventStore.js', () => ({
 }));
 
 vi.mock('../../eventSourceManager', () => ({
-    startEventReception: mockStartEventReception,
-    closeEventSource: mockCloseEventSource,
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     startLoggerReception: mockStartLoggerReception,
     closeLoggerEventSource: mockCloseLoggerEventSource,
 }));
@@ -139,9 +141,9 @@ describe('NodesTable', () => {
             selector(createDefaultStore())
         );
 
-        mockStartEventReception.mockImplementation(() => {
+        mockRetainEventReception.mockImplementation(() => {
         });
-        mockCloseEventSource.mockImplementation(() => {
+        mockReleaseEventReception.mockImplementation(() => {
         });
         mockStartLoggerReception.mockImplementation(() => {
         });
@@ -674,7 +676,7 @@ describe('NodesTable', () => {
     test('cleans up event source on unmount', () => {
         const {unmount} = renderWithRouter(<NodesTable/>);
         unmount();
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('renders the rows once data is there', () => {

@@ -1413,4 +1413,82 @@ describe('eventSourceManager', () => {
             expect(global.fetch).toHaveBeenCalledWith(`${URL_OBJECT}?path=**`, expect.anything());
         });
     });
+
+    // ==================== Stream claims ====================
+    describe('stream claims', () => {
+        // The claims of one render are applied together, once its microtasks run.
+        const settle = () => Promise.resolve();
+        const openedUrls = () => vi.mocked(EventSourcePolyfill).mock.calls.map(([url]) => url);
+
+        test('the union of the claims is the query', () => {
+            const {query, types} = eventSourceManager.claimsQuery([
+                {filters: ['ObjectStatusUpdated', 'InstanceStatusUpdated'], objectName: null},
+                {filters: ['InstanceStatusUpdated', 'Bogus'], objectName: null},
+            ]);
+            expect(query).toBe('cache=true&filter=InstanceStatusUpdated&filter=ObjectStatusUpdated');
+            expect(types).toEqual(['ObjectStatusUpdated', 'InstanceStatusUpdated']);
+        });
+
+        test('a claim on an object asks for the events of that object only', () => {
+            const {query} = eventSourceManager.claimsQuery([
+                {filters: ['ObjectStatusUpdated'], objectName: 'ns1/svc/web'},
+            ]);
+            expect(query).toContain('filter=ObjectStatusUpdated,path=ns1%2Fsvc%2Fweb');
+            expect(query).toContain('filter=InstanceConfigUpdated,path=ns1%2Fsvc%2Fweb');
+            expect(query).not.toMatch(/filter=ObjectStatusUpdated(&|$)/);
+        });
+
+        test('a panel over a list widens the stream, and closing it narrows it back', async () => {
+            const releaseList = eventSourceManager.retainEventReception('tok', ['ObjectStatusUpdated']);
+            await settle();
+            expect(openedUrls()).toEqual([`${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`]);
+
+            const releasePanel = eventSourceManager.retainEventReception('tok', ['InstanceConfigUpdated'], 'ns1/svc/web');
+            await settle();
+            expect(openedUrls()).toHaveLength(2);
+            expect(openedUrls()[1]).toContain('filter=ObjectStatusUpdated&');
+            expect(openedUrls()[1]).toContain('path=ns1%2Fsvc%2Fweb');
+
+            releasePanel();
+            await settle();
+            expect(openedUrls()).toHaveLength(3);
+            expect(openedUrls()[2]).toBe(`${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`);
+
+            releaseList();
+            await settle();
+            expect(mockEventSource.close).toHaveBeenCalled();
+            expect(openedUrls()).toHaveLength(3);
+        });
+
+        test('the claims released and made by one render open the stream once', async () => {
+            const release = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            release();
+            const again = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            expect(openedUrls()).toHaveLength(1);
+            again();
+            await settle();
+        });
+
+        test('a claim released twice releases once', async () => {
+            const releaseA = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            const releaseB = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            releaseA();
+            releaseA();
+            await settle();
+            expect(mockEventSource.close).not.toHaveBeenCalled();
+            releaseB();
+            await settle();
+            expect(mockEventSource.close).toHaveBeenCalled();
+        });
+
+        test('no token, no claim', async () => {
+            const release = eventSourceManager.retainEventReception('', ['NodeStatusUpdated']);
+            await settle();
+            expect(EventSourcePolyfill).not.toHaveBeenCalled();
+            expect(() => release()).not.toThrow();
+        });
+    });
 });

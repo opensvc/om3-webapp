@@ -46,12 +46,24 @@ vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     default: vi.fn(() => ({daemon: {cluster: {object: {}}}})),
 }));
 
+const {mockRetainEventReception, mockReleaseEventReception} = vi.hoisted(() => ({
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
+}));
+
 vi.mock('../../eventSourceManager', () => ({
-    closeEventSource: vi.fn(),
-    startEventReception: vi.fn(),
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     forceFlush: mockForceFlush,
     startLoggerReception: vi.fn(),
     closeLoggerEventSource: vi.fn(),
+}));
+
+// The panel of an object, on its own tested elsewhere: here, which object it is given.
+vi.mock('../RecordPanels', () => ({
+    ObjectDetailPanel: ({path}) => (path ? <div data-testid="object-panel">{path}</div> : null),
 }));
 
 vi.mock('../../ui/lib/media', async (importOriginal) => {
@@ -66,7 +78,6 @@ import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
-import {startEventReception, closeEventSource} from '../../eventSourceManager';
 
 // ---------- helpers ----------
 let originalConsoleError;
@@ -278,16 +289,16 @@ describe('Objects Component', () => {
         expect(screen.getByText('Status')).toBeInTheDocument();
         expect(screen.getByText('Object')).toBeInTheDocument();
         expect(screen.getByRole('table')).toBeInTheDocument();
-        expect(startEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
+        expect(mockRetainEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
         unmount();
-        expect(closeEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('does not start event reception without a token', async () => {
         Storage.prototype.getItem = vi.fn().mockReturnValue(null);
         setup();
         await waitForLoad();
-        expect(startEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     test('renders object data correctly (status labels)', async () => {
@@ -1150,17 +1161,21 @@ describe('Objects Component', () => {
         });
     });
 
-    test('row click navigates', async () => {
+    test('row click opens the object panel over the list, the row marked', async () => {
         setup();
         await waitForLoad();
-        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects/test-ns%2Fsvc%2Ftest1');
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/});
+        fireEvent.click(row);
+        expect(await screen.findByTestId('object-panel')).toHaveTextContent('test-ns/svc/test1');
+        expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/})).toHaveAttribute('aria-current', 'true');
+        expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('/objects/'));
     });
 
-    test('no navigation if no instance status', async () => {
+    test('no panel if no instance status', async () => {
         setup({objectInstanceStatus: {}});
         await waitForLoad();
         fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
+        expect(screen.queryByTestId('object-panel')).not.toBeInTheDocument();
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 

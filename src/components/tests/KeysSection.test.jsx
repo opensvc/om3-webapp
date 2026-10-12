@@ -8,8 +8,7 @@ import KeysSection from '../KeysSection';
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('../../hooks/useEventStore.js', () => ({default: vi.fn()}));
 vi.mock('../../eventSourceManager.jsx', () => ({
-    closeEventSource: vi.fn(),
-    startEventReception: vi.fn(),
+    retainEventReception: vi.fn(() => () => {}),
     configureEventSource: vi.fn(),
 }));
 

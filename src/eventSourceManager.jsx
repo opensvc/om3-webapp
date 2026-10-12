@@ -954,6 +954,7 @@ export const closeEventSource = () => {
         currentToken = null;
         reconnectAttempts = 0;
     }
+    claimedQuery = null;
 };
 
 // Close Logger EventSource
@@ -993,6 +994,81 @@ export const startEventReception = (token, filters = DEFAULT_FILTERS, objectName
         return;
     }
     configureEventSource(token, objectName, filters, useCache);
+};
+
+/*
+ * Stream claims. A view and the record panel open over it each need their events
+ * (the Objects list and the panel of one of its objects, say), but the daemon is
+ * listened to through one stream: each claims what it needs, the stream carries
+ * the union of the claims, and it is opened again only when that union changes.
+ * The claims made and released by one render are applied together, once it is done.
+ */
+const streamClaims = new Map();
+let claimSequence = 0;
+let claimedQuery = null;
+let claimsQueued = false;
+
+const validTypes = (filters) => filters.filter(f => Object.values(EVENT_TYPES).includes(f));
+
+/** The query string and the event types of the union of the claims. */
+export const claimsQuery = (claims) => {
+    const queryFilters = new Set();
+    const types = new Set();
+    for (const {filters, objectName} of claims) {
+        const valid = validTypes(filters);
+        valid.forEach(type => types.add(type));
+        if (objectName) {
+            OBJECT_SPECIFIC_FILTERS.forEach(filter => queryFilters.add(
+                `${encodeURIComponent(filter)},path=${encodeURIComponent(objectName)}`
+            ));
+        } else {
+            valid.forEach(filter => queryFilters.add(encodeURIComponent(filter)));
+        }
+    }
+    const query = `cache=true&${[...queryFilters].sort().map(filter => `filter=${filter}`).join('&')}`;
+    return {query, types: [...types]};
+};
+
+const applyClaims = () => {
+    claimsQueued = false;
+    if (streamClaims.size === 0) {
+        closeEventSource();
+        return;
+    }
+    const token = getCurrentToken();
+    if (!token) {
+        logger.error('❌ No token provided for SSE!');
+        return;
+    }
+    const {query, types} = claimsQuery([...streamClaims.values()]);
+    if (query === claimedQuery && currentEventSource) return;
+    closeEventSource();
+    currentEventSource = createEventSource(`${URL_NODE_EVENT}?${query}`, token, types);
+    claimedQuery = query;
+};
+
+const queueClaims = () => {
+    if (claimsQueued) return;
+    claimsQueued = true;
+    queueMicrotask(applyClaims);
+};
+
+/**
+ * Claims the events of `filters`, for the object `objectName` only when given, and
+ * returns the function that releases the claim. The stream closes with the last one.
+ */
+export const retainEventReception = (token, filters = DEFAULT_FILTERS, objectName = null) => {
+    if (!token) {
+        logger.error('❌ No token provided for SSE!');
+        return () => {};
+    }
+    currentToken = token;
+    const id = ++claimSequence;
+    streamClaims.set(id, {filters, objectName});
+    queueClaims();
+    return () => {
+        if (streamClaims.delete(id)) queueClaims();
+    };
 };
 
 export const configureLoggerEventSource = (token, objectName = null, filters = DEFAULT_FILTERS) => {

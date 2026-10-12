@@ -5,7 +5,6 @@ import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
 import ObjectDetail, {getResourceType, parseProvisionedState} from '../ObjectDetails';
 import useEventStore from '../../hooks/useEventStore.js';
-import {closeEventSource, startEventReception} from '../../eventSourceManager.jsx';
 import logger from '../../utils/logger';
 
 // ── Hoisted variables for use in vi.mock factories ──────────────────────
@@ -47,9 +46,16 @@ vi.mock('../../hooks/useEventStore.js', () => ({
     }),
 }));
 
+const {mockRetainEventReception, mockReleaseEventReception} = vi.hoisted(() => ({
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
+}));
+
 vi.mock('../../eventSourceManager.jsx', () => ({
-    closeEventSource: vi.fn(),
-    startEventReception: vi.fn(),
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     clearEventBuffers: vi.fn(),
     startLoggerReception: vi.fn(),
     closeLoggerEventSource: vi.fn(),
@@ -487,10 +493,10 @@ describe('ObjectDetail Component', () => {
     test('mount/unmount lifecycle', () => {
         const {unmount} = renderComponent('root/cfg/cfg1');
         expect(localStorage.getItem).toHaveBeenCalledWith('authToken');
-        expect(startEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array), 'root/cfg/cfg1');
+        expect(mockRetainEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array), 'root/cfg/cfg1');
         expect(vi.mocked(useEventStore.getState)().removeObject).toHaveBeenCalledWith('root/cfg/cfg1');
         unmount();
-        expect(closeEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     // ── Basic rendering ──────────────────────────────────────────────────

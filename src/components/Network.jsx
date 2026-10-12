@@ -1,11 +1,12 @@
 import React, {useEffect, useState, useRef, useMemo} from "react";
-import {useNavigate} from "react-router-dom";
 import axios from "axios";
 import {useTranslation} from "react-i18next";
 import {URL_NETWORK} from "../config/apiPath.js";
 import logger from '../utils/logger.js';
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {UsageBar} from "../ui/components/UsageBar";
+import {usePanelSearch} from "../app/panel-search";
+import {NetworkDetailPanel} from "./RecordPanels";
 
 const COLUMNS = [
     {key: "name", labelKey: "common.name"},
@@ -32,7 +33,8 @@ const Network = () => {
     const [networks, setNetworks] = useState([]);
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
-    const navigate = useNavigate();
+    // The network whose panel is open, in the URL.
+    const {sel, select} = usePanelSearch();
     const containerRef = useRef(null);
 
     // Scroll to top on component mount
@@ -109,7 +111,8 @@ const Network = () => {
                     {sortedNetworks.map((network) => (
                         <Row
                             key={network.name}
-                            onActivate={() => navigate(`/network/${network.name}`)}
+                            onActivate={() => select(network.name)}
+                            selected={sel === network.name}
                         >
                             <Cell className="font-medium">{network.name}</Cell>
                             <Cell>{network.type}</Cell>
@@ -122,6 +125,8 @@ const Network = () => {
                     )}
                 </tbody>
             </Table>
+
+            <NetworkDetailPanel name={sel} onClose={() => select(undefined)}/>
         </div>
     );
 };

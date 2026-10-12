@@ -8,7 +8,7 @@ import {SlideOver} from "../ui/components/SlideOver";
 import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon} from "../ui/icons";
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {retainEventReception} from "../eventSourceManager.jsx";
 import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import ActionDialogManager from "../components/ActionDialogManager";
@@ -57,10 +57,16 @@ export const parseProvisionedState = (state) => {
     return !!state;
 };
 
-const ObjectDetail = () => {
+/**
+ * An object: its state and actions, its configuration, its keys, its instances. A
+ * page of its own under its route, or, `embedded`, the content of the object record
+ * panel (`ObjectDetailPanel`), which gives the path, shows the logs in a tab of its
+ * own (`onOpenLogs`) and opens the instances in their own panel (`onViewInstance`).
+ */
+const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {}) => {
     const {t} = useTranslation();
     const {objectName} = useParams();
-    const decodedObjectName = decodeURIComponent(objectName);
+    const decodedObjectName = path ?? decodeURIComponent(objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
     const navigate = useNavigate();
 
@@ -208,7 +214,9 @@ const ObjectDetail = () => {
     }, [decodedObjectName, t]);
 
     useEffect(() => {
-        useEventStore.getState().removeObject(decodedObjectName);
+        // The page starts from the replay of the stream. A panel stands over a view
+        // that lists the object: dropping it would blink its row.
+        if (!embedded) useEventStore.getState().removeObject(decodedObjectName);
         setInitialLoading(true);
         setInitialDataError(null);
         setFallbackCompleted(false);
@@ -216,9 +224,7 @@ const ObjectDetail = () => {
         setConfigNode(null);
 
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token, objectEventTypes, decodedObjectName);
-        }
+        const release = token ? retainEventReception(token, objectEventTypes, decodedObjectName) : null;
 
         fallbackTimer.current = setTimeout(() => {
             fetchFallbackData().catch((err) => {
@@ -228,9 +234,9 @@ const ObjectDetail = () => {
 
         return () => {
             if (fallbackTimer.current) clearTimeout(fallbackTimer.current);
-            closeEventSource();
+            release?.();
         };
-    }, [decodedObjectName, objectEventTypes, fetchFallbackData]);
+    }, [decodedObjectName, objectEventTypes, fetchFallbackData, embedded]);
 
     useEffect(() => {
         if (initialLoading && (objectInstanceStatus !== undefined || fallbackCompleted)) {
@@ -414,14 +420,19 @@ const ObjectDetail = () => {
     };
 
     const handleViewInstance = useCallback((node) => {
-        navigate(`/nodes/${node}/objects/${encodeURIComponent(decodedObjectName)}`);
-    }, [decodedObjectName, navigate]);
+        if (onViewInstance) onViewInstance(node);
+        else navigate(`/nodes/${node}/objects/${encodeURIComponent(decodedObjectName)}`);
+    }, [decodedObjectName, navigate, onViewInstance]);
 
     const handleOpenLogs = useCallback((node, instanceName = null) => {
+        if (onOpenLogs) {
+            onOpenLogs(node);
+            return;
+        }
         setSelectedNodeForLogs(node);
         setSelectedInstanceForLogs(instanceName);
         setLogsDrawerOpen(true);
-    }, []);
+    }, [onOpenLogs]);
 
     const handleCloseLogsDrawer = useCallback(() => {
         setLogsDrawerOpen(false);
@@ -519,7 +530,7 @@ const ObjectDetail = () => {
 
     if (initialLoading) {
         return (
-            <div className="flex min-h-[80vh] items-center justify-center gap-2 p-4">
+            <div className={embedded ? "flex items-center justify-center gap-2 py-8" : "flex min-h-[80vh] items-center justify-center gap-2 p-4"}>
                 <Spinner label={t("objectDetails.loading")}/>
                 <span className="text-ink-muted">{t("objectDetails.loadingText")}</span>
             </div>
@@ -528,8 +539,8 @@ const ObjectDetail = () => {
 
     if (nodesList.length === 0 && !initialDataError) {
         return (
-            <div className="p-4 space-y-3">
-                <h1 className="text-title font-semibold">{decodedObjectName}</h1>
+            <div className={embedded ? "space-y-3" : "p-4 space-y-3"}>
+                {!embedded && <h1 className="text-title font-semibold">{decodedObjectName}</h1>}
                 {feedback}
                 <p className="py-4 text-center text-ink-muted">{t("objectDetails.noInformation")}</p>
                 {showKeys && <KeysSection decodedObjectName={decodedObjectName} openSnackbar={openSnackbar}/>}
@@ -545,10 +556,11 @@ const ObjectDetail = () => {
             : t("objectDetails.logs.title");
 
     return (
-        <div className="p-4 space-y-3">
+        <div className={embedded ? "space-y-3" : "p-4 space-y-3"}>
             <div className="flex flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
                     <HeaderSection
+                        embedded={embedded}
                         decodedObjectName={decodedObjectName}
                         kind={kind}
                         globalStatus={objectStatus}
@@ -640,7 +652,7 @@ const ObjectDetail = () => {
             )}
 
             <SlideOver
-                open={logsDrawerOpen && selectedNodeForLogs !== null}
+                open={logsDrawerOpen && selectedNodeForLogs !== null && !embedded}
                 title={logsTitle}
                 onClose={handleCloseLogsDrawer}
                 closeLabel={t("objectDetails.logs.close")}
@@ -660,9 +672,11 @@ const ObjectDetail = () => {
                 )}
             </SlideOver>
 
-            <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}
-                         title={t("objectDetails.events.title", {name: decodedObjectName})}
-                         buttonLabel={t("objectDetails.events.button")}/>
+            {!embedded && (
+                <EventLogger eventTypes={objectEventTypes} objectName={decodedObjectName}
+                             title={t("objectDetails.events.title", {name: decodedObjectName})}
+                             buttonLabel={t("objectDetails.events.button")}/>
+            )}
         </div>
     );
 };

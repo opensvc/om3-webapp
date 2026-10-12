@@ -8,7 +8,7 @@ import {INSTANCE_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/acti
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import {ObjectIcon, om3ObjectKind} from "../ui/components/ObjectIcon";
 import {StoppedMark, RpoBreachedMark} from "../ui/components/StateMarks";
-import {startEventReception, closeEventSource} from "../eventSourceManager.jsx";
+import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import LogsViewer from "./LogsViewer";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
@@ -160,10 +160,17 @@ const ResourceRow = React.memo(({
     );
 });
 
-const ObjectInstanceView = () => {
+/**
+ * The instance of an object on a node: its resources and their actions. A page of its
+ * own under its route, or, `embedded`, the content of the instance record panel
+ * (`InstanceDetailPanel`), which gives the node and the path and shows the logs in a
+ * tab of its own (`onOpenLogs`).
+ */
+const ObjectInstanceView = ({node, path, embedded = false, onOpenLogs} = {}) => {
     const {t} = useTranslation();
-    const {node: nodeName, objectName} = useParams();
-    const decodedObjectName = decodeURIComponent(objectName);
+    const params = useParams();
+    const nodeName = node ?? params.node;
+    const decodedObjectName = path ?? decodeURIComponent(params.objectName);
     const {namespace, kind, name} = parseObjectPath(decodedObjectName);
 
     const objectInstanceStatus = useEventStore((s) => s.objectInstanceStatus);
@@ -209,9 +216,7 @@ const ObjectInstanceView = () => {
         isMounted.current = true;
 
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token, instanceEventTypes, decodedObjectName);
-        }
+        const release = token ? retainEventReception(token, instanceEventTypes, decodedObjectName) : null;
 
         const timer = setTimeout(() => {
             if (isMounted.current) {
@@ -221,7 +226,7 @@ const ObjectInstanceView = () => {
 
         return () => {
             isMounted.current = false;
-            closeEventSource();
+            release?.();
             clearTimeout(timer);
         };
     }, [decodedObjectName, nodeName, instanceEventTypes]);
@@ -510,14 +515,17 @@ const ObjectInstanceView = () => {
     };
 
     return (
-        <div className="p-4 space-y-3">
+        <div className={embedded ? "space-y-3" : "p-4 space-y-3"}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="min-w-0">
-                    {/* The kind icon before the name, as in the object page header. */}
-                    <h1 className="flex items-center gap-2 text-title font-semibold break-all">
-                        <ObjectIcon kind={om3ObjectKind(parseObjectPath(decodedObjectName).kind)} className="h-5 w-5"/>
-                        {decodedObjectName}
-                    </h1>
+                    {/* The kind icon before the name, as in the object page header. In a
+                        panel, its title already names the object. */}
+                    {!embedded && (
+                        <h1 className="flex items-center gap-2 text-title font-semibold break-all">
+                            <ObjectIcon kind={om3ObjectKind(parseObjectPath(decodedObjectName).kind)} className="h-5 w-5"/>
+                            {decodedObjectName}
+                        </h1>
+                    )}
                     <p className="text-ink-muted">{t("instance.view.node", {node: nodeName})}</p>
                 </div>
                 <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -529,7 +537,7 @@ const ObjectInstanceView = () => {
                     {isLagging && <RpoBreachedMark/>}
                     {isInstanceNotProvisioned && <NotProvisionedMark label={t("instance.view.notProvisioned")}/>}
                     <FrozenMark frozen={!!isFrozen}/>
-                    <IconButton label={t("instance.view.viewLogs", {name: decodedObjectName})} onClick={() => setLogsDrawerOpen(true)}>
+                    <IconButton label={t("instance.view.viewLogs", {name: decodedObjectName})} onClick={() => (onOpenLogs ? onOpenLogs() : setLogsDrawerOpen(true))}>
                         <FileIcon className="h-4 w-4"/>
                     </IconButton>
                     <MenuButton
@@ -773,16 +781,18 @@ const ObjectInstanceView = () => {
                 </p>
             </Dialog>
 
-            <EventLogger
-                eventTypes={instanceEventTypes}
-                objectName={decodedObjectName}
-                nodeName={nodeName}
-                title={t("instance.events.title", {node: nodeName, name: decodedObjectName})}
-                buttonLabel={t("instance.events.button")}
-            />
+            {!embedded && (
+                <EventLogger
+                    eventTypes={instanceEventTypes}
+                    objectName={decodedObjectName}
+                    nodeName={nodeName}
+                    title={t("instance.events.title", {node: nodeName, name: decodedObjectName})}
+                    buttonLabel={t("instance.events.button")}
+                />
+            )}
 
             <SlideOver
-                open={logsDrawerOpen}
+                open={logsDrawerOpen && !embedded}
                 title={t("instance.logs.title", {node: nodeName, name: decodedObjectName})}
                 onClose={() => setLogsDrawerOpen(false)}
                 closeLabel={t("instance.logs.close")}

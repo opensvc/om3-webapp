@@ -11,7 +11,7 @@ import {useLocation, useNavigate} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 
 import useEventStore from "../hooks/useEventStore.js";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
 import {StatusMark} from "../ui/components/StatusMark";
@@ -222,13 +222,14 @@ const Heartbeats = () => {
     // Start event reception with heartbeat-specific filters
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let release = null;
         if (token && !eventStarted.current) {
-            startEventReception(token, heartbeatEventTypes);
+            release = retainEventReception(token, heartbeatEventTypes);
             eventStarted.current = true;
         }
 
         return () => {
-            closeEventSource();
+            release?.();
             eventStarted.current = false;
         };
     }, [heartbeatEventTypes]);

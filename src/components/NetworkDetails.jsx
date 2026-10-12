@@ -11,8 +11,13 @@ import {Button} from "../ui/components/Button";
 import {Input} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
 import {ChevronDownIcon} from "../ui/icons";
+import {CrossLink} from "../app/CrossLink";
 
-const NetworkDetails = () => {
+/**
+ * The addresses of a network. A page of its own under its route, or, `embedded`, the
+ * content of the network record panel, which gives the name and already shows it.
+ */
+const NetworkDetails = ({name, embedded = false} = {}) => {
     const {t} = useTranslation();
     const [ipDetails, setIpDetails] = useState([]);
     // The type of the network, null while unknown.
@@ -23,7 +28,8 @@ const NetworkDetails = () => {
     const [showFilters, setShowFilters] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(false);
-    const {networkName} = useParams();
+    const params = useParams();
+    const networkName = name ?? params.networkName;
     const containerRef = useRef(null);
 
     // Scroll to top on component mount and when networkName changes
@@ -129,10 +135,14 @@ const NetworkDetails = () => {
     const notAvailable = t("common.notAvailable");
 
     return (
-        <div ref={containerRef} className="p-4 space-y-3">
-            <h1 className="text-title font-semibold">
-                {t("networks.details.title", {name: networkName || notAvailable, type: networkType || notAvailable})}
-            </h1>
+        <div ref={containerRef} className={embedded ? "space-y-3" : "p-4 space-y-3"}>
+            {embedded ? (
+                <p className="text-ink-muted">{t("networks.details.type", {type: networkType || notAvailable})}</p>
+            ) : (
+                <h1 className="text-title font-semibold">
+                    {t("networks.details.title", {name: networkName || notAvailable, type: networkType || notAvailable})}
+                </h1>
+            )}
             {error && <Alert>{t("networks.details.loadError")}</Alert>}
             <div className="flex flex-wrap items-center gap-3">
                 <Button
@@ -195,7 +205,11 @@ const NetworkDetails = () => {
                                 <Row key={`${detail.rid}-${index}`}>
                                     <Cell className="font-medium">{detail.ip || notAvailable}</Cell>
                                     <Cell>{detail.node || notAvailable}</Cell>
-                                    <Cell>{detail.path || notAvailable}</Cell>
+                                    <Cell>
+                                        {detail.path
+                                            ? <CrossLink kind="object" id={detail.path}>{detail.path}</CrossLink>
+                                            : notAvailable}
+                                    </Cell>
                                     <Cell>{detail.rid || notAvailable}</Cell>
                                 </Row>
                             ))

@@ -5,7 +5,6 @@ import '@testing-library/jest-dom';
 import {vi} from 'vitest';
 import ObjectInstanceView from '../ObjectInstanceView';
 import useEventStore from '../../hooks/useEventStore';
-import {startEventReception} from '../../eventSourceManager';
 import i18n from '../../i18n';
 
 // ── Hoisted mock variables ──────────────────────────────────────────────
@@ -13,12 +12,14 @@ const {
     mockUseParams,
     mockUseNavigate,
     mockParseObjectPath,
-    mockCloseEventSource,
+    mockReleaseEventReception,
+    mockRetainEventReception,
 } = vi.hoisted(() => ({
     mockUseParams: vi.fn(),
     mockUseNavigate: vi.fn(),
     mockParseObjectPath: vi.fn(),
-    mockCloseEventSource: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
+    mockRetainEventReception: vi.fn(),
 }));
 
 // ── Mocks ───────────────────────────────────────────────────────────────
@@ -27,8 +28,10 @@ vi.mock('../../hooks/useEventStore', () => ({
 }));
 
 vi.mock('../../eventSourceManager', () => ({
-    closeEventSource: mockCloseEventSource,
-    startEventReception: vi.fn(),
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     clearEventBuffers: vi.fn(),
     startLoggerReception: vi.fn(),
     closeLoggerEventSource: vi.fn(),
@@ -202,7 +205,7 @@ describe('ObjectInstanceView', () => {
 
     test('subscribes to the instance events of this object', () => {
         setup();
-        expect(startEventReception).toHaveBeenCalledWith(
+        expect(mockRetainEventReception).toHaveBeenCalledWith(
             'mock-token',
             ['InstanceStatusUpdated', 'InstanceMonitorUpdated', 'InstanceConfigUpdated'],
             mockObjectName,
@@ -945,7 +948,7 @@ describe('ObjectInstanceView', () => {
     test('cleans up event source on unmount', () => {
         const {unmount} = setup();
         unmount();
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('displays logs for encapsulated resource', async () => {

@@ -5,10 +5,6 @@ import userEvent from "@testing-library/user-event";
 import Heartbeats from "../Heartbeats";
 import i18n from "../../i18n";
 import useEventStore from "../../hooks/useEventStore.js";
-import {
-    closeEventSource,
-    startEventReception,
-} from "../../eventSourceManager.jsx";
 import {vi} from "vitest";
 
 const mockNavigate = vi.fn();
@@ -25,9 +21,16 @@ vi.mock("../../hooks/useEventStore.js", () => ({
     default: vi.fn(),
 }));
 
+const {mockRetainEventReception, mockReleaseEventReception} = vi.hoisted(() => ({
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
+}));
+
 vi.mock("../../eventSourceManager.jsx", () => ({
-    startEventReception: vi.fn(),
-    closeEventSource: vi.fn(),
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     startLoggerReception: vi.fn(),
     closeLoggerEventSource: vi.fn(),
 }));
@@ -889,16 +892,16 @@ describe("Heartbeats Component", () => {
         mockHeartbeatStore({});
         const {unmount} = renderWithRouter(<Heartbeats/>);
         expect(mockLocalStorage.getItem).toHaveBeenCalledWith("authToken");
-        expect(startEventReception).toHaveBeenCalledWith("valid-token", expect.any(Array));
+        expect(mockRetainEventReception).toHaveBeenCalledWith("valid-token", expect.any(Array));
         unmount();
-        expect(closeEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test("does not start event reception without auth token", () => {
         mockLocalStorage.getItem.mockReturnValue(null);
         mockHeartbeatStore({});
         renderWithRouter(<Heartbeats/>);
-        expect(startEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     // ==================== LAZY LOADING (SCROLL) ====================

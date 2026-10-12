@@ -1,7 +1,7 @@
 import React, {useEffect, useState, useMemo, useCallback, useRef, useDeferredValue} from "react";
 import {useNavigate, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
-import {closeEventSource, startEventReception} from "../eventSourceManager.jsx";
+import {retainEventReception} from "../eventSourceManager.jsx";
 import EventLogger from "../components/EventLogger";
 import {useKindData} from "../hooks/useKindData";
 import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/components/Table";
@@ -111,11 +111,9 @@ const Kinds = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
-        if (token) {
-            startEventReception(token, kindEventTypes);
-        }
+        const release = token ? retainEventReception(token, kindEventTypes) : null;
         return () => {
-            closeEventSource();
+            release?.();
         };
     }, [kindEventTypes]);
 

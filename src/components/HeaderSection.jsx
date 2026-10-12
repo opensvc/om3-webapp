@@ -16,7 +16,8 @@ const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&
 /**
  * Record header of the object page: the kind icon and the object name, then its
  * global state, frozen and provisioning marks, the global expectation in progress,
- * and the object actions menu at the right edge.
+ * and the object actions menu at the right edge. `embedded` in a record panel, whose
+ * title already names the object: the state and the actions only.
  */
 const HeaderSection = ({
                            decodedObjectName,
@@ -25,6 +26,7 @@ const HeaderSection = ({
                            actionInProgress,
                            handleObjectActionClick,
                            getObjectStatus,
+                           embedded = false,
                        }) => {
     const {t} = useTranslation();
     if (!globalStatus) return null;
@@ -39,10 +41,12 @@ const HeaderSection = ({
 
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-                <ObjectIcon kind={om3ObjectKind(kind)} className="h-5 w-5"/>
-                <h1 className="truncate text-title font-semibold">{decodedObjectName}</h1>
-            </div>
+            {!embedded && (
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <ObjectIcon kind={om3ObjectKind(kind)} className="h-5 w-5"/>
+                    <h1 className="truncate text-title font-semibold">{decodedObjectName}</h1>
+                </div>
+            )}
 
             <div className="flex items-center gap-3">
                 {globalExpect && (

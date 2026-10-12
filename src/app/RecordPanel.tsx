@@ -1,0 +1,135 @@
+import { useEffect, useRef, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { SlideOver } from "../ui/components/SlideOver";
+import { TabList, type TabItem } from "../ui/components/Tabs";
+import { tabPanelProps, useTabsId } from "../ui/components/tabs-ids";
+import { RAIL_FALLBACK, type SlideOverSize } from "../ui/components/slide-over-layout";
+import { ObjectIcon } from "../ui/components/ObjectIcon";
+import { PanelHistoryMenu, PanelHistoryRail } from "./PanelHistory";
+import { openedFromHistory, recordKey } from "./panel-history";
+import { isPeekStep, stepIcon, type PeekKind } from "./peek";
+import { rememberLastRecord, useRecordHistory } from "./record-history";
+
+/**
+ * Title of a record panel: the icon of its kind and its name. Where the window leaves
+ * no room for the history rail, a button next to the title opens it as a list.
+ *
+ * The title also records the record it shows in the history, whatever opened it —
+ * a list row, a badge, the history itself: it enters, or comes back, in front. Only
+ * a record picked in the history stays where it stands.
+ */
+export function PanelTitle({
+  kind,
+  title,
+  recordId,
+  open,
+  size,
+}: {
+  kind: PeekKind;
+  title: string;
+  recordId: string | undefined;
+  open: boolean;
+  size: SlideOverSize;
+}) {
+  const history = useRecordHistory();
+  const currentKey = recordKey(kind, recordId);
+  const record = useRef(history.record);
+  record.current = history.record;
+
+  useEffect(() => {
+    if (!open || recordId === undefined) return;
+    const step = { kind, id: recordId };
+    if (!isPeekStep(step)) return;
+    record.current(step.kind, step.id, !openedFromHistory(currentKey));
+    rememberLastRecord(step);
+    // The step is derived from currentKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentKey]);
+
+  const icon = recordId === undefined ? "service" : stepIcon({ kind, id: recordId });
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <ObjectIcon kind={icon} />
+      <h2 className="truncate text-title font-semibold">{title}</h2>
+      {open && (
+        <div className={RAIL_FALLBACK[size]}>
+          <PanelHistoryMenu currentKey={currentKey} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Detail panel of a record, the shape every record takes, as oc3 gives it: a side
+ * panel over the view, its title, its tabs under the title, and the history of the
+ * records shown on its right. The open tab is held by the view, in the URL (`tab`
+ * or `peektab`), so that a link, a reload or the Back button reopen it; an unknown
+ * tab falls back to the first one. The caller renders the content of the active tab.
+ */
+export function RecordPanel({
+  open,
+  kind,
+  recordId,
+  title,
+  onClose,
+  tabs,
+  tab,
+  onTabChange,
+  size = "wider",
+  closeOnOutsideClick,
+  children,
+}: {
+  open: boolean;
+  kind: PeekKind;
+  recordId: string | undefined;
+  title: string;
+  onClose: () => void;
+  /** The tabs, the first one being the default; none or one, no tab bar. */
+  tabs?: TabItem[];
+  tab?: string;
+  onTabChange?: (tab: string | undefined) => void;
+  size?: SlideOverSize;
+  closeOnOutsideClick?: boolean;
+  /** The content of the active tab, given its key. */
+  children: (active: string) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const tabsId = useTabsId();
+  const items = tabs ?? [];
+  const first = items[0]?.key ?? "";
+  const active = items.some((item) => item.key === tab) ? (tab as string) : first;
+
+  return (
+    <SlideOver
+      open={open}
+      size={size}
+      title={title}
+      onClose={onClose}
+      closeLabel={t("common.close")}
+      resizeLabel={t("panel.resize")}
+      closeOnOutsideClick={closeOnOutsideClick}
+      heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} size={size} />}
+      rail={<PanelHistoryRail currentKey={recordKey(kind, recordId)} />}
+      subheader={
+        open && items.length > 1 ? (
+          <TabList
+            tabs={items}
+            active={active}
+            onChange={(key) => {
+              onTabChange?.(key === first ? undefined : key);
+            }}
+            label={t("panel.tabs", { name: title })}
+            idPrefix={tabsId}
+          />
+        ) : undefined
+      }
+    >
+      {open && (
+        <div {...(items.length > 1 ? tabPanelProps(tabsId, active) : {})} className="outline-none">
+          {children(active)}
+        </div>
+      )}
+    </SlideOver>
+  );
+}

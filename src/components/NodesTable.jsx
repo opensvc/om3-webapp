@@ -1,6 +1,6 @@
 import React, {useEffect, useState, useMemo} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource, startEventReception} from "../eventSourceManager";
+import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
 import LogsViewer from "../components/LogsViewer.jsx";
@@ -90,9 +90,10 @@ const NodesTable = () => {
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let release = null;
         if (token) {
             // Start event reception immediately
-            startEventReception(token, nodeEventTypes);
+            release = retainEventReception(token, nodeEventTypes);
             // Fetch daemon status in parallel
             fetchNodes(token).catch(error => {
                 logger.error("Failed to fetch nodes:", error);
@@ -100,7 +101,7 @@ const NodesTable = () => {
         }
 
         return () => {
-            closeEventSource();
+            release?.();
         };
     }, [fetchNodes, nodeEventTypes]);
 

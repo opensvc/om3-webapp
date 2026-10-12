@@ -24,10 +24,17 @@ vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTa
 vi.mock('../Namespaces', () => ({default: () => <div data-testid="namespaces">Namespaces</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
 vi.mock('../Pools', () => ({default: () => <div data-testid="pools">Pools</div>}));
-vi.mock('../Objects', () => ({default: () => <div data-testid="objects">Objects</div>}));
-vi.mock('../ObjectDetails', () => ({default: () => <div data-testid="object-details">ObjectDetails</div>}));
-vi.mock('../Network', () => ({default: () => <div data-testid="network">Network</div>}));
-vi.mock('../NetworkDetails', () => ({default: () => <div data-testid="network-details">NetworkDetails</div>}));
+// The lists show the query of their address: the panel state they were given.
+vi.mock('../Objects', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="objects">{useLocation().search}</div>};
+});
+vi.mock('../Network', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="network">{useLocation().search}</div>};
+});
+vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
+vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: () => <div data-testid="panel-anchor"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
 vi.mock('../AuthChoice.jsx', () => ({default: () => <div data-testid="auth-choice">AuthChoice</div>}));
@@ -215,13 +222,34 @@ describe('App Component', () => {
         ['/network', 'network'],
         ['/objects', 'objects'],
         ['/whoami', 'whoami'],
-        ['/network/test-network', 'network-details'],
-        ['/objects/test-object', 'object-details'],
     ])('protected route %s renders %s', async (path, testId) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);
         expect(await screen.findByTestId(testId)).toBeInTheDocument();
         unmount();
+    });
+
+    // The records had pages of their own: their old addresses open the panel over the list.
+    test.each([
+        ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
+        ['/network/test-network', 'network', '?sel=test-network'],
+        ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?peek=instance%3Anode1%2Fns1%2Fsvc%2Fweb'],
+    ])('old record address %s opens the panel over %s', async (path, testId, search) => {
+        setupBasicAuth();
+        const {unmount} = renderApp([path]);
+        expect(await screen.findByTestId(testId)).toHaveTextContent(search);
+        unmount();
+    });
+
+    test('the record panel and its anchor stand over the views, not over the sign-in', async () => {
+        setupBasicAuth();
+        const {unmount} = renderApp(['/objects']);
+        expect(await screen.findByTestId('peek-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('panel-anchor')).toBeInTheDocument();
+        unmount();
+        renderApp(['/auth/login']);
+        expect(await screen.findByTestId('login')).toBeInTheDocument();
+        expect(screen.queryByTestId('peek-panel')).not.toBeInTheDocument();
     });
 
     test.each([

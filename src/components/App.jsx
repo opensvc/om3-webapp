@@ -1,5 +1,5 @@
 import React, {useEffect, useCallback, lazy, Suspense, useRef} from "react";
-import {Routes, Route, Navigate, useNavigate, useLocation} from "react-router-dom";
+import {Routes, Route, Navigate, useNavigate, useLocation, useParams} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
@@ -21,21 +21,41 @@ import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
+import {PeekPanel} from "./PeekPanel";
+import {PanelAnchor} from "../app/PanelAnchor";
+import {instanceId, serialiseStep} from "../app/peek";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
-const ObjectDetails = lazy(() => import("./ObjectDetails"));
-const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Kinds = lazy(() => import("./Kinds"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
-const NetworkDetails = lazy(() => import("./NetworkDetails"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
+
+/*
+ * The records had pages of their own; they open in a panel over their list now, as
+ * in oc3 (`panel-search.ts`). The old addresses, bookmarked or shared, lead there.
+ */
+const ObjectRedirect = () => {
+    const {objectName} = useParams();
+    return <Navigate to={`/objects?${new URLSearchParams({sel: decodeURIComponent(objectName)})}`} replace/>;
+};
+
+const NetworkRedirect = () => {
+    const {networkName} = useParams();
+    return <Navigate to={`/network?${new URLSearchParams({sel: networkName})}`} replace/>;
+};
+
+const InstanceRedirect = () => {
+    const {node, objectName} = useParams();
+    const peek = serialiseStep({kind: "instance", id: instanceId(node, decodeURIComponent(objectName))});
+    return <Navigate to={`/objects?${new URLSearchParams({peek})}`} replace/>;
+};
 
 // Loading component for Suspense fallback
 const Loading = () => {
@@ -286,12 +306,14 @@ const App = () => {
     // The sign-in screens have no view to navigate to: no menu there.
     const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
 
+    // Another view starts at its top. Not a panel opening over the view, nor its
+    // filters changing: those keep the place in the list.
     useEffect(() => {
         if (mainRef.current) {
             mainRef.current.scrollTop = 0;
         }
         prepareForNavigation();
-    }, [location]);
+    }, [location.pathname]);
 
     useEffect(() => {
         const checkTokenChange = () => {
@@ -346,13 +368,10 @@ const App = () => {
                                         <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                         <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
                                         <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                        <Route path="/network/:networkName"
-                                               element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
+                                        <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
                                         <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                        <Route path="/objects/:objectName"
-                                               element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                                        <Route path="/nodes/:node/objects/:objectName"
-                                               element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
+                                        <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
+                                        <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
                                         <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
                                         <Route path="/silent-renew" element={<SilentRenew/>}/>
                                         <Route path="/auth-callback" element={<OidcCallback/>}/>
@@ -360,6 +379,14 @@ const App = () => {
                                         <Route path="/auth/login" element={<Login/>}/>
                                         <Route path="*" element={<Navigate to="/"/>}/>
                                     </Routes>
+                                    {/* The record opened from a badge or the history, whatever the
+                                        view, and what brings the panels back once closed. */}
+                                    {showSidebar && localStorage.getItem("authToken") && (
+                                        <>
+                                            <PeekPanel/>
+                                            <PanelAnchor/>
+                                        </>
+                                    )}
                                 </Suspense>
                             </main>
                         </div>

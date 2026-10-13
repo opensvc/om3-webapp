@@ -96,7 +96,7 @@ describe("GlobalSearch", () => {
     fireEvent.keyDown(document.body, { key: "/" });
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "foo" } });
     const option = await screen.findByRole("option");
-    expect(within(option).getByText("/")).toBeInTheDocument();
+    expect(within(option).getByTitle("n/a").querySelector("svg")).toHaveAttribute("data-glyph", "na");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "dev3" } });
     await waitFor(() => expect(screen.getByRole("option")).toHaveTextContent("opens the list"));
     fireEvent.click(screen.getByRole("option"));

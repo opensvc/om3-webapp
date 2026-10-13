@@ -22,7 +22,7 @@ const STATUS_COLUMNS = [
     {column: "n/a", labelKey: "namespaces.columns.na"},
 ];
 
-const MARK_STATE = {up: "up", down: "down", warn: "warn", "n/a": "unknown"};
+const MARK_STATE = {up: "up", down: "down", warn: "warn", "n/a": "na"};
 
 export const areStatusDotPropsEqual = (prev, next) =>
     prev.status === next.status && prev.count === next.count && prev.namespace === next.namespace;

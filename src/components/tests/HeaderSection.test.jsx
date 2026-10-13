@@ -83,7 +83,7 @@ describe('HeaderSection Component', () => {
 
     test.each([
         ['down', 'down'],
-        ['n/a', 'unknown'],
+        ['n/a', 'na'],
         [undefined, 'unknown'],
     ])('maps avail %p to state %p', (avail, state) => {
         defaultProps.getObjectStatus.mockReturnValue({avail, frozen: 'unfrozen', globalExpect: null});

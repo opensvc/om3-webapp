@@ -2,13 +2,15 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../cn";
 import { StateGlyph } from "./StateGlyph";
 
-export type ObjectState = "up" | "warn" | "down" | "unknown";
+/** `na` is n/a, a status that does not apply: an object with nothing to run, a cfg, a sec. */
+export type ObjectState = "up" | "warn" | "down" | "na" | "unknown";
 
 /** Catalog keys of the labels of the states, translated at render. */
 export const STATE_LABEL_KEYS: Record<ObjectState, string> = {
   up: "ui.states.up",
   warn: "ui.states.warn",
   down: "ui.states.down",
+  na: "ui.states.na",
   unknown: "ui.states.unknown",
 };
 
@@ -16,6 +18,7 @@ const styles: Record<ObjectState, { ink: string }> = {
   up: { ink: "text-state-up" },
   warn: { ink: "text-state-warn" },
   down: { ink: "text-state-down" },
+  na: { ink: "text-state-unknown" },
   unknown: { ink: "text-state-unknown" },
 };
 

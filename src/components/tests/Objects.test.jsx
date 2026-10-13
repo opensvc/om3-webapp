@@ -326,7 +326,7 @@ describe('Objects Component', () => {
         expect(within(statusCell(row3)).getByText('started')).toBeInTheDocument();
 
         const row4 = objectRow('test-ns/svc/test4');
-        expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(statusCell(row4)).getByTitle('n/a')).toBeInTheDocument();
 
         // The object name in its own column, medium weight.
@@ -429,7 +429,7 @@ describe('Objects Component', () => {
 
         const unprovisioned = objectRow('test-ns/svc/unprovisioned(?!-bool)');
         const unprovisionedNode = nodeCell(unprovisioned, 0);
-        expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(unprovisionedNode).getByRole('img', {name: 'Not provisioned'})).toHaveClass('text-state-down');
     });
 
@@ -543,6 +543,37 @@ describe('Objects Component', () => {
         });
     });
 
+    describe('new object', () => {
+        test('opens on the kind of the tab, the namespace filtered on', async () => {
+            setup({}, '?list=configs&namespace=test-ns');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            expect(within(dialog).getByLabelText('Kind')).toHaveValue('cfg');
+            expect(within(dialog).getByLabelText('Namespace')).toHaveValue('test-ns');
+            // An object listed is refused as a new one.
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'svc'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'test1'}});
+            expect(within(dialog).getByText('test-ns/svc/test1 already exists.')).toBeInTheDocument();
+        });
+
+        test('created, the object opens in its panel over the tab it is listed in', async () => {
+            setup({}, '?kind=svc&name=t');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=configs&sel=test-ns%2Fsec%2Ftls'));
+            expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
+            expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
+            expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+        });
+    });
+
     describe('filtering', () => {
         const filterTests = [
             {
@@ -653,7 +684,7 @@ describe('Objects Component', () => {
                 .toEqual(['svc']);
             // Each global state carries its mark.
             expect(filterOption('Global State', 'Up').closest('label').querySelector('[data-state="up"]')).not.toBeNull();
-            expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="unknown"]')).not.toBeNull();
+            expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="na"]')).not.toBeNull();
             expect(filterOption('Global State', 'Unprovisioned').closest('label').querySelector('svg.text-state-down')).not.toBeNull();
         });
 

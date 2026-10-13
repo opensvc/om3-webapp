@@ -69,7 +69,7 @@ describe('ObjectStatus', () => {
         // n/a written as om writes it, and no tooltip of its own on a piece of a
         // cell: the card of the cell says what they mean, without two over each other.
         const config = within(board).getByRole('rowheader', {name: /container#config$/}).closest('tr');
-        expect(within(config).getAllByText('/')).toHaveLength(2);
+        expect(config.querySelectorAll('[data-glyph="na"]')).toHaveLength(2);
         expect(board.querySelectorAll('td [title]')).toHaveLength(0);
         expect(screen.getByRole('heading', {name: 'Notes (2)'})).toBeInTheDocument();
         expect(screen.getByText('system/vol/dns avail down')).toBeInTheDocument();

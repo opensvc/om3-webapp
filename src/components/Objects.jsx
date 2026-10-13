@@ -11,6 +11,7 @@ import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtil
 import {OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {useTranslation} from "react-i18next";
 import ActionDialogManager from "./ActionDialogManager";
+import CreateObjectDialog from "./CreateObjectDialog";
 import EventLogger from "../components/EventLogger";
 import {useObjectData} from "../hooks/useObjectData";
 import {useNodeData} from "../hooks/useNodeData";
@@ -26,7 +27,7 @@ import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
 import {tabPanelProps} from "../ui/components/tabs-ids";
-import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, SearchIcon} from "../ui/icons";
+import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, PlusIcon, SearchIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -39,9 +40,9 @@ const FEEDBACK_DURATION_MS = 4000;
 /** Feedback tones, from the severities of the snackbar it replaces. */
 const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
 
-/** An availability as a mark state: n/a and anything unknown read as unknown. */
-const MARK_STATE = {up: "up", down: "down", warn: "warn"};
-const markState = (avail) => MARK_STATE[avail] ?? "unknown";
+/** An availability as a mark state: n/a, or none, is "/", anything else unknown. */
+const MARK_STATE = {up: "up", down: "down", warn: "warn", "n/a": "na", "": "na"};
+const markState = (avail) => MARK_STATE[avail ?? ""] ?? "unknown";
 
 /** Icons of the action menus, the destructive ones in the down colour. */
 const ACTION_ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
@@ -82,6 +83,8 @@ const listOf = (objectName) => {
     const {kind} = parseObjectName(objectName);
     return kind === "usr" ? "users" : CONFIG_KINDS.includes(kind) ? "configs" : "services";
 };
+/** The kind a new object takes by default, from the tab it is created from. */
+const LIST_KIND = {services: "svc", configs: "cfg", users: "usr"};
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -304,7 +307,7 @@ const GLOBAL_STATE_MARKS = {
     up: <StatusMark state="up"/>,
     down: <StatusMark state="down"/>,
     warn: <StatusMark state="warn"/>,
-    "n/a": <StatusMark state="unknown"/>,
+    "n/a": <StatusMark state="na"/>,
     unprovisioned: <AlertTriangleIcon className="h-3.5 w-3.5 text-state-down"/>,
 };
 
@@ -342,6 +345,7 @@ const Objects = () => {
     const [selectedGlobalStates, setSelectedGlobalStates] = useState(rawGlobalStates);
     const [snackbar, setSnackbar] = useState({open: false, message: "", severity: "info"});
     const [pendingAction, setPendingAction] = useState(null);
+    const [createOpen, setCreateOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [sortColumn, setSortColumn] = useState("object");
     const [sortDirection, setSortDirection] = useState("asc");
@@ -414,6 +418,12 @@ const Objects = () => {
             kinds: Array.from(kindSet).sort()
         };
     }, [listObjectNames]);
+
+    // A new object may go in any namespace known, whatever the tab.
+    const allNamespaces = useMemo(
+        () => [...new Set(allObjectNames.map(extractNamespace))].sort(),
+        [allObjectNames]
+    );
 
     const allNodes = useMemo(() => {
         const nodeSet = new Set();
@@ -813,6 +823,32 @@ const Objects = () => {
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {replace: true});
     }, [location.pathname, location.search, navigate]);
 
+    // Created, the object opens in its panel, over the tab it is listed in.
+    const handleCreated = useCallback((path, provisioning) => {
+        setCreateOpen(false);
+        setSnackbar({
+            open: true,
+            severity: provisioning === "failed" ? "warning" : "success",
+            message: provisioning === "requested"
+                ? t("createObject.feedback.createdProvisioning", {path})
+                : provisioning === "failed"
+                    ? t("createObject.feedback.createdProvisionFailed", {path})
+                    : t("createObject.feedback.created", {path}),
+        });
+        const next = listOf(path);
+        const params = new URLSearchParams(location.search);
+        if (next !== list) {
+            setSelectedObjects([]);
+            setSelectedKinds([]);
+            params.delete("kind");
+        }
+        if (next === OBJECT_LISTS[0]) params.delete("list");
+        else params.set("list", next);
+        ["tab", "peek", "peektab"].forEach((key) => params.delete(key));
+        params.set("sel", path);
+        navigate(`${location.pathname}?${params.toString()}`);
+    }, [list, location.pathname, location.search, navigate, t]);
+
     const handleSelectAll = useCallback((e) => {
         setSelectedObjects(e.target.checked ? filteredObjectNames : []);
     }, [filteredObjectNames]);
@@ -933,6 +969,9 @@ const Objects = () => {
                     {selectedObjects.length > 0 && (
                         <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
                     )}
+                    <Button size="sm" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => setCreateOpen(true)}>
+                        {t("createObject.open")}
+                    </Button>
                     <MenuButton
                         label={t("objects.actionsMenu")}
                         disabled={!selectedObjects.length}
@@ -1038,6 +1077,15 @@ const Objects = () => {
                     : t("objects.dialogTarget.objects", {count: selectedObjects.length})}
                 supportedActions={OBJECT_ACTIONS.map((action) => action.name)}
                 onClose={handleClosePendingAction}
+            />
+            <CreateObjectDialog
+                open={createOpen}
+                onClose={() => setCreateOpen(false)}
+                defaultKind={LIST_KIND[list]}
+                defaultNamespace={selectedNamespaces.length === 1 ? selectedNamespaces[0] : "root"}
+                namespaces={allNamespaces}
+                paths={allObjectNames}
+                onCreated={handleCreated}
             />
             <EventLogger eventTypes={objectEventTypes} title={t("objects.events.title")}
                          buttonLabel={t("objects.events.button")}/>

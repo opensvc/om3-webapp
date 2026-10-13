@@ -825,6 +825,47 @@
       "button": "Événements de l'objet"
     }
   },
+  "createObject": {
+    "open": "Nouvel objet",
+    "title": "Nouvel objet",
+    "kind": "Kind",
+    "namespace": "Namespace",
+    "path": "Chemin :",
+    "nscfgName": "Une configuration de namespace s'appelle toujours {{name}}.",
+    "source": "Partir de",
+    "sources": {
+      "empty": "Une configuration vide",
+      "copy": "La copie d'un objet",
+      "file": "Un fichier"
+    },
+    "copyFrom": "Objet à copier",
+    "noObject": "Aucun objet ne correspond",
+    "reading": "Lecture de la configuration",
+    "noFile": "Aucun fichier choisi",
+    "config": "Configuration",
+    "configHint": "Modifiable ici avant l'envoi. Le nouvel objet reçoit son propre id.",
+    "provision": "Provisionner une fois créé",
+    "submit": "Créer",
+    "creating": "Création",
+    "errors": {
+      "empty": "Obligatoire.",
+      "tooLong": "63 caractères au plus.",
+      "firstChar": "Doit commencer par une lettre ou un chiffre.",
+      "chars": "Lettres, chiffres, points et tirets seulement.",
+      "uppercase": "Minuscules seulement.",
+      "reserved": "Ce nom est réservé par om.",
+      "reservedRoot": "Ce nom est réservé dans le namespace root.",
+      "exists": "{{path}} existe déjà."
+    },
+    "feedback": {
+      "created": "{{path}} créé.",
+      "createdProvisioning": "{{path}} créé ; son provisionnement est demandé.",
+      "createdProvisionFailed": "{{path}} créé, mais son provisionnement n'a pas pu être demandé.",
+      "failed": "L'objet n'a pas pu être créé : {{message}}",
+      "copyFailed": "La configuration de {{path}} n'a pas pu être lue : {{message}}",
+      "readFailed": "Le fichier n'a pas pu être lu : {{message}}"
+    }
+  },
   "objects": {
     "notProvisioned": "Non provisionné",
     "tableLabel": "Objets",
@@ -899,7 +940,8 @@
       "up": "up",
       "warn": "warn",
       "down": "down",
-      "unknown": "n/d"
+      "na": "n/d",
+      "unknown": "inconnu"
     },
     "stateMarks": {
       "stopped": "Arrêté",

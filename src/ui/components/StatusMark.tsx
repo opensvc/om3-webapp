@@ -8,6 +8,7 @@ const MARKS: Record<ObjectState, { ink: string }> = {
   up: { ink: "text-state-up" },
   warn: { ink: "text-state-warn" },
   down: { ink: "text-state-down" },
+  na: { ink: "text-state-unknown" },
   unknown: { ink: "text-state-unknown" },
 };
 

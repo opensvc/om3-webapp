@@ -185,7 +185,8 @@ describe("StatusMark", () => {
     ["up", "text-state-up", "up"],
     ["warn", "text-state-warn", "warn"],
     ["down", "text-state-down", "down"],
-    ["unknown", "text-state-unknown", "n/a"],
+    ["na", "text-state-unknown", "n/a"],
+    ["unknown", "text-state-unknown", "unknown"],
   ] as const)("marks %s with its drawn shape, tint and label", (state, ink, label) => {
     render(<StatusMark state={state} />);
     const mark = screen.getByTitle(label);

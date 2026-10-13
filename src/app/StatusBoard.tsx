@@ -41,21 +41,15 @@ const GLYPH_INK: Record<ObjectState, string> = {
   up: "text-state-up",
   warn: "text-state-warn",
   down: "text-state-down",
+  na: "text-state-unknown",
   unknown: "text-state-unknown",
 };
 
 /** A status as the other views draw it: the glyph of its state, gray when no issue; n/a as om writes it, "/". */
 function Status({ span }: { span: Span }) {
-  if (span.status === "n/a")
-    return (
-      <span className="inline-flex w-4 justify-center text-ink-muted">
-        <span aria-hidden="true">/</span>
-        <span className="sr-only">n/a</span>
-      </span>
-    );
   const badge = statusBadge(span.status);
   // om grays a down where the object misses no instance: it is no issue.
-  const muted = span.tone === "secondary" && badge.state !== "unknown";
+  const muted = span.tone === "secondary" && badge.state !== "unknown" && badge.state !== "na";
   return (
     <span data-state={badge.state} className={cn("inline-flex w-4 shrink-0 items-center justify-center", muted ? "text-ink-muted" : GLYPH_INK[badge.state])}>
       <StateGlyph state={badge.state} />

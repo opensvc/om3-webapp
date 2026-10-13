@@ -178,7 +178,7 @@ describe('Namespaces', () => {
         renderComponent();
         const rootRow = screen.getByRole('row', {name: /root/i});
         const marks = rootRow.querySelectorAll('[data-state]');
-        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'unknown']);
+        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'na']);
         expect(marks[0]).toHaveTextContent('up');
         expect(marks[1]).toHaveTextContent('down');
         expect(marks[2]).toHaveTextContent('warn');

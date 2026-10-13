@@ -825,6 +825,47 @@
       "button": "Object Events"
     }
   },
+  "createObject": {
+    "open": "New object",
+    "title": "New object",
+    "kind": "Kind",
+    "namespace": "Namespace",
+    "path": "Path:",
+    "nscfgName": "A namespace configuration is always named {{name}}.",
+    "source": "Start from",
+    "sources": {
+      "empty": "An empty configuration",
+      "copy": "A copy of an object",
+      "file": "A file"
+    },
+    "copyFrom": "Object to copy",
+    "noObject": "No object matches",
+    "reading": "Reading the configuration",
+    "noFile": "No file chosen",
+    "config": "Configuration",
+    "configHint": "Edited here before it is sent. The new object gets an id of its own.",
+    "provision": "Provision once created",
+    "submit": "Create",
+    "creating": "Creating",
+    "errors": {
+      "empty": "Required.",
+      "tooLong": "63 characters at most.",
+      "firstChar": "Must start with a letter or a digit.",
+      "chars": "Letters, digits, dots and dashes only.",
+      "uppercase": "Lowercase letters only.",
+      "reserved": "This name is reserved by om.",
+      "reservedRoot": "This name is reserved in the root namespace.",
+      "exists": "{{path}} already exists."
+    },
+    "feedback": {
+      "created": "{{path}} created.",
+      "createdProvisioning": "{{path}} created; its provisioning is requested.",
+      "createdProvisionFailed": "{{path}} created, but its provisioning could not be requested.",
+      "failed": "The object could not be created: {{message}}",
+      "copyFailed": "The configuration of {{path}} could not be read: {{message}}",
+      "readFailed": "The file could not be read: {{message}}"
+    }
+  },
   "objects": {
     "notProvisioned": "Not provisioned",
     "tableLabel": "Objects",
@@ -899,7 +940,8 @@
       "up": "up",
       "warn": "warn",
       "down": "down",
-      "unknown": "n/a"
+      "na": "n/a",
+      "unknown": "unknown"
     },
     "stateMarks": {
       "stopped": "Stopped",

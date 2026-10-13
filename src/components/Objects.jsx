@@ -27,7 +27,7 @@ import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
 import {tabPanelProps} from "../ui/components/tabs-ids";
-import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, PlusIcon, SearchIcon} from "../ui/icons";
+import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
 // behind a button, from lg (1200px) the node columns are shown.
@@ -973,6 +973,9 @@ const Objects = () => {
                         {t("createObject.open")}
                     </Button>
                     <MenuButton
+                        // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                        prominent
+                        icon={<GearIcon className="h-3.5 w-3.5"/>}
                         label={t("objects.actionsMenu")}
                         disabled={!selectedObjects.length}
                         align="end"

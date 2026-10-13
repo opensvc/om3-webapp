@@ -17,7 +17,7 @@ import {MenuButton} from "../ui/components/MenuButton";
 import {SlideOver} from "../ui/components/SlideOver";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon} from "../ui/icons";
+import {CloseIcon, GearIcon} from "../ui/icons";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
@@ -259,6 +259,9 @@ const NodesTable = () => {
         <div className="p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
                 <MenuButton
+                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                    prominent
+                    icon={<GearIcon className="h-3.5 w-3.5"/>}
                     label={t("nodes.bulkActions")}
                     disabled={selectedNodes.length === 0}
                     className="ml-auto"

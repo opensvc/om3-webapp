@@ -346,3 +346,15 @@ describe("submenuShift", () => {
     expect(submenuShift(rect(100, 300, 900, 1100)).flip).toBe(true);
   });
 });
+
+describe("MenuButton prominent", () => {
+  test("as oc3 draws the actions: an accent pill, its icon before the label, filled when open", () => {
+    render(<MenuButton label="Actions" items={items()} prominent icon={<svg data-testid="gear" />} />);
+    const button = screen.getByRole("button", { name: "Actions" });
+    expect(button).toHaveClass("rounded-(--radius-pill)", "border-accent", "bg-accent-soft", "aria-expanded:bg-accent");
+    // The label names it, the icon only shows: no tooltip of an icon alone.
+    expect(button).not.toHaveAttribute("title");
+    expect(button.firstElementChild).toBe(screen.getByTestId("gear"));
+    expect(button).toHaveTextContent("Actions");
+  });
+});

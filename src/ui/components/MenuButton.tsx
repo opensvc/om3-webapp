@@ -38,8 +38,12 @@ const ITEM =
  * the right arrow; within it the arrows walk its own entries, and the left arrow
  * or Escape give the focus back to the entry that opened it.
  *
- * om3 additions: `icon` makes the trigger an icon alone, `label` staying its
- * accessible name and tooltip; `compact` makes it small and borderless, for a table
+ * `prominent`, as in oc3, draws a menu the page is used for, such as the actions:
+ * a pill outlined and tinted with the accent, filled when hovered or open, its
+ * `icon` before the label.
+ *
+ * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
+ * staying its accessible name and tooltip; `compact` makes it small and borderless, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -49,6 +53,7 @@ export function MenuButton({
   items,
   disabled = false,
   className = "",
+  prominent = false,
   icon,
   compact = false,
   trigger,
@@ -58,7 +63,16 @@ export function MenuButton({
   items: MenuItem[];
   disabled?: boolean;
   className?: string;
-  /** Icon alone in the trigger, instead of the label and the chevron. */
+  /**
+   * A menu the page is used for, such as the actions on the selection: a pill,
+   * outlined and tinted with the accent, filled when hovered or open. The plain one, for a
+   * secondary menu, is muted. A primary button, filled, stays apart from both.
+   */
+  prominent?: boolean;
+  /**
+   * Icon alone in the trigger, instead of the label and the chevron; with
+   * `prominent`, the visual placed before the label.
+   */
   icon?: ReactNode;
   /** Small borderless trigger, for a table row. */
   compact?: boolean;
@@ -70,6 +84,7 @@ export function MenuButton({
   align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
+  const iconOnly = icon !== undefined && !prominent;
   const [position, setPosition] = useState<CSSProperties | null>(null);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -211,16 +226,18 @@ export function MenuButton({
           setOpen((previous) => !previous);
         }}
         onKeyDown={onButtonKeyDown}
-        title={icon !== undefined ? label : undefined}
-        aria-label={icon !== undefined || trigger !== undefined ? label : undefined}
+        title={iconOnly ? label : undefined}
+        aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
-          trigger !== undefined
+          prominent
+            ? "flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent-soft pr-2.5 pl-3 font-medium text-ink hover:bg-accent hover:text-accent-ink disabled:opacity-60 aria-expanded:bg-accent aria-expanded:text-accent-ink"
+            : trigger !== undefined
             ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
               "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
             : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
-                icon !== undefined ? "w-7 justify-center" : "px-2"
+                iconOnly ? "w-7 justify-center" : "px-2"
               }`
         }
       >
@@ -229,8 +246,11 @@ export function MenuButton({
             {trigger}
             <ChevronDownIcon aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-muted" />
           </>
-        ) : icon ?? (
+        ) : iconOnly ? (
+          icon
+        ) : (
           <>
+            {icon}
             {label}
             <ChevronDownIcon className="h-3.5 w-3.5" />
           </>

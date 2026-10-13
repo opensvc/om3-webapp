@@ -13,7 +13,7 @@ import {Alert} from "../ui/components/Alert";
 import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon} from "../ui/icons";
+import {CloseIcon, GearIcon} from "../ui/icons";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
@@ -282,6 +282,9 @@ const ObjectStatus = ({path}) => {
 
     const objectMenu = (
         <MenuButton
+            // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+            prominent
+            icon={<GearIcon className="h-3.5 w-3.5"/>}
             label={t("statusBoard.actions.object")}
             align="end"
             disabled={running}
@@ -350,6 +353,9 @@ const ObjectStatus = ({path}) => {
             {picked > 0 ? (
                 <>
                     <MenuButton
+                        // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                        prominent
+                        icon={<GearIcon className="h-3.5 w-3.5"/>}
                         label={cellsPicked.length > 0
                             ? t("statusBoard.actions.selectionResources", {count: resourcesPicked})
                             : t("statusBoard.actions.selectionInstances", {count: nodesPicked.length})}

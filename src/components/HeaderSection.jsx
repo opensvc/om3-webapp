@@ -5,7 +5,7 @@ import {StatusBadge} from '../ui/components/StatusBadge';
 import {statusBadge} from '../ui/components/status';
 import {FrozenMark} from '../ui/components/FrozenMark';
 import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
-import {AlertTriangleIcon} from '../ui/icons';
+import {AlertTriangleIcon, GearIcon} from '../ui/icons';
 import {OBJECT_ACTIONS, actionLabel} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 
@@ -69,6 +69,9 @@ const HeaderSection = ({
                     </span>
                 )}
                 <MenuButton
+                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                    prominent
+                    icon={<GearIcon className="h-3.5 w-3.5"/>}
                     label={t("objects.header.actionsMenu")}
                     align="end"
                     disabled={actionInProgress}

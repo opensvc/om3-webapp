@@ -2,12 +2,11 @@ import React, {useEffect, useMemo, useState} from "react";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {RecordPanel} from "../app/RecordPanel";
-import {usePeek} from "../app/panel-search";
-import {instanceId, parseInstanceId} from "../app/peek";
 import {Select} from "../ui/components/Field";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
 import ObjectDetail from "./ObjectDetails";
-import ObjectInstanceView from "./ObjectInstanceView";
+import ObjectStatus from "./ObjectStatus";
+import ObjectConfig from "./ObjectConfig";
 import NetworkDetails from "./NetworkDetails";
 import NamespaceMetrics from "./NamespaceMetrics";
 import LogsViewer from "./LogsViewer";
@@ -54,22 +53,29 @@ function InstanceLogs({path, nodes, node, onNodeChange}) {
 }
 
 /**
- * An object: its state, actions, configuration, keys and instances on a first tab,
- * the logs of its instances on a second one. An instance opens in its own panel.
+ * An object. A service or a volume shows its status as `om <path> status` does, with
+ * its actions (ObjectStatus), then the logs of its instances, then its configuration
+ * (ObjectConfig).
+ * A configuration, a secret or a user, which om shows no status of, shows its keys
+ * and its configuration (ObjectDetail).
  */
 export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
-    const peek = usePeek();
     const open = path !== undefined;
     const {kind} = parseObjectPath(path ?? "");
+    const keysOnly = KEY_KINDS.includes(kind);
     const instances = useEventStore((s) => (path === undefined ? undefined : s.objectInstanceStatus[path]));
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const [logsNode, setLogsNode] = useState(null);
     useEffect(() => setLogsNode(null), [path]);
 
-    const tabs = KEY_KINDS.includes(kind)
-        ? [{key: "status", label: t("panel.tabs.status")}]
-        : [{key: "status", label: t("panel.tabs.status")}, {key: "logs", label: t("panel.tabs.logs")}];
+    const tabs = keysOnly
+        ? [{key: "keys", label: t("panel.tabs.keys")}]
+        : [
+            {key: "status", label: t("panel.tabs.status")},
+            {key: "logs", label: t("panel.tabs.logs")},
+            {key: "config", label: t("panel.tabs.config")},
+        ];
 
     return (
         <RecordPanel
@@ -83,66 +89,20 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (
+            {(active) => (keysOnly ? (
+                <ObjectDetail key={path} path={path} embedded/>
+            ) : (
                 <>
                     {/* Kept mounted under the logs: its stream and its state hold. */}
                     <div hidden={active !== "status"}>
-                        <ObjectDetail
-                            key={path}
-                            path={path}
-                            embedded
-                            onOpenLogs={(node) => {
-                                setLogsNode(node);
-                                onTabChange("logs");
-                            }}
-                            onViewInstance={(node) => peek("instance", instanceId(node, path))}
-                        />
+                        <ObjectStatus key={path} path={path}/>
                     </div>
                     {active === "logs" && (
                         <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}/>
                     )}
+                    {active === "config" && <ObjectConfig path={path}/>}
                 </>
-            )}
-        </RecordPanel>
-    );
-}
-
-/** The instance of an object on a node: its resources on a first tab, its logs on a second one. */
-export function InstanceDetailPanel({id, tab, onTabChange, onClose}) {
-    const {t} = useTranslation();
-    const {node, path} = parseInstanceId(id ?? "");
-    const open = id !== undefined && path !== "";
-    return (
-        <RecordPanel
-            open={open}
-            kind="instance"
-            recordId={id}
-            title={open ? t("panel.instanceTitle", {path, node}) : ""}
-            onClose={onClose}
-            tabs={[
-                {key: "status", label: t("panel.tabs.resources")},
-                {key: "logs", label: t("panel.tabs.logs")},
-            ]}
-            tab={tab}
-            onTabChange={onTabChange}
-            closeOnOutsideClick={false}
-        >
-            {(active) => (
-                <>
-                    <div hidden={active !== "status"}>
-                        <ObjectInstanceView
-                            key={id}
-                            node={node}
-                            path={path}
-                            embedded
-                            onOpenLogs={() => onTabChange("logs")}
-                        />
-                    </div>
-                    {active === "logs" && (
-                        <InstanceLogs path={path} nodes={[node]} node={node} onNodeChange={() => {}}/>
-                    )}
-                </>
-            )}
+            ))}
         </RecordPanel>
     );
 }

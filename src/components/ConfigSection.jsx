@@ -696,6 +696,7 @@ const ConfigSection = ({
                            configDialogOpen,
                            setConfigDialogOpen,
                            configRefreshTrigger = 0,
+                           inline = false,
                        }) => {
     const {t} = useTranslation();
     // Secrets stay hidden until asked for, and hidden again each time the dialog opens.
@@ -1028,39 +1029,9 @@ const ConfigSection = ({
 
     const closeConfigDialog = () => setConfigDialogOpen(false);
 
-    return (
-        <div className="w-full">
-            <Button
-                size="sm"
-                icon={<FileIcon/>}
-                onClick={() => setConfigDialogOpen(true)}
-                className="w-full min-w-0 overflow-hidden text-ellipsis"
-            >
-                {t("config.view.button")}
-            </Button>
-
-            <Dialog
-                open={configDialogOpen}
-                onClose={closeConfigDialog}
-                title={t("config.view.title")}
-                size="lg"
-                footer={edit ? (
-                    <>
-                        <Button onClick={cancelEdit} disabled={actionLoading}>{t("common.cancel")}</Button>
-                        <Button
-                            variant="primary"
-                            onClick={saveEdit}
-                            disabled={actionLoading || !editDirty}
-                            icon={actionLoading ? <Spinner label={t("config.view.saving")}/> : undefined}
-                        >
-                            {t("common.save")}
-                        </Button>
-                    </>
-                ) : (
-                    <Button onClick={closeConfigDialog}>{t("common.close")}</Button>
-                )}
-            >
-                {edit ? (
+    // The file, its tools and the edit in progress: in a dialog opened by a button,
+    // or `inline`, in place, as in the configuration tab of an object.
+    const body = edit ? (
                     <div className="space-y-2">
                         <p className="text-data text-ink-muted">
                             {t("config.view.editNotice")}
@@ -1152,8 +1123,24 @@ const ConfigSection = ({
                             </div>
                         )}
                     </>
-                )}
-            </Dialog>
+                );
+    const footer = (edit ? (
+                    <>
+                        <Button onClick={cancelEdit} disabled={actionLoading}>{t("common.cancel")}</Button>
+                        <Button
+                            variant="primary"
+                            onClick={saveEdit}
+                            disabled={actionLoading || !editDirty}
+                            icon={actionLoading ? <Spinner label={t("config.view.saving")}/> : undefined}
+                        >
+                            {t("common.save")}
+                        </Button>
+                    </>
+                ) : (
+                    <Button onClick={closeConfigDialog}>{t("common.close")}</Button>
+                ));
+    const subDialogs = (
+        <>
 
             <UpdateConfigDialog
                 open={updateConfigDialogOpen}
@@ -1189,6 +1176,39 @@ const ConfigSection = ({
                 keywordsLoading={keywordsLoading}
                 keywordsError={keywordsError}
             />
+        </>
+    );
+
+    if (inline) {
+        return (
+            <div className="space-y-2">
+                {body}
+                {edit && <div className="flex justify-end gap-2">{footer}</div>}
+                {subDialogs}
+            </div>
+        );
+    }
+
+    return (
+        <div className="inline-flex">
+            <Button
+                size="sm"
+                icon={<FileIcon/>}
+                onClick={() => setConfigDialogOpen(true)}
+            >
+                {t("config.view.button")}
+            </Button>
+
+            <Dialog
+                open={configDialogOpen}
+                onClose={closeConfigDialog}
+                title={t("config.view.title")}
+                size="lg"
+                footer={footer}
+            >
+                {body}
+            </Dialog>
+            {subDialogs}
         </div>
     );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SlideOver } from "../ui/components/SlideOver";
 import { TabList, type TabItem } from "../ui/components/Tabs";
@@ -9,6 +9,7 @@ import { PanelHistoryMenu, PanelHistoryRail } from "./PanelHistory";
 import { openedFromHistory, recordKey } from "./panel-history";
 import { isPeekStep, stepIcon, type PeekKind } from "./peek";
 import { rememberLastRecord, useRecordHistory } from "./record-history";
+import { PanelHeaderContext } from "./panel-header";
 
 /**
  * Title of a record panel: the icon of its kind and its name. Where the window leaves
@@ -24,12 +25,15 @@ export function PanelTitle({
   recordId,
   open,
   size,
+  slotRef,
 }: {
   kind: PeekKind;
   title: string;
   recordId: string | undefined;
   open: boolean;
   size: SlideOverSize;
+  /** The place by the name where the content of the panel qualifies the record. */
+  slotRef?: (element: HTMLElement | null) => void;
 }) {
   const history = useRecordHistory();
   const currentKey = recordKey(kind, recordId);
@@ -51,6 +55,7 @@ export function PanelTitle({
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <ObjectIcon kind={icon} />
       <h2 className="truncate text-title font-semibold">{title}</h2>
+      {slotRef !== undefined && <div ref={slotRef} className="flex shrink-0 items-center gap-1" />}
       {open && (
         <div className={RAIL_FALLBACK[size]}>
           <PanelHistoryMenu currentKey={currentKey} />
@@ -99,6 +104,9 @@ export function RecordPanel({
   const items = tabs ?? [];
   const first = items[0]?.key ?? "";
   const active = items.some((item) => item.key === tab) ? (tab as string) : first;
+  // The place in the title bar the content puts what concerns the whole record.
+  const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
 
   return (
     <SlideOver
@@ -109,8 +117,9 @@ export function RecordPanel({
       closeLabel={t("common.close")}
       resizeLabel={t("panel.resize")}
       closeOnOutsideClick={closeOnOutsideClick}
-      heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} size={size} />}
+      heading={<PanelTitle kind={kind} title={title} recordId={recordId} open={open} size={size} slotRef={setTitleSlot} />}
       rail={<PanelHistoryRail currentKey={recordKey(kind, recordId)} />}
+      actions={<div ref={setActionsSlot} className="flex items-center gap-2" />}
       subheader={
         open && items.length > 1 ? (
           <TabList
@@ -126,9 +135,11 @@ export function RecordPanel({
       }
     >
       {open && (
-        <div {...(items.length > 1 ? tabPanelProps(tabsId, active) : {})} className="outline-none">
-          {children(active)}
-        </div>
+        <PanelHeaderContext.Provider value={{ title: titleSlot, actions: actionsSlot }}>
+          <div {...(items.length > 1 ? tabPanelProps(tabsId, active) : {})} className="outline-none">
+            {children(active)}
+          </div>
+        </PanelHeaderContext.Provider>
       )}
     </SlideOver>
   );

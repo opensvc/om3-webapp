@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { RecordPanel } from "../RecordPanel";
+import { usePanelHeader } from "../panel-header";
 import { PanelAnchor } from "../PanelAnchor";
 import { CrossLink } from "../CrossLink";
 import { usePanelSearch } from "../panel-search";
@@ -144,5 +146,29 @@ describe("record panels", () => {
     expect(openDialogs()).toHaveLength(0);
     fireEvent.keyDown(document.body, { key: "p" });
     expect(openDialogs().map((d) => d.getAttribute("aria-label"))).toEqual(["ns1/svc/web"]);
+  });
+
+  test("the content puts what concerns the whole record in the title bar", () => {
+    function Content() {
+      const slots = usePanelHeader();
+      return (
+        <>
+          {slots.title !== null && createPortal(<span>flex</span>, slots.title)}
+          {slots.actions !== null && createPortal(<button type="button">Actions</button>, slots.actions)}
+        </>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/objects?peek=network:lo"]}>
+        <RecordPanel open kind="network" recordId="lo" title="lo" onClose={() => {}}>
+          {() => <Content />}
+        </RecordPanel>
+      </MemoryRouter>,
+    );
+    const actions = screen.getByRole("button", { name: "Actions" });
+    // In the bar of the title, by the close button, not in the body.
+    expect(actions.closest("[role=dialog] > div > div:first-child")).toContainElement(screen.getByRole("button", { name: "Close" }));
+    // What qualifies the record, by its name.
+    expect(screen.getByRole("heading", { name: "lo" }).nextElementSibling).toHaveTextContent("flex");
   });
 });

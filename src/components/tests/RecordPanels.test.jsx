@@ -6,22 +6,12 @@ import {PeekPanel} from '../PeekPanel';
 
 // The record contents, tested on their own: here, what each panel hands them.
 vi.mock('../ObjectDetails', () => ({
-    default: ({path, embedded, onOpenLogs, onViewInstance}) => (
-        <div data-testid="object-details" data-embedded={String(embedded)}>
-            {path}
-            <button onClick={() => onOpenLogs('node2')}>logs of node2</button>
-            <button onClick={() => onViewInstance('node1')}>instance on node1</button>
-        </div>
+    default: ({path, embedded}) => (
+        <div data-testid="object-details" data-embedded={String(embedded)}>{path}</div>
     ),
 }));
-vi.mock('../ObjectInstanceView', () => ({
-    default: ({node, path, onOpenLogs}) => (
-        <div data-testid="instance-view">
-            {path}@{node}
-            <button onClick={() => onOpenLogs()}>instance logs</button>
-        </div>
-    ),
-}));
+vi.mock('../ObjectStatus', () => ({default: ({path}) => <div data-testid="object-status">{path}</div>}));
+vi.mock('../ObjectConfig', () => ({default: ({path}) => <div data-testid="object-config">{path}</div>}));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
 vi.mock('../NamespaceMetrics', () => ({default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>}));
 vi.mock('../LogsViewer', () => ({
@@ -54,38 +44,35 @@ describe('record panels', () => {
         sessionStorage.clear();
     });
 
-    test('an object opens embedded, on its status tab', () => {
+    test('a service opens on its status board, its logs and its configuration on tabs of their own', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        expect(within(panel).getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(panel).getByTestId('object-status')).toBeVisible();
+        expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
         expect(openDialogs()).toEqual([panel]);
+
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
+        expect(within(panel).getByTestId('object-config')).toHaveTextContent('ns1/svc/web');
+        expect(within(panel).getByTestId('object-status')).not.toBeVisible();
     });
 
-    test('the logs of an instance open in the logs tab, on the node asked for', () => {
-        renderPeek('/nodes?peek=object:ns1/svc/web');
-        fireEvent.click(screen.getByRole('button', {name: 'logs of node2'}));
-        expect(screen.getByTestId('search')).toHaveTextContent('peektab=logs');
-        expect(screen.getByTestId('logs')).toHaveTextContent('instance ns1/svc/web on node2');
-        fireEvent.change(screen.getByRole('combobox'), {target: {value: 'node1'}});
-        expect(screen.getByTestId('logs')).toHaveTextContent('on node1');
+    test('the logs tab reads the logs of an instance, on the node chosen', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web&peektab=logs');
+        expect(screen.getByTestId('logs')).toHaveTextContent('instance ns1/svc/web on node1');
+        fireEvent.change(screen.getByRole('combobox'), {target: {value: 'node2'}});
+        expect(screen.getByTestId('logs')).toHaveTextContent('on node2');
         // The status stays mounted under the logs: its stream holds.
-        expect(screen.getByTestId('object-details')).not.toBeVisible();
+        expect(screen.getByTestId('object-status')).not.toBeVisible();
     });
 
-    test('an instance opens in its own panel', () => {
-        renderPeek('/nodes?peek=object:ns1/svc/web');
-        fireEvent.click(screen.getByRole('button', {name: 'instance on node1'}));
-        expect(screen.getByTestId('search')).toHaveTextContent('?peek=instance:node1/ns1/svc/web');
-        const panel = screen.getByRole('dialog', {name: 'ns1/svc/web on node1'});
-        expect(within(panel).getByTestId('instance-view')).toHaveTextContent('ns1/svc/web@node1');
-        fireEvent.click(within(panel).getByRole('button', {name: 'instance logs'}));
-        expect(within(panel).getByTestId('logs')).toHaveTextContent('instance ns1/svc/web on node1');
-    });
-
-    test('keys objects have no logs tab', () => {
+    test('a secret, which om shows no status of, shows its keys alone', () => {
         renderPeek('/nodes?peek=object:ns1/sec/key');
         expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('object-status')).not.toBeInTheDocument();
+        expect(screen.getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');
     });
 
     test.each([

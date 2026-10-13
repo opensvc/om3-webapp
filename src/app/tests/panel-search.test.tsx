@@ -68,9 +68,9 @@ describe("usePanelSearch", () => {
     expect(result.current.location.pathname).toBe("/network");
     expect(result.current.panel.sel).toBe("lo");
     expect(result.current.panel.tab).toBe("addresses");
-    act(() => result.current.peek("instance", "n1/ns1/svc/web", "logs"));
+    act(() => result.current.peek("object", "ns1/svc/web", "logs"));
     expect(result.current.panel.sel).toBeUndefined();
-    expect(result.current.panel.peek).toEqual({ kind: "instance", id: "n1/ns1/svc/web" });
+    expect(result.current.panel.peek).toEqual({ kind: "object", id: "ns1/svc/web" });
     expect(result.current.panel.peektab).toBe("logs");
     act(() => result.current.panel.closePeek());
     expect(result.current.location.search).toBe("?x=1");

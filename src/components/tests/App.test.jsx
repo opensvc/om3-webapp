@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, act} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
 import {vi} from 'vitest';
@@ -35,6 +35,7 @@ vi.mock('../Network', async () => {
 });
 vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
 vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: () => <div data-testid="panel-anchor"/>}));
+vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
 vi.mock('../AuthChoice.jsx', () => ({default: () => <div data-testid="auth-choice">AuthChoice</div>}));
@@ -233,7 +234,7 @@ describe('App Component', () => {
     test.each([
         ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
         ['/network/test-network', 'network', '?sel=test-network'],
-        ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?peek=instance%3Anode1%2Fns1%2Fsvc%2Fweb'],
+        ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
     ])('old record address %s opens the panel over %s', async (path, testId, search) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);
@@ -241,11 +242,29 @@ describe('App Component', () => {
         unmount();
     });
 
+    test('n moves the focus to the menu, on the entry of the view, unfolding it first', async () => {
+        const token = setupBasicAuth();
+        // The menu folded: "n" unfolds it.
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'om3.sidebar' ? 'closed' : k === 'authToken' ? token : k === 'authChoice' ? 'basic' : null);
+        renderApp(['/nodes']);
+        await screen.findByTestId('nodes');
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+            cb(0);
+            return 0;
+        });
+        fireEvent.keyDown(document.body, {key: 'n'});
+        expect(document.getElementById('app-sidebar')).not.toHaveAttribute('inert');
+        expect(screen.getByRole('link', {name: 'Nodes'})).toHaveFocus();
+        raf.mockRestore();
+    });
+
     test('the record panel and its anchor stand over the views, not over the sign-in', async () => {
         setupBasicAuth();
         const {unmount} = renderApp(['/objects']);
         expect(await screen.findByTestId('peek-panel')).toBeInTheDocument();
         expect(screen.getByTestId('panel-anchor')).toBeInTheDocument();
+        expect(screen.getByTestId('shortcuts-help')).toBeInTheDocument();
         unmount();
         renderApp(['/auth/login']);
         expect(await screen.findByTestId('login')).toBeInTheDocument();

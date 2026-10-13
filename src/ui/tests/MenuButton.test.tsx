@@ -33,6 +33,37 @@ function setup(handlers: Record<string, () => void> = {}) {
 }
 
 describe("MenuButton", () => {
+  test("Escape closes a menu opened with the mouse, not what is around it", async () => {
+    const user = userEvent.setup();
+    const onPanelKey = vi.fn();
+    document.addEventListener("keydown", onPanelKey);
+    render(<MenuButton label="Actions" items={[{ key: "start", label: "Start", onSelect: () => {} }]} />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onPanelKey).not.toHaveBeenCalled();
+    document.removeEventListener("keydown", onPanelKey);
+  });
+
+  test("the menu stands in the window, out of a translated panel, and its entries act", async () => {
+    // A side panel slides in with a translation, which makes it the reference of
+    // the fixed elements inside it: the menu was placed off its trigger.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <div style={{ translate: "10px" }} data-testid="panel">
+        <MenuButton label="Actions" items={[{ key: "start", label: "Start", onSelect }]} />
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const menu = screen.getByRole("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(screen.getByTestId("panel")).not.toContainElement(menu);
+    await user.click(screen.getByRole("menuitem", { name: "Start" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   test("announces a closed menu", () => {
     const { button } = setup();
     expect(button).toHaveAttribute("aria-haspopup", "menu");

@@ -13,17 +13,15 @@ export interface PeekStep {
 
 /**
  * The kinds of record a panel shows:
- * - `object`: an object, by its path (`ns/kind/name`);
- * - `instance`: the instance of an object on a node, `node/path` (a node name
- *   holds no slash, so the first one ends it);
+ * - `object`: an object, by its path (`ns/kind/name`), its instances shown by
+ *   its status board;
  * - `network`: a network, by its name;
  * - `namespace`: the usage of a namespace, by its name.
  */
-export type PeekKind = "object" | "instance" | "network" | "namespace";
+export type PeekKind = "object" | "network" | "namespace";
 
 const PEEK_KINDS: ReadonlySet<string> = new Set<PeekKind>([
   "object",
-  "instance",
   "network",
   "namespace",
 ]);
@@ -46,29 +44,17 @@ export function serialiseStep(step: PeekStep): string {
   return `${step.kind}:${step.id}`;
 }
 
-/** The id of an instance record: its node, then the path of its object. */
-export function instanceId(node: string, path: string): string {
-  return `${node}/${path}`;
-}
-
-export function parseInstanceId(id: string): { node: string; path: string } {
-  const cut = id.indexOf("/");
-  return cut <= 0 ? { node: id, path: "" } : { node: id.slice(0, cut), path: id.slice(cut + 1) };
-}
-
 /** The kind of an object path ("ns/kind/name", or a bare name for a root service). */
 function pathKind(path: string): string | undefined {
   const parts = path.split("/");
   return parts.length === 3 ? parts[1] : parts.length === 2 ? parts[0] : undefined;
 }
 
-/** The pictogram of a record, the one of its object kind for objects and instances. */
+/** The pictogram of a record, the one of its object kind for objects. */
 export function stepIcon(step: PeekStep): ObjectKind {
   switch (step.kind) {
     case "object":
       return om3ObjectKind(pathKind(step.id));
-    case "instance":
-      return "instance";
     case "network":
       return "network";
     case "namespace":
@@ -80,7 +66,5 @@ export function stepIcon(step: PeekStep): ObjectKind {
 
 /** The name of a record, as the history and the anchor show it. */
 export function stepLabel(step: PeekStep): string {
-  if (step.kind !== "instance") return step.id;
-  const { node, path } = parseInstanceId(step.id);
-  return path === "" ? node : `${path} @ ${node}`;
+  return step.id;
 }

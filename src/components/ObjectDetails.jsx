@@ -60,8 +60,9 @@ export const parseProvisionedState = (state) => {
 /**
  * An object: its state and actions, its configuration, its keys, its instances. A
  * page of its own under its route, or, `embedded`, the content of the object record
- * panel (`ObjectDetailPanel`), which gives the path, shows the logs in a tab of its
- * own (`onOpenLogs`) and opens the instances in their own panel (`onViewInstance`).
+ * panel (`ObjectDetailPanel`), which gives the path and shows the logs in a tab of
+ * its own (`onOpenLogs`). An instance opens on a click only where `onViewInstance`
+ * says what to do with it: in the panel, the status board shows the instances.
  */
 const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {}) => {
     const {t} = useTranslation();
@@ -423,6 +424,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
         if (onViewInstance) onViewInstance(node);
         else navigate(`/nodes/${node}/objects/${encodeURIComponent(decodedObjectName)}`);
     }, [decodedObjectName, navigate, onViewInstance]);
+    const viewInstance = embedded && !onViewInstance ? undefined : handleViewInstance;
 
     const handleOpenLogs = useCallback((node, instanceName = null) => {
         if (onOpenLogs) {
@@ -644,7 +646,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
                                 getNodeState={getNodeState}
                                 instanceName={name}
                                 onOpenLogs={handleOpenLogs}
-                                onViewInstance={handleViewInstance}
+                                onViewInstance={viewInstance}
                             />
                         ))}
                     </div>

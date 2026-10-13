@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { CaretRightIcon, ChevronDownIcon } from "../icons";
 
 export interface MenuItem {
@@ -50,6 +51,7 @@ export function MenuButton({
   className = "",
   icon,
   compact = false,
+  trigger,
   align = "start",
 }: {
   label: string;
@@ -60,6 +62,11 @@ export function MenuButton({
   icon?: ReactNode;
   /** Small borderless trigger, for a table row. */
   compact?: boolean;
+  /**
+   * Content of the trigger in place of the label, as a cell of a table drawn as
+   * itself and opening the actions on what it shows; `label` names it.
+   */
+  trigger?: ReactNode;
   align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
@@ -113,12 +120,25 @@ export function MenuButton({
       (target === "first" ? list[0] : list[list.length - 1])?.focus();
     }
     function onPointerDown(event: PointerEvent) {
-      if (!(event.target instanceof Node) || root.current?.contains(event.target)) return;
+      if (!(event.target instanceof Node)) return;
+      // The menu stands apart from the trigger, in its portal: a click in either is in.
+      if (root.current?.contains(event.target) || menu.current?.contains(event.target)) return;
+      setOpen(false);
+    }
+    // Escape closes the menu first, wherever the focus is: opened with the mouse, the
+    // focus stays on the trigger, and the side panel around would take the key.
+    function onEscape(event: globalThis.KeyboardEvent) {
+      // In the menu, its own keys apply: a submenu closes alone, the focus goes back.
+      if (event.key !== "Escape" || menu.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
       setOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onEscape, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onEscape, true);
     };
   }, [open]);
 
@@ -192,16 +212,24 @@ export function MenuButton({
         }}
         onKeyDown={onButtonKeyDown}
         title={icon !== undefined ? label : undefined}
-        aria-label={icon !== undefined ? label : undefined}
+        aria-label={icon !== undefined || trigger !== undefined ? label : undefined}
         className={
-          compact
+          trigger !== undefined
+            ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
+              "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
+            : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
                 icon !== undefined ? "w-7 justify-center" : "px-2"
               }`
         }
       >
-        {icon ?? (
+        {trigger !== undefined ? (
+          <>
+            {trigger}
+            <ChevronDownIcon aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-muted" />
+          </>
+        ) : icon ?? (
           <>
             {label}
             <ChevronDownIcon className="h-3.5 w-3.5" />
@@ -209,7 +237,9 @@ export function MenuButton({
         )}
       </button>
 
-      {open && (
+      {/* In a portal: placed against the window, which a side panel sliding in with a
+          translation would otherwise replace as the reference of a fixed element. */}
+      {open && createPortal(
         <div
           ref={menu}
           id={menuId}
@@ -228,7 +258,8 @@ export function MenuButton({
               }}
             />
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -189,6 +189,15 @@ describe('ConfigSection Component', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    test('inline, the file and its tools are in place: no button, no dialog', async () => {
+        renderConfig({configDialogOpen: false, inline: true});
+        expect(screen.queryByRole('button', {name: 'View Configuration'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(getUploadButton()).toBeInTheDocument();
+        expect(getManageButton()).toBeInTheDocument();
+        await waitFor(() => expect(configFileGets().length).toBeGreaterThan(0));
+    });
+
     test('speaks French in a French browser', async () => {
         await i18n.changeLanguage('fr');
         try {

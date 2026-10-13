@@ -23,7 +23,8 @@ import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
 import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
-import {instanceId, serialiseStep} from "../app/peek";
+import {ShortcutsHelp} from "../app/ShortcutsHelp";
+import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
 
@@ -51,10 +52,10 @@ const NetworkRedirect = () => {
     return <Navigate to={`/network?${new URLSearchParams({sel: networkName})}`} replace/>;
 };
 
+// An instance is a column of the status board of its object.
 const InstanceRedirect = () => {
-    const {node, objectName} = useParams();
-    const peek = serialiseStep({kind: "instance", id: instanceId(node, decodeURIComponent(objectName))});
-    return <Navigate to={`/objects?${new URLSearchParams({peek})}`} replace/>;
+    const {objectName} = useParams();
+    return <Navigate to={`/objects?${new URLSearchParams({sel: decodeURIComponent(objectName)})}`} replace/>;
 };
 
 // Loading component for Suspense fallback
@@ -306,6 +307,20 @@ const App = () => {
     // The sign-in screens have no view to navigate to: no menu there.
     const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
 
+    // "n", for navigation, moves the focus to the menu, on the entry of the view on
+    // display, unfolding the menu first when it is folded: the focus waits for it to
+    // leave `inert`.
+    useShortcut("n", () => {
+        if (!showSidebar) return false;
+        if (!sidebarOpen) toggleSidebar();
+        window.requestAnimationFrame(() => {
+            const menu = document.getElementById("app-sidebar");
+            const entry = menu?.querySelector('a[aria-current="page"]') ?? menu?.querySelector("a, button");
+            entry?.focus();
+        });
+        return true;
+    });
+
     // Another view starts at its top. Not a panel opening over the view, nor its
     // filters changing: those keep the place in the list.
     useEffect(() => {
@@ -385,6 +400,7 @@ const App = () => {
                                         <>
                                             <PeekPanel/>
                                             <PanelAnchor/>
+                                            <ShortcutsHelp/>
                                         </>
                                     )}
                                 </Suspense>

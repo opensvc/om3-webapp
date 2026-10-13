@@ -60,8 +60,8 @@ export const parseProvisionedState = (state) => {
 /**
  * An object: its state and actions, its configuration, its keys, its instances. A
  * page of its own under its route, or, `embedded`, the content of the object record
- * panel (`ObjectDetailPanel`), which gives the path and shows the logs in a tab of
- * its own (`onOpenLogs`). An instance opens on a click only where `onViewInstance`
+ * panel (`ObjectDetailPanel`), which gives the path and shows the logs and the
+ * configuration in tabs of their own (`onOpenLogs`). An instance opens on a click only where `onViewInstance`
  * says what to do with it: in the panel, the status board shows the instances.
  */
 const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {}) => {
@@ -518,7 +518,8 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
         </Alert>
     );
 
-    const configSection = (
+    // In the panel, the configuration has a tab of its own.
+    const configSection = embedded ? null : (
         <ConfigSection
             decodedObjectName={decodedObjectName}
             configNode={configNode}
@@ -571,7 +572,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
                         getObjectStatus={() => objectData}
                     />
                 </div>
-                <div className="shrink-0">{configSection}</div>
+                {configSection !== null && <div className="shrink-0">{configSection}</div>}
             </div>
 
             {feedback}

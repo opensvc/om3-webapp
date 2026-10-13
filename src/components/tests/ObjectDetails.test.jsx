@@ -582,6 +582,16 @@ describe('ObjectDetail Component', () => {
         await waitFor(() => expect(screen.getByTestId('config-dialog')).toBeInTheDocument());
     });
 
+    test('embedded, the keys without the config button: the panel has a tab for it', async () => {
+        render(
+            <MemoryRouter>
+                <ObjectDetail path="root/cfg/cfg1" embedded/>
+            </MemoryRouter>
+        );
+        expect(await screen.findByText('key1')).toBeInTheDocument();
+        expect(screen.queryByTestId('open-config-dialog')).not.toBeInTheDocument();
+    });
+
     test('renders keys section for cfg', async () => {
         renderComponent('root/cfg/cfg1');
         expect(await screen.findByText(/Keys/i)).toBeInTheDocument();

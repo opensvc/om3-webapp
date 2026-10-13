@@ -68,11 +68,19 @@ describe('record panels', () => {
         expect(screen.getByTestId('object-status')).not.toBeVisible();
     });
 
-    test('a secret, which om shows no status of, shows its keys alone', () => {
-        renderPeek('/nodes?peek=object:ns1/sec/key');
-        expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('object-status')).not.toBeInTheDocument();
-        expect(screen.getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');
+    test.each(['ns1/sec/key', 'ns1/cfg/settings'])('%s, which om shows no status of, shows its keys, its configuration on a tab', (path) => {
+        renderPeek(`/nodes?peek=object:${path}`);
+        const panel = screen.getByRole('dialog', {name: path});
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Keys', 'Configuration']);
+        expect(within(panel).getByRole('tab', {name: 'Keys'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(panel).queryByTestId('object-status')).not.toBeInTheDocument();
+        expect(within(panel).getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');
+
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Configuration'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
+        expect(within(panel).getByTestId('object-config')).toHaveTextContent(path);
+        // Kept mounted under the configuration: its stream holds.
+        expect(within(panel).getByTestId('object-details')).not.toBeVisible();
     });
 
     test.each([

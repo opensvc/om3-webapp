@@ -57,7 +57,7 @@ function InstanceLogs({path, nodes, node, onNodeChange}) {
  * its actions (ObjectStatus), then the logs of its instances, then its configuration
  * (ObjectConfig).
  * A configuration, a secret or a user, which om shows no status of, shows its keys
- * and its configuration (ObjectDetail).
+ * (ObjectDetail), then its configuration, as a service does.
  */
 export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -70,7 +70,10 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     useEffect(() => setLogsNode(null), [path]);
 
     const tabs = keysOnly
-        ? [{key: "keys", label: t("panel.tabs.keys")}]
+        ? [
+            {key: "keys", label: t("panel.tabs.keys")},
+            {key: "config", label: t("panel.tabs.config")},
+        ]
         : [
             {key: "status", label: t("panel.tabs.status")},
             {key: "logs", label: t("panel.tabs.logs")},
@@ -89,20 +92,20 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
             onTabChange={onTabChange}
             closeOnOutsideClick={false}
         >
-            {(active) => (keysOnly ? (
-                <ObjectDetail key={path} path={path} embedded/>
-            ) : (
+            {(active) => (
                 <>
-                    {/* Kept mounted under the logs: its stream and its state hold. */}
-                    <div hidden={active !== "status"}>
-                        <ObjectStatus key={path} path={path}/>
+                    {/* Kept mounted under the other tabs: its stream and its state hold. */}
+                    <div hidden={active !== tabs[0].key}>
+                        {keysOnly
+                            ? <ObjectDetail key={path} path={path} embedded/>
+                            : <ObjectStatus key={path} path={path}/>}
                     </div>
                     {active === "logs" && (
                         <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}/>
                     )}
                     {active === "config" && <ObjectConfig path={path}/>}
                 </>
-            ))}
+            )}
         </RecordPanel>
     );
 }

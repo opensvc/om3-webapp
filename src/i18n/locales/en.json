@@ -836,7 +836,8 @@
     "lists": {
       "label": "Object lists",
       "services": "Services",
-      "configs": "Configurations"
+      "configs": "Configurations",
+      "users": "Users"
     },
     "columns": {
       "object": "Object",

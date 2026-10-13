@@ -72,13 +72,16 @@ const parseObjectName = (objectName) => {
 };
 
 /**
- * The list is split in two tabs: the objects running on the nodes, and the ones
- * holding configuration, the cfg, the sec and the cluster object. The tab is in
- * the URL, `list=configs`; the first one is shown without it.
+ * The list is split in tabs: the objects running on the nodes, the ones holding
+ * configuration, the cfg, the sec and the cluster object, and the users. The tab
+ * is in the URL, `list=configs` or `list=users`; the first one is shown without it.
  */
 const CONFIG_KINDS = ["cfg", "sec", "ccfg"];
-const OBJECT_LISTS = ["services", "configs"];
-const listOf = (objectName) => (CONFIG_KINDS.includes(parseObjectName(objectName).kind) ? "configs" : "services");
+const OBJECT_LISTS = ["services", "configs", "users"];
+const listOf = (objectName) => {
+    const {kind} = parseObjectName(objectName);
+    return kind === "usr" ? "users" : CONFIG_KINDS.includes(kind) ? "configs" : "services";
+};
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -327,7 +330,7 @@ const Objects = () => {
     const rawNamespaces = parseMultipleValues("namespace");
     const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
-    const list = queryParams.get("list") === "configs" ? "configs" : "services";
+    const list = OBJECT_LISTS.includes(queryParams.get("list")) ? queryParams.get("list") : "services";
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -386,7 +389,7 @@ const Objects = () => {
 
     // The objects of the tab shown, and how many each tab has.
     const {listObjectNames, listCounts} = useMemo(() => {
-        const counts = {services: 0, configs: 0};
+        const counts = Object.fromEntries(OBJECT_LISTS.map((key) => [key, 0]));
         const names = [];
         for (const name of allObjectNames) {
             const of = listOf(name);
@@ -804,8 +807,8 @@ const Objects = () => {
         setSelectedKinds([]);
         const params = new URLSearchParams(location.search);
         params.delete("kind");
-        if (next === "configs") params.set("list", next);
-        else params.delete("list");
+        if (next === OBJECT_LISTS[0]) params.delete("list");
+        else params.set("list", next);
         const queryString = params.toString();
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {replace: true});
     }, [location.pathname, location.search, navigate]);

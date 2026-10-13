@@ -25,6 +25,7 @@ import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
 import {PanelSideProvider} from "../app/PanelSideProvider";
 import {usePanelSidePref} from "../app/panel-side-pref";
+import {useRecordHistory} from "../app/record-history";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
 
@@ -354,16 +355,20 @@ const App = () => {
         color: 'var(--ink)',
     };
 
-    // With the panels on the left, the gutter of the views on that side is as wide as
-    // the anchor that brings them back, which stands there without covering them.
+    // The anchor that brings the panels back stands on their edge of the window, over
+    // the views: while there is a record to bring back, the views keep a gutter as
+    // wide as it on that side, so that it covers nothing, an Actions menu at the end
+    // of a toolbar included.
     const panelSide = usePanelSidePref().value;
+    const historySize = useRecordHistory().entries.length;
+    const anchorShown = showSidebar && historySize > 0;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
-        ...(panelSide === 'left' && showSidebar ? {paddingLeft: '2rem'} : {}),
+        ...(anchorShown ? {[panelSide === 'left' ? 'paddingLeft' : 'paddingRight']: '2.5rem'} : {}),
     };
 
     return (

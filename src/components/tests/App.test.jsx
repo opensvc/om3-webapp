@@ -18,6 +18,12 @@ vi.mock('../../utils/logger.js', () => ({
         debug: vi.fn(),
     },
 }));
+// The records the anchor would bring back: the gutter of the views follows them.
+const {mockHistory} = vi.hoisted(() => ({mockHistory: {entries: []}}));
+vi.mock('../../app/record-history', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRecordHistory: () => mockHistory,
+}));
 vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
@@ -873,5 +879,28 @@ describe('App Component', () => {
             expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
             unmount();
         }
+    });
+
+    describe('the gutter of the anchor that brings the panels back', () => {
+        afterEach(() => {
+            mockHistory.entries = [];
+        });
+
+        test('none while there is nothing to bring back', async () => {
+            setupBasicAuth();
+            renderApp(['/objects']);
+            await screen.findByTestId('objects');
+            const main = document.getElementById('app-scroll-container');
+            expect(main.style.paddingRight).toBe('');
+            expect(main.style.paddingLeft).toBe('');
+        });
+
+        test('on the right, where the anchor stands: an Actions menu at the end of a toolbar stays clear of it', async () => {
+            mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+            setupBasicAuth();
+            renderApp(['/nodes']);
+            await screen.findByTestId('nodes');
+            expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('2.5rem');
+        });
     });
 });

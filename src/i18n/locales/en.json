@@ -928,17 +928,16 @@
     "resize": "Resize the panel",
     "tabs": {
       "status": "Status",
-      "resources": "Resources",
-      "logs": "Logs"
+      "logs": "Logs",
+      "keys": "Keys",
+      "config": "Configuration"
     },
     "crossLink": "Show the {{kind}} here",
     "kinds": {
       "object": "object",
-      "instance": "instance",
       "network": "network",
       "namespace": "namespace"
     },
-    "instanceTitle": "{{path}} on {{node}}",
     "logs": {
       "noNode": "No instance to read the logs of."
     }
@@ -958,6 +957,137 @@
       "hour": "Last hour",
       "day": "Last day",
       "week": "Last week"
+    }
+  },
+  "statusBoard": {
+    "caption": "Status of {{path}} by node",
+    "notes_one": "Notes ({{count}})",
+    "notes_other": "Notes ({{count}})",
+    "moreInfos_one": "{{count}} more info note",
+    "moreInfos_other": "{{count}} more info notes",
+    "loading": "Reading the status",
+    "loadError": "The status could not be read: {{message}}",
+    "avail": "Avail",
+    "overall": "Overall",
+    "instancesUp": "Instances up",
+    "item": "Item",
+    "description": "Description",
+    "parallel": "parallel",
+    "allNodes": "all nodes",
+    "none": "none",
+    "seeNote": "See note {{marker}}",
+    "rows": {
+      "monitor": "Monitor",
+      "expect": "Expect",
+      "provisioned": "Provisioned",
+      "orchestration": "Orchestration",
+      "resources_one": "Resources ({{count}})",
+      "resources_other": "Resources ({{count}})",
+      "state": "State",
+      "instances_one": "Instances ({{count}})",
+      "instances_other": "Instances ({{count}})"
+    },
+    "states": {
+      "not-provisioned": "not provisioned",
+      "mixed-provisioned": "partly provisioned",
+      "frozen": "frozen",
+      "mixed-frozen": "partly frozen",
+      "non-optimal-placement": "non-optimal placement",
+      "incompatible-versions": "incompatible agent versions"
+    },
+    "marks": {
+      "overallWarn": "some resources in warn",
+      "running": "a run in progress",
+      "drp": "DRP node",
+      "leader": "HA leader",
+      "leaderNonOptimal": "HA leader, not where the placement prefers",
+      "notProvisioned": "not provisioned",
+      "frozen": "frozen",
+      "stopped": "stopped on purpose",
+      "rpoBreached": "RPO breached"
+    },
+    "flags": {
+      "R": "running",
+      "M": "monitored",
+      "D": "disabled",
+      "O": "optional",
+      "E": "encapsulated",
+      "P": "not provisioned",
+      "S": "standby",
+      "X": "stopped on purpose",
+      "restarts_one": "{{count}} restart left",
+      "restarts_other": "{{count}} restarts left"
+    },
+    "levels": {
+      "error": "error",
+      "warn": "warning",
+      "info": "info"
+    },
+    "actions": {
+      "object": "Actions",
+      "allNodes": "all nodes",
+      "clearSelection": "Clear the selection",
+      "selectionHelp": "Click on resources or on instances to select them.",
+      "selectionResources_one": "Actions on 1 resource",
+      "selectionResources_other": "Actions on {{count}} resources",
+      "selectionInstances_one": "Actions on 1 instance",
+      "selectionInstances_other": "Actions on {{count}} instances"
+    },
+    "subjects": {
+      "instance": "{{path}} on {{where}}",
+      "resource": "{{rid}} of {{path}} on {{where}}",
+      "cells": "{{list}} of {{path}}",
+      "cell": "{{rid}} on {{where}}"
+    },
+    "feedback": {
+      "running": "Running {{action}} on {{subject}}…",
+      "accepted": "{{action}} on {{subject}}: accepted",
+      "failed": "{{action}} on {{subject}} failed: {{detail}}"
+    },
+    "selectInstance": "Select the instance on {{node}}",
+    "selectResource": "Select {{rid}} on all its nodes",
+    "selectCell": "Select {{rid}} on {{node}}",
+    "policies": "Policies",
+    "issues": "Issues",
+    "details": {
+      "status": "Status: {{status}}"
+    }
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "or": "or",
+    "search": "Search the cluster",
+    "panel": "Open the detail panel on the record shown last, or close it",
+    "menu": "Move to the left-hand menu",
+    "menuMove": "In the menu: move between entries, Enter opens",
+    "escape": "Close the panel, a list or this help; leave the menu",
+    "help": "Show this list",
+    "hint": "Single keys act when no field has the focus."
+  },
+  "search": {
+    "title": "Search the cluster",
+    "placeholder": "Objects, namespaces, nodes, networks…",
+    "close": "Close the search",
+    "scopes": "Search in",
+    "all": "All",
+    "results": "Results",
+    "hint": "Type a name: objects, namespaces, nodes and networks are searched.",
+    "searching": "Reading…",
+    "none": "Nothing matches “{{query}}”.",
+    "more": "Show more",
+    "opensList": "opens the list",
+    "refine": "More match: refine the search.",
+    "kindError": "This kind could not be read.",
+    "keys": {
+      "move": "to move",
+      "open": "to open",
+      "close": "to close"
+    },
+    "kinds": {
+      "object": "Objects",
+      "namespace": "Namespaces",
+      "node": "Nodes",
+      "network": "Networks"
     }
   }
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, act, renderHook, within} from '@testing-library/react';
+import {render, screen, act, renderHook, within, fireEvent} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
 import {Sidebar, NAV_ROUTES, useSidebarOpen} from '../Sidebar';
@@ -233,5 +233,28 @@ describe('Sidebar in French', () => {
         renderSidebar();
         expect(screen.getByTestId('counts-nodes').querySelector('[data-state="frozen"]'))
             .toHaveAttribute('title', '2 gelés');
+    });
+
+    test('the arrows, Home and End walk the menu entries, not their pills; Escape leaves it', () => {
+        mockPills.current = {'/objects': {counts: [{state: 'up', count: 45}]}};
+        renderSidebar(true, '/nodes');
+        const menu = screen.getByRole('navigation', {name: 'Main'});
+        expect(menu).toHaveAttribute('aria-keyshortcuts', 'n');
+        const links = within(menu).getAllByRole('link').filter((l) => !l.hasAttribute('data-state'));
+        const objects = links.find((l) => l.textContent === 'Objects');
+        act(() => objects.focus());
+        fireEvent.keyDown(objects, {key: 'ArrowDown'});
+        expect(links[links.indexOf(objects) + 1]).toHaveFocus();
+        act(() => links[0].focus());
+        fireEvent.keyDown(links[0], {key: 'ArrowDown'});
+        expect(links[1]).toHaveFocus();
+        fireEvent.keyDown(links[1], {key: 'ArrowUp'});
+        expect(links[0]).toHaveFocus();
+        fireEvent.keyDown(links[0], {key: 'End'});
+        expect(links[links.length - 1]).toHaveFocus();
+        fireEvent.keyDown(links[links.length - 1], {key: 'Home'});
+        expect(links[0]).toHaveFocus();
+        fireEvent.keyDown(links[0], {key: 'Escape'});
+        expect(links[0]).not.toHaveFocus();
     });
 });

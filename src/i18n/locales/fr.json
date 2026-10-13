@@ -928,17 +928,16 @@
     "resize": "Redimensionner le panneau",
     "tabs": {
       "status": "État",
-      "resources": "Ressources",
-      "logs": "Journaux"
+      "logs": "Journaux",
+      "keys": "Clés",
+      "config": "Configuration"
     },
     "crossLink": "Afficher la fiche ici ({{kind}})",
     "kinds": {
       "object": "objet",
-      "instance": "instance",
       "network": "réseau",
       "namespace": "espace de noms"
     },
-    "instanceTitle": "{{path}} sur {{node}}",
     "logs": {
       "noNode": "Aucune instance dont lire les journaux."
     }
@@ -958,6 +957,137 @@
       "hour": "Dernière heure",
       "day": "Dernier jour",
       "week": "Dernière semaine"
+    }
+  },
+  "statusBoard": {
+    "caption": "État de {{path}} par nœud",
+    "notes_one": "Notes ({{count}})",
+    "notes_other": "Notes ({{count}})",
+    "moreInfos_one": "{{count}} autre note d'info",
+    "moreInfos_other": "{{count}} autres notes d'info",
+    "loading": "Lecture de l'état",
+    "loadError": "L'état n'a pas pu être lu : {{message}}",
+    "avail": "Disponibilité",
+    "overall": "Global",
+    "instancesUp": "Instances actives",
+    "item": "Élément",
+    "description": "Description",
+    "parallel": "parallèle",
+    "allNodes": "tous les nœuds",
+    "none": "aucun",
+    "seeNote": "Voir la note {{marker}}",
+    "rows": {
+      "monitor": "Moniteur",
+      "expect": "Attendu",
+      "provisioned": "Provisionné",
+      "orchestration": "Orchestration",
+      "resources_one": "Ressources ({{count}})",
+      "resources_other": "Ressources ({{count}})",
+      "state": "État",
+      "instances_one": "Instances ({{count}})",
+      "instances_other": "Instances ({{count}})"
+    },
+    "states": {
+      "not-provisioned": "non provisionné",
+      "mixed-provisioned": "partiellement provisionné",
+      "frozen": "gelé",
+      "mixed-frozen": "partiellement gelé",
+      "non-optimal-placement": "placement non optimal",
+      "incompatible-versions": "versions d'agent incompatibles"
+    },
+    "marks": {
+      "overallWarn": "des ressources en alerte",
+      "running": "une exécution en cours",
+      "drp": "nœud de PRA",
+      "leader": "leader HA",
+      "leaderNonOptimal": "leader HA, hors du placement préféré",
+      "notProvisioned": "non provisionné",
+      "frozen": "gelée",
+      "stopped": "arrêtée volontairement",
+      "rpoBreached": "RPO dépassé"
+    },
+    "flags": {
+      "R": "en cours",
+      "M": "surveillée",
+      "D": "désactivée",
+      "O": "optionnelle",
+      "E": "encapsulée",
+      "P": "non provisionnée",
+      "S": "standby",
+      "X": "arrêtée volontairement",
+      "restarts_one": "{{count}} redémarrage restant",
+      "restarts_other": "{{count}} redémarrages restants"
+    },
+    "levels": {
+      "error": "erreur",
+      "warn": "alerte",
+      "info": "info"
+    },
+    "actions": {
+      "object": "Actions",
+      "allNodes": "tous les nœuds",
+      "clearSelection": "Vider la sélection",
+      "selectionHelp": "Cliquez sur des ressources ou sur des instances pour les sélectionner.",
+      "selectionResources_one": "Actions sur 1 ressource",
+      "selectionResources_other": "Actions sur {{count}} ressources",
+      "selectionInstances_one": "Actions sur 1 instance",
+      "selectionInstances_other": "Actions sur {{count}} instances"
+    },
+    "subjects": {
+      "instance": "{{path}} sur {{where}}",
+      "resource": "{{rid}} de {{path}} sur {{where}}",
+      "cells": "{{list}} de {{path}}",
+      "cell": "{{rid}} sur {{where}}"
+    },
+    "feedback": {
+      "running": "{{action}} en cours sur {{subject}}…",
+      "accepted": "{{action}} sur {{subject}} : accepté",
+      "failed": "{{action}} sur {{subject}} a échoué : {{detail}}"
+    },
+    "selectInstance": "Sélectionner l'instance sur {{node}}",
+    "selectResource": "Sélectionner {{rid}} sur tous ses nœuds",
+    "selectCell": "Sélectionner {{rid}} sur {{node}}",
+    "policies": "Politiques",
+    "issues": "Problèmes",
+    "details": {
+      "status": "État : {{status}}"
+    }
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "or": "ou",
+    "search": "Chercher dans le cluster",
+    "panel": "Ouvrir le panneau de détail sur la dernière fiche affichée, ou le fermer",
+    "menu": "Aller au menu de gauche",
+    "menuMove": "Dans le menu : passer d'une entrée à l'autre, Entrée ouvre",
+    "escape": "Fermer le panneau, une liste ou cette aide ; quitter le menu",
+    "help": "Afficher cette liste",
+    "hint": "Les touches simples agissent quand aucun champ n'a le focus."
+  },
+  "search": {
+    "title": "Rechercher dans le cluster",
+    "placeholder": "Objets, espaces de noms, nœuds, réseaux…",
+    "close": "Fermer la recherche",
+    "scopes": "Rechercher dans",
+    "all": "Tout",
+    "results": "Résultats",
+    "hint": "Saisissez un nom : la recherche porte sur les objets, les espaces de noms, les nœuds et les réseaux.",
+    "searching": "Lecture…",
+    "none": "Rien ne correspond à « {{query}} ».",
+    "more": "Voir plus",
+    "opensList": "ouvre la liste",
+    "refine": "D'autres correspondent : précisez la recherche.",
+    "kindError": "Ce type n'a pas pu être lu.",
+    "keys": {
+      "move": "pour se déplacer",
+      "open": "pour ouvrir",
+      "close": "pour fermer"
+    },
+    "kinds": {
+      "object": "Objets",
+      "namespace": "Espaces de noms",
+      "node": "Nœuds",
+      "network": "Réseaux"
     }
   }
 }

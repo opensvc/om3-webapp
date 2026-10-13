@@ -161,6 +161,31 @@ function NavList({routes, alerts, nested = false}) {
 }
 
 /**
+ * From the keyboard, as in oc3: "n" brings the focus to the menu (App), the arrows
+ * move from one entry to the next, Home and End go to the ends, and Escape gives
+ * the focus back to the page.
+ */
+function onMenuKeyDown(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "Escape") {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        return;
+    }
+    // The entries only: the count pills of an entry are links too, but not stops.
+    const stops = [...event.currentTarget.querySelectorAll("a:not([data-state])")];
+    const at = stops.findIndex((element) => element === document.activeElement);
+    const next =
+        event.key === "ArrowDown" ? stops[Math.min(at + 1, stops.length - 1)]
+            : event.key === "ArrowUp" ? stops[Math.max(at - 1, 0)]
+                : event.key === "Home" ? stops[0]
+                    : event.key === "End" ? stops[stops.length - 1]
+                        : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    next.focus();
+}
+
+/**
  * Side menu, after the oc3 one. Foldable from the button at the top left of the
  * header: folded, it keeps its place in the layout but not its width, and `inert`
  * takes it out of the keyboard path.
@@ -177,7 +202,7 @@ export function Sidebar({open}) {
                 open ? "w-60" : "w-0 border-r-0"
             )}
         >
-            <nav aria-label={t("nav.main")} className="w-60 p-2">
+            <nav aria-label={t("nav.main")} aria-keyshortcuts="n" onKeyDown={onMenuKeyDown} className="w-60 p-2">
                 <NavList routes={NAV_ROUTES} alerts={alerts}/>
             </nav>
         </aside>

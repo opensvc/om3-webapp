@@ -281,13 +281,11 @@ describe('NavBar', () => {
         await waitFor(() => expect(document.title).toBe('dev3 · OpenSVC Cluster'));
     });
 
-    test('shows the OpenSVC logo link to the home view, as in oc3, tagged Cluster', () => {
+    test('links the OpenSVC name to the home view, tagged Cluster, without the logo', () => {
         renderNavBar();
         const link = screen.getByRole('link', {name: 'OpenSVC Cluster'});
         expect(link).toHaveAttribute('href', '/');
-        const logo = link.querySelector('img');
-        expect(logo).toHaveAttribute('alt', '');
-        expect(logo).toHaveAttribute('width', '24');
+        expect(link.querySelector('img')).toBeNull();
     });
 
     // ---------- sidebar toggle ----------

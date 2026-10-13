@@ -1,9 +1,11 @@
 import {Link, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {SidebarIcon, UserIcon} from "../ui/icons";
+import {GlobalSearch} from "../app/GlobalSearch";
+import {setShortcutsHelp} from "../ui/lib/shortcuts";
+import {loadSearchIndex} from "./searchIndex";
 import {StateGlyph} from "../ui/components/StateGlyph";
 import {ProductTag} from "../ui/components/ProductTag";
-import opensvcLogo from "../ui/assets/opensvc-logo.svg";
 import {useAuth} from "../context/AuthProvider.jsx";
 import {useEffect, useState, useCallback} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus";
@@ -160,11 +162,9 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                 </button>
             )}
 
-            {/* The oc3 top bar link: logo and product name, back to the home view,
-                tagged om3 not to be taken for the collector. */}
+            {/* The top bar link: the product name, back to the home view, tagged
+                not to be taken for the collector. */}
             <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight text-ink">
-                {/* Decorative: the name that follows already names the link. */}
-                <img src={opensvcLogo} alt="" width={24} height={24} className="h-6 w-6"/>
                 OpenSVC
                 <ProductTag/>
             </Link>
@@ -204,6 +204,23 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                         <StateGlyph state="down" className="h-2 w-2"/>
                         {t("nav.offline")}
                     </span>
+                )}
+
+                {showSidebarToggle && (
+                    <>
+                        <GlobalSearch loadIndex={loadSearchIndex}/>
+                        {/* The shortcuts for whoever does not know "?" yet. */}
+                        <button
+                            type="button"
+                            aria-keyshortcuts="?"
+                            title={`${t("shortcuts.title")} (?)`}
+                            onClick={() => setShortcutsHelp(true)}
+                            className={`${HEADER_BUTTON} font-semibold`}
+                        >
+                            <span aria-hidden="true">?</span>
+                            <span className="sr-only">{t("shortcuts.title")}</span>
+                        </button>
+                    </>
                 )}
 
                 <Link to="/whoami" aria-label={t("nav.viewUser")} title={t("nav.viewUser")} className={HEADER_BUTTON}>

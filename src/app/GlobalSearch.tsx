@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ObjectIcon } from "../ui/components/ObjectIcon";
 import { StatusBadge } from "../ui/components/StatusBadge";
+import { StatusMark } from "../ui/components/StatusMark";
 import { statusBadge } from "../ui/components/status";
 import { CloseIcon, SearchIcon } from "../ui/icons";
 import { typing } from "../ui/lib/shortcuts";
@@ -350,7 +351,7 @@ function SearchPalette({
                         </div>
                         {hit.status !== undefined &&
                           (hit.status === "n/a" ? (
-                            <span className="text-ink-muted">/</span>
+                            <StatusMark state="na" label="n/a" />
                           ) : (
                             <StatusBadge {...statusBadge(hit.status)} className="w-auto" />
                           ))}

@@ -13,14 +13,16 @@ export interface PeekStep {
 
 /**
  * The kinds of record a panel shows:
+ * - `node`: a cluster node, by its name;
  * - `object`: an object, by its path (`ns/kind/name`), its instances shown by
  *   its status board;
  * - `network`: a network, by its name;
  * - `namespace`: the usage of a namespace, by its name.
  */
-export type PeekKind = "object" | "network" | "namespace";
+export type PeekKind = "node" | "object" | "network" | "namespace";
 
 const PEEK_KINDS: ReadonlySet<string> = new Set<PeekKind>([
+  "node",
   "object",
   "network",
   "namespace",
@@ -53,6 +55,8 @@ export function pathKind(path: string): string | undefined {
 /** The pictogram of a record, the one of its object kind for objects. */
 export function stepIcon(step: PeekStep): ObjectKind {
   switch (step.kind) {
+    case "node":
+      return "node";
     case "object":
       return om3ObjectKind(pathKind(step.id));
     case "network":

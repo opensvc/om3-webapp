@@ -51,6 +51,7 @@ describe("typeOf", () => {
     [{ kind: "object", id: "vol/data" }, "vol"],
     [{ kind: "object", id: "ns1/sec/tls" }, "sec"],
     [{ kind: "object", id: "cluster" }, "ccfg"],
+    [{ kind: "node", id: "dev3n1" }, "node"],
     [{ kind: "network", id: "lo" }, "network"],
     [{ kind: "namespace", id: "ns1" }, "namespace"],
   ])("%j is %s", (step, type) => {

@@ -16,6 +16,14 @@ export function formatSizeMiB(value: number | undefined, locale: string): string
   return `${gib.toLocaleString(locale, { maximumFractionDigits: gib < 10 ? 1 : 0 })} GiB`;
 }
 
+/** Sizes in bytes, as the om3 daemon gives them: a disk, a region. */
+export function formatBytes(value: number | undefined, locale: string): string {
+  if (value === undefined || value <= 0) return "";
+  // Below the mebibyte, in kibibytes: a DVD drive's 374 KiB shown as "0 MiB" would say nothing.
+  if (value < 1024 * 1024) return `${(value / 1024).toLocaleString(locale, { maximumFractionDigits: 0 })} KiB`;
+  return formatSizeMiB(Math.round(value / 1024 / 1024), locale);
+}
+
 /**
  * The collector returns "2026-09-15 15:06:23.000", which is not ISO 8601: without the
  * T, Safari refuses to parse it.

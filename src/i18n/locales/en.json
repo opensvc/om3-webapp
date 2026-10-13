@@ -756,14 +756,11 @@
       "swapAvail": "Swap Avail",
       "version": "Version",
       "bootedAt": "Booted At",
-      "updatedAt": "Updated At",
-      "logs": "Logs"
+      "updatedAt": "Updated At"
     },
     "bulkActions": "Actions on selected nodes",
     "selectAll": "Select all nodes",
     "loading": "Loading nodes",
-    "logsTitle": "Node Logs",
-    "resizeDrawer": "Resize drawer",
     "eventsLogger": "Node Events Logger",
     "events": "Node Events",
     "target": {
@@ -784,14 +781,99 @@
       "label": "Node {{node}} row",
       "select": "Select node {{node}}",
       "connected": "Connected to this node",
-      "moreActions": "More actions for node {{node}}",
-      "viewLogs": "View logs for node {{node}}"
+      "moreActions": "More actions for node {{node}}"
     },
     "time": {
       "justNow": "Just now",
       "minutesAgo": "{{count}}m ago",
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
+    }
+  },
+  "nodePanel": {
+    "loading": "Reading",
+    "loadError": "Could not read it: {{message}}",
+    "none": "None",
+    "actions": "Node actions",
+    "actionFailed": "{{action}} failed: {{message}}",
+    "tabs": {
+      "status": "Status",
+      "inventory": "Inventory",
+      "config": "Configuration",
+      "schedules": "Schedules",
+      "drivers": "Drivers",
+      "logs": "Logs"
+    },
+    "status": {
+      "title": "Node state",
+      "state": "State",
+      "frozen": "Frozen",
+      "leader": "Leader",
+      "overloaded": "Overloaded",
+      "agent": "Agent",
+      "booted": "Booted",
+      "score": "Score",
+      "load15m": "Load (15 min)",
+      "memAvail": "Memory available",
+      "swapAvail": "Swap available",
+      "ofTotal": "{{pct}}% of {{total}}",
+      "properties": "Properties"
+    },
+    "inventory": {
+      "hardware": "Hardware",
+      "disks": "Disks",
+      "addresses": "IP addresses",
+      "san": "SAN",
+      "initiators": "SAN initiators",
+      "paths": "SAN paths",
+      "packages": "Packages",
+      "filterPackages": "Filter the packages",
+      "morePackages_one": "{{count}} more package: refine the filter.",
+      "morePackages_other": "{{count}} more packages: refine the filter.",
+      "users": "Users",
+      "groups": "Groups"
+    },
+    "config": {
+      "file": "Node configuration file",
+      "edit": "Edit the configuration file",
+      "readFailed": "The configuration could not be read: {{message}}"
+    },
+    "schedules": {
+      "collector": "collector",
+      "provisioned": "provisioned",
+      "unscheduled": "not scheduled"
+    },
+    "drivers": {
+      "filter": "Filter the drivers and capabilities",
+      "drivers": "Drivers",
+      "capabilities": "Capabilities"
+    },
+    "columns": {
+      "property": "Property",
+      "value": "Value",
+      "source": "Source",
+      "class": "Class",
+      "description": "Description",
+      "driver": "Driver",
+      "path": "Path",
+      "device": "Device",
+      "model": "Model",
+      "size": "Size",
+      "objects": "Objects",
+      "interface": "Interface",
+      "address": "Address",
+      "mac": "MAC",
+      "initiator": "Initiator",
+      "target": "Target",
+      "version": "Version",
+      "arch": "Arch",
+      "id": "Id",
+      "action": "Action",
+      "schedule": "Schedule",
+      "lastRun": "Last run",
+      "nextRun": "Next run",
+      "requires": "Requires",
+      "keyword": "Keyword"
     }
   },
   "objectDetails": {
@@ -1014,6 +1096,7 @@
       "week": "Last week"
     },
     "types": {
+      "node": "Nodes",
       "svc": "Services",
       "vol": "Volumes",
       "cfg": "Configurations",
@@ -1145,7 +1228,6 @@
     "searching": "Reading…",
     "none": "Nothing matches “{{query}}”.",
     "more": "Show more",
-    "opensList": "opens the list",
     "refine": "More match: refine the search.",
     "kindError": "This kind could not be read.",
     "keys": {

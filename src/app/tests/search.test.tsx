@@ -91,16 +91,17 @@ describe("GlobalSearch", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/objects?kind=svc&peek=object:system/svc/dns");
   });
 
-  test("a node opens the list of the nodes; n/a is written /", async () => {
+  test("a node opens its panel, as the other records; n/a is written /", async () => {
     renderSearch();
     fireEvent.keyDown(document.body, { key: "/" });
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "foo" } });
     const option = await screen.findByRole("option");
     expect(within(option).getByTitle("n/a").querySelector("svg")).toHaveAttribute("data-glyph", "na");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "dev3" } });
-    await waitFor(() => expect(screen.getByRole("option")).toHaveTextContent("opens the list"));
+    await waitFor(() => expect(screen.getByRole("option")).toHaveTextContent("dev3n1"));
+    expect(screen.getByRole("option")).not.toHaveTextContent("opens the list");
     fireEvent.click(screen.getByRole("option"));
-    expect(screen.getByTestId("location")).toHaveTextContent("/nodes");
+    expect(screen.getByTestId("location")).toHaveTextContent("peek=node:dev3n1");
   });
 
   test("a scope narrows the search to one kind", async () => {

@@ -3,7 +3,6 @@ import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
 import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
-import LogsViewer from "../components/LogsViewer.jsx";
 import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
@@ -14,7 +13,8 @@ import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Tab
 import {Checkbox} from "../ui/components/Field";
 import {IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
-import {SlideOver} from "../ui/components/SlideOver";
+import {usePanelSearch} from "../app/panel-search";
+import {NodeDetailPanel} from "./NodePanel";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon, GearIcon} from "../ui/icons";
@@ -58,9 +58,8 @@ const NodesTable = () => {
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
 
-    // Logs panel state
-    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
+    // The node whose panel is open, and its tab, in the URL as on the other views.
+    const panel = usePanelSearch();
 
     const nodeEventTypes = useMemo(() => [
         "NodeStatusUpdated",
@@ -77,16 +76,8 @@ const NodesTable = () => {
         setPendingAction({action, node: nodename});
     };
 
-    // Handle opening logs for a node
-    const handleOpenLogs = (nodename) => {
-        setSelectedNodeForLogs(nodename);
-        setLogsDrawerOpen(true);
-    };
-
-    const handleCloseLogsDrawer = () => {
-        setLogsDrawerOpen(false);
-        setSelectedNodeForLogs(null);
-    };
+    // A row opens its node's panel; its logs are on a tab of it.
+    const handleOpenNode = (nodename) => panel.select(nodename);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -317,7 +308,6 @@ const NodesTable = () => {
                             />
                         ))}
                         <HeaderCell>{t("common.actions")}</HeaderCell>
-                        <HeaderCell>{t("nodes.columns.logs")}</HeaderCell>
                     </HeaderRow>
                     </thead>
                     <tbody>
@@ -332,7 +322,8 @@ const NodesTable = () => {
                             daemonNodename={daemon.nodename}
                             onSelect={handleSelectNode}
                             onAction={(nodename, action) => handleAction(action, nodename)}
-                            onOpenLogs={handleOpenLogs}
+                            onOpen={handleOpenNode}
+                            isOpen={panel.sel === nodename}
                         />
                     ))}
                     </tbody>
@@ -349,23 +340,12 @@ const NodesTable = () => {
                 onClose={() => setPendingAction(null)}
             />
 
-            <SlideOver
-                open={logsDrawerOpen}
-                title={t("nodes.logsTitle")}
-                onClose={handleCloseLogsDrawer}
-                closeLabel={t("common.close")}
-                size="wide"
-                resizeLabel={t("nodes.resizeDrawer")}
-                closeOnOutsideClick={false}
-            >
-                {selectedNodeForLogs !== null && (
-                    <LogsViewer
-                        nodename={selectedNodeForLogs}
-                        type="node"
-                        height="100%"
-                    />
-                )}
-            </SlideOver>
+            <NodeDetailPanel
+                node={panel.sel}
+                tab={panel.tab}
+                onTabChange={panel.setTab}
+                onClose={() => panel.select(undefined)}
+            />
 
             <EventLogger eventTypes={nodeEventTypes} title={t("nodes.eventsLogger")} buttonLabel={t("nodes.events")}/>
         </div>

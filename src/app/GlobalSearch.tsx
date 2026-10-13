@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ObjectIcon } from "../ui/components/ObjectIcon";
 import { StatusBadge } from "../ui/components/StatusBadge";
@@ -44,8 +43,8 @@ function isMac(): boolean {
  * Ctrl+K (⌘K on a Mac) or "/" open it from anywhere. The results come grouped by
  * kind (`search.ts`), each with its icon, what tells homonyms apart and its
  * status. Choosing one opens its record in the panel over the current view, as a
- * badge does (`usePeek`); a node, which has no record panel, opens the list of
- * the nodes. Up and Down move through the results, Enter opens, Escape closes; a
+ * badge does (`usePeek`), a node included. Up and Down move through the results,
+ * Enter opens, Escape closes; a
  * scope narrows the search to one kind and shows more of it.
  *
  * `loadIndex` reads what is searched, each time the palette opens.
@@ -118,7 +117,6 @@ function SearchPalette({
   const { t } = useTranslation();
   const id = useId();
   const peek = usePeek();
-  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [active, setActive] = useState(0);
@@ -164,8 +162,7 @@ function SearchPalette({
 
   function choose(hit: SearchEntry) {
     onClose(false);
-    if (hit.kind === "node") void navigate("/nodes");
-    else peek(hit.kind, hit.id);
+    peek(hit.kind, hit.id);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -355,7 +352,6 @@ function SearchPalette({
                           ) : (
                             <StatusBadge {...statusBadge(hit.status)} className="w-auto" />
                           ))}
-                        {hit.kind === "node" && <span className="shrink-0 text-data text-ink-muted">{t("search.opensList")}</span>}
                       </div>
                     );
                   })}

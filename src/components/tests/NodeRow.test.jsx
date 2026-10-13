@@ -40,7 +40,6 @@ describe('NodeRow Component', () => {
         daemonNodename: 'node2',
         onSelect: jest.fn(),
         onAction: jest.fn(),
-        onOpenLogs: jest.fn(),
     };
 
     beforeEach(() => {
@@ -353,13 +352,6 @@ describe('NodeRow Component', () => {
         });
     });
 
-    test('calls onOpenLogs when logs button is clicked', () => {
-        render(<NodeRow {...defaultProps} />);
-        const logsButton = screen.getByRole('button', {name: /View logs for node node1/i});
-        fireEvent.click(logsButton);
-        expect(defaultProps.onOpenLogs).toHaveBeenCalledWith('node1');
-    });
-
     test('renders load_15m progress bar with different states based on value', () => {
         const {rerender} = render(<NodeRow {...defaultProps} stats={{load_15m: 1}}/>);
         expect(screen.getByText('1')).toBeInTheDocument();
@@ -395,7 +387,7 @@ describe('NodeRow Component', () => {
         render(<NodeRow {...defaultProps} />);
         const row = screen.getByRole('row', {name: /Node node1 row/i});
         expect(row).toHaveClass('h-[1.875rem]');
-        expect(screen.getAllByRole('cell')).toHaveLength(12);
+        expect(screen.getAllByRole('cell')).toHaveLength(11);
     });
 
     test('marks a selected row', () => {
@@ -403,5 +395,22 @@ describe('NodeRow Component', () => {
         expect(screen.getByRole('row', {name: /Node node1 row/i})).toHaveClass('bg-accent-soft');
         rerender(<NodeRow {...defaultProps} isSelected={false}/>);
         expect(screen.getByRole('row', {name: /Node node1 row/i})).not.toHaveClass('bg-accent-soft');
+    });
+
+    test('the row opens the panel of its node, its logs on a tab of it; its controls act on their own', () => {
+        const onOpen = jest.fn();
+        render(<table><tbody><NodeRow {...defaultProps} onOpen={onOpen} isOpen/></tbody></table>);
+        const row = screen.getByRole('row', {name: /node1/});
+        expect(row).toHaveAttribute('aria-current', 'true');
+        fireEvent.click(screen.getByText('node1'));
+        expect(onOpen).toHaveBeenCalledWith('node1');
+
+        onOpen.mockClear();
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', {name: /actions/i}));
+        expect(onOpen).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(row, {key: 'Enter'});
+        expect(onOpen).toHaveBeenCalledWith('node1');
     });
 });

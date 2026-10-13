@@ -1,6 +1,7 @@
 import React from "react";
 import {usePanelSearch} from "../app/panel-search";
 import {NamespaceDetailPanel, NetworkDetailPanel, ObjectDetailPanel} from "./RecordPanels";
+import {NodeDetailPanel} from "./NodePanel";
 
 /**
  * Record looked at from any view, as oc3 does it.
@@ -17,6 +18,7 @@ export function PeekPanel() {
     const id = (kind) => (peek?.kind === kind ? peek.id : undefined);
     return (
         <>
+            <NodeDetailPanel node={id("node")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <ObjectDetailPanel path={id("object")} tab={peektab} onTabChange={setPeekTab} onClose={closePeek}/>
             <NetworkDetailPanel name={id("network")} onClose={closePeek}/>
             <NamespaceDetailPanel name={id("namespace")} onClose={closePeek}/>

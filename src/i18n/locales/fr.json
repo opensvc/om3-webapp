@@ -756,14 +756,11 @@
       "swapAvail": "Swap dispo",
       "version": "Version",
       "bootedAt": "Démarré",
-      "updatedAt": "Mis à jour",
-      "logs": "Journaux"
+      "updatedAt": "Mis à jour"
     },
     "bulkActions": "Actions sur les nœuds sélectionnés",
     "selectAll": "Sélectionner tous les nœuds",
     "loading": "Chargement des nœuds",
-    "logsTitle": "Journaux du nœud",
-    "resizeDrawer": "Redimensionner le panneau",
     "eventsLogger": "Journal des événements des nœuds",
     "events": "Événements des nœuds",
     "target": {
@@ -784,14 +781,99 @@
       "label": "Ligne du nœud {{node}}",
       "select": "Sélectionner le nœud {{node}}",
       "connected": "Connecté à ce nœud",
-      "moreActions": "Plus d'actions pour le nœud {{node}}",
-      "viewLogs": "Voir les journaux du nœud {{node}}"
+      "moreActions": "Plus d'actions pour le nœud {{node}}"
     },
     "time": {
       "justNow": "À l'instant",
       "minutesAgo": "il y a {{count}} min",
       "hoursAgo": "il y a {{count}} h",
       "daysAgo": "il y a {{count}} j"
+    }
+  },
+  "nodePanel": {
+    "loading": "Lecture",
+    "loadError": "Lecture impossible : {{message}}",
+    "none": "Aucun",
+    "actions": "Actions du nœud",
+    "actionFailed": "{{action}} a échoué : {{message}}",
+    "tabs": {
+      "status": "État",
+      "inventory": "Inventaire",
+      "config": "Configuration",
+      "schedules": "Planifications",
+      "drivers": "Pilotes",
+      "logs": "Journaux"
+    },
+    "status": {
+      "title": "État du nœud",
+      "state": "État",
+      "frozen": "Gelé",
+      "leader": "Leader",
+      "overloaded": "Surchargé",
+      "agent": "Agent",
+      "booted": "Démarré",
+      "score": "Score",
+      "load15m": "Charge (15 min)",
+      "memAvail": "Mémoire disponible",
+      "swapAvail": "Swap disponible",
+      "ofTotal": "{{pct}} % de {{total}}",
+      "properties": "Propriétés"
+    },
+    "inventory": {
+      "hardware": "Matériel",
+      "disks": "Disques",
+      "addresses": "Adresses IP",
+      "san": "SAN",
+      "initiators": "Initiateurs SAN",
+      "paths": "Chemins SAN",
+      "packages": "Paquets",
+      "filterPackages": "Filtrer les paquets",
+      "morePackages_one": "{{count}} paquet de plus : précisez le filtre.",
+      "morePackages_other": "{{count}} paquets de plus : précisez le filtre.",
+      "users": "Utilisateurs",
+      "groups": "Groupes"
+    },
+    "config": {
+      "file": "Fichier de configuration du nœud",
+      "edit": "Modifier le fichier de configuration",
+      "readFailed": "La configuration n'a pas pu être lue : {{message}}"
+    },
+    "schedules": {
+      "collector": "collecteur",
+      "provisioned": "provisionné",
+      "unscheduled": "non planifié"
+    },
+    "drivers": {
+      "filter": "Filtrer les pilotes et capacités",
+      "drivers": "Pilotes",
+      "capabilities": "Capacités"
+    },
+    "columns": {
+      "property": "Propriété",
+      "value": "Valeur",
+      "source": "Source",
+      "class": "Classe",
+      "description": "Description",
+      "driver": "Pilote",
+      "path": "Chemin",
+      "device": "Périphérique",
+      "model": "Modèle",
+      "size": "Taille",
+      "objects": "Objets",
+      "interface": "Interface",
+      "address": "Adresse",
+      "mac": "MAC",
+      "initiator": "Initiateur",
+      "target": "Cible",
+      "version": "Version",
+      "arch": "Arch.",
+      "id": "Id",
+      "action": "Action",
+      "schedule": "Planification",
+      "lastRun": "Dernière exécution",
+      "nextRun": "Prochaine exécution",
+      "requires": "Requiert",
+      "keyword": "Mot-clé"
     }
   },
   "objectDetails": {
@@ -1014,6 +1096,7 @@
       "week": "Dernière semaine"
     },
     "types": {
+      "node": "Nœuds",
       "svc": "Services",
       "vol": "Volumes",
       "cfg": "Configurations",
@@ -1145,7 +1228,6 @@
     "searching": "Lecture…",
     "none": "Rien ne correspond à « {{query}} ».",
     "more": "Voir plus",
-    "opensList": "ouvre la liste",
     "refine": "D'autres correspondent : précisez la recherche.",
     "kindError": "Ce type n'a pas pu être lu.",
     "keys": {

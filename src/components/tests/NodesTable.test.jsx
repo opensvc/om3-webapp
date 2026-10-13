@@ -53,7 +53,8 @@ vi.mock('../NodeRow.jsx', () => ({
                 </span>
             </td>
             <td>
-                <button onClick={() => props.onOpenLogs(props.nodename)}>Open Logs</button>
+                <button onClick={() => props.onOpen(props.nodename)}>Open {props.nodename}</button>
+                {props.isOpen && <span>open</span>}
             </td>
         </tr>
     ),
@@ -82,6 +83,16 @@ vi.mock('react-router-dom', async (importOriginal) => {
         useNavigate: () => mockNavigate,
     };
 });
+
+// The node panel is tested on its own: here, which node it shows and on which tab.
+vi.mock('../NodePanel', () => ({
+    NodeDetailPanel: ({node, tab, onClose}) => (node === undefined ? null : (
+        <div role="dialog" aria-label={`Node ${node}`}>
+            {`${node} on ${tab ?? 'status'}`}
+            <button onClick={onClose}>Close panel</button>
+        </div>
+    )),
+}));
 
 vi.mock('../../components/LogsViewer.jsx', () => ({
     default: ({nodename, type, height}) => (
@@ -131,6 +142,8 @@ describe('NodesTable', () => {
     const originalDevicePixelRatio = window.devicePixelRatio;
 
     beforeEach(() => {
+        // The panel lives in the URL: no test inherits the one the test before opened.
+        window.history.replaceState({}, '', '/nodes');
         const fetchNodesMock = vi.fn().mockResolvedValue(undefined);
         mockUseFetchDaemonStatus.mockReturnValue({
             daemon: {nodename: 'node-1'},
@@ -452,7 +465,7 @@ describe('NodesTable', () => {
         test('passes each row its data and callbacks, the row menu being its own', async () => {
             renderWithRouter(<NodesTable/>);
             expect(await screen.findByTestId('props-node-1')).toHaveTextContent(
-                'daemonNodename,isSelected,monitor,nodename,onAction,onOpenLogs,onSelect,stats,status'
+                'daemonNodename,isOpen,isSelected,monitor,nodename,onAction,onOpen,onSelect,stats,status'
             );
         });
 
@@ -611,50 +624,27 @@ describe('NodesTable', () => {
         });
     });
 
-    describe('logs drawer', () => {
-        beforeEach(() => {
-            Object.defineProperty(window, 'innerWidth', {writable: true, configurable: true, value: 1000});
+    describe('node panel', () => {
+        test('a row opens the panel of its node, marked open', async () => {
+            renderWithRouter(<NodesTable/>);
+            fireEvent.click(await screen.findByRole('button', {name: 'Open node-2'}));
+            expect(screen.getByRole('dialog', {name: 'Node node-2'})).toHaveTextContent('node-2 on status');
+            expect(within(screen.getByTestId('row-node-2')).getByText('open')).toBeInTheDocument();
+            expect(window.location.search).toBe('?sel=node-2');
         });
 
-        const logsPanel = () => screen.getByRole('dialog', {name: 'Node Logs'});
-
-        test('opens and closes', async () => {
+        test('no logs column: the logs are a tab of the panel', async () => {
             renderWithRouter(<NodesTable/>);
-            expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument();
-            expect(logsPanel()).toHaveAttribute('inert');
-            fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            expect(logsPanel()).not.toHaveAttribute('inert');
-            expect(within(logsPanel()).getByTestId('logs-viewer')).toHaveTextContent('Logs for node-1 (node), height: 100%');
-            fireEvent.click(within(logsPanel()).getByRole('button', {name: 'Close'}));
-            await waitFor(() => expect(screen.queryByTestId('logs-viewer')).not.toBeInTheDocument());
-            expect(logsPanel()).toHaveAttribute('inert');
+            await screen.findByTestId('row-node-1');
+            expect(screen.queryByRole('columnheader', {name: 'Logs'})).not.toBeInTheDocument();
         });
 
-        test('shows the logs of the node last asked for', async () => {
+        test('closed, the URL forgets it', async () => {
             renderWithRouter(<NodesTable/>);
-            const buttons = await screen.findAllByText('Open Logs');
-            fireEvent.click(buttons[0]);
-            fireEvent.click(buttons[1]);
-            expect(screen.getByTestId('logs-viewer')).toHaveTextContent('Logs for node-2');
-        });
-
-        test('stays open on a click beside it', async () => {
-            renderWithRouter(<NodesTable/>);
-            fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            fireEvent.pointerDown(document.body);
-            expect(screen.getByTestId('logs-viewer')).toBeInTheDocument();
-        });
-
-        test('is resizable from its left edge, by the keyboard', async () => {
-            renderWithRouter(<NodesTable/>);
-            expect(screen.queryByRole('separator', {name: 'Resize drawer'})).not.toBeInTheDocument();
-            fireEvent.click((await screen.findAllByText('Open Logs'))[0]);
-            const handle = screen.getByRole('separator', {name: 'Resize drawer'});
-            const before = handle.getAttribute('aria-valuenow');
-            fireEvent.keyDown(handle, {key: 'ArrowLeft'});
-            await waitFor(() => expect(handle.getAttribute('aria-valuenow')).not.toBe(before));
-            fireEvent.keyDown(handle, {key: 'Enter'});
-            await waitFor(() => expect(handle.getAttribute('aria-valuenow')).toBe(before));
+            fireEvent.click(await screen.findByRole('button', {name: 'Open node-1'}));
+            fireEvent.click(screen.getByRole('button', {name: 'Close panel'}));
+            expect(screen.queryByRole('dialog', {name: /^Node /})).not.toBeInTheDocument();
+            expect(window.location.search).toBe('');
         });
     });
 

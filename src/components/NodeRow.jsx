@@ -1,16 +1,17 @@
 import React from "react";
 import {Row, Cell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
-import {IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {StatusMark} from "../ui/components/StatusMark";
 import {FrozenMark} from "../ui/components/FrozenMark";
 import {UsageBar} from "../ui/components/UsageBar";
-import {FileIcon, RssIcon, MoreIcon} from "../ui/icons";
+import {RssIcon, MoreIcon} from "../ui/icons";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
 import {useTranslation} from "react-i18next";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
+
+const stopPropagation = (event) => event.stopPropagation();
 
 const formatDate = (dateString, t, language) => {
     if (!dateString || dateString === ZERO_DATE) {
@@ -36,7 +37,7 @@ const formatDate = (dateString, t, language) => {
  * The node monitor state as a mark: idle is the normal state, a failure is down,
  * anything else is a transition. Without a monitor the state is unknown.
  */
-const monitorMark = (monitor) => {
+export const monitorMark = (monitor) => {
     const state = monitor?.state;
     if (!state) return {state: "unknown", label: "unknown"};
     if (state === "idle") return {state: "up", label: "idle"};
@@ -57,7 +58,8 @@ const NodeRow = ({
                      daemonNodename,
                      onSelect,
                      onAction,
-                     onOpenLogs,
+                     onOpen,
+                     isOpen = false,
                  }) => {
     const {t, i18n} = useTranslation();
     const notAvailable = t("common.notAvailable");
@@ -75,7 +77,12 @@ const NodeRow = ({
     const updatedValid = monitor?.updated_at && monitor.updated_at !== ZERO_DATE;
 
     return (
-        <Row aria-label={t("nodes.row.label", {node: nodename})} className={isSelected ? "bg-accent-soft" : undefined}>
+        <Row
+            aria-label={t("nodes.row.label", {node: nodename})}
+            onActivate={onOpen ? () => onOpen(nodename) : undefined}
+            selected={isOpen}
+            className={isSelected ? "bg-accent-soft" : undefined}
+        >
             <Cell className="w-8">
                 <Checkbox
                     checked={isSelected}
@@ -137,7 +144,8 @@ const NodeRow = ({
                     {formatDate(monitor?.updated_at, t, i18n.language)}
                 </span>
             </Cell>
-            <Cell>
+            {/* Its controls act on their own: the row would open the panel. */}
+            <Cell onClick={stopPropagation}>
                 <MenuButton
                     label={t("nodes.row.moreActions", {node: nodename})}
                     icon={<MoreIcon className="h-4 w-4"/>}
@@ -151,11 +159,6 @@ const NodeRow = ({
                         onSelect: () => onAction(nodename, name),
                     }))}
                 />
-            </Cell>
-            <Cell>
-                <IconButton size="sm" className="align-middle" label={t("nodes.row.viewLogs", {node: nodename})} onClick={() => onOpenLogs(nodename)}>
-                    <FileIcon className="h-4 w-4"/>
-                </IconButton>
             </Cell>
         </Row>
     );

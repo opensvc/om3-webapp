@@ -1025,6 +1025,10 @@
       "namespace": "Namespaces"
     }
   },
+  "panelSide": {
+    "toLeft": "Move the panels to the left",
+    "toRight": "Move the panels to the right"
+  },
   "statusBoard": {
     "caption": "Status of {{path}} by node",
     "notes_one": "Notes ({{count}})",

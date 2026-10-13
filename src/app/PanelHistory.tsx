@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClockIcon, CloseIcon, HistoryIcon, ShapesIcon, TrashIcon } from "../ui/icons";
 import { ObjectIcon } from "../ui/components/ObjectIcon";
+import { usePanelSide } from "../ui/components/panel-side";
 import { formatRelativeInstant } from "../ui/lib/format";
+import { moveHistoryEntries } from "./history-motion";
 import {
   useHistoryGrouping,
   usePanelHistory,
@@ -25,16 +27,23 @@ const RAIL_HEADER = "flex h-11 shrink-0 items-center gap-1 border-b border-line 
  * then in its tooltip; the choice is kept by the browser. The record on display is
  * highlighted where it stands, and scrolled into view.
  *
- * Clicking a pill shows its record and leaves it where it stands. The cross at the
- * right end of a pill, shown when the entry is hovered or focused, removes it; the
- * bin in the header clears them all. Nothing is rendered while the history is empty.
+ * Clicking a pill shows its record and leaves it where it stands; shown from
+ * anywhere else, a record comes back on top, the others sliding down
+ * (`history-motion.ts`). The cross at the right end of a pill, shown when the entry
+ * is hovered or focused, removes it; the bin in the header clears them all. Nothing
+ * is rendered while the history is empty.
  */
 export function PanelHistoryRail({ currentKey }: { currentKey: string }) {
   const { t } = useTranslation();
   const grouping = useHistoryGrouping();
   const history = usePanelHistory(currentKey, grouping.value);
+  const { side } = usePanelSide();
   const list = useRef<HTMLDivElement>(null);
   const signature = history.entries.map((entry) => entry.key).join(",");
+
+  useLayoutEffect(() => {
+    if (list.current !== null) moveHistoryEntries(list.current, signature);
+  }, [signature]);
 
   // The record on display stays in sight, however far down the list it stands.
   useEffect(() => {
@@ -47,7 +56,10 @@ export function PanelHistoryRail({ currentKey }: { currentKey: string }) {
     <nav
       aria-label={t("panelHistory.label")}
       // Sunken, against the raised record zone: two zones of one panel.
-      className="flex h-full w-44 flex-col border-l border-line-strong bg-surface-sunken"
+      // The border faces the record, whichever edge of the window the panel stands on.
+      className={`flex h-full w-44 flex-col border-line-strong bg-surface-sunken ${
+        side === "left" ? "border-r" : "border-l"
+      }`}
     >
       <div className={RAIL_HEADER}>
         <HistoryIcon className="h-4 w-4 shrink-0 text-ink-muted" />
@@ -63,7 +75,8 @@ export function PanelHistoryRail({ currentKey }: { currentKey: string }) {
           <span className="sr-only">{t("panelHistory.clear")}</span>
         </button>
       </div>
-      <div ref={list} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+      {/* Positioned: the entries measure their place from it (`history-motion.ts`). */}
+      <div ref={list} className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         {history.groups.map((group) => (
           <section key={group.key} aria-labelledby={`history-${group.key}`}>
             <GroupHeading
@@ -75,6 +88,7 @@ export function PanelHistoryRail({ currentKey }: { currentKey: string }) {
               {group.entries.map((entry) => (
                 <li
                   key={entry.key}
+                  data-entry={entry.key}
                   // The pill: the record on the left, the cross that removes it on the right.
                   className={`group flex items-center rounded-full border text-data ${
                     entry.current

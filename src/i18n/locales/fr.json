@@ -1025,6 +1025,10 @@
       "namespace": "Namespaces"
     }
   },
+  "panelSide": {
+    "toLeft": "Déplacer les panneaux à gauche",
+    "toRight": "Déplacer les panneaux à droite"
+  },
   "statusBoard": {
     "caption": "État de {{path}} par nœud",
     "notes_one": "Notes ({{count}})",

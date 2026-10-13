@@ -23,6 +23,8 @@ import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
 import {PeekPanel} from "./PeekPanel";
 import {PanelAnchor} from "../app/PanelAnchor";
+import {PanelSideProvider} from "../app/PanelSideProvider";
+import {usePanelSidePref} from "../app/panel-side-pref";
 import {ShortcutsHelp} from "../app/ShortcutsHelp";
 import {useShortcut} from "../ui/lib/shortcuts";
 
@@ -352,61 +354,67 @@ const App = () => {
         color: 'var(--ink)',
     };
 
+    // With the panels on the left, the gutter of the views on that side is as wide as
+    // the anchor that brings them back, which stands there without covering them.
+    const panelSide = usePanelSidePref().value;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
+        ...(panelSide === 'left' && showSidebar ? {paddingLeft: '2rem'} : {}),
     };
 
     return (
         <AuthProvider>
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
-                    <div id="app-root-container" style={appContainerStyle}>
-                        <NavBar
-                            sidebarOpen={sidebarOpen}
-                            onToggleSidebar={toggleSidebar}
-                            showSidebarToggle={showSidebar}
-                        />
-                        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-                            {showSidebar && <Sidebar open={sidebarOpen}/>}
-                            <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
-                                <Suspense fallback={<Loading/>}>
-                                    <Routes>
-                                        <Route path="/" element={<Navigate to="/objects" replace/>}/>
-                                        <Route path="/namespaces"
-                                               element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                                        <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
-                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
-                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                        <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                        <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
-                                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                        <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
-                                        <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
-                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                                        <Route path="/silent-renew" element={<SilentRenew/>}/>
-                                        <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                        <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
-                                        <Route path="/auth/login" element={<Login/>}/>
-                                        <Route path="*" element={<Navigate to="/"/>}/>
-                                    </Routes>
-                                    {/* The record opened from a badge or the history, whatever the
-                                        view, and what brings the panels back once closed. */}
-                                    {showSidebar && localStorage.getItem("authToken") && (
-                                        <>
-                                            <PeekPanel/>
-                                            <PanelAnchor/>
-                                            <ShortcutsHelp/>
-                                        </>
-                                    )}
-                                </Suspense>
-                            </main>
+                    <PanelSideProvider>
+                        <div id="app-root-container" style={appContainerStyle}>
+                            <NavBar
+                                sidebarOpen={sidebarOpen}
+                                onToggleSidebar={toggleSidebar}
+                                showSidebarToggle={showSidebar}
+                            />
+                            <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+                                {showSidebar && <Sidebar open={sidebarOpen}/>}
+                                <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
+                                    <Suspense fallback={<Loading/>}>
+                                        <Routes>
+                                            <Route path="/" element={<Navigate to="/objects" replace/>}/>
+                                            <Route path="/namespaces"
+                                                   element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                            <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
+                                            <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                            <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                            <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                            <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                            <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
+                                            <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                                            <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
+                                            <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
+                                            <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                            <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                            <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                            <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
+                                            <Route path="/auth/login" element={<Login/>}/>
+                                            <Route path="*" element={<Navigate to="/"/>}/>
+                                        </Routes>
+                                        {/* The record opened from a badge or the history, whatever the
+                                            view, and what brings the panels back once closed. */}
+                                        {showSidebar && localStorage.getItem("authToken") && (
+                                            <>
+                                                <PeekPanel/>
+                                                <PanelAnchor/>
+                                                <ShortcutsHelp/>
+                                            </>
+                                        )}
+                                    </Suspense>
+                                </main>
+                            </div>
                         </div>
-                    </div>
+                    </PanelSideProvider>
                 </OidcInitializer>
             </OidcProvider>
         </AuthProvider>

@@ -1000,11 +1000,29 @@
     "show": "Afficher {{name}}",
     "reopen_one": "Rouvrir {{name}}",
     "reopen_other": "Rouvrir {{name}} et l'historique ({{count}} fiches)",
+    "grouping": {
+      "label": "Regrouper l'historique",
+      "time": "Par date",
+      "kind": "Par type"
+    },
+    "shownAt": "{{name}} · affiché {{when}}",
+    "shownWhen": "affiché {{when}}",
     "sections": {
       "now": "Maintenant",
       "hour": "Dernière heure",
       "day": "Dernier jour",
       "week": "Dernière semaine"
+    },
+    "types": {
+      "svc": "Services",
+      "vol": "Volumes",
+      "cfg": "Configurations",
+      "sec": "Secrets",
+      "usr": "Utilisateurs",
+      "nscfg": "Configurations de namespace",
+      "ccfg": "Cluster",
+      "network": "Réseaux",
+      "namespace": "Namespaces"
     }
   },
   "statusBoard": {

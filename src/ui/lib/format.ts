@@ -86,6 +86,19 @@ export function formatRelativeTime(
   return "";
 }
 
+/** `formatRelativeTime` for an instant in milliseconds since the epoch. */
+export function formatRelativeInstant(at: number, locale: string, now: number = Date.now()): string {
+  const seconds = (at - now) / 1000;
+  const absolute = Math.abs(seconds);
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const [unit, size] of RELATIVE_UNITS) {
+    if (absolute >= size || unit === "second") {
+      return format.format(Math.trunc(seconds / size), unit);
+    }
+  }
+  return "";
+}
+
 /** A duration in seconds, in its two largest units: "3 d 4 h", "12 min", "15 s". */
 export function formatDuration(seconds: number, locale: string): string {
   const units: [number, Intl.NumberFormatOptions["unit"]][] = [

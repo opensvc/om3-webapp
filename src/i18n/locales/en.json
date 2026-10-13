@@ -1000,11 +1000,29 @@
     "show": "Show {{name}}",
     "reopen_one": "Reopen {{name}}",
     "reopen_other": "Reopen {{name}} and the history ({{count}} records)",
+    "grouping": {
+      "label": "Group the history",
+      "time": "By time",
+      "kind": "By kind"
+    },
+    "shownAt": "{{name}} · shown {{when}}",
+    "shownWhen": "shown {{when}}",
     "sections": {
       "now": "Now",
       "hour": "Last hour",
       "day": "Last day",
       "week": "Last week"
+    },
+    "types": {
+      "svc": "Services",
+      "vol": "Volumes",
+      "cfg": "Configurations",
+      "sec": "Secrets",
+      "usr": "Users",
+      "nscfg": "Namespace configurations",
+      "ccfg": "Cluster",
+      "network": "Networks",
+      "namespace": "Namespaces"
     }
   },
   "statusBoard": {

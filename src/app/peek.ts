@@ -45,7 +45,7 @@ export function serialiseStep(step: PeekStep): string {
 }
 
 /** The kind of an object path ("ns/kind/name", or a bare name for a root service). */
-function pathKind(path: string): string | undefined {
+export function pathKind(path: string): string | undefined {
   const parts = path.split("/");
   return parts.length === 3 ? parts[1] : parts.length === 2 ? parts[0] : undefined;
 }

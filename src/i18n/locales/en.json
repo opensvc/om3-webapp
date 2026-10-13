@@ -833,6 +833,11 @@
     "empty": "No objects found matching the current filters.",
     "loadingMore": "Loading more objects",
     "actionsMenu": "Actions on selected objects",
+    "lists": {
+      "label": "Object lists",
+      "services": "Services",
+      "configs": "Configurations"
+    },
     "columns": {
       "object": "Object",
       "orchestrate": "Orchestrate",

@@ -833,6 +833,11 @@
     "empty": "Aucun objet ne correspond aux filtres actuels.",
     "loadingMore": "Chargement d'autres objets",
     "actionsMenu": "Actions sur les objets sélectionnés",
+    "lists": {
+      "label": "Listes d'objets",
+      "services": "Services",
+      "configs": "Configurations"
+    },
     "columns": {
       "object": "Objet",
       "orchestrate": "Orchestration",

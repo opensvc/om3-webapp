@@ -24,6 +24,8 @@ import {Checkbox, Input} from "../ui/components/Field";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
+import {TabList} from "../ui/components/Tabs";
+import {tabPanelProps} from "../ui/components/tabs-ids";
 import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, SearchIcon} from "../ui/icons";
 
 // The breakpoints of the MUI theme the view used: below md (900px) the filters fold
@@ -68,6 +70,15 @@ const parseObjectName = (objectName) => {
         name: parts[0],
     };
 };
+
+/**
+ * The list is split in two tabs: the objects running on the nodes, and the ones
+ * holding configuration, the cfg, the sec and the cluster object. The tab is in
+ * the URL, `list=configs`; the first one is shown without it.
+ */
+const CONFIG_KINDS = ["cfg", "sec", "ccfg"];
+const OBJECT_LISTS = ["services", "configs"];
+const listOf = (objectName) => (CONFIG_KINDS.includes(parseObjectName(objectName).kind) ? "configs" : "services");
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -316,6 +327,7 @@ const Objects = () => {
     const rawNamespaces = parseMultipleValues("namespace");
     const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
+    const list = queryParams.get("list") === "configs" ? "configs" : "services";
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -360,6 +372,7 @@ const Objects = () => {
     const tableContainerRef = useRef(null);
 
     const filtersId = React.useId();
+    const listTabsId = React.useId();
 
     const objects = useMemo(
         () => (Object.keys(objectStatus).length ? objectStatus : daemon?.cluster?.object || {}),
@@ -371,12 +384,24 @@ const Objects = () => {
         [objects]
     );
 
+    // The objects of the tab shown, and how many each tab has.
+    const {listObjectNames, listCounts} = useMemo(() => {
+        const counts = {services: 0, configs: 0};
+        const names = [];
+        for (const name of allObjectNames) {
+            const of = listOf(name);
+            counts[of] += 1;
+            if (of === list) names.push(name);
+        }
+        return {listObjectNames: names, listCounts: counts};
+    }, [allObjectNames, list]);
+
     const {namespaces, kinds} = useMemo(() => {
         const nsSet = new Set();
         const kindSet = new Set();
 
-        for (let i = 0; i < allObjectNames.length; i++) {
-            const name = allObjectNames[i];
+        for (let i = 0; i < listObjectNames.length; i++) {
+            const name = listObjectNames[i];
             nsSet.add(extractNamespace(name));
             kindSet.add(parseObjectName(name).kind);
         }
@@ -385,7 +410,7 @@ const Objects = () => {
             namespaces: Array.from(nsSet).sort(),
             kinds: Array.from(kindSet).sort()
         };
-    }, [allObjectNames]);
+    }, [listObjectNames]);
 
     const allNodes = useMemo(() => {
         const nodeSet = new Set();
@@ -406,8 +431,8 @@ const Objects = () => {
         const searchLower = deferredSearchQuery.toLowerCase();
         const hasSearch = searchLower.length > 0;
 
-        for (let i = 0; i < allObjectNames.length; i++) {
-            const name = allObjectNames[i];
+        for (let i = 0; i < listObjectNames.length; i++) {
+            const name = listObjectNames[i];
 
             if (hasSearch && !name.toLowerCase().includes(searchLower)) {
                 continue;
@@ -454,7 +479,7 @@ const Objects = () => {
         }
 
         return result;
-    }, [allObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
+    }, [listObjectNames, deferredSelectedGlobalStates, deferredSelectedNamespaces,
         deferredSelectedKinds, deferredSearchQuery, objects]);
 
     const getStatusOrder = (cycleIndex) => {
@@ -773,6 +798,18 @@ const Objects = () => {
         };
     }, []);
 
+    // Another tab: the selection and the kinds picked were the other tab's.
+    const handleListChange = useCallback((next) => {
+        setSelectedObjects([]);
+        setSelectedKinds([]);
+        const params = new URLSearchParams(location.search);
+        params.delete("kind");
+        if (next === "configs") params.set("list", next);
+        else params.delete("list");
+        const queryString = params.toString();
+        navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {replace: true});
+    }, [location.pathname, location.search, navigate]);
+
     const handleSelectAll = useCallback((e) => {
         setSelectedObjects(e.target.checked ? filteredObjectNames : []);
     }, [filteredObjectNames]);
@@ -829,6 +866,17 @@ const Objects = () => {
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
+            <TabList
+                tabs={OBJECT_LISTS.map((key) => ({
+                    key,
+                    label: t(`objects.lists.${key}`),
+                    badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
+                }))}
+                active={list}
+                onChange={handleListChange}
+                label={t("objects.lists.label")}
+                idPrefix={listTabsId}
+            />
             <div className="flex shrink-0 flex-wrap items-center gap-3">
                 {isMobile && (
                     <Button
@@ -905,7 +953,13 @@ const Objects = () => {
                 </Alert>
             )}
 
-            <Table ref={tableContainerRef} sticky aria-label={t("objects.tableLabel")} className="min-h-0 flex-1">
+            <Table
+                ref={tableContainerRef}
+                sticky
+                aria-label={t("objects.tableLabel")}
+                className="min-h-0 flex-1"
+                {...tabPanelProps(listTabsId, list)}
+            >
                 <thead>
                     <HeaderRow>
                         <HeaderCell className="w-8">

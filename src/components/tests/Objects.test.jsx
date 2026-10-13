@@ -355,7 +355,7 @@ describe('Objects Component', () => {
                     placement_policy: 'spread', placement_state: 'non-optimal', up_instances_count: 2,
                     scope: ['node1', 'node2', 'node3'], priority: 50,
                 },
-                'test-ns/cfg/c': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1'], priority: 50},
+                'test-ns/usr/c': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1'], priority: 50},
             },
             objectInstanceStatus: {},
         };
@@ -381,7 +381,7 @@ describe('Objects Component', () => {
         test('are empty for an object with no instances to place', async () => {
             setup(propertyState);
             await waitForLoad();
-            const cfg = objectRow('test-ns/cfg/c');
+            const cfg = objectRow('test-ns/usr/c');
             ['Orchestrate', 'Topology'].forEach((label) =>
                 expect(propertyCell(cfg, label)).toHaveTextContent(/^$/)
             );
@@ -392,15 +392,15 @@ describe('Objects Component', () => {
             await waitForLoad();
             clickHeader('Orchestrate');
             await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/cfg/c'])
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/usr/c'])
             );
             clickHeader('Orchestrate');
             await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fx', 'test-ns/svc/fo', 'test-ns/cfg/c'])
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fx', 'test-ns/svc/fo', 'test-ns/usr/c'])
             );
             clickHeader('Topology');
             await waitFor(() =>
-                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/cfg/c'])
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/usr/c'])
             );
         });
     });
@@ -479,7 +479,7 @@ describe('Objects Component', () => {
                 ...defaultState.objectStatus,
                 'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
             },
-        });
+        }, '?list=configs');
         await waitForLoad();
         selectRow('test-ns/cfg/conf1');
         openActionsMenu();
@@ -490,6 +490,49 @@ describe('Objects Component', () => {
         expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeDisabled();
         expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
+    });
+
+    describe('tabs', () => {
+        const mixed = {
+            objectStatus: {
+                ...defaultState.objectStatus,
+                'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/sec/sec1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'cluster': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/usr/usr1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+            },
+        };
+        const configs = ['test-ns/cfg/conf1', 'test-ns/sec/sec1', 'cluster'];
+
+        test('the services first, the cfg, sec and cluster objects in a tab of their own', async () => {
+            setup(mixed);
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
+            expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('7');
+            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('3');
+            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
+            expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
+            expect(objectNamesInOrder()).toContain('test-ns/usr/usr1');
+        });
+
+        test('list=configs shows the configurations alone, their kinds alone in the filter', async () => {
+            setup(mixed, '?list=configs');
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
+            expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
+            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
+            expect(kinds).toEqual(['ccfg', 'cfg', 'sec']);
+        });
+
+        test('another tab drops the selection and the kinds picked, the panel kept', async () => {
+            setup(mixed, '?kind=svc&sel=test-ns%2Fsvc%2Ftest1&name=test');
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            expect(screen.getByText('1 selected')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', {name: /^Configurations/}));
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?sel=test-ns%2Fsvc%2Ftest1&name=test&list=configs', {replace: true});
+            expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
+        });
     });
 
     describe('filtering', () => {
@@ -989,16 +1032,16 @@ describe('Objects Component', () => {
             setup({
                 objectStatus: {
                     ...defaultState.objectStatus,
-                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    'test-ns/usr/usr1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
                 },
                 objectInstanceStatus: {
                     ...defaultState.objectInstanceStatus,
-                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                    'test-ns/usr/usr1': {node1: {avail: 'up'}},
                 },
             });
             await waitForLoad();
             selectRow('test-ns/svc/test1');
-            selectRow('test-ns/cfg/cfg1');
+            selectRow('test-ns/usr/usr1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
@@ -1536,7 +1579,8 @@ describe('Objects Component', () => {
             objectInstanceStatus: {standalone: {node1: {avail: 'up'}}},
         }, '/root/svc/standalone/action/restart'],
     ])('object name "%s" resolves to the expected action URL', async (rowName, customState, expectedUrl) => {
-        setup(customState, '', {isWideScreen: true, isMobile: false});
+        // The cluster object is listed with the configurations.
+        setup(customState, rowName === 'cluster' ? '?list=configs' : '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         selectRow(rowName);
         openActionsMenu();

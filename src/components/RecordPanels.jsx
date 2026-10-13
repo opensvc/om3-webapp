@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import useEventStore from "../hooks/useEventStore.js";
 import {RecordPanel} from "../app/RecordPanel";
@@ -68,6 +68,22 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const [logsNode, setLogsNode] = useState(null);
     useEffect(() => setLogsNode(null), [path]);
+
+    // An object deleted or purged, from the panel or anywhere else, leaves the
+    // store: its panel closes. Only once it was seen there, for an object the store
+    // does not hold yet to keep its panel.
+    const known = useEventStore((s) => path !== undefined && s.objectStatus?.[path] !== undefined);
+    const seen = useRef(false);
+    useEffect(() => {
+        seen.current = false;
+    }, [path]);
+    useEffect(() => {
+        if (known) seen.current = true;
+        else if (seen.current) {
+            seen.current = false;
+            onClose();
+        }
+    }, [known, onClose]);
 
     const tabs = keysOnly
         ? [

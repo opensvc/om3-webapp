@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
 import {vi} from 'vitest';
 import {PeekPanel} from '../PeekPanel';
@@ -19,11 +19,30 @@ vi.mock('../LogsViewer', () => ({
         <div data-testid="logs">{`${type} ${namespace}/${kind}/${instanceName} on ${nodename}`}</div>
     ),
 }));
-vi.mock('../../hooks/useEventStore.js', () => ({
-    default: (selector) => selector({
-        objectInstanceStatus: {'ns1/svc/web': {node1: {}, node2: {}}},
-    }),
-}));
+/** The event store, as small as the panels need: a state, changed by the tests. */
+const store = vi.hoisted(() => {
+    const initial = {objectInstanceStatus: {'ns1/svc/web': {node1: {}, node2: {}}}, objectStatus: {}};
+    let state = initial;
+    const listeners = new Set();
+    return {
+        get: () => state,
+        set: (next) => {
+            state = {...state, ...next};
+            listeners.forEach((listener) => listener());
+        },
+        reset: () => {
+            state = initial;
+        },
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+    };
+});
+vi.mock('../../hooks/useEventStore.js', async () => {
+    const {useSyncExternalStore} = await import('react');
+    return {default: (selector) => selector(useSyncExternalStore(store.subscribe, store.get))};
+});
 
 /** The panels open: a closed one stays mounted for its animation, inert. */
 const openDialogs = () => screen.queryAllByRole('dialog').filter((d) => !d.hasAttribute('inert'));
@@ -42,6 +61,22 @@ const renderPeek = (url) => render(
 describe('record panels', () => {
     beforeEach(() => {
         sessionStorage.clear();
+        store.reset();
+    });
+
+    test('an object deleted or purged closes its panel', () => {
+        store.set({objectStatus: {'ns1/svc/web': {avail: 'up'}}});
+        renderPeek('/nodes?peek=object:ns1/svc/web');
+        expect(openDialogs()).toHaveLength(1);
+        act(() => store.set({objectStatus: {}}));
+        expect(openDialogs()).toHaveLength(0);
+        expect(screen.getByTestId('search')).toHaveTextContent(/^$/);
+    });
+
+    test('an object the store does not hold yet keeps its panel', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web');
+        act(() => store.set({objectStatus: {'ns1/svc/other': {avail: 'up'}}}));
+        expect(openDialogs()).toHaveLength(1);
     });
 
     test('a service opens on its status board, its logs and its configuration on tabs of their own', () => {

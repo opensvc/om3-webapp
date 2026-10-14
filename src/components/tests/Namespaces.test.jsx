@@ -3,22 +3,23 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import Namespaces, {areStatusDotPropsEqual} from '../Namespaces';
+import i18n from '../../i18n';
 
 // ── Hoisted mock variables ──────────────────────────────────────────────
 const {
     mockNavigate,
     mockUseNavigate,
     mockUseLocation,
-    mockStartEventReception,
-    mockCloseEventSource,
+    mockRetainEventReception,
+    mockReleaseEventReception,
     mockUseEventStore,
     mockUseNamespaceData,
 } = vi.hoisted(() => ({
     mockNavigate: vi.fn(),
     mockUseNavigate: vi.fn(() => mockNavigate),
     mockUseLocation: vi.fn(() => ({pathname: '/namespaces', search: ''})),
-    mockStartEventReception: vi.fn(),
-    mockCloseEventSource: vi.fn(),
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
     mockUseEventStore: vi.fn(),
     mockUseNamespaceData: vi.fn(),
 }));
@@ -39,12 +40,18 @@ vi.mock('../../hooks/useEventStore.js', () => ({
 }));
 
 vi.mock('../../eventSourceManager.jsx', () => ({
-    startEventReception: mockStartEventReception,
-    closeEventSource: mockCloseEventSource,
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
 }));
 
 vi.mock('../../hooks/useNamespaceData', () => ({
     useNamespaceData: mockUseNamespaceData,
+}));
+
+vi.mock('../NamespaceMetrics', () => ({
+    default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>,
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -143,6 +150,18 @@ describe('Namespaces', () => {
         );
     });
 
+    test('speaks French to a French browser', async () => {
+        await i18n.changeLanguage('fr');
+        try {
+            renderComponent();
+            expect(screen.getByRole('columnheader', {name: 'Namespace'})).toBeInTheDocument();
+            expect(screen.getByRole('columnheader', {name: 'Métriques'})).toBeInTheDocument();
+            expect(screen.getByLabelText('Filtrer par namespace')).toBeInTheDocument();
+        } finally {
+            await i18n.changeLanguage('en');
+        }
+    });
+
     test('displays namespace counts correctly', () => {
         renderComponent();
         const rootRow = screen.getByRole('row', {name: /root/i});
@@ -159,7 +178,7 @@ describe('Namespaces', () => {
         renderComponent();
         const rootRow = screen.getByRole('row', {name: /root/i});
         const marks = rootRow.querySelectorAll('[data-state]');
-        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'unknown']);
+        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'na']);
         expect(marks[0]).toHaveTextContent('up');
         expect(marks[1]).toHaveTextContent('down');
         expect(marks[2]).toHaveTextContent('warn');
@@ -214,7 +233,7 @@ describe('Namespaces', () => {
     test('starts event reception on mount with token', async () => {
         renderComponent();
         await waitFor(() => {
-            expect(mockStartEventReception).toHaveBeenCalledWith(
+            expect(mockRetainEventReception).toHaveBeenCalledWith(
                 'valid-token',
                 ['ObjectStatusUpdated', 'InstanceStatusUpdated', 'ObjectDeleted', 'InstanceConfigUpdated']
             );
@@ -224,13 +243,13 @@ describe('Namespaces', () => {
     test('closes event source on unmount', async () => {
         const {unmount} = renderComponent();
         await act(() => unmount());
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('does not start event reception without token', () => {
         setup({token: null});
         renderComponent();
-        expect(mockStartEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     test('shows no namespaces message when empty', () => {
@@ -445,6 +464,15 @@ describe('Namespaces', () => {
         renderComponent();
         const cells = getCells(getBodyRows()[0]);
         expect(cells[4]).toHaveTextContent('1');
+    });
+
+    test('opens the metrics of a namespace without opening its objects', () => {
+        renderComponent();
+        expect(screen.getByRole('columnheader', {name: 'Metrics'})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'View metrics for namespace prod'}));
+        expect(screen.getByTestId('namespace-metrics')).toHaveTextContent('prod');
+        expect(screen.getByRole('dialog', {name: 'Metrics of prod'})).toBeInTheDocument();
+        expect(mockNavigate).not.toHaveBeenCalled();
     });
 
     test('labels the namespace filter', () => {

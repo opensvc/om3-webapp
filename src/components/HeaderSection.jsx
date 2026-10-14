@@ -1,24 +1,23 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import {MenuButton} from '../ui/components/MenuButton';
 import {StatusBadge} from '../ui/components/StatusBadge';
 import {statusBadge} from '../ui/components/status';
 import {FrozenMark} from '../ui/components/FrozenMark';
 import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
-import {AlertTriangleIcon} from '../ui/icons';
-import {OBJECT_ACTIONS} from '../constants/actions';
+import {AlertTriangleIcon, GearIcon} from '../ui/icons';
+import {OBJECT_ACTIONS, actionLabel} from '../constants/actions';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
 const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
 
-
-const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
-
 /**
  * Record header of the object page: the kind icon and the object name, then its
  * global state, frozen and provisioning marks, the global expectation in progress,
- * and the object actions menu at the right edge.
+ * and the object actions menu at the right edge. `embedded` in a record panel, whose
+ * title already names the object: the state and the actions only.
  */
 const HeaderSection = ({
                            decodedObjectName,
@@ -27,7 +26,9 @@ const HeaderSection = ({
                            actionInProgress,
                            handleObjectActionClick,
                            getObjectStatus,
+                           embedded = false,
                        }) => {
+    const {t} = useTranslation();
     if (!globalStatus) return null;
 
     const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
@@ -40,10 +41,12 @@ const HeaderSection = ({
 
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-                <ObjectIcon kind={om3ObjectKind(kind)} className="h-5 w-5"/>
-                <h1 className="truncate text-title font-semibold">{decodedObjectName}</h1>
-            </div>
+            {!embedded && (
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <ObjectIcon kind={om3ObjectKind(kind)} className="h-5 w-5"/>
+                    <h1 className="truncate text-title font-semibold">{decodedObjectName}</h1>
+                </div>
+            )}
 
             <div className="flex items-center gap-3">
                 {globalExpect && (
@@ -51,29 +54,32 @@ const HeaderSection = ({
                         {globalExpect}
                     </span>
                 )}
-                <span data-state={badge.state} title={`Object status: ${avail || "unknown"}`} className="inline-flex">
+                <span data-state={badge.state} title={t("objects.header.statusTitle", {status: avail || t("objects.header.unknown")})} className="inline-flex">
                     <StatusBadge state={badge.state} label={badge.label ?? (avail || undefined)} className="w-auto"/>
                 </span>
                 <FrozenMark frozen={frozen === 'frozen'}/>
                 {isNotProvisioned && (
                     <span
                         role="img"
-                        title="Not Provisioned"
-                        aria-label="Object is not provisioned"
+                        title={t("objects.header.notProvisionedTitle")}
+                        aria-label={t("objects.header.notProvisionedLabel")}
                         className="text-state-down"
                     >
                         <AlertTriangleIcon className="h-4 w-4"/>
                     </span>
                 )}
                 <MenuButton
-                    label="Object actions"
+                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                    prominent
+                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                    label={t("objects.header.actionsMenu")}
                     align="end"
                     disabled={actionInProgress}
                     items={allowedActions.map(({name, icon, color}) => {
                         const isAllowed = isActionAllowedForSelection(name, [decodedObjectName]);
                         return {
                             key: name,
-                            label: capitalize(name),
+                            label: actionLabel(name),
                             icon: (
                                 <span aria-hidden="true" className={color === "red" && isAllowed ? DANGER_ICON : ICON}>
                                     {icon}

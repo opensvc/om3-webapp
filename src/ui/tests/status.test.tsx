@@ -10,7 +10,8 @@ describe("StatusBadge", () => {
     ["up", "up", "text-state-up"],
     ["warn", "warn", "text-state-warn"],
     ["down", "down", "text-state-down"],
-    ["unknown", "n/a", "text-state-unknown"],
+    ["na", "n/a", "text-state-unknown"],
+    ["unknown", "unknown", "text-state-unknown"],
   ] as [ObjectState, string, string][])(
     "%s reads %s with its drawn shape, in %s",
     (state, label, ink) => {
@@ -38,7 +39,7 @@ describe("toObjectState", () => {
     ["up", "up"],
     ["warn", "warn"],
     ["down", "down"],
-    ["n/a", "unknown"],
+    ["n/a", "na"],
     ["", "unknown"],
     [undefined, "unknown"],
     ["stdby up", "unknown"],
@@ -59,7 +60,7 @@ describe("statusBadge", () => {
 
   test("other values map through toObjectState, without a label", () => {
     expect(statusBadge("warn")).toEqual({ state: "warn" });
-    expect(statusBadge("n/a")).toEqual({ state: "unknown" });
+    expect(statusBadge("n/a")).toEqual({ state: "na" });
     expect(statusBadge(undefined)).toEqual({ state: "unknown" });
   });
 });

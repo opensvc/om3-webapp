@@ -1,6 +1,7 @@
 import React from 'react';
 import {render as rtlRender, screen, fireEvent, within} from '@testing-library/react';
 import NodeRow from '../NodeRow';
+import i18n from '../../i18n';
 
 // A row lives in a table body.
 const wrapper = ({children}) => <table><tbody>{children}</tbody></table>;
@@ -8,9 +9,10 @@ const render = (ui, options) => rtlRender(ui, {wrapper, ...options});
 import '@testing-library/jest-dom';
 
 // Mock NODE_ACTIONS
-vi.mock('../../constants/actions', async () => {
+vi.mock('../../constants/actions', async (importOriginal) => {
     const {createElement} = await import('react');
     return {
+    ...(await importOriginal()),
     NODE_ACTIONS: [
         {name: 'freeze', icon: createElement('span', {'aria-label': 'Freeze icon'})},
         {name: 'unfreeze', icon: createElement('span', {'aria-label': 'Unfreeze icon'})},
@@ -38,7 +40,6 @@ describe('NodeRow Component', () => {
         daemonNodename: 'node2',
         onSelect: jest.fn(),
         onAction: jest.fn(),
-        onOpenLogs: jest.fn(),
     };
 
     beforeEach(() => {
@@ -60,6 +61,17 @@ describe('NodeRow Component', () => {
     test('renders nodename correctly', () => {
         render(<NodeRow {...defaultProps} />);
         expect(screen.getByText('node1')).toBeInTheDocument();
+    });
+
+    test('speaks French to a French browser', async () => {
+        await i18n.changeLanguage('fr');
+        try {
+            render(<NodeRow {...defaultProps} stats={undefined}/>);
+            expect(screen.getByRole('checkbox', {name: 'Sélectionner le nœud node1'})).toBeInTheDocument();
+            expect(screen.getAllByText('N/D').length).toBeGreaterThan(0);
+        } finally {
+            await i18n.changeLanguage('en');
+        }
     });
 
     test('renders checkbox with correct checked state', () => {
@@ -192,7 +204,7 @@ describe('NodeRow Component', () => {
     test('passes the action name, not its label', () => {
         render(<NodeRow {...defaultProps} />);
         fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        fireEvent.click(screen.getByRole('menuitem', {name: 'Restart Daemon'}));
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Restart daemon'}));
         expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'restart daemon');
     });
 
@@ -271,7 +283,7 @@ describe('NodeRow Component', () => {
         test('renders tooltip with full date when booted_at is valid', () => {
             const date = '2023-01-01T10:00:00Z';
             render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: date}}/>);
-            expect(screen.getByText('2h ago')).toHaveAttribute('title', new Date(date).toLocaleString());
+            expect(screen.getByText('2h ago')).toHaveAttribute('title', new Date(date).toLocaleString(i18n.language));
         });
 
         test('renders "Xd ago" when booted_at is within 7 days', () => {
@@ -281,7 +293,7 @@ describe('NodeRow Component', () => {
 
         test('renders locale date when booted_at is older than 7 days', () => {
             const oldDate = '2022-12-24T12:00:00Z';
-            const expectedDateString = new Date(oldDate).toLocaleDateString();
+            const expectedDateString = new Date(oldDate).toLocaleDateString(i18n.language);
             render(<NodeRow {...defaultProps} status={{...defaultProps.status, booted_at: oldDate}}/>);
             expect(screen.getByText(expectedDateString)).toBeInTheDocument();
         });
@@ -310,7 +322,7 @@ describe('NodeRow Component', () => {
             const date = '2023-01-01T11:30:00Z';
             render(<NodeRow {...defaultProps}
                             monitor={{...defaultProps.monitor, updated_at: date}}/>);
-            expect(screen.getByText('30m ago')).toHaveAttribute('title', new Date(date).toLocaleString());
+            expect(screen.getByText('30m ago')).toHaveAttribute('title', new Date(date).toLocaleString(i18n.language));
         });
 
         test('renders "Xd ago" when updated_at is within 7 days', () => {
@@ -321,7 +333,7 @@ describe('NodeRow Component', () => {
 
         test('renders locale date when updated_at is older than 7 days', () => {
             const oldDate = '2022-12-24T12:00:00Z';
-            const expectedDateString = new Date(oldDate).toLocaleDateString();
+            const expectedDateString = new Date(oldDate).toLocaleDateString(i18n.language);
             render(<NodeRow {...defaultProps} monitor={{...defaultProps.monitor, updated_at: oldDate}}/>);
             expect(screen.getByText(expectedDateString)).toBeInTheDocument();
         });
@@ -338,13 +350,6 @@ describe('NodeRow Component', () => {
             const cells = screen.getAllByRole('cell');
             expect(cells[9]).toHaveTextContent(/^-$/);
         });
-    });
-
-    test('calls onOpenLogs when logs button is clicked', () => {
-        render(<NodeRow {...defaultProps} />);
-        const logsButton = screen.getByRole('button', {name: /View logs for node node1/i});
-        fireEvent.click(logsButton);
-        expect(defaultProps.onOpenLogs).toHaveBeenCalledWith('node1');
     });
 
     test('renders load_15m progress bar with different states based on value', () => {
@@ -382,7 +387,7 @@ describe('NodeRow Component', () => {
         render(<NodeRow {...defaultProps} />);
         const row = screen.getByRole('row', {name: /Node node1 row/i});
         expect(row).toHaveClass('h-[1.875rem]');
-        expect(screen.getAllByRole('cell')).toHaveLength(12);
+        expect(screen.getAllByRole('cell')).toHaveLength(11);
     });
 
     test('marks a selected row', () => {
@@ -390,5 +395,22 @@ describe('NodeRow Component', () => {
         expect(screen.getByRole('row', {name: /Node node1 row/i})).toHaveClass('bg-accent-soft');
         rerender(<NodeRow {...defaultProps} isSelected={false}/>);
         expect(screen.getByRole('row', {name: /Node node1 row/i})).not.toHaveClass('bg-accent-soft');
+    });
+
+    test('the row opens the panel of its node, its logs on a tab of it; its controls act on their own', () => {
+        const onOpen = jest.fn();
+        render(<table><tbody><NodeRow {...defaultProps} onOpen={onOpen} isOpen/></tbody></table>);
+        const row = screen.getByRole('row', {name: /node1/});
+        expect(row).toHaveAttribute('aria-current', 'true');
+        fireEvent.click(screen.getByText('node1'));
+        expect(onOpen).toHaveBeenCalledWith('node1');
+
+        onOpen.mockClear();
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', {name: /actions/i}));
+        expect(onOpen).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(row, {key: 'Enter'});
+        expect(onOpen).toHaveBeenCalledWith('node1');
     });
 });

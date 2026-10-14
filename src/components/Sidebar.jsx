@@ -1,5 +1,6 @@
 import {useState, useCallback} from "react";
 import {Link, NavLink} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import {cn} from "../ui/cn";
 import {ObjectIcon} from "../ui/components/ObjectIcon";
 import useSidebarAlerts from "../hooks/useSidebarAlerts";
@@ -8,29 +9,36 @@ import useSidebarAlerts from "../hooks/useSidebarAlerts";
 // disks, objects as services, and the om3 kinds drawn from the same set.
 // The cluster overview and the user page are reached from the top bar: the logo
 // and the user button. Entries in alphabetical order.
+// Kinds and namespaces group the objects: they sit under the Objects entry.
+// `labelKey` is the catalog key of the entry name, translated at render.
 export const NAV_ROUTES = [
-    {path: "/heartbeats", name: "Heartbeats", kind: "heartbeat"},
-    {path: "/kinds", name: "Kinds", kind: "kind"},
-    {path: "/namespaces", name: "Namespaces", kind: "namespace"},
-    {path: "/network", name: "Networks", kind: "network"},
-    {path: "/nodes", name: "Nodes", kind: "node"},
-    {path: "/objects", name: "Objects", kind: "service"},
-    {path: "/pools", name: "Pools", kind: "pool"},
+    {path: "/heartbeats", labelKey: "nav.routes.heartbeats", kind: "heartbeat"},
+    {path: "/network", labelKey: "nav.routes.networks", kind: "network"},
+    {path: "/nodes", labelKey: "nav.routes.nodes", kind: "node"},
+    {
+        path: "/objects", labelKey: "nav.routes.objects", kind: "service",
+        children: [
+            {path: "/kinds", labelKey: "nav.routes.kinds", kind: "kind"},
+            {path: "/namespaces", labelKey: "nav.routes.namespaces", kind: "namespace"},
+        ],
+    },
+    {path: "/pools", labelKey: "nav.routes.pools", kind: "pool"},
 ];
 
 // Pill colours: the oc3 state colours, and the oc3 frozen tint (FrozenMark).
-// `label` says what a count of this state is, unless the entry says otherwise.
+// `label` says what a count of this state is, unless the entry says otherwise:
+// the key of its label under `alerts.pills`, translated at render.
 export const PILLS = {
     up: {className: "bg-state-up", label: "up"},
     warn: {className: "bg-state-warn", label: "warn"},
     down: {className: "bg-state-down", label: "down"},
-    unknown: {className: "bg-state-unknown", label: "n/a"},
+    unknown: {className: "bg-state-unknown", label: "unknown"},
     frozen: {className: "bg-icon-network", label: "frozen"},
 };
 
-/** Labels of the counts whose state alone does not say what they are. */
+/** Labels (keys under `alerts.pills`) of the counts whose state alone does not say what they are. */
 const COUNT_LABELS = {
-    "/heartbeats": {up: "beating", down: "stale or stopped"},
+    "/heartbeats": {up: "beating", down: "staleOrStopped"},
     "/pools": {down: "full"},
     "/network": {down: "full"},
 };
@@ -53,13 +61,14 @@ const SEGMENT =
  * let the clicks through to the menu link under them.
  */
 function CountPills({path, counts}) {
+    const {t} = useTranslation();
     return (
         <span
             data-testid={`counts-${path.slice(1)}`}
             className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 overflow-hidden rounded-full"
         >
             {counts.map(({state, count}) => {
-                const label = COUNT_LABELS[path]?.[state] ?? PILLS[state].label;
+                const label = t(`alerts.pills.${COUNT_LABELS[path]?.[state] ?? PILLS[state].label}`, {count});
                 const className = cn(SEGMENT, PILLS[state].className);
                 const filter = path === "/objects" ? OBJECTS_FILTER[state] : undefined;
                 if (filter) {
@@ -68,16 +77,16 @@ function CountPills({path, counts}) {
                             key={state}
                             to={`/objects?globalState=${encodeURIComponent(filter)}`}
                             data-state={state}
-                            title={`Show the ${label} objects`}
+                            title={t("alerts.showObjects", {label})}
                             className={cn(className, "pointer-events-auto hover:brightness-110")}
                         >
                             {count}
-                            <span className="sr-only"> {label}, show them</span>
+                            <span className="sr-only"> {t("alerts.showThem", {label})}</span>
                         </Link>
                     );
                 }
                 return (
-                    <span key={state} data-state={state} title={`${count} ${label}`} className={className}>
+                    <span key={state} data-state={state} title={t("alerts.countTitle", {count, label})} className={className}>
                         {count}
                         <span className="sr-only"> {label}</span>
                     </span>
@@ -119,12 +128,71 @@ export function useSidebarOpen() {
 const LINK = "flex items-center gap-2 rounded-(--radius-control) px-2 py-1 text-ink-muted hover:text-ink";
 
 /**
+ * Entries of the menu; the children of an entry are listed under it, indented
+ * along a line that ties them to it.
+ */
+function NavList({routes, alerts, nested = false}) {
+    const {t} = useTranslation();
+    return (
+        <ul className={cn(nested && "ml-4 border-l border-line pl-1")}>
+            {routes.map(({path, labelKey, kind, children}) => (
+                <li key={path}>
+                    <div className="relative">
+                        <NavLink
+                            to={path}
+                            // Mouseover details of the entries that have some.
+                            title={alerts[path]?.details?.join("\n")}
+                            className={({isActive}) => cn(LINK, isActive && "bg-accent-soft text-ink")}
+                        >
+                            {/* The icon keeps its tint in every state: it identifies the view,
+                                the background and the label mark the selection. */}
+                            <ObjectIcon kind={kind} className="h-4 w-4"/>
+                            {t(labelKey)}
+                        </NavLink>
+                        {alerts[path]?.counts?.length > 0 && (
+                            <CountPills path={path} counts={alerts[path].counts}/>
+                        )}
+                    </div>
+                    {children && <NavList routes={children} alerts={alerts} nested/>}
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+/**
+ * From the keyboard, as in oc3: "n" brings the focus to the menu (App), the arrows
+ * move from one entry to the next, Home and End go to the ends, and Escape gives
+ * the focus back to the page.
+ */
+function onMenuKeyDown(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "Escape") {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        return;
+    }
+    // The entries only: the count pills of an entry are links too, but not stops.
+    const stops = [...event.currentTarget.querySelectorAll("a:not([data-state])")];
+    const at = stops.findIndex((element) => element === document.activeElement);
+    const next =
+        event.key === "ArrowDown" ? stops[Math.min(at + 1, stops.length - 1)]
+            : event.key === "ArrowUp" ? stops[Math.max(at - 1, 0)]
+                : event.key === "Home" ? stops[0]
+                    : event.key === "End" ? stops[stops.length - 1]
+                        : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    next.focus();
+}
+
+/**
  * Side menu, after the oc3 one. Foldable from the button at the top left of the
  * header: folded, it keeps its place in the layout but not its width, and `inert`
  * takes it out of the keyboard path.
  */
 export function Sidebar({open}) {
     const alerts = useSidebarAlerts();
+    const {t} = useTranslation();
     return (
         <aside
             id="app-sidebar"
@@ -134,27 +202,8 @@ export function Sidebar({open}) {
                 open ? "w-60" : "w-0 border-r-0"
             )}
         >
-            <nav aria-label="Main" className="w-60 p-2">
-                <ul>
-                    {NAV_ROUTES.map(({path, name, kind}) => (
-                        <li key={path} className="relative">
-                            <NavLink
-                                to={path}
-                                // Mouseover details of the entries that have some.
-                                title={alerts[path]?.details?.join("\n")}
-                                className={({isActive}) => cn(LINK, isActive && "bg-accent-soft text-ink")}
-                            >
-                                {/* The icon keeps its tint in every state: it identifies the view,
-                                    the background and the label mark the selection. */}
-                                <ObjectIcon kind={kind} className="h-4 w-4"/>
-                                {name}
-                            </NavLink>
-                            {alerts[path]?.counts?.length > 0 && (
-                                <CountPills path={path} counts={alerts[path].counts}/>
-                            )}
-                        </li>
-                    ))}
-                </ul>
+            <nav aria-label={t("nav.main")} aria-keyshortcuts="n" onKeyDown={onMenuKeyDown} className="w-60 p-2">
+                <NavList routes={NAV_ROUTES} alerts={alerts}/>
             </nav>
         </aside>
     );

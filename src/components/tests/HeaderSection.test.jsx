@@ -10,7 +10,8 @@ const {mockHandleObjectActionClick} = vi.hoisted(() => ({
 }));
 
 // ── Mocks ───────────────────────────────────────────────────────────────
-vi.mock('../../constants/actions', () => ({
+vi.mock('../../constants/actions', async (importOriginal) => ({
+    actionLabel: (await importOriginal()).actionLabel,
     OBJECT_ACTIONS: [
         {name: 'delete', icon: 'delete-icon', color: 'red'},
         {name: 'edit', icon: 'edit-icon'},
@@ -82,7 +83,7 @@ describe('HeaderSection Component', () => {
 
     test.each([
         ['down', 'down'],
-        ['n/a', 'unknown'],
+        ['n/a', 'na'],
         [undefined, 'unknown'],
     ])('maps avail %p to state %p', (avail, state) => {
         defaultProps.getObjectStatus.mockReturnValue({avail, frozen: 'unfrozen', globalExpect: null});

@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { CaretRightIcon, ChevronDownIcon } from "../icons";
 
 export interface MenuItem {
@@ -37,8 +38,12 @@ const ITEM =
  * the right arrow; within it the arrows walk its own entries, and the left arrow
  * or Escape give the focus back to the entry that opened it.
  *
- * om3 additions: `icon` makes the trigger an icon alone, `label` staying its
- * accessible name and tooltip; `compact` makes it small and borderless, for a table
+ * `prominent`, as in oc3, draws a menu the page is used for, such as the actions:
+ * a pill outlined and tinted with the accent, filled when hovered or open, its
+ * `icon` before the label.
+ *
+ * om3 additions: `icon` without `prominent` makes the trigger an icon alone, `label`
+ * staying its accessible name and tooltip; `compact` makes it small and borderless, for a table
  * row; `align="end"` lines the menu up with the right edge of the trigger. The menu
  * is placed against the window, so that a scrolling container (a table) cannot cut
  * it, and closes when the page scrolls or resizes rather than drift from its button.
@@ -48,21 +53,38 @@ export function MenuButton({
   items,
   disabled = false,
   className = "",
+  prominent = false,
   icon,
   compact = false,
+  trigger,
   align = "start",
 }: {
   label: string;
   items: MenuItem[];
   disabled?: boolean;
   className?: string;
-  /** Icon alone in the trigger, instead of the label and the chevron. */
+  /**
+   * A menu the page is used for, such as the actions on the selection: a pill,
+   * outlined and tinted with the accent, filled when hovered or open. The plain one, for a
+   * secondary menu, is muted. A primary button, filled, stays apart from both.
+   */
+  prominent?: boolean;
+  /**
+   * Icon alone in the trigger, instead of the label and the chevron; with
+   * `prominent`, the visual placed before the label.
+   */
   icon?: ReactNode;
   /** Small borderless trigger, for a table row. */
   compact?: boolean;
+  /**
+   * Content of the trigger in place of the label, as a cell of a table drawn as
+   * itself and opening the actions on what it shows; `label` names it.
+   */
+  trigger?: ReactNode;
   align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
+  const iconOnly = icon !== undefined && !prominent;
   const [position, setPosition] = useState<CSSProperties | null>(null);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -78,7 +100,8 @@ export function MenuButton({
     ];
   }
 
-  // Placed against the window, under the trigger, before the menu is painted.
+  // Placed against the window, before the menu is painted: under the trigger, or
+  // over it when the room below is short, as for the last rows of a list.
   useLayoutEffect(() => {
     if (!open) {
       setPosition(null);
@@ -86,11 +109,11 @@ export function MenuButton({
     }
     const rect = button.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    setPosition(
+    const horizontal =
       align === "end"
-        ? { top: rect.bottom + 4, right: document.documentElement.clientWidth - rect.right }
-        : { top: rect.bottom + 4, left: rect.left },
-    );
+        ? { right: document.documentElement.clientWidth - rect.right }
+        : { left: rect.left };
+    setPosition({ ...horizontal, ...verticalPlacement(rect, menu.current?.offsetHeight ?? 0) });
     function onMove(event: Event) {
       if (event.target instanceof Node && menu.current?.contains(event.target)) return;
       setOpen(false);
@@ -112,12 +135,25 @@ export function MenuButton({
       (target === "first" ? list[0] : list[list.length - 1])?.focus();
     }
     function onPointerDown(event: PointerEvent) {
-      if (!(event.target instanceof Node) || root.current?.contains(event.target)) return;
+      if (!(event.target instanceof Node)) return;
+      // The menu stands apart from the trigger, in its portal: a click in either is in.
+      if (root.current?.contains(event.target) || menu.current?.contains(event.target)) return;
+      setOpen(false);
+    }
+    // Escape closes the menu first, wherever the focus is: opened with the mouse, the
+    // focus stays on the trigger, and the side panel around would take the key.
+    function onEscape(event: globalThis.KeyboardEvent) {
+      // In the menu, its own keys apply: a submenu closes alone, the focus goes back.
+      if (event.key !== "Escape" || menu.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
       setOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onEscape, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onEscape, true);
     };
   }, [open]);
 
@@ -190,25 +226,40 @@ export function MenuButton({
           setOpen((previous) => !previous);
         }}
         onKeyDown={onButtonKeyDown}
-        title={icon !== undefined ? label : undefined}
-        aria-label={icon !== undefined ? label : undefined}
+        title={iconOnly ? label : undefined}
+        aria-label={iconOnly || trigger !== undefined ? label : undefined}
         className={
-          compact
+          prominent
+            ? "flex h-7 items-center gap-1.5 rounded-(--radius-pill) border border-accent bg-accent-soft pr-2.5 pl-3 font-medium text-ink hover:bg-accent hover:text-accent-ink disabled:opacity-60 aria-expanded:bg-accent aria-expanded:text-accent-ink"
+            : trigger !== undefined
+            ? // Drawn as the other menu triggers, lighter: a border and a chevron say it opens.
+              "inline-flex h-6 cursor-pointer items-center gap-1 rounded-(--radius-control) border border-line pr-0.5 pl-1 hover:border-line-strong hover:bg-surface-sunken disabled:cursor-default disabled:opacity-60 aria-expanded:border-line-strong aria-expanded:bg-surface-sunken"
+            : compact
             ? "flex h-5 w-5 items-center justify-center rounded-(--radius-control) text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-60 aria-expanded:bg-surface-sunken aria-expanded:text-ink"
             : `flex h-7 items-center gap-1.5 rounded-(--radius-control) border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60 aria-expanded:text-ink ${
-                icon !== undefined ? "w-7 justify-center" : "px-2"
+                iconOnly ? "w-7 justify-center" : "px-2"
               }`
         }
       >
-        {icon ?? (
+        {trigger !== undefined ? (
           <>
+            {trigger}
+            <ChevronDownIcon aria-hidden="true" className="h-3 w-3 shrink-0 text-ink-muted" />
+          </>
+        ) : iconOnly ? (
+          icon
+        ) : (
+          <>
+            {icon}
             {label}
             <ChevronDownIcon className="h-3.5 w-3.5" />
           </>
         )}
       </button>
 
-      {open && (
+      {/* In a portal: placed against the window, which a side panel sliding in with a
+          translation would otherwise replace as the reference of a fixed element. */}
+      {open && createPortal(
         <div
           ref={menu}
           id={menuId}
@@ -227,10 +278,43 @@ export function MenuButton({
               }}
             />
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
+}
+
+/** Space kept between a menu and the edges of the window. */
+const WINDOW_MARGIN = 8;
+/** Gap between a menu and its trigger. */
+const GAP = 4;
+
+/**
+ * Vertical place of a menu of `height` opened from `trigger`: under it when it
+ * fits, else over it when it fits there, else on the roomier side, cut to the room
+ * left and scrolled.
+ */
+export function verticalPlacement(trigger: DOMRect, height: number): CSSProperties {
+  const below = window.innerHeight - trigger.bottom - GAP - WINDOW_MARGIN;
+  const above = trigger.top - GAP - WINDOW_MARGIN;
+  if (height <= below) return { top: trigger.bottom + GAP };
+  if (height <= above) return { bottom: window.innerHeight - trigger.top + GAP };
+  return below >= above
+    ? { top: trigger.bottom + GAP, maxHeight: below, overflowY: "auto" }
+    : { bottom: window.innerHeight - trigger.top + GAP, maxHeight: above, overflowY: "auto" };
+}
+
+/**
+ * Shift of a submenu laid out at `rect` that keeps it in the window: up by what
+ * passes the bottom edge (never above the top one), and to the other side of its
+ * entry when it passes the right edge.
+ */
+export function submenuShift(rect: DOMRect): { up: number; flip: boolean } {
+  const overflow = rect.bottom - (window.innerHeight - WINDOW_MARGIN);
+  const up = Math.max(0, Math.min(overflow, rect.top - WINDOW_MARGIN));
+  const flip = rect.right > window.innerWidth - WINDOW_MARGIN;
+  return { up, flip };
 }
 
 /**
@@ -242,6 +326,16 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
   const submenu = useRef<HTMLDivElement>(null);
   const subId = useId();
   const sub = item.items;
+  // Shift keeping the submenu in the window, measured before it is painted.
+  const [shift, setShift] = useState<{ up: number; flip: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || submenu.current === null) {
+      setShift(null);
+      return;
+    }
+    setShift(submenuShift(submenu.current.getBoundingClientRect()));
+  }, [open]);
 
   function subEntries(): HTMLElement[] {
     return [
@@ -344,7 +438,10 @@ function MenuEntry({ item, onChosen }: { item: MenuItem; onChosen: () => void })
           role="menu"
           aria-label={item.label}
           onKeyDown={onSubKeyDown}
-          className="absolute top-0 left-full z-40 ml-1 min-w-56 rounded-(--radius-panel) border border-line bg-surface-raised p-1 shadow-lg"
+          style={shift === null ? { visibility: "hidden", top: 0 } : { top: -shift.up }}
+          className={`absolute z-40 min-w-56 rounded-(--radius-panel) border border-line bg-surface-raised p-1 shadow-lg ${
+            shift?.flip === true ? "right-full mr-1" : "left-full ml-1"
+          }`}
         >
           {sub.map((child) => (
             <MenuEntry key={child.key} item={child} onChosen={onChosen} />

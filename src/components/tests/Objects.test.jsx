@@ -4,7 +4,8 @@ import {render, screen, fireEvent, waitFor, within, cleanup, act} from '@testing
 import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import {axe} from 'vitest-axe';
-import Objects from '../Objects';
+import Objects, {PROPERTY_COLUMNS} from '../Objects';
+import i18n from '../../i18n';
 
 // ── Hoisted mock variables ─────────────────────────────────────────────
 const {
@@ -45,12 +46,24 @@ vi.mock('../../hooks/useFetchDaemonStatus', () => ({
     default: vi.fn(() => ({daemon: {cluster: {object: {}}}})),
 }));
 
+const {mockRetainEventReception, mockReleaseEventReception} = vi.hoisted(() => ({
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
+}));
+
 vi.mock('../../eventSourceManager', () => ({
-    closeEventSource: vi.fn(),
-    startEventReception: vi.fn(),
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
     forceFlush: mockForceFlush,
     startLoggerReception: vi.fn(),
     closeLoggerEventSource: vi.fn(),
+}));
+
+// The panel of an object, on its own tested elsewhere: here, which object it is given.
+vi.mock('../RecordPanels', () => ({
+    ObjectDetailPanel: ({path}) => (path ? <div data-testid="object-panel">{path}</div> : null),
 }));
 
 vi.mock('../../ui/lib/media', async (importOriginal) => {
@@ -65,7 +78,6 @@ import useEventStore from '../../hooks/useEventStore';
 import useFetchDaemonStatus from '../../hooks/useFetchDaemonStatus';
 import {useMediaQuery} from '../../ui/lib/media';
 import {useLocation} from 'react-router-dom';
-import {startEventReception, closeEventSource} from '../../eventSourceManager';
 
 // ---------- helpers ----------
 let originalConsoleError;
@@ -176,9 +188,13 @@ const selectFilter = async (label, optionText) => {
 
 const objectRow = (name) => screen.getByRole('row', {name: new RegExp(name, 'i')});
 const rowCells = (row) => within(row).getAllByRole('cell');
-/** Cells: 0 selection, 1 status, 2 object, then one per node (node1, node2) on a wide screen, then actions. */
+/**
+ * Cells: 0 selection, 1 status, 2 object, 3 and 4 the properties (orchestrate, topology),
+ * then one per node (node1, node2) on a wide screen.
+ */
 const statusCell = (row) => rowCells(row)[1];
-const nodeCell = (row, index) => rowCells(row)[3 + index];
+const propertyCell = (row, label) => rowCells(row)[3 + PROPERTY_COLUMNS.findIndex((c) => i18n.t(c.labelKey) === label)];
+const nodeCell = (row, index) => rowCells(row)[3 + PROPERTY_COLUMNS.length + index];
 
 const selectRow = (name) => {
     const row = objectRow(name);
@@ -191,9 +207,6 @@ const rowCheckboxes = () => screen.getAllByRole('checkbox', {name: /^Select obje
 
 const openActionsMenu = () =>
     fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
-
-const openRowMenu = (row) =>
-    fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
 
 const clickMenuItem = async (text) => {
     const menu = await screen.findByRole('menu');
@@ -276,16 +289,16 @@ describe('Objects Component', () => {
         expect(screen.getByText('Status')).toBeInTheDocument();
         expect(screen.getByText('Object')).toBeInTheDocument();
         expect(screen.getByRole('table')).toBeInTheDocument();
-        expect(startEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
+        expect(mockRetainEventReception).toHaveBeenCalledWith('mock-token', expect.any(Array));
         unmount();
-        expect(closeEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('does not start event reception without a token', async () => {
         Storage.prototype.getItem = vi.fn().mockReturnValue(null);
         setup();
         await waitForLoad();
-        expect(startEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     test('renders object data correctly (status labels)', async () => {
@@ -313,12 +326,83 @@ describe('Objects Component', () => {
         expect(within(statusCell(row3)).getByText('started')).toBeInTheDocument();
 
         const row4 = objectRow('test-ns/svc/test4');
-        expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(statusCell(row4).querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(statusCell(row4)).getByTitle('n/a')).toBeInTheDocument();
 
         // The object name in its own column, medium weight.
         expect(rowCells(row1)[2]).toHaveTextContent('test-ns/svc/test1');
         expect(rowCells(row1)[2]).toHaveClass('font-medium');
+    });
+
+    test('has no per-row actions column', async () => {
+        setup({}, '', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        expect(screen.queryByRole('columnheader', {name: 'Actions'})).not.toBeInTheDocument();
+        expect(within(objectRow('test-ns/svc/test1')).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    describe('object property columns', () => {
+        const propertyState = {
+            objectStatus: {
+                'test-ns/svc/fo': {
+                    avail: 'up', frozen: 'unfrozen', provisioned: 'true',
+                    orchestrate: 'ha', topology: 'failover', placement_policy: 'nodes order',
+                    placement_state: 'optimal', up_instances_count: 1, scope: ['node1', 'node2'], priority: 10,
+                },
+                'test-ns/svc/fx': {
+                    avail: 'warn', frozen: 'unfrozen', provisioned: 'true',
+                    orchestrate: 'start', topology: 'flex', flex: {min: 1, max: 3, target: 2},
+                    placement_policy: 'spread', placement_state: 'non-optimal', up_instances_count: 2,
+                    scope: ['node1', 'node2', 'node3'], priority: 50,
+                },
+                'test-ns/nscfg/c': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true', scope: ['node1'], priority: 50},
+            },
+            objectInstanceStatus: {},
+        };
+
+        test('show orchestrate and topology', async () => {
+            setup(propertyState);
+            await waitForLoad();
+            ['Placement', 'Up', 'Priority'].forEach((label) =>
+                expect(screen.queryByRole('columnheader', {name: new RegExp(`^${label}`)})).not.toBeInTheDocument()
+            );
+            PROPERTY_COLUMNS.forEach(({labelKey}) =>
+                expect(screen.getByRole('columnheader', {name: new RegExp(`^${i18n.t(labelKey)}`)})).toBeInTheDocument()
+            );
+
+            const failover = objectRow('test-ns/svc/fo');
+            expect(propertyCell(failover, 'Orchestrate')).toHaveTextContent(/^ha$/);
+            expect(propertyCell(failover, 'Topology')).toHaveTextContent(/^failover$/);
+
+            const flex = objectRow('test-ns/svc/fx');
+            expect(propertyCell(flex, 'Topology')).toHaveTextContent('flex 1-3');
+        });
+
+        test('are empty for an object with no instances to place', async () => {
+            setup(propertyState);
+            await waitForLoad();
+            const cfg = objectRow('test-ns/nscfg/c');
+            ['Orchestrate', 'Topology'].forEach((label) =>
+                expect(propertyCell(cfg, label)).toHaveTextContent(/^$/)
+            );
+        });
+
+        test('sort, objects without the property last', async () => {
+            setup(propertyState);
+            await waitForLoad();
+            clickHeader('Orchestrate');
+            await waitFor(() =>
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/nscfg/c'])
+            );
+            clickHeader('Orchestrate');
+            await waitFor(() =>
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fx', 'test-ns/svc/fo', 'test-ns/nscfg/c'])
+            );
+            clickHeader('Topology');
+            await waitFor(() =>
+                expect(objectNamesInOrder()).toEqual(['test-ns/svc/fo', 'test-ns/svc/fx', 'test-ns/nscfg/c'])
+            );
+        });
     });
 
     test('per-node cells show avail, frozen, not provisioned and monitor state', async () => {
@@ -345,7 +429,7 @@ describe('Objects Component', () => {
 
         const unprovisioned = objectRow('test-ns/svc/unprovisioned(?!-bool)');
         const unprovisionedNode = nodeCell(unprovisioned, 0);
-        expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'unknown');
+        expect(unprovisionedNode.querySelector('[data-state]')).toHaveAttribute('data-state', 'na');
         expect(within(unprovisionedNode).getByRole('img', {name: 'Not provisioned'})).toHaveClass('text-state-down');
     });
 
@@ -395,7 +479,7 @@ describe('Objects Component', () => {
                 ...defaultState.objectStatus,
                 'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
             },
-        });
+        }, '?list=configs');
         await waitForLoad();
         selectRow('test-ns/cfg/conf1');
         openActionsMenu();
@@ -406,6 +490,88 @@ describe('Objects Component', () => {
         expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeDisabled();
         expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
+    });
+
+    describe('tabs', () => {
+        const mixed = {
+            objectStatus: {
+                ...defaultState.objectStatus,
+                'test-ns/cfg/conf1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/sec/sec1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'cluster': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+                'test-ns/usr/usr1': {avail: 'n/a', frozen: 'unfrozen', provisioned: 'true'},
+            },
+        };
+        const configs = ['test-ns/cfg/conf1', 'test-ns/sec/sec1', 'cluster'];
+
+        test('the services first, the cfg, sec and cluster objects, then the users, in tabs of their own', async () => {
+            setup(mixed);
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Services/})).toHaveAttribute('aria-selected', 'true');
+            expect(screen.getByRole('tab', {name: /^Services/})).toHaveTextContent('6');
+            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveTextContent('3');
+            expect(screen.getByRole('tab', {name: /^Users/})).toHaveTextContent('1');
+            expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
+            expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
+            expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
+        });
+
+        test('list=users shows the users alone', async () => {
+            setup(mixed, '?list=users');
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Users/})).toHaveAttribute('aria-selected', 'true');
+            expect(objectNamesInOrder()).toEqual(['test-ns/usr/usr1']);
+        });
+
+        test('list=configs shows the configurations alone, their kinds alone in the filter', async () => {
+            setup(mixed, '?list=configs');
+            await waitForLoad();
+            expect(screen.getByRole('tab', {name: /^Configurations/})).toHaveAttribute('aria-selected', 'true');
+            expect([...objectNamesInOrder()].sort()).toEqual([...configs].sort());
+            const kinds = within(filterGroup('Kind')).getAllByRole('checkbox').map(optionText);
+            expect(kinds).toEqual(['ccfg', 'cfg', 'sec']);
+        });
+
+        test('another tab drops the selection and the kinds picked, the panel kept', async () => {
+            setup(mixed, '?kind=svc&sel=test-ns%2Fsvc%2Ftest1&name=test');
+            await waitForLoad();
+            selectRow('test-ns/svc/test1');
+            expect(screen.getByText('1 selected')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', {name: /^Configurations/}));
+            expect(mockNavigate).toHaveBeenCalledWith('/objects?sel=test-ns%2Fsvc%2Ftest1&name=test&list=configs', {replace: true});
+            expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
+        });
+    });
+
+    describe('new object', () => {
+        test('opens on the kind of the tab, the namespace filtered on', async () => {
+            setup({}, '?list=configs&namespace=test-ns');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            expect(within(dialog).getByLabelText('Kind')).toHaveValue('cfg');
+            expect(within(dialog).getByLabelText('Namespace')).toHaveValue('test-ns');
+            // An object listed is refused as a new one.
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'svc'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'test1'}});
+            expect(within(dialog).getByText('test-ns/svc/test1 already exists.')).toBeInTheDocument();
+        });
+
+        test('created, the object opens in its panel over the tab it is listed in', async () => {
+            setup({}, '?kind=svc&name=t');
+            await waitForLoad();
+            fireEvent.click(screen.getByRole('button', {name: 'New object'}));
+            const dialog = screen.getByRole('dialog', {name: 'New object'});
+            fireEvent.change(within(dialog).getByLabelText('Kind'), {target: {value: 'sec'}});
+            fireEvent.change(within(dialog).getByLabelText('Namespace'), {target: {value: 'test-ns'}});
+            fireEvent.change(within(dialog).getByLabelText('Name'), {target: {value: 'tls'}});
+            fireEvent.click(within(dialog).getByRole('button', {name: 'Create'}));
+            await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/objects?name=t&list=configs&sel=test-ns%2Fsec%2Ftls'));
+            expect(global.fetch).toHaveBeenCalledWith('/api/object/path/test-ns/sec/tls/config/file', expect.objectContaining({method: 'POST'}));
+            expect(screen.queryByRole('dialog', {name: 'New object'})).not.toBeInTheDocument();
+            expect(screen.getByText('test-ns/sec/tls created.')).toBeInTheDocument();
+        });
     });
 
     describe('filtering', () => {
@@ -518,7 +684,7 @@ describe('Objects Component', () => {
                 .toEqual(['svc']);
             // Each global state carries its mark.
             expect(filterOption('Global State', 'Up').closest('label').querySelector('[data-state="up"]')).not.toBeNull();
-            expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="unknown"]')).not.toBeNull();
+            expect(filterOption('Global State', 'N/a').closest('label').querySelector('[data-state="na"]')).not.toBeNull();
             expect(filterOption('Global State', 'Unprovisioned').closest('label').querySelector('svg.text-state-down')).not.toBeNull();
         });
 
@@ -709,17 +875,6 @@ describe('Objects Component', () => {
             expect(mockSetObjectStatuses).toHaveBeenCalled();
         });
 
-        test.each([
-            ['test1', 'Unfreeze'],
-            ['test2', 'Freeze'],
-        ])('%s row menu does not offer "%s" (already in that state)', async (rowName, missingAction) => {
-            setup();
-            await waitForLoad();
-            const row = screen.getByRole('row', {name: new RegExp(rowName)});
-            fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-            await screen.findByRole('menu');
-            expect(screen.queryByText(missingAction)).not.toBeInTheDocument();
-        });
 
         test('delete succeeds with confirmations', async () => {
             setup();
@@ -847,21 +1002,6 @@ describe('Objects Component', () => {
             );
         });
 
-        test('single-object action via row menu targets only that object', async () => {
-            setup();
-            await waitForLoad();
-            selectRow('test-ns/svc/test1');
-            selectRow('test-ns/svc/test2');
-            const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/});
-            fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-            await clickMenuItem('Restart');
-            await confirmDialog();
-            await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('test-ns/svc/test1/action/restart'),
-                expect.any(Object)
-            );
-        });
 
         test('stop action succeeds', async () => {
             setup();
@@ -895,14 +1035,6 @@ describe('Objects Component', () => {
             expect(within(menu).getByRole('menuitem', {name: /^Disable$/})).toBeEnabled();
         });
 
-        test('Enable and Disable appear in the row menu of a svc object', async () => {
-            setup();
-            await waitForLoad();
-            openRowMenu(objectRow('test-ns/svc/test1'));
-            const menu = await screen.findByRole('menu');
-            expect(within(menu).getByRole('menuitem', {name: /^Enable$/})).toBeInTheDocument();
-            expect(within(menu).getByRole('menuitem', {name: /^Disable$/})).toBeInTheDocument();
-        });
 
         test('Enable URL uses the object-path endpoint (no /action prefix)', async () => {
             setup();
@@ -934,41 +1066,21 @@ describe('Objects Component', () => {
             );
         });
 
-        test('Enable is not present in the row menu for a non-svc object', async () => {
-            setup({
-                objectStatus: {
-                    ...defaultState.objectStatus,
-                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
-                },
-                objectInstanceStatus: {
-                    ...defaultState.objectInstanceStatus,
-                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
-                },
-            });
-            await waitForLoad();
-            const row = screen.getByRole('row', {name: /test-ns\/cfg\/cfg1/});
-            fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-            const menu = await screen.findByRole('menu');
-            expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
-            expect(within(menu).queryByRole('menuitem', {name: /^Disable$/})).not.toBeInTheDocument();
-            // The actions the kind allows are still there.
-            expect(within(menu).getByRole('menuitem', {name: /^Delete$/})).toBeInTheDocument();
-        });
 
         test('Enable/Disable not offered when a mixed-kind selection is made', async () => {
             setup({
                 objectStatus: {
                     ...defaultState.objectStatus,
-                    'test-ns/cfg/cfg1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
+                    'test-ns/vol/vol1': {avail: 'up', frozen: 'unfrozen', provisioned: 'true'},
                 },
                 objectInstanceStatus: {
                     ...defaultState.objectInstanceStatus,
-                    'test-ns/cfg/cfg1': {node1: {avail: 'up'}},
+                    'test-ns/vol/vol1': {node1: {avail: 'up'}},
                 },
             });
             await waitForLoad();
             selectRow('test-ns/svc/test1');
-            selectRow('test-ns/cfg/cfg1');
+            selectRow('test-ns/vol/vol1');
             openActionsMenu();
             const menu = await screen.findByRole('menu');
             expect(within(menu).queryByRole('menuitem', {name: /^Enable$/})).not.toBeInTheDocument();
@@ -1010,7 +1122,7 @@ describe('Objects Component', () => {
             });
             const mark = stoppedMark(cell);
             expect(mark).toBeInTheDocument();
-            expect(mark).toHaveAttribute('title', `stopped at ${new Date('2025-05-16T10:00:00Z').toLocaleString()}`);
+            expect(mark).toHaveAttribute('title', `stopped at ${new Date('2025-05-16T10:00:00Z').toLocaleString(i18n.language)}`);
             expect(mark.querySelector('svg')).not.toBeNull();
         });
 
@@ -1131,17 +1243,21 @@ describe('Objects Component', () => {
         });
     });
 
-    test('row click navigates', async () => {
+    test('row click opens the object panel over the list, the row marked', async () => {
         setup();
         await waitForLoad();
-        fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects/test-ns%2Fsvc%2Ftest1');
+        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/});
+        fireEvent.click(row);
+        expect(await screen.findByTestId('object-panel')).toHaveTextContent('test-ns/svc/test1');
+        expect(screen.getByRole('row', {name: /test-ns\/svc\/test1/})).toHaveAttribute('aria-current', 'true');
+        expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('/objects/'));
     });
 
-    test('no navigation if no instance status', async () => {
+    test('no panel if no instance status', async () => {
         setup({objectInstanceStatus: {}});
         await waitForLoad();
         fireEvent.click(screen.getByRole('row', {name: /test-ns\/svc\/test1/}));
+        expect(screen.queryByTestId('object-panel')).not.toBeInTheDocument();
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
@@ -1152,53 +1268,10 @@ describe('Objects Component', () => {
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    test('row menu button click does not trigger row navigation', async () => {
-        setup();
-        await waitForLoad();
-        const row = screen.getByRole('row', {name: /test-ns\/svc\/test1/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        expect(mockNavigate).not.toHaveBeenCalled();
-    });
 
-    test('row context menu shows correct actions (unfrozen object)', async () => {
-        setup();
-        await waitForLoad();
-        const row = screen.getByRole('row', {name: /test1/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        expect(screen.getByText('Freeze')).toBeInTheDocument();
-        expect(screen.queryByText('Unfreeze')).not.toBeInTheDocument();
-    });
 
-    test('row context menu for frozen object', async () => {
-        setup();
-        await waitForLoad();
-        const row = screen.getByRole('row', {name: /test2/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-        expect(screen.queryByText('Freeze')).not.toBeInTheDocument();
-        expect(screen.getByText('Unfreeze')).toBeInTheDocument();
-    });
 
-    test('row menu closes when pressing Escape', async () => {
-        setup();
-        await waitForLoad();
-        const row = screen.getByRole('row', {name: /test1/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        const menu = await screen.findByRole('menu');
-        fireEvent.keyDown(menu, {key: 'Escape', code: 'Escape'});
-        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
-    });
 
-    test('clicking inside the row actions menu does not propagate a click to the row', async () => {
-        setup();
-        await waitForLoad();
-        const row = screen.getByRole('row', {name: /test1/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        const menu = await screen.findByRole('menu');
-        fireEvent.click(menu);
-        expect(mockNavigate).not.toHaveBeenCalled();
-    });
 
     test('global actions disabled when none selected', async () => {
         setup();
@@ -1507,20 +1580,6 @@ describe('Objects Component', () => {
         );
     });
 
-    test('row menu for object from daemon fallback shows Freeze but not Unfreeze', async () => {
-        setup(
-            {objectStatus: {}, objectInstanceStatus: {}},
-            '',
-            {isWideScreen: true, isMobile: false},
-            {daemon: {cluster: {object: {'daemon/svc/obj1': {avail: 'up', frozen: 'unfrozen'}}}}}
-        );
-        await waitFor(() => expect(screen.getByRole('row', {name: /daemon\/svc\/obj1/})).toBeInTheDocument());
-        const row = screen.getByRole('row', {name: /daemon\/svc\/obj1/});
-        fireEvent.click(within(row).getByRole('button', {name: /more actions/i}));
-        await screen.findByRole('menu');
-        expect(screen.getByText('Freeze')).toBeInTheDocument();
-        expect(screen.queryByText('Unfreeze')).not.toBeInTheDocument();
-    });
 
     test('daemon fallback with no objects at all renders empty state', async () => {
         setup(
@@ -1545,11 +1604,23 @@ describe('Objects Component', () => {
             .not.toBeInTheDocument();
     });
 
-    test.each([
-        ['cluster', {
+    test('the cluster object is frozen as the cluster, on all the nodes', async () => {
+        // The cluster object is listed with the configurations.
+        setup({
             objectStatus: {cluster: {avail: 'up', frozen: 'unfrozen'}},
             objectInstanceStatus: {cluster: {node1: {avail: 'up'}}},
-        }, '/root/ccfg/cluster/action/restart'],
+        }, '?list=configs', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        selectRow('cluster');
+        openActionsMenu();
+        await clickMenuItem('Freeze');
+        await confirmDialog();
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith('/api/cluster/action/freeze', expect.any(Object))
+        );
+    });
+
+    test.each([
         ['svc/myobj', {
             objectStatus: {'svc/myobj': {avail: 'up', frozen: 'unfrozen'}},
             objectInstanceStatus: {'svc/myobj': {node1: {avail: 'up'}}},

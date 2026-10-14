@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, act} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, act} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import App from '../App';
 import {vi} from 'vitest';
@@ -18,16 +18,30 @@ vi.mock('../../utils/logger.js', () => ({
         debug: vi.fn(),
     },
 }));
+// The records the anchor would bring back: the gutter of the views follows them.
+const {mockHistory} = vi.hoisted(() => ({mockHistory: {entries: []}}));
+vi.mock('../../app/record-history', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRecordHistory: () => mockHistory,
+}));
 vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
 vi.mock('../Namespaces', () => ({default: () => <div data-testid="namespaces">Namespaces</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
 vi.mock('../Pools', () => ({default: () => <div data-testid="pools">Pools</div>}));
-vi.mock('../Objects', () => ({default: () => <div data-testid="objects">Objects</div>}));
-vi.mock('../ObjectDetails', () => ({default: () => <div data-testid="object-details">ObjectDetails</div>}));
-vi.mock('../Network', () => ({default: () => <div data-testid="network">Network</div>}));
-vi.mock('../NetworkDetails', () => ({default: () => <div data-testid="network-details">NetworkDetails</div>}));
+// The lists show the query of their address: the panel state they were given.
+vi.mock('../Objects', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="objects">{useLocation().search}</div>};
+});
+vi.mock('../Network', async () => {
+    const {useLocation} = await vi.importActual('react-router-dom');
+    return {default: () => <div data-testid="network">{useLocation().search}</div>};
+});
+vi.mock('../PeekPanel', () => ({PeekPanel: () => <div data-testid="peek-panel"/>}));
+vi.mock('../../app/PanelAnchor', () => ({PanelAnchor: () => <div data-testid="panel-anchor"/>}));
+vi.mock('../../app/ShortcutsHelp', () => ({ShortcutsHelp: () => <div data-testid="shortcuts-help"/>}));
 vi.mock('../WhoAmI', () => ({default: () => <div data-testid="whoami">WhoAmI</div>}));
 vi.mock('../SilentRenew.jsx', () => ({default: () => <div data-testid="silent-renew">SilentRenew</div>}));
 vi.mock('../AuthChoice.jsx', () => ({default: () => <div data-testid="auth-choice">AuthChoice</div>}));
@@ -215,13 +229,52 @@ describe('App Component', () => {
         ['/network', 'network'],
         ['/objects', 'objects'],
         ['/whoami', 'whoami'],
-        ['/network/test-network', 'network-details'],
-        ['/objects/test-object', 'object-details'],
     ])('protected route %s renders %s', async (path, testId) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);
         expect(await screen.findByTestId(testId)).toBeInTheDocument();
         unmount();
+    });
+
+    // The records had pages of their own: their old addresses open the panel over the list.
+    test.each([
+        ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
+        ['/network/test-network', 'network', '?sel=test-network'],
+        ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
+    ])('old record address %s opens the panel over %s', async (path, testId, search) => {
+        setupBasicAuth();
+        const {unmount} = renderApp([path]);
+        expect(await screen.findByTestId(testId)).toHaveTextContent(search);
+        unmount();
+    });
+
+    test('n moves the focus to the menu, on the entry of the view, unfolding it first', async () => {
+        const token = setupBasicAuth();
+        // The menu folded: "n" unfolds it.
+        mockLocalStorage.getItem.mockImplementation((k) =>
+            k === 'om3.sidebar' ? 'closed' : k === 'authToken' ? token : k === 'authChoice' ? 'basic' : null);
+        renderApp(['/nodes']);
+        await screen.findByTestId('nodes');
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+            cb(0);
+            return 0;
+        });
+        fireEvent.keyDown(document.body, {key: 'n'});
+        expect(document.getElementById('app-sidebar')).not.toHaveAttribute('inert');
+        expect(screen.getByRole('link', {name: 'Nodes'})).toHaveFocus();
+        raf.mockRestore();
+    });
+
+    test('the record panel and its anchor stand over the views, not over the sign-in', async () => {
+        setupBasicAuth();
+        const {unmount} = renderApp(['/objects']);
+        expect(await screen.findByTestId('peek-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('panel-anchor')).toBeInTheDocument();
+        expect(screen.getByTestId('shortcuts-help')).toBeInTheDocument();
+        unmount();
+        renderApp(['/auth/login']);
+        expect(await screen.findByTestId('login')).toBeInTheDocument();
+        expect(screen.queryByTestId('peek-panel')).not.toBeInTheDocument();
     });
 
     test.each([
@@ -826,5 +879,28 @@ describe('App Component', () => {
             expect(await screen.findByTestId('auth-choice')).toBeInTheDocument();
             unmount();
         }
+    });
+
+    describe('the gutter of the anchor that brings the panels back', () => {
+        afterEach(() => {
+            mockHistory.entries = [];
+        });
+
+        test('none while there is nothing to bring back', async () => {
+            setupBasicAuth();
+            renderApp(['/objects']);
+            await screen.findByTestId('objects');
+            const main = document.getElementById('app-scroll-container');
+            expect(main.style.paddingRight).toBe('');
+            expect(main.style.paddingLeft).toBe('');
+        });
+
+        test('on the right, where the anchor stands: an Actions menu at the end of a toolbar stays clear of it', async () => {
+            mockHistory.entries = [{kind: 'node', id: 'dev3n1', at: Date.now()}];
+            setupBasicAuth();
+            renderApp(['/nodes']);
+            await screen.findByTestId('nodes');
+            expect(document.getElementById('app-scroll-container').style.paddingRight).toBe('2.5rem');
+        });
     });
 });

@@ -3,7 +3,8 @@ import type { ObjectState } from "./StatusBadge";
 /**
  * Translates a collector status into an OpenSVC object state.
  * The database stores "up", "warn", "down", "n/a", and an empty string for a service
- * that has never reported a status: the last two are an unknown state.
+ * that has never reported a status: n/a is a state of its own, the status does not
+ * apply; the empty string is an unknown state.
  */
 export function toObjectState(value: string | undefined): ObjectState {
   switch (value) {
@@ -11,6 +12,8 @@ export function toObjectState(value: string | undefined): ObjectState {
     case "warn":
     case "down":
       return value;
+    case "n/a":
+      return "na";
     default:
       return "unknown";
   }

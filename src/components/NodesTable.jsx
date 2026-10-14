@@ -1,46 +1,41 @@
 import React, {useEffect, useState, useMemo} from "react";
 import useFetchDaemonStatus from "../hooks/useFetchDaemonStatus.jsx";
-import {closeEventSource, startEventReception} from "../eventSourceManager";
+import {retainEventReception} from "../eventSourceManager";
 import useEventStore from "../hooks/useEventStore.js";
 import NodeRow from "../components/NodeRow.jsx";
-import LogsViewer from "../components/LogsViewer.jsx";
 import logger from '../utils/logger.js';
 import {URL_NODE} from "../config/apiPath.js";
-import {NODE_ACTIONS} from "../constants/actions";
+import {NODE_ACTIONS, actionLabel} from "../constants/actions";
+import {useTranslation} from "react-i18next";
 import ActionDialogManager from "./ActionDialogManager";
 import EventLogger from "../components/EventLogger";
 import {Table, HeaderRow, HeaderCell, SortHeaderCell} from "../ui/components/Table";
 import {Checkbox} from "../ui/components/Field";
 import {IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
-import {SlideOver} from "../ui/components/SlideOver";
+import {usePanelSearch} from "../app/panel-search";
+import {NodeDetailPanel} from "./NodePanel";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CloseIcon} from "../ui/icons";
+import {CloseIcon, GearIcon} from "../ui/icons";
 
 const ZERO_DATE = "0001-01-01T00:00:00Z";
 
 /** How long a feedback message stays, as the snackbar it replaces. */
 const FEEDBACK_DURATION_MS = 4000;
 
-const capitalize = (name) =>
-    name
-        .split(" ")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ");
-
 const isNodeFrozen = (status) => !!status?.frozen_at && status?.frozen_at !== ZERO_DATE;
 
 const SORT_COLUMNS = [
-    {key: "name", label: "Name"},
-    {key: "state", label: "State"},
-    {key: "score", label: "Score", align: "right"},
-    {key: "load_15m", label: "Load (15m)", align: "right"},
-    {key: "mem_avail", label: "Mem Avail", align: "right"},
-    {key: "swap_avail", label: "Swap Avail", align: "right"},
-    {key: "version", label: "Version"},
-    {key: "booted_at", label: "Booted At"},
-    {key: "updated_at", label: "Updated At"},
+    {key: "name", labelKey: "common.name"},
+    {key: "state", labelKey: "common.state"},
+    {key: "score", labelKey: "nodes.columns.score"},
+    {key: "load_15m", labelKey: "nodes.columns.load15m"},
+    {key: "mem_avail", labelKey: "nodes.columns.memAvail"},
+    {key: "swap_avail", labelKey: "nodes.columns.swapAvail"},
+    {key: "version", labelKey: "nodes.columns.version"},
+    {key: "booted_at", labelKey: "nodes.columns.bootedAt"},
+    {key: "updated_at", labelKey: "nodes.columns.updatedAt"},
 ];
 
 /** Feedback tones, from the severities of the snackbar it replaces. */
@@ -51,6 +46,7 @@ const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-
 const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
 
 const NodesTable = () => {
+    const {t} = useTranslation();
     const {daemon, fetchNodes} = useFetchDaemonStatus();
     const nodeStatus = useEventStore((state) => state.nodeStatus);
     const nodeStats = useEventStore((state) => state.nodeStats);
@@ -62,9 +58,8 @@ const NodesTable = () => {
     const [sortColumn, setSortColumn] = useState("name");
     const [sortDirection, setSortDirection] = useState("asc");
 
-    // Logs panel state
-    const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
-    const [selectedNodeForLogs, setSelectedNodeForLogs] = useState(null);
+    // The node whose panel is open, and its tab, in the URL as on the other views.
+    const panel = usePanelSearch();
 
     const nodeEventTypes = useMemo(() => [
         "NodeStatusUpdated",
@@ -81,22 +76,15 @@ const NodesTable = () => {
         setPendingAction({action, node: nodename});
     };
 
-    // Handle opening logs for a node
-    const handleOpenLogs = (nodename) => {
-        setSelectedNodeForLogs(nodename);
-        setLogsDrawerOpen(true);
-    };
-
-    const handleCloseLogsDrawer = () => {
-        setLogsDrawerOpen(false);
-        setSelectedNodeForLogs(null);
-    };
+    // A row opens its node's panel; its logs are on a tab of it.
+    const handleOpenNode = (nodename) => panel.select(nodename);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
+        let release = null;
         if (token) {
             // Start event reception immediately
-            startEventReception(token, nodeEventTypes);
+            release = retainEventReception(token, nodeEventTypes);
             // Fetch daemon status in parallel
             fetchNodes(token).catch(error => {
                 logger.error("Failed to fetch nodes:", error);
@@ -104,7 +92,7 @@ const NodesTable = () => {
         }
 
         return () => {
-            closeEventSource();
+            release?.();
         };
     }, [fetchNodes, nodeEventTypes]);
 
@@ -140,16 +128,16 @@ const NodesTable = () => {
         if (!token) {
             setSnackbar({
                 open: true,
-                message: "Authentication token not found",
+                message: t("nodes.feedback.noToken"),
                 severity: "error",
             });
             return;
         }
 
-        const actionLabel = capitalize(action);
+        const label = actionLabel(action);
         setSnackbar({
             open: true,
-            message: `Executing '${actionLabel}'...`,
+            message: t("nodes.feedback.executing", {action: label}),
             severity: "info",
         });
         let successCount = 0;
@@ -195,10 +183,10 @@ const NodesTable = () => {
             open: true,
             message:
                 successCount && !errorCount
-                    ? `✅ '${actionLabel}' succeeded on ${successCount} node(s).`
+                    ? t("nodes.feedback.succeeded", {action: label, count: successCount})
                     : successCount
-                        ? `⚠️ '${actionLabel}' partially succeeded: ${successCount} ok, ${errorCount} errors.`
-                        : `❌ '${actionLabel}' failed on all ${nodesToProcess.length} node(s).`,
+                        ? t("nodes.feedback.partial", {action: label, ok: successCount, errors: errorCount})
+                        : t("nodes.feedback.failed", {action: label, count: nodesToProcess.length}),
             severity: successCount && !errorCount ? "success" : successCount ? "warning" : "error",
         });
 
@@ -262,13 +250,16 @@ const NodesTable = () => {
         <div className="p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
                 <MenuButton
-                    label="Actions on selected nodes"
+                    // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                    prominent
+                    icon={<GearIcon className="h-3.5 w-3.5"/>}
+                    label={t("nodes.bulkActions")}
                     disabled={selectedNodes.length === 0}
                     className="ml-auto"
                     align="end"
                     items={filteredMenuItems.map(({name, icon, color}) => ({
                         key: name,
-                        label: capitalize(name),
+                        label: actionLabel(name),
                         icon: <span aria-hidden="true" className={color === "red" ? DANGER_ICON : ICON}>{icon}</span>,
                         onSelect: () => handleAction(name),
                     }))}
@@ -279,7 +270,7 @@ const NodesTable = () => {
                 <Alert
                     tone={TONES[snackbar.severity] ?? "info"}
                     action={
-                        <IconButton label="Close" bare onClick={closeSnackbar}>
+                        <IconButton label={t("common.close")} bare onClick={closeSnackbar}>
                             <CloseIcon className="h-4 w-4"/>
                         </IconButton>
                     }
@@ -290,7 +281,7 @@ const NodesTable = () => {
 
             {nodeCount === 0 ? (
                 <div className="flex justify-center py-8">
-                    <Spinner label="Loading nodes"/>
+                    <Spinner label={t("nodes.loading")}/>
                 </div>
             ) : (
                 // Visible overflow, the panel as wide as the table: the row menus are not clipped,
@@ -298,27 +289,25 @@ const NodesTable = () => {
                 <Table sticky className="max-h-[calc(100dvh-12rem)]">
                     <thead>
                     <HeaderRow>
-                        <HeaderCell align="center" className="w-8">
+                        <HeaderCell className="w-8">
                             <Checkbox
-                                aria-label="Select all nodes"
+                                aria-label={t("nodes.selectAll")}
                                 checked={selectedNodes.length === nodeCount}
                                 onChange={(e) =>
                                     setSelectedNodes(e.target.checked ? Object.keys(nodeStatus) : [])
                                 }
                             />
                         </HeaderCell>
-                        {SORT_COLUMNS.map(({key, label, align}) => (
+                        {SORT_COLUMNS.map(({key, labelKey}) => (
                             <SortHeaderCell
                                 key={key}
-                                label={label}
-                                align={align}
+                                label={t(labelKey)}
                                 active={sortColumn === key}
                                 direction={sortDirection}
                                 onSort={() => handleSort(key)}
                             />
                         ))}
-                        <HeaderCell align="center">Actions</HeaderCell>
-                        <HeaderCell align="center">Logs</HeaderCell>
+                        <HeaderCell>{t("common.actions")}</HeaderCell>
                     </HeaderRow>
                     </thead>
                     <tbody>
@@ -333,7 +322,8 @@ const NodesTable = () => {
                             daemonNodename={daemon.nodename}
                             onSelect={handleSelectNode}
                             onAction={(nodename, action) => handleAction(action, nodename)}
-                            onOpenLogs={handleOpenLogs}
+                            onOpen={handleOpenNode}
+                            isOpen={panel.sel === nodename}
                         />
                     ))}
                     </tbody>
@@ -343,30 +333,21 @@ const NodesTable = () => {
             <ActionDialogManager
                 pendingAction={pendingAction}
                 handleConfirm={handleDialogConfirm}
-                target={pendingAction?.node ? `node ${pendingAction.node}` : `${selectedNodes.length} nodes`}
+                target={pendingAction?.node
+                    ? t("nodes.target.node", {node: pendingAction.node})
+                    : t("nodes.target.selected", {count: selectedNodes.length})}
                 supportedActions={NODE_ACTIONS.map((action) => action.name)}
                 onClose={() => setPendingAction(null)}
             />
 
-            <SlideOver
-                open={logsDrawerOpen}
-                title="Node Logs"
-                onClose={handleCloseLogsDrawer}
-                closeLabel="Close"
-                size="wide"
-                resizeLabel="Resize drawer"
-                closeOnOutsideClick={false}
-            >
-                {selectedNodeForLogs !== null && (
-                    <LogsViewer
-                        nodename={selectedNodeForLogs}
-                        type="node"
-                        height="100%"
-                    />
-                )}
-            </SlideOver>
+            <NodeDetailPanel
+                node={panel.sel}
+                tab={panel.tab}
+                onTabChange={panel.setTab}
+                onClose={() => panel.select(undefined)}
+            />
 
-            <EventLogger eventTypes={nodeEventTypes} title="Node Events Logger" buttonLabel="Node Events"/>
+            <EventLogger eventTypes={nodeEventTypes} title={t("nodes.eventsLogger")} buttonLabel={t("nodes.events")}/>
         </div>
     );
 };

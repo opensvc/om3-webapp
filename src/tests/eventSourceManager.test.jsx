@@ -2,7 +2,7 @@ import * as eventSourceManager from '../eventSourceManager';
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import useEventStore from '../hooks/useEventStore.js';
 import useEventLogStore from '../hooks/useEventLogStore.js';
-import {URL_NODE_EVENT} from '../config/apiPath.js';
+import {URL_NODE_EVENT, URL_OBJECT} from '../config/apiPath.js';
 import {vi, beforeAll, afterAll, beforeEach, afterEach, describe, test, expect} from 'vitest';
 
 vi.mock('event-source-polyfill', () => ({
@@ -93,6 +93,7 @@ describe('eventSourceManager', () => {
             }),
             removeInstanceFromObject: vi.fn(),
             removePendingDelete: vi.fn(),
+            removeObjects: vi.fn(),
         };
         mockStore.setNodeStatuses = makeSetter('nodeStatus');
         mockStore.setNodeMonitors = makeSetter('nodeMonitor');
@@ -1346,6 +1347,148 @@ describe('eventSourceManager', () => {
             ['type mismatch nested', {a: {b: 1}}, {a: {b: '1'}}, false],
         ])('%s', (_label, a, b, expected) => {
             expect(isEqual(a, b)).toBe(expected);
+        });
+    });
+
+    describe('reconcileObjects', () => {
+        const answer = (paths, ok = true) => vi.fn(() => Promise.resolve({
+            ok, status: ok ? 200 : 500, json: () => Promise.resolve(paths),
+        }));
+
+        beforeEach(() => {
+            mockStore.objectStatus = {'root/svc/kept': {}, 'root/svc/gone': {}};
+            mockStore.objectInstanceStatus = {'root/svc/gone': {}};
+            mockStore.instanceConfig = {};
+            mockStore.instanceMonitor = {'n1:root/svc/stale': {}};
+        });
+
+        test('drops the objects the daemon no longer lists', async () => {
+            global.fetch = answer(['root/svc/kept', 'root/svc/other']);
+            await eventSourceManager.reconcileObjects('tok');
+            expect(global.fetch).toHaveBeenCalledWith(`${URL_OBJECT}?path=**`, expect.objectContaining({
+                headers: {Authorization: 'Bearer tok'},
+            }));
+            expect(mockStore.removeObjects).toHaveBeenCalledWith(['root/svc/gone', 'root/svc/stale']);
+        });
+
+        test('keeps an object created while the list was asked for', async () => {
+            global.fetch = vi.fn(() => {
+                mockStore.objectStatus = {...mockStore.objectStatus, 'root/svc/new': {}};
+                return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve(['root/svc/kept'])});
+            });
+            await eventSourceManager.reconcileObjects('tok');
+            expect(mockStore.removeObjects).toHaveBeenCalledWith(['root/svc/gone', 'root/svc/stale']);
+        });
+
+        test('drops nothing when every object is listed', async () => {
+            global.fetch = answer(['root/svc/kept', 'root/svc/gone', 'root/svc/stale']);
+            await eventSourceManager.reconcileObjects('tok');
+            expect(mockStore.removeObjects).not.toHaveBeenCalled();
+        });
+
+        test.each([
+            ['a refused request', () => answer(null, false)],
+            ['a network error', () => vi.fn(() => Promise.reject(new Error('offline')))],
+            ['an unexpected answer', () => answer({items: []})],
+        ])('drops nothing on %s', async (_label, makeFetch) => {
+            global.fetch = makeFetch();
+            await eventSourceManager.reconcileObjects('tok');
+            expect(mockStore.removeObjects).not.toHaveBeenCalled();
+        });
+
+        test('asks nothing while no object is held', async () => {
+            mockStore.objectStatus = {};
+            mockStore.objectInstanceStatus = {};
+            mockStore.instanceMonitor = {};
+            global.fetch = answer([]);
+            await eventSourceManager.reconcileObjects('tok');
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
+
+        test('runs each time the stream opens', async () => {
+            global.fetch = answer(['root/svc/kept']);
+            createES('tok');
+            mockEventSource.onopen();
+            await vi.waitFor(() => expect(mockStore.removeObjects).toHaveBeenCalledWith(['root/svc/gone', 'root/svc/stale']));
+            expect(global.fetch).toHaveBeenCalledWith(`${URL_OBJECT}?path=**`, expect.anything());
+        });
+    });
+
+    // ==================== Stream claims ====================
+    describe('stream claims', () => {
+        // The claims of one render are applied together, once its microtasks run.
+        const settle = () => Promise.resolve();
+        const openedUrls = () => vi.mocked(EventSourcePolyfill).mock.calls.map(([url]) => url);
+
+        test('the union of the claims is the query', () => {
+            const {query, types} = eventSourceManager.claimsQuery([
+                {filters: ['ObjectStatusUpdated', 'InstanceStatusUpdated'], objectName: null},
+                {filters: ['InstanceStatusUpdated', 'Bogus'], objectName: null},
+            ]);
+            expect(query).toBe('cache=true&filter=InstanceStatusUpdated&filter=ObjectStatusUpdated');
+            expect(types).toEqual(['ObjectStatusUpdated', 'InstanceStatusUpdated']);
+        });
+
+        test('a claim on an object asks for the events of that object only', () => {
+            const {query} = eventSourceManager.claimsQuery([
+                {filters: ['ObjectStatusUpdated'], objectName: 'ns1/svc/web'},
+            ]);
+            expect(query).toContain('filter=ObjectStatusUpdated,path=ns1%2Fsvc%2Fweb');
+            expect(query).toContain('filter=InstanceConfigUpdated,path=ns1%2Fsvc%2Fweb');
+            expect(query).not.toMatch(/filter=ObjectStatusUpdated(&|$)/);
+        });
+
+        test('a panel over a list widens the stream, and closing it narrows it back', async () => {
+            const releaseList = eventSourceManager.retainEventReception('tok', ['ObjectStatusUpdated']);
+            await settle();
+            expect(openedUrls()).toEqual([`${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`]);
+
+            const releasePanel = eventSourceManager.retainEventReception('tok', ['InstanceConfigUpdated'], 'ns1/svc/web');
+            await settle();
+            expect(openedUrls()).toHaveLength(2);
+            expect(openedUrls()[1]).toContain('filter=ObjectStatusUpdated&');
+            expect(openedUrls()[1]).toContain('path=ns1%2Fsvc%2Fweb');
+
+            releasePanel();
+            await settle();
+            expect(openedUrls()).toHaveLength(3);
+            expect(openedUrls()[2]).toBe(`${URL_NODE_EVENT}?cache=true&filter=ObjectStatusUpdated`);
+
+            releaseList();
+            await settle();
+            expect(mockEventSource.close).toHaveBeenCalled();
+            expect(openedUrls()).toHaveLength(3);
+        });
+
+        test('the claims released and made by one render open the stream once', async () => {
+            const release = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            release();
+            const again = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            expect(openedUrls()).toHaveLength(1);
+            again();
+            await settle();
+        });
+
+        test('a claim released twice releases once', async () => {
+            const releaseA = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            const releaseB = eventSourceManager.retainEventReception('tok', ['NodeStatusUpdated']);
+            await settle();
+            releaseA();
+            releaseA();
+            await settle();
+            expect(mockEventSource.close).not.toHaveBeenCalled();
+            releaseB();
+            await settle();
+            expect(mockEventSource.close).toHaveBeenCalled();
+        });
+
+        test('no token, no claim', async () => {
+            const release = eventSourceManager.retainEventReception('', ['NodeStatusUpdated']);
+            await settle();
+            expect(EventSourcePolyfill).not.toHaveBeenCalled();
+            expect(() => release()).not.toThrow();
         });
     });
 });

@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from '../../i18n';
 import {render, screen, waitFor, act, within, fireEvent, cleanup} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
@@ -7,8 +8,7 @@ import KeysSection from '../KeysSection';
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('../../hooks/useEventStore.js', () => ({default: vi.fn()}));
 vi.mock('../../eventSourceManager.jsx', () => ({
-    closeEventSource: vi.fn(),
-    startEventReception: vi.fn(),
+    retainEventReception: vi.fn(() => () => {}),
     configureEventSource: vi.fn(),
 }));
 
@@ -978,5 +978,20 @@ describe('KeysSection', () => {
         });
         // Empty content is displayed without crashing
         expect(within(dialog).queryByText(/hidden by default/i)).not.toBeInTheDocument();
+    });
+});
+
+describe('KeysSection in French', () => {
+    afterEach(async () => {
+        await i18n.changeLanguage('en');
+    });
+
+    test('shows the keys table in French', async () => {
+        await i18n.changeLanguage('fr');
+        mockFetch({keys: [{name: 'key1', node: 'node1', size: 12}]});
+        render(<KeysSection decodedObjectName="root/cfg/cfg1" openSnackbar={openSnackbar}/>);
+        expect(await screen.findByText("Clés de l'objet (1)")).toBeInTheDocument();
+        expect(screen.getByText('12 octets')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Supprimer la clé key1'})).toBeInTheDocument();
     });
 });

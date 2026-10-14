@@ -1,8 +1,9 @@
 import React from 'react';
-import {render, screen, act, renderHook} from '@testing-library/react';
+import {render, screen, act, renderHook, within, fireEvent} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {describe, test, expect, beforeEach, vi} from 'vitest';
+import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
 import {Sidebar, NAV_ROUTES, useSidebarOpen} from '../Sidebar';
+import i18n from '../../i18n';
 
 const {mockPills} = vi.hoisted(() => ({mockPills: {current: {}}}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => mockPills.current}));
@@ -134,19 +135,27 @@ describe('Sidebar', () => {
         expect(screen.queryByRole('link', {name: /^Who Am I/})).toBeNull();
     });
 
-    test('lists the views in alphabetical order', () => {
+    test('lists the views in alphabetical order, kinds and namespaces under objects', () => {
         renderSidebar();
         const names = screen.getAllByRole('link').map((link) => link.textContent);
         expect(names.map((name) => name.replace(/(all up|warn|down|no status|frozen|a .* is .*)$/, '')))
-            .toEqual(['Heartbeats', 'Kinds', 'Namespaces', 'Networks', 'Nodes', 'Objects', 'Pools']);
+            .toEqual(['Heartbeats', 'Networks', 'Nodes', 'Objects', 'Kinds', 'Namespaces', 'Pools']);
+    });
+
+    test('groups kinds and namespaces in a list nested under the objects entry', () => {
+        renderSidebar();
+        const objects = screen.getByRole('link', {name: /^Objects/}).closest('li');
+        const nested = within(objects).getByRole('list');
+        expect(within(nested).getAllByRole('link').map((link) => link.getAttribute('href')))
+            .toEqual(['/kinds', '/namespaces']);
     });
 
     test('lists every view', () => {
         renderSidebar();
         const nav = screen.getByRole('navigation', {name: 'Main'});
         expect(nav).toBeInTheDocument();
-        for (const {path, name} of NAV_ROUTES) {
-            expect(screen.getByRole('link', {name: new RegExp(`^${name}`)})).toHaveAttribute('href', path);
+        for (const {path, labelKey} of NAV_ROUTES.flatMap((route) => [route, ...(route.children ?? [])])) {
+            expect(screen.getByRole('link', {name: new RegExp(`^${i18n.t(labelKey)}`)})).toHaveAttribute('href', path);
         }
     });
 
@@ -202,5 +211,50 @@ describe('useSidebarOpen', () => {
         } finally {
             spy.mockRestore();
         }
+    });
+});
+
+describe('Sidebar in French', () => {
+    afterEach(async () => {
+        await i18n.changeLanguage('en');
+    });
+
+    test('names the entries in French', async () => {
+        await i18n.changeLanguage('fr');
+        renderSidebar();
+        expect(screen.getByRole('navigation', {name: 'Principal'})).toBeInTheDocument();
+        expect(screen.getByRole('link', {name: /^Nœuds/})).toHaveAttribute('href', '/nodes');
+        expect(screen.getByRole('link', {name: /^Namespaces/})).toHaveAttribute('href', '/namespaces');
+    });
+
+    test('says what the counts are in French', async () => {
+        await i18n.changeLanguage('fr');
+        mockPills.current = {'/nodes': {counts: [{state: 'frozen', count: 2}]}};
+        renderSidebar();
+        expect(screen.getByTestId('counts-nodes').querySelector('[data-state="frozen"]'))
+            .toHaveAttribute('title', '2 gelés');
+    });
+
+    test('the arrows, Home and End walk the menu entries, not their pills; Escape leaves it', () => {
+        mockPills.current = {'/objects': {counts: [{state: 'up', count: 45}]}};
+        renderSidebar(true, '/nodes');
+        const menu = screen.getByRole('navigation', {name: 'Main'});
+        expect(menu).toHaveAttribute('aria-keyshortcuts', 'n');
+        const links = within(menu).getAllByRole('link').filter((l) => !l.hasAttribute('data-state'));
+        const objects = links.find((l) => l.textContent === 'Objects');
+        act(() => objects.focus());
+        fireEvent.keyDown(objects, {key: 'ArrowDown'});
+        expect(links[links.indexOf(objects) + 1]).toHaveFocus();
+        act(() => links[0].focus());
+        fireEvent.keyDown(links[0], {key: 'ArrowDown'});
+        expect(links[1]).toHaveFocus();
+        fireEvent.keyDown(links[1], {key: 'ArrowUp'});
+        expect(links[0]).toHaveFocus();
+        fireEvent.keyDown(links[0], {key: 'End'});
+        expect(links[links.length - 1]).toHaveFocus();
+        fireEvent.keyDown(links[links.length - 1], {key: 'Home'});
+        expect(links[0]).toHaveFocus();
+        fireEvent.keyDown(links[0], {key: 'Escape'});
+        expect(links[0]).not.toHaveFocus();
     });
 });

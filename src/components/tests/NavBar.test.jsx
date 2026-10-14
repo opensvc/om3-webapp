@@ -141,6 +141,16 @@ describe('NavBar', () => {
         expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
     });
 
+    test('the Cluster tag opens the cluster object over the view, its filters kept, its row panel closed', () => {
+        mockUseLocation.mockReturnValue({pathname: '/objects', search: '?globalState=down&sel=svc%2Fweb&tab=logs'});
+        renderNavBar();
+        const tag = screen.getByRole('link', {name: 'Open the cluster'});
+        expect(tag).toHaveAttribute('href', '/objects?globalState=down&peek=object%3Acluster');
+        expect(tag).toHaveTextContent('Cluster');
+        // The product name still leads home.
+        expect(screen.getByRole('link', {name: 'OpenSVC'})).toHaveAttribute('href', '/');
+    });
+
     test('does not show breadcrumbs on /login', () => {
         setupMocks({pathname: '/login', authToken: null, fetchNodes: undefined});
         renderNavBar();
@@ -246,10 +256,11 @@ describe('NavBar', () => {
     });
 
     // ---------- object status counts ----------
-    test('is the oc3 top bar: a 44px raised header with a breadcrumb navigation', () => {
+    test('is the oc3 top bar, in the om3 band colour: a 44px header with a breadcrumb navigation', () => {
         renderNavBar();
         const header = screen.getByRole('banner');
-        expect(header).toHaveClass('h-11', 'border-b', 'border-line', 'bg-surface-raised');
+        expect(header).toHaveClass('brand-bar', 'h-11', 'border-b', 'border-line');
+        expect(header).not.toHaveClass('bg-surface-raised');
         expect(screen.getByRole('navigation', {name: 'Breadcrumb'})).toBeInTheDocument();
     });
 
@@ -274,13 +285,18 @@ describe('NavBar', () => {
     });
 
     // ---------- logo ----------
-    test('shows the OpenSVC logo link to the home view, as in oc3', () => {
+    test('names the tab after the cluster, tagged Cluster, not to be taken for oc3', async () => {
+        setupMocks({clusterName: 'dev3'});
+        renderNavBar();
+        await waitFor(() => expect(document.title).toBe('dev3 · OpenSVC Cluster'));
+    });
+
+    test('links the OpenSVC name to the home view, tagged Cluster, without the logo', () => {
         renderNavBar();
         const link = screen.getByRole('link', {name: 'OpenSVC'});
         expect(link).toHaveAttribute('href', '/');
-        const logo = link.querySelector('img');
-        expect(logo).toHaveAttribute('alt', '');
-        expect(logo).toHaveAttribute('width', '24');
+        expect(link.querySelector('img')).toBeNull();
+        expect(link.nextElementSibling).toHaveTextContent('Cluster');
     });
 
     // ---------- sidebar toggle ----------

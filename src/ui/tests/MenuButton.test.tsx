@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MenuButton, type MenuItem } from "../components/MenuButton";
+import { MenuButton, submenuShift, verticalPlacement, type MenuItem } from "../components/MenuButton";
 
 function items(handlers: Record<string, () => void> = {}): MenuItem[] {
   return [
@@ -33,6 +33,37 @@ function setup(handlers: Record<string, () => void> = {}) {
 }
 
 describe("MenuButton", () => {
+  test("Escape closes a menu opened with the mouse, not what is around it", async () => {
+    const user = userEvent.setup();
+    const onPanelKey = vi.fn();
+    document.addEventListener("keydown", onPanelKey);
+    render(<MenuButton label="Actions" items={[{ key: "start", label: "Start", onSelect: () => {} }]} />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onPanelKey).not.toHaveBeenCalled();
+    document.removeEventListener("keydown", onPanelKey);
+  });
+
+  test("the menu stands in the window, out of a translated panel, and its entries act", async () => {
+    // A side panel slides in with a translation, which makes it the reference of
+    // the fixed elements inside it: the menu was placed off its trigger.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <div style={{ translate: "10px" }} data-testid="panel">
+        <MenuButton label="Actions" items={[{ key: "start", label: "Start", onSelect }]} />
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const menu = screen.getByRole("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(screen.getByTestId("panel")).not.toContainElement(menu);
+    await user.click(screen.getByRole("menuitem", { name: "Start" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   test("announces a closed menu", () => {
     const { button } = setup();
     expect(button).toHaveAttribute("aria-haspopup", "menu");
@@ -268,5 +299,62 @@ describe("MenuButton", () => {
       await user.unhover(more);
       expect(screen.queryByRole("menu", { name: "More" })).not.toBeInTheDocument();
     });
+  });
+});
+
+// jsdom lays nothing out: the window is 1024 x 768, and the rectangles are given.
+const rect = (top: number, bottom: number, left = 100, right = 300) =>
+  ({ top, bottom, left, right, width: right - left, height: bottom - top }) as DOMRect;
+
+describe("verticalPlacement", () => {
+  test("opens under the trigger when the menu fits there", () => {
+    expect(verticalPlacement(rect(100, 120), 300)).toEqual({ top: 124 });
+  });
+
+  test("opens over the trigger near the bottom of the window", () => {
+    expect(verticalPlacement(rect(700, 720), 300)).toEqual({ bottom: 768 - 700 + 4 });
+  });
+
+  test("fitting nowhere, takes the roomier side, cut and scrolled", () => {
+    expect(verticalPlacement(rect(500, 520), 900)).toEqual({
+      bottom: 768 - 500 + 4,
+      maxHeight: 500 - 4 - 8,
+      overflowY: "auto",
+    });
+    expect(verticalPlacement(rect(200, 220), 900)).toEqual({
+      top: 224,
+      maxHeight: 768 - 220 - 4 - 8,
+      overflowY: "auto",
+    });
+  });
+});
+
+describe("submenuShift", () => {
+  test("stays in place inside the window", () => {
+    expect(submenuShift(rect(100, 300))).toEqual({ up: 0, flip: false });
+  });
+
+  test("goes up by what passes the bottom of the window", () => {
+    expect(submenuShift(rect(600, 860))).toEqual({ up: 860 - (768 - 8), flip: false });
+  });
+
+  test("never goes above the top of the window", () => {
+    expect(submenuShift(rect(50, 900)).up).toBe(50 - 8);
+  });
+
+  test("goes to the other side of its entry past the right edge", () => {
+    expect(submenuShift(rect(100, 300, 900, 1100)).flip).toBe(true);
+  });
+});
+
+describe("MenuButton prominent", () => {
+  test("as oc3 draws the actions: an accent pill, its icon before the label, filled when open", () => {
+    render(<MenuButton label="Actions" items={items()} prominent icon={<svg data-testid="gear" />} />);
+    const button = screen.getByRole("button", { name: "Actions" });
+    expect(button).toHaveClass("rounded-(--radius-pill)", "border-accent", "bg-accent-soft", "aria-expanded:bg-accent");
+    // The label names it, the icon only shows: no tooltip of an icon alone.
+    expect(button).not.toHaveAttribute("title");
+    expect(button.firstElementChild).toBe(screen.getByTestId("gear"));
+    expect(button).toHaveTextContent("Actions");
   });
 });

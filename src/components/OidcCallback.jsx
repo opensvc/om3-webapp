@@ -1,10 +1,12 @@
 import React, {useEffect, useCallback, useRef} from 'react';
 import {useNavigate} from 'react-router-dom';
+import {useTranslation} from 'react-i18next';
 import {useAuthDispatch, SetAccessToken, SetAuthChoice, Login} from "../context/AuthProvider.jsx";
 import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import {useOidc} from "../context/OidcAuthContext.tsx";
 import logger from '../utils/logger.js';
+import {clearObjectCache} from "../hooks/useEventStore.js";
 
 const OidcCallback = () => {
     const {userManager, recreateUserManager} = useOidc();
@@ -12,12 +14,14 @@ const OidcCallback = () => {
     const authInfo = useAuthInfo();
     const navigate = useNavigate();
     const eventHandlersSet = useRef(false);
+    const {t} = useTranslation();
 
     const handleLogout = useCallback(() => {
         if (authDispatch) {
             authDispatch({type: SetAccessToken, data: null});
         }
         localStorage.removeItem('authToken');
+        clearObjectCache();
         localStorage.removeItem('tokenExpiration');
         localStorage.removeItem('authChoice');
 
@@ -145,7 +149,7 @@ const OidcCallback = () => {
         return () => channel.close();
     }, [authDispatch, handleLogout]);
 
-    return <>Logging ...</>;
+    return <>{t('auth.callback.logging')}</>;
 };
 
 export default OidcCallback;

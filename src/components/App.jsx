@@ -1,5 +1,6 @@
 import React, {useEffect, useCallback, lazy, Suspense, useRef} from "react";
-import {Routes, Route, Navigate, useNavigate, useLocation} from "react-router-dom";
+import {Routes, Route, Navigate, useNavigate, useLocation, useParams} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
 import AuthChoice from "./AuthChoice.jsx";
@@ -20,28 +21,55 @@ import oidcConfiguration from "../config/oidcConfiguration.js";
 import useAuthInfo from "../hooks/AuthInfo.jsx";
 import logger from "../utils/logger.js";
 import {prepareForNavigation} from "../eventSourceManager";
+import {PeekPanel} from "./PeekPanel";
+import {PanelAnchor} from "../app/PanelAnchor";
+import {PanelSideProvider} from "../app/PanelSideProvider";
+import {usePanelSidePref} from "../app/panel-side-pref";
+import {useRecordHistory} from "../app/record-history";
+import {ShortcutsHelp} from "../app/ShortcutsHelp";
+import {useShortcut} from "../ui/lib/shortcuts";
 
 import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
 
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
-const ObjectDetails = lazy(() => import("./ObjectDetails"));
-const ObjectInstanceView = lazy(() => import("./ObjectInstanceView"));
 const Namespaces = lazy(() => import("./Namespaces"));
 const Kinds = lazy(() => import("./Kinds"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
-const NetworkDetails = lazy(() => import("./NetworkDetails"));
 const WhoAmI = lazy(() => import("./WhoAmI"));
 
+/*
+ * The records had pages of their own; they open in a panel over their list now, as
+ * in oc3 (`panel-search.ts`). The old addresses, bookmarked or shared, lead there.
+ */
+const ObjectRedirect = () => {
+    const {objectName} = useParams();
+    return <Navigate to={`/objects?${new URLSearchParams({sel: decodeURIComponent(objectName)})}`} replace/>;
+};
+
+const NetworkRedirect = () => {
+    const {networkName} = useParams();
+    return <Navigate to={`/network?${new URLSearchParams({sel: networkName})}`} replace/>;
+};
+
+// An instance is a column of the status board of its object.
+const InstanceRedirect = () => {
+    const {objectName} = useParams();
+    return <Navigate to={`/objects?${new URLSearchParams({sel: decodeURIComponent(objectName)})}`} replace/>;
+};
+
 // Loading component for Suspense fallback
-const Loading = () => (
-    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%'}}>
-        <div style={{fontSize: '1.125rem'}}>Loading...</div>
-    </div>
-);
+const Loading = () => {
+    const {t} = useTranslation();
+    return (
+        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%'}}>
+            <div style={{fontSize: '1.125rem'}}>{t("nav.loading")}</div>
+        </div>
+    );
+};
 
 const isTokenValid = (token) => {
     if (!token) {
@@ -282,12 +310,28 @@ const App = () => {
     // The sign-in screens have no view to navigate to: no menu there.
     const showSidebar = !AUTH_PATHS.some((path) => location.pathname.startsWith(path));
 
+    // "n", for navigation, moves the focus to the menu, on the entry of the view on
+    // display, unfolding the menu first when it is folded: the focus waits for it to
+    // leave `inert`.
+    useShortcut("n", () => {
+        if (!showSidebar) return false;
+        if (!sidebarOpen) toggleSidebar();
+        window.requestAnimationFrame(() => {
+            const menu = document.getElementById("app-sidebar");
+            const entry = menu?.querySelector('a[aria-current="page"]') ?? menu?.querySelector("a, button");
+            entry?.focus();
+        });
+        return true;
+    });
+
+    // Another view starts at its top. Not a panel opening over the view, nor its
+    // filters changing: those keep the place in the list.
     useEffect(() => {
         if (mainRef.current) {
             mainRef.current.scrollTop = 0;
         }
         prepareForNavigation();
-    }, [location]);
+    }, [location.pathname]);
 
     useEffect(() => {
         const checkTokenChange = () => {
@@ -311,55 +355,71 @@ const App = () => {
         color: 'var(--ink)',
     };
 
+    // The anchor that brings the panels back stands on their edge of the window, over
+    // the views: while there is a record to bring back, the views keep a gutter as
+    // wide as it on that side, so that it covers nothing, an Actions menu at the end
+    // of a toolbar included.
+    const panelSide = usePanelSidePref().value;
+    const historySize = useRecordHistory().entries.length;
+    const anchorShown = showSidebar && historySize > 0;
     const mainStyle = {
         flex: 1,
         minWidth: 0,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         width: '100%',
+        ...(anchorShown ? {[panelSide === 'left' ? 'paddingLeft' : 'paddingRight']: '2.5rem'} : {}),
     };
 
     return (
         <AuthProvider>
             <OidcProvider>
                 <OidcInitializer authInfo={authInfo}>
-                    <div id="app-root-container" style={appContainerStyle}>
-                        <NavBar
-                            sidebarOpen={sidebarOpen}
-                            onToggleSidebar={toggleSidebar}
-                            showSidebarToggle={showSidebar}
-                        />
-                        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-                            {showSidebar && <Sidebar open={sidebarOpen}/>}
-                            <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
-                                <Suspense fallback={<Loading/>}>
-                                    <Routes>
-                                        <Route path="/" element={<Navigate to="/objects" replace/>}/>
-                                        <Route path="/namespaces"
-                                               element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                                        <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
-                                        <Route path="/heartbeats" element={<Heartbeats/>}/>
-                                        <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
-                                        <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
-                                        <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
-                                        <Route path="/network/:networkName"
-                                               element={<ProtectedRoute><NetworkDetails/></ProtectedRoute>}/>
-                                        <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
-                                        <Route path="/objects/:objectName"
-                                               element={<ProtectedRoute><ObjectDetails/></ProtectedRoute>}/>
-                                        <Route path="/nodes/:node/objects/:objectName"
-                                               element={<ProtectedRoute><ObjectInstanceView/></ProtectedRoute>}/>
-                                        <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
-                                        <Route path="/silent-renew" element={<SilentRenew/>}/>
-                                        <Route path="/auth-callback" element={<OidcCallback/>}/>
-                                        <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
-                                        <Route path="/auth/login" element={<Login/>}/>
-                                        <Route path="*" element={<Navigate to="/"/>}/>
-                                    </Routes>
-                                </Suspense>
-                            </main>
+                    <PanelSideProvider>
+                        <div id="app-root-container" style={appContainerStyle}>
+                            <NavBar
+                                sidebarOpen={sidebarOpen}
+                                onToggleSidebar={toggleSidebar}
+                                showSidebarToggle={showSidebar}
+                            />
+                            <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+                                {showSidebar && <Sidebar open={sidebarOpen}/>}
+                                <main id="app-scroll-container" ref={mainRef} style={mainStyle}>
+                                    <Suspense fallback={<Loading/>}>
+                                        <Routes>
+                                            <Route path="/" element={<Navigate to="/objects" replace/>}/>
+                                            <Route path="/namespaces"
+                                                   element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
+                                            <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
+                                            <Route path="/heartbeats" element={<Heartbeats/>}/>
+                                            <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
+                                            <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>
+                                            <Route path="/network" element={<ProtectedRoute><Network/></ProtectedRoute>}/>
+                                            <Route path="/network/:networkName" element={<NetworkRedirect/>}/>
+                                            <Route path="/objects" element={<ProtectedRoute><Objects/></ProtectedRoute>}/>
+                                            <Route path="/objects/:objectName" element={<ObjectRedirect/>}/>
+                                            <Route path="/nodes/:node/objects/:objectName" element={<InstanceRedirect/>}/>
+                                            <Route path="/whoami" element={<ProtectedRoute><WhoAmI/></ProtectedRoute>}/>
+                                            <Route path="/silent-renew" element={<SilentRenew/>}/>
+                                            <Route path="/auth-callback" element={<OidcCallback/>}/>
+                                            <Route path="/auth-choice" element={<AuthChoice authInfo={authInfo}/>}/>
+                                            <Route path="/auth/login" element={<Login/>}/>
+                                            <Route path="*" element={<Navigate to="/"/>}/>
+                                        </Routes>
+                                        {/* The record opened from a badge or the history, whatever the
+                                            view, and what brings the panels back once closed. */}
+                                        {showSidebar && localStorage.getItem("authToken") && (
+                                            <>
+                                                <PeekPanel/>
+                                                <PanelAnchor/>
+                                                <ShortcutsHelp/>
+                                            </>
+                                        )}
+                                    </Suspense>
+                                </main>
+                            </div>
                         </div>
-                    </div>
+                    </PanelSideProvider>
                 </OidcInitializer>
             </OidcProvider>
         </AuthProvider>

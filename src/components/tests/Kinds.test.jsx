@@ -3,22 +3,23 @@ import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/
 import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
 import Kinds from '../Kinds';
+import i18n from '../../i18n';
 
 // ── Hoisted mock variables ──────────────────────────────────────────────
 const {
     mockNavigate,
     mockUseNavigate,
     mockUseLocation,
-    mockStartEventReception,
-    mockCloseEventSource,
+    mockRetainEventReception,
+    mockReleaseEventReception,
     mockUseEventStore,
     mockUseKindData,
 } = vi.hoisted(() => ({
     mockNavigate: vi.fn(),
     mockUseNavigate: vi.fn(() => mockNavigate),
     mockUseLocation: vi.fn(() => ({pathname: '/kinds', search: ''})),
-    mockStartEventReception: vi.fn(),
-    mockCloseEventSource: vi.fn(),
+    mockRetainEventReception: vi.fn(),
+    mockReleaseEventReception: vi.fn(),
     mockUseEventStore: vi.fn(),
     mockUseKindData: vi.fn(),
 }));
@@ -39,8 +40,10 @@ vi.mock('../../hooks/useEventStore.js', () => ({
 }));
 
 vi.mock('../../eventSourceManager.jsx', () => ({
-    startEventReception: mockStartEventReception,
-    closeEventSource: mockCloseEventSource,
+    retainEventReception: (...args) => {
+        mockRetainEventReception(...args);
+        return mockReleaseEventReception;
+    },
 }));
 
 vi.mock('../../hooks/useKindData', () => ({
@@ -130,6 +133,17 @@ describe('Kinds', () => {
         );
     });
 
+    test('speaks French to a French browser', async () => {
+        await i18n.changeLanguage('fr');
+        try {
+            renderComponent();
+            expect(screen.getByRole('columnheader', {name: 'Non provisionné'})).toBeInTheDocument();
+            expect(screen.getByLabelText("Filtrer par kind")).toBeInTheDocument();
+        } finally {
+            await i18n.changeLanguage('en');
+        }
+    });
+
     test('displays kind counts correctly', () => {
         renderComponent();
         const serviceRow = screen.getByRole('row', {name: /service/i});
@@ -203,7 +217,7 @@ describe('Kinds', () => {
     test('starts event reception on mount with token', async () => {
         renderComponent();
         await waitFor(() => {
-            expect(mockStartEventReception).toHaveBeenCalledWith(
+            expect(mockRetainEventReception).toHaveBeenCalledWith(
                 'valid-token',
                 ['ObjectStatusUpdated', 'InstanceStatusUpdated', 'ObjectDeleted', 'InstanceConfigUpdated']
             );
@@ -213,13 +227,13 @@ describe('Kinds', () => {
     test('closes event source on unmount', async () => {
         const {unmount} = renderComponent();
         await act(() => unmount());
-        expect(mockCloseEventSource).toHaveBeenCalled();
+        expect(mockReleaseEventReception).toHaveBeenCalled();
     });
 
     test('does not start event reception without token', () => {
         setup({token: null});
         renderComponent();
-        expect(mockStartEventReception).not.toHaveBeenCalled();
+        expect(mockRetainEventReception).not.toHaveBeenCalled();
     });
 
     test('shows no kinds message when empty', () => {

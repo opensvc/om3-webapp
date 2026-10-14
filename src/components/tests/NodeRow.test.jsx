@@ -8,28 +8,6 @@ const wrapper = ({children}) => <table><tbody>{children}</tbody></table>;
 const render = (ui, options) => rtlRender(ui, {wrapper, ...options});
 import '@testing-library/jest-dom';
 
-// Mock NODE_ACTIONS
-vi.mock('../../constants/actions', async (importOriginal) => {
-    const {createElement} = await import('react');
-    return {
-    ...(await importOriginal()),
-    NODE_ACTIONS: [
-        {name: 'freeze', icon: createElement('span', {'aria-label': 'Freeze icon'})},
-        {name: 'unfreeze', icon: createElement('span', {'aria-label': 'Unfreeze icon'})},
-        {name: 'restart daemon', icon: createElement('span', {'aria-label': 'Restart daemon icon'})},
-        {name: 'abort', icon: createElement('span', {'aria-label': 'Abort icon'})},
-        {name: 'clear', icon: createElement('span', {'aria-label': 'Clear icon'})},
-        {name: 'drain', icon: createElement('span', {'aria-label': 'Drain icon'})},
-        {name: 'push/asset', icon: createElement('span', {'aria-label': 'Asset icon'})},
-        {name: 'push/disk', icon: createElement('span', {'aria-label': 'Disk icon'})},
-        {name: 'push/pkg', icon: createElement('span', {'aria-label': 'Pkg icon'})},
-        {name: 'scan/capabilities', icon: createElement('span', {'aria-label': 'Capabilities icon'})},
-        {name: 'sysreport', icon: createElement('span', {'aria-label': 'Sysreport icon'})},
-        {name: 'shutdown', icon: createElement('span', {'aria-label': 'Shutdown icon'}), color: 'red'},
-    ],
-    };
-});
-
 describe('NodeRow Component', () => {
     const defaultProps = {
         nodename: 'node1',
@@ -39,7 +17,6 @@ describe('NodeRow Component', () => {
         isSelected: false,
         daemonNodename: 'node2',
         onSelect: jest.fn(),
-        onAction: jest.fn(),
     };
 
     beforeEach(() => {
@@ -182,41 +159,10 @@ describe('NodeRow Component', () => {
         expect(progress.firstChild).toHaveStyle({width: '10%'});
     });
 
-    test('opens the row menu when its button is clicked', () => {
+    test('has no menu of actions: the panel of the node holds them', () => {
         render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: 'More actions for node node1'});
-        expect(menuButton).toHaveAttribute('aria-haspopup', 'menu');
+        expect(screen.queryByRole('button')).not.toBeInTheDocument();
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        fireEvent.click(menuButton);
-        expect(screen.getByRole('menu', {name: 'More actions for node node1'})).toBeInTheDocument();
-        expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-    });
-
-    test('calls onAction and closes the menu when a menu item is clicked', () => {
-        render(<NodeRow {...defaultProps} />);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        const menu = screen.getByRole('menu');
-        fireEvent.click(within(menu).getByRole('menuitem', {name: 'Freeze'}));
-        expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'freeze');
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    });
-
-    test('passes the action name, not its label', () => {
-        render(<NodeRow {...defaultProps} />);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        fireEvent.click(screen.getByRole('menuitem', {name: 'Restart daemon'}));
-        expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'restart daemon');
-    });
-
-    test('tints the icon of a destructive action', () => {
-        render(<NodeRow {...defaultProps} />);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        const shutdownIcon = screen.getByLabelText('Shutdown icon').parentElement;
-        const freezeIcon = screen.getByLabelText('Freeze icon').parentElement;
-        expect(shutdownIcon).toHaveClass('text-state-down');
-        expect(freezeIcon).toHaveClass('text-ink-muted');
-        fireEvent.click(screen.getByRole('menuitem', {name: 'Shutdown'}));
-        expect(defaultProps.onAction).toHaveBeenCalledWith('node1', 'shutdown');
     });
 
     test('checkbox click stops propagation', () => {
@@ -226,52 +172,6 @@ describe('NodeRow Component', () => {
         fireEvent.click(checkbox);
         expect(spy).toHaveBeenCalled();
         spy.mockRestore();
-    });
-
-    test('menu closes on Escape and on a click outside, without action', () => {
-        render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        fireEvent.click(menuButton);
-        fireEvent.keyDown(screen.getByRole('menu'), {key: 'Escape'});
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        fireEvent.click(menuButton);
-        expect(screen.getByRole('menu')).toBeInTheDocument();
-        fireEvent.pointerDown(document.body);
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        expect(defaultProps.onAction).not.toHaveBeenCalled();
-    });
-
-    test('a second click on the button closes the menu', () => {
-        render(<NodeRow {...defaultProps} />);
-        const menuButton = screen.getByRole('button', {name: /More actions for node node1/i});
-        fireEvent.click(menuButton);
-        fireEvent.click(menuButton);
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    });
-
-    test('filters menu items correctly when node is frozen', () => {
-        render(<NodeRow {...defaultProps} status={{frozen_at: '2023-01-01T12:00:00Z', agent: 'v1.2.3'}}/>);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        const menu = screen.getByRole('menu');
-        expect(within(menu).getByRole('menuitem', {name: 'Unfreeze'})).toBeInTheDocument();
-        expect(within(menu).queryByRole('menuitem', {name: 'Freeze'})).not.toBeInTheDocument();
-        expect(within(menu).getAllByRole('menuitem')).toHaveLength(11);
-    });
-
-    test('filters menu items correctly when node is not frozen', () => {
-        render(<NodeRow {...defaultProps} status={{frozen_at: null, agent: 'v1.2.3'}}/>);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        const menu = screen.getByRole('menu');
-        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeInTheDocument();
-        expect(within(menu).queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
-        expect(within(menu).getByRole('menuitem', {name: 'Push/asset'})).toBeInTheDocument();
-        expect(within(menu).getAllByRole('menuitem')).toHaveLength(11);
-    });
-
-    test('shows the action icons in the menu', () => {
-        render(<NodeRow {...defaultProps} />);
-        fireEvent.click(screen.getByRole('button', {name: /More actions for node node1/i}));
-        expect(within(screen.getByRole('menu')).getByLabelText('Freeze icon')).toBeInTheDocument();
     });
 
     describe('booted_at column', () => {
@@ -387,7 +287,7 @@ describe('NodeRow Component', () => {
         render(<NodeRow {...defaultProps} />);
         const row = screen.getByRole('row', {name: /Node node1 row/i});
         expect(row).toHaveClass('h-[1.875rem]');
-        expect(screen.getAllByRole('cell')).toHaveLength(11);
+        expect(screen.getAllByRole('cell')).toHaveLength(10);
     });
 
     test('marks a selected row', () => {
@@ -407,7 +307,6 @@ describe('NodeRow Component', () => {
 
         onOpen.mockClear();
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', {name: /actions/i}));
         expect(onOpen).not.toHaveBeenCalled();
 
         fireEvent.keyDown(row, {key: 'Enter'});

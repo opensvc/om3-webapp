@@ -827,7 +827,7 @@ describe('Objects Component', () => {
                 )
             );
             await waitFor(() =>
-                expect(screen.getByRole('status')).toHaveTextContent(/'restart' succeeded on 1 object\(s\)\./i)
+                expect(screen.getByRole('status')).toHaveTextContent(/'restart' requested on 1 object\./i)
             );
             expect(getFeedback()).toHaveClass('text-state-up');
             expect(mockForceFlush).toHaveBeenCalled();
@@ -885,7 +885,7 @@ describe('Objects Component', () => {
             expect(global.fetch).toHaveBeenCalledTimes(1);
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
             expect(mockSetObjectStatuses).toHaveBeenCalled();
@@ -921,7 +921,7 @@ describe('Objects Component', () => {
             await clickMenuItem('Restart');
             await confirmDialog();
             await waitFor(() =>
-                expect(screen.getByRole('alert')).toHaveTextContent(/failed/i)
+                expect(screen.getByRole('alert')).toHaveTextContent(/could not be requested/i)
             );
         });
 
@@ -938,7 +938,7 @@ describe('Objects Component', () => {
             await confirmDialog();
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
         });
@@ -953,7 +953,7 @@ describe('Objects Component', () => {
             await confirmDialog();
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /failed on all 1 object\(s\)/i
+                    /could not be requested on the object/i
                 )
             );
         });
@@ -1013,7 +1013,7 @@ describe('Objects Component', () => {
             await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
             await waitFor(() =>
                 expect(screen.getByRole('alert')).toHaveTextContent(
-                    /partially succeeded: 1 ok, 1 errors/i
+                    /requested on 1 object\(s\), not on 1/i
                 )
             );
         });
@@ -1536,9 +1536,9 @@ describe('Objects Component', () => {
         openActionsMenu();
         await clickMenuItem('Restart');
         await confirmDialog();
-        await waitFor(() => expect(getFeedback()).toHaveTextContent(/succeeded/i));
+        await waitFor(() => expect(getFeedback()).toHaveTextContent(/requested/i));
         fireEvent.click(screen.getByRole('button', {name: 'Close'}));
-        await waitFor(() => expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText(/requested/i)).not.toBeInTheDocument());
     });
 
     test('feedback hides itself after 4 seconds', async () => {
@@ -1553,15 +1553,15 @@ describe('Objects Component', () => {
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(0);
             });
-            expect(getFeedback()).toHaveTextContent(/succeeded/i);
+            expect(getFeedback()).toHaveTextContent(/requested/i);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(3900);
             });
-            expect(screen.getByText(/succeeded/i)).toBeInTheDocument();
+            expect(screen.getByText(/requested/i)).toBeInTheDocument();
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(200);
             });
-            expect(screen.queryByText(/succeeded/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/requested/i)).not.toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }

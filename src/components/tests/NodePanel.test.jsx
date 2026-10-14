@@ -118,7 +118,31 @@ describe('NodeDetailPanel', () => {
         await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
             method: 'POST', url: '/api/node/name/dev3n1/action/freeze',
         })));
-        expect(await within(panel()).findByText(/'Freeze' succeeded on 1 node/)).toBeInTheDocument();
+        expect(await within(panel()).findByText(/'Freeze' requested on 1 node/)).toBeInTheDocument();
+    });
+
+    test('no abort in its menu: the orchestration in progress offers it, and its logs', async () => {
+        useEventStore.setState({nodeMonitor: {dev3n1: {state: 'draining', global_expect: 'drained', orchestration_id: 'o-7'}}});
+        renderPanel();
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Node actions'}));
+        expect(within(screen.getByRole('menu')).queryByRole('menuitem', {name: 'Abort'})).not.toBeInTheDocument();
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Node actions'}));
+
+        const badge = within(panel()).getByRole('button', {name: 'Orchestration in progress: drained'});
+        fireEvent.click(badge);
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Abort'}));
+        fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', {name: 'Confirm'}));
+        await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+            method: 'POST', url: '/api/node/name/dev3n1/action/abort',
+        })));
+
+        // Its logs: the logs tab, of this orchestration only, until asked for all.
+        fireEvent.click(badge);
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Logs'}));
+        expect(within(panel()).getByRole('tab', {name: 'Logs'})).toHaveAttribute('aria-selected', 'true');
+        expect(within(panel()).getByTestId('logs')).toHaveTextContent('node logs of dev3n1 where ORCHESTRATION_ID=o-7');
+        fireEvent.click(within(panel()).getByRole('button', {name: 'Show all the logs'}));
+        expect(within(panel()).getByTestId('logs')).toHaveTextContent(/^node logs of dev3n1$/);
     });
 
     test('no abort in its menu: the orchestration in progress offers it, and its logs', async () => {

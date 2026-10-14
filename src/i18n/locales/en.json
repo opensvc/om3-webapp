@@ -499,11 +499,11 @@
     },
     "feedback": {
       "authTokenNotFound": "Auth token not found.",
-      "executingOnResource": "Executing {{action}} on resource {{rid}}...",
-      "executingOnInstance": "Executing {{action}} on instance...",
-      "failed": "Failed: HTTP {{status}}",
-      "failedWithDetail": "Failed: HTTP {{status}} - {{detail}}",
-      "succeeded": "Action '{{action}}' succeeded",
+      "executingOnResource": "Requesting {{action}} on resource {{rid}}…",
+      "executingOnInstance": "Requesting {{action}} on the instance…",
+      "failed": "Not requested: HTTP {{status}}",
+      "failedWithDetail": "Not requested: HTTP {{status}} - {{detail}}",
+      "succeeded": "'{{action}}' requested",
       "error": "Error: {{message}}"
     },
     "dialogs": {
@@ -759,7 +759,7 @@
       "bootedAt": "Booted At",
       "updatedAt": "Updated At"
     },
-    "bulkActions": "Actions on selected nodes",
+    "bulkActions": "Actions",
     "selectAll": "Select all nodes",
     "loading": "Loading nodes",
     "eventsLogger": "Node Events Logger",
@@ -771,25 +771,25 @@
     },
     "feedback": {
       "noToken": "Authentication token not found",
-      "executing": "Executing '{{action}}'...",
-      "succeeded_one": "✅ '{{action}}' succeeded on {{count}} node(s).",
-      "succeeded_other": "✅ '{{action}}' succeeded on {{count}} node(s).",
-      "partial": "⚠️ '{{action}}' partially succeeded: {{ok}} ok, {{errors}} errors.",
-      "failed_one": "❌ '{{action}}' failed on all {{count}} node(s).",
-      "failed_other": "❌ '{{action}}' failed on all {{count}} node(s)."
+      "executing": "Requesting '{{action}}'…",
+      "succeeded_one": "'{{action}}' requested on {{count}} node.",
+      "succeeded_other": "'{{action}}' requested on {{count}} nodes.",
+      "partial": "'{{action}}' requested on {{ok}} node(s), not on {{errors}}.",
+      "failed_one": "'{{action}}' could not be requested on the node.",
+      "failed_other": "'{{action}}' could not be requested on any of the {{count}} nodes."
     },
     "row": {
       "label": "Node {{node}} row",
       "select": "Select node {{node}}",
-      "connected": "Connected to this node",
-      "moreActions": "More actions for node {{node}}"
+      "connected": "Connected to this node"
     },
     "time": {
       "justNow": "Just now",
       "minutesAgo": "{{count}}m ago",
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
-    }
+    },
+    "selectHint": "Select nodes to act on them, or open one"
   },
   "objectTabs": {
     "schedules": {
@@ -899,12 +899,12 @@
     "dialogTarget": "object {{name}}",
     "feedback": {
       "authTokenNotFound": "Auth token not found.",
-      "executingOnObject": "Executing {{action}} on object…",
-      "executingOnNode": "Executing {{action}} on node {{node}}…",
-      "failed": "Failed to execute {{action}}: HTTP error! status: {{status}}",
-      "failedWithDetail": "Failed to execute {{action}}: HTTP error! status: {{status}} - {{detail}}",
-      "succeededOnObject": "'{{action}}' succeeded on object",
-      "succeededOnNode": "'{{action}}' succeeded on node '{{node}}'",
+      "executingOnObject": "Requesting {{action}} on the object…",
+      "executingOnNode": "Requesting {{action}} on node {{node}}…",
+      "failed": "{{action}} could not be requested: HTTP {{status}}",
+      "failedWithDetail": "{{action}} could not be requested: HTTP {{status}} - {{detail}}",
+      "succeededOnObject": "'{{action}}' requested on the object",
+      "succeededOnNode": "'{{action}}' requested on node '{{node}}'",
       "error": "Error: {{message}}",
       "configUpdated": "Instance configuration updated"
     },
@@ -990,12 +990,12 @@
     },
     "feedback": {
       "authTokenNotFound": "Authentication token not found",
-      "executing": "Executing '{{action}}'...",
-      "succeeded_one": "'{{action}}' succeeded on {{count}} object(s).",
-      "succeeded_other": "'{{action}}' succeeded on {{count}} object(s).",
-      "partial": "'{{action}}' partially succeeded: {{ok}} ok, {{errors}} errors.",
-      "failed_one": "'{{action}}' failed on all {{count}} object(s).",
-      "failed_other": "'{{action}}' failed on all {{count}} object(s)."
+      "executing": "Requesting '{{action}}'…",
+      "succeeded_one": "'{{action}}' requested on {{count}} object.",
+      "succeeded_other": "'{{action}}' requested on {{count}} objects.",
+      "partial": "'{{action}}' requested on {{ok}} object(s), not on {{errors}}.",
+      "failed_one": "'{{action}}' could not be requested on the object.",
+      "failed_other": "'{{action}}' could not be requested on any of the {{count}} objects."
     },
     "dialogTarget": {
       "object": "object {{name}}",
@@ -1210,9 +1210,9 @@
       "cluster": "the cluster, on all its nodes"
     },
     "feedback": {
-      "running": "Running {{action}} on {{subject}}…",
-      "accepted": "{{action}} on {{subject}}: accepted",
-      "failed": "{{action}} on {{subject}} failed: {{detail}}"
+      "running": "Requesting {{action}} on {{subject}}…",
+      "accepted": "{{action}} on {{subject}}: requested",
+      "failed": "{{action}} on {{subject}} could not be requested: {{detail}}"
     },
     "selectInstance": "Select the instance on {{node}}",
     "selectResource": "Select {{rid}} on all its nodes",

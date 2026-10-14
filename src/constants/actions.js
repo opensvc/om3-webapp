@@ -66,6 +66,21 @@ export const OBJECT_ACTIONS = [
     {name: "purge", icon: icon(TrashIcon), endpoint: "action/purge", color: "red"},
 ];
 
+/** Kinds holding keys, on all the nodes: no status, nothing to start or place. */
+export const KEY_KINDS = ["cfg", "sec", "usr"];
+
+/** What `om sec`, `om cfg` and `om usr` do to the object as a whole. */
+const KEY_KIND_ACTIONS = ["delete", "purge"];
+
+/**
+ * Of the object `actions`, the ones of the menu of an object of `kind`: the ones
+ * of its kind, without abort, which the badge of the orchestration in progress
+ * offers instead.
+ */
+export const objectActionsFor = (kind, actions = OBJECT_ACTIONS) => actions.filter((a) => a.name !== "abort"
+    && (!a.kinds || a.kinds.includes(kind))
+    && (!KEY_KINDS.includes(kind) || KEY_KIND_ACTIONS.includes(a.name)));
+
 export const INSTANCE_ACTIONS = [
     // Lifecycle
     {name: "start", icon: icon(PlayIcon), endpoint: "start"},

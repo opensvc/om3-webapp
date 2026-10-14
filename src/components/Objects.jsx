@@ -8,7 +8,7 @@ import {usePanelSearch} from "../app/panel-search";
 import {ObjectDetailPanel} from "./RecordPanels";
 import {actionUrl} from "./objectActions";
 import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtils";
-import {OBJECT_ACTIONS, actionLabel} from "../constants/actions";
+import {KEY_KINDS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {useTranslation} from "react-i18next";
 import ActionDialogManager from "./ActionDialogManager";
 import CreateObjectDialog from "./CreateObjectDialog";
@@ -85,6 +85,11 @@ const listOf = (objectName) => {
 };
 /** The kind a new object takes by default, from the tab it is created from. */
 const LIST_KIND = {services: "svc", configs: "cfg", users: "usr"};
+/**
+ * The lists of objects held on all the nodes, with no status nor placement: their
+ * names only, the status, orchestrate, topology and node columns telling nothing.
+ */
+const NAMES_ONLY_LISTS = ["configs", "users"];
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -189,6 +194,7 @@ const TableRowComponent = React.memo(({
                                           onObjectClick,
                                           allNodes,
                                           isWideScreen,
+                                          namesOnly = false,
                                       }) => {
     const {t} = useTranslation();
     const objectData = useObjectData(objectName);
@@ -209,17 +215,19 @@ const TableRowComponent = React.memo(({
                     aria-label={t("objects.selectObject", {name: objectName})}
                 />
             </Cell>
-            <Cell className="whitespace-nowrap">
-                <StatusMarks
-                    avail={objectData.avail}
-                    isNotProvisioned={objectData.isNotProvisioned}
-                    frozen={objectData.frozen}
-                    globalExpect={objectData.globalExpect}
-                />
-            </Cell>
+            {!namesOnly && (
+                <Cell className="whitespace-nowrap">
+                    <StatusMarks
+                        avail={objectData.avail}
+                        isNotProvisioned={objectData.isNotProvisioned}
+                        frozen={objectData.frozen}
+                        globalExpect={objectData.globalExpect}
+                    />
+                </Cell>
+            )}
             <Cell className="text-data font-medium whitespace-nowrap">{objectName}</Cell>
-            <PropertyCells objectName={objectName}/>
-            {isWideScreen &&
+            {!namesOnly && <PropertyCells objectName={objectName}/>}
+            {!namesOnly && isWideScreen &&
                 allNodes.map((node) => (
                     <Cell key={node} className="whitespace-nowrap">
                         <NodeStatus objectName={objectName} node={node}/>
@@ -233,6 +241,7 @@ const TableRowComponent = React.memo(({
         prevProps.isSelected === nextProps.isSelected &&
         prevProps.isOpen === nextProps.isOpen &&
         prevProps.isWideScreen === nextProps.isWideScreen &&
+        prevProps.namesOnly === nextProps.namesOnly &&
         prevProps.allNodes.length === nextProps.allNodes.length &&
         prevProps.allNodes.every((node, i) => node === nextProps.allNodes[i])
     );
@@ -348,6 +357,10 @@ const Objects = () => {
     const [createOpen, setCreateOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState(rawSearchQuery);
     const [sortColumn, setSortColumn] = useState("object");
+    // A list of names only is sorted by them: not by a column it does not show.
+    useEffect(() => {
+        if (NAMES_ONLY_LISTS.includes(list) && sortColumn !== "object") setSortColumn("object");
+    }, [list, sortColumn]);
     const [sortDirection, setSortDirection] = useState("asc");
     const [statusCycleIndex, setStatusCycleIndex] = useState(0);
     const isWideScreen = useMediaQuery(WIDE_QUERY);
@@ -887,7 +900,10 @@ const Objects = () => {
     // Kind-limited actions (svc-only enable / disable) are offered when the whole selection is of that kind.
     const bulkActions = useMemo(() => {
         const selectedKinds = new Set(selectedObjects.map((obj) => parseObjectName(obj).kind));
+        // Keys held on all the nodes are deleted, or the orchestration on them aborted: nothing else.
+        const keysOnly = selectedKinds.size > 0 && [...selectedKinds].every((kind) => KEY_KINDS.includes(kind));
         return OBJECT_ACTIONS
+            .filter((action) => !keysOnly || ["delete", "purge", "abort"].includes(action.name))
             .filter((action) => !action.kinds ||
                 (selectedKinds.size > 0 && [...selectedKinds].every((kind) => action.kinds.includes(kind))))
             .map((action) => ({
@@ -899,7 +915,8 @@ const Objects = () => {
             }));
     }, [selectedObjects, handleActionClick, t]);
 
-    const columnCount = 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
+    const namesOnly = NAMES_ONLY_LISTS.includes(list);
+    const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
@@ -964,21 +981,25 @@ const Objects = () => {
                     </div>
                 )}
                 <div className="ml-auto flex items-center gap-3">
-                    {selectedObjects.length > 0 && (
-                        <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
-                    )}
                     <Button size="sm" icon={<PlusIcon className="h-4 w-4"/>} onClick={() => setCreateOpen(true)}>
                         {t("createObject.open")}
                     </Button>
-                    <MenuButton
-                        // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
-                        prominent
-                        icon={<GearIcon className="h-3.5 w-3.5"/>}
-                        label={t("objects.actionsMenu")}
-                        disabled={!selectedObjects.length}
-                        align="end"
-                        items={bulkActions}
-                    />
+                    {/* Nothing selected, nothing to act on: how to select, in the place of the actions. */}
+                    {selectedObjects.length > 0 ? (
+                        <>
+                            <span className="whitespace-nowrap text-ink-muted">{t("common.selected", {count: selectedObjects.length})}</span>
+                            <MenuButton
+                                // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
+                                prominent
+                                icon={<GearIcon className="h-3.5 w-3.5"/>}
+                                label={t("objects.actionsMenu")}
+                                align="end"
+                                items={bulkActions}
+                            />
+                        </>
+                    ) : (
+                        <span className="whitespace-nowrap text-ink-muted">{t("objects.selectHint")}</span>
+                    )}
                 </div>
             </div>
 
@@ -1012,19 +1033,21 @@ const Objects = () => {
                                 aria-label={t("objects.selectAll")}
                             />
                         </HeaderCell>
-                        <SortHeaderCell
-                            label={t("common.status")}
-                            active={sortColumn === "status"}
-                            direction={sortDirection}
-                            onSort={() => handleSort("status")}
-                        />
+                        {!namesOnly && (
+                            <SortHeaderCell
+                                label={t("common.status")}
+                                active={sortColumn === "status"}
+                                direction={sortDirection}
+                                onSort={() => handleSort("status")}
+                            />
+                        )}
                         <SortHeaderCell
                             label={t("objects.columns.object")}
                             active={sortColumn === "object"}
                             direction={sortDirection}
                             onSort={() => handleSort("object")}
                         />
-                        {PROPERTY_COLUMNS.map(({key, labelKey}) => (
+                        {!namesOnly && PROPERTY_COLUMNS.map(({key, labelKey}) => (
                             <SortHeaderCell
                                 key={key}
                                 label={t(labelKey)}
@@ -1033,7 +1056,7 @@ const Objects = () => {
                                 onSort={() => handleSort(key)}
                             />
                         ))}
-                        {isWideScreen && allNodes.map((node) => (
+                        {!namesOnly && isWideScreen && allNodes.map((node) => (
                             <SortHeaderCell
                                 key={node}
                                 label={node}
@@ -1055,6 +1078,7 @@ const Objects = () => {
                             onObjectClick={handleObjectClick}
                             allNodes={allNodes}
                             isWideScreen={isWideScreen}
+                            namesOnly={namesOnly}
                         />
                     ))}
                     {visibleObjectNames.length === 0 && (

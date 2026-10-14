@@ -1,6 +1,7 @@
 import React from 'react';
 import {render, screen, waitFor, act, within, fireEvent} from '@testing-library/react';
 import ConfigSection from '../ConfigSection';
+import {clearKeywordsCache} from '../ConfigText';
 import userEvent from '@testing-library/user-event';
 import {URL_OBJECT} from '../../config/apiPath.js';
 import {vi, describe, test, expect, beforeEach, afterEach} from 'vitest';
@@ -178,6 +179,7 @@ describe('ConfigSection Component', () => {
         mockLocalStorage.getItem.mockReturnValue('mock-token');
         mockUseParams.mockReturnValue({objectName: 'root/cfg/cfg1'});
         global.fetch = vi.fn(defaultFetchMock);
+        clearKeywordsCache();
     });
 
     afterEach(() => vi.resetAllMocks());
@@ -585,11 +587,12 @@ describe('ConfigSection Component', () => {
     });
 
     // ── Viewer (the theme now comes from the tokens: no dark branch left) ──
-    test('shows the configuration text as is, in a preformatted block', async () => {
+    test('shows the configuration text as is, a line each', async () => {
         renderConfig();
-        const text = await screen.findByText(/nodes = \*/);
-        expect(text.tagName).toBe('PRE');
-        expect(text.textContent).toBe('[DEFAULT]\nnodes = *\norchestrate = ha\n[fs#1]\nsize = 10GB');
+        const file = await screen.findByRole('group', {name: 'Configuration file'});
+        expect(file).toHaveClass('whitespace-pre-wrap', 'font-mono');
+        expect([...file.children].map((line) => line.textContent))
+            .toEqual(['[DEFAULT]', 'nodes = *', 'orchestrate = ha', '[fs#1]', 'size = 10GB']);
     });
 
     // ── Update config dialog ─────────────────────────────────────────────
@@ -1029,132 +1032,31 @@ describe('ConfigSection Component', () => {
     });
 
     // ── Keywords dialog ──────────────────────────────────────────────────
-    test('keywords dialog: displays table with keywords', async () => {
+    // ── Keywords help, in place of the keywords dialog ────────────────────
+    test('no button lists the keywords: the help of each one stands by its line', async () => {
         renderConfig();
-        await act(() => user.click(getKeywordsButton()));
-        await waitFor(() => expect(screen.getByRole('heading', {name: 'Configuration Keywords'})).toBeInTheDocument());
-        const kd = getDialogByTitle('Configuration Keywords');
-        await waitFor(() => expect(within(kd).getByRole('table')).toBeInTheDocument());
+        await screen.findByRole('group', {name: 'Configuration file'});
+        expect(screen.queryByRole('button', {name: /keywords/i})).not.toBeInTheDocument();
     });
 
-    test('keywords dialog: deduplicates duplicate keywords', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/keywords')) {
-                return Promise.resolve({
-                    ok: true, status: 200,
-                    json: () => Promise.resolve({
-                        items: [
-                            {
-                                option: 'nodes',
-                                section: 'DEFAULT',
-                                text: 'Nodes to deploy the service',
-                                converter: 'string',
-                                scopable: true,
-                                default: '*'
-                            },
-                            {
-                                option: 'nodes',
-                                section: 'DEFAULT',
-                                text: 'Duplicate nodes entry',
-                                converter: 'string',
-                                scopable: false,
-                                default: 'none'
-                            },
-                        ],
-                    }),
-                    headers: new Headers(),
-                });
-            }
-            return defaultFetchMock(url);
-        });
+    test('hovering the file reads the keywords of the kind once, and a "?" by each keyword tells what it does', async () => {
         renderConfig();
-        await act(() => user.click(getKeywordsButton()));
-        const kd = getDialogByTitle('Configuration Keywords');
-        const rows = within(kd).getAllByRole('row');
-        expect(rows).toHaveLength(2);
-        const cells = within(rows[1]).getAllByRole('cell');
-        expect(cells[0]).toHaveTextContent('nodes');
-        expect(cells[1]).not.toHaveTextContent('Duplicate nodes entry');
-    });
-
-    test('keywords dialog: keywords without text/default show fallbacks', async () => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/keywords')) {
-                return Promise.resolve({
-                    ok: true, status: 200,
-                    json: () => Promise.resolve({
-                        items: [
-                            {
-                                option: 'orphan',
-                                section: '',
-                                converter: 'string',
-                                scopable: false,
-                            },
-                        ],
-                    }),
-                    headers: new Headers(),
-                });
-            }
-            return defaultFetchMock(url);
-        });
-        renderConfig();
-        await act(() => user.click(getKeywordsButton()));
-        const kd = getDialogByTitle('Configuration Keywords');
-        await waitFor(() => expect(within(kd).getByRole('table')).toBeInTheDocument());
-        const rows = within(kd).getAllByRole('row');
-        expect(rows).toHaveLength(2); // header + data
-        const dataRow = rows[1];
-        const cells = within(dataRow).getAllByRole('cell');
-        expect(cells[1]).toHaveTextContent('N/A'); // text fallback
-        expect(cells[2]).toHaveTextContent('None'); // default fallback
-    });
-
-    test.each([
-        ['HTTP error', () => ({
-            ok: false,
-            status: 404,
-            json: () => Promise.resolve({}),
-            headers: new Headers(),
-        }), /Failed to fetch keywords: HTTP 404/i],
-        ['invalid format', () => ({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({items: 'not-an-array'}),
-            headers: new Headers(),
-        }), /Invalid response format/i],
-        ['AbortError', () => Promise.reject(new DOMException('The operation was aborted', 'AbortError')), /Request timed out after 60 seconds/i],
-        ['null items', () => ({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({items: null}),
-            headers: new Headers(),
-        }), /Invalid response format/i],
-        ['undefined data', () => ({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve(undefined),
-            headers: new Headers(),
-        }), /Invalid response format/i],
-        ['network error', () => Promise.reject(new Error('Network failure')), /Failed to fetch keywords: Network failure/i],
-    ])('keywords dialog: %s shows alert', async (_, fetchImpl, expected) => {
-        global.fetch.mockImplementation((url) => {
-            if (url.includes('/config/keywords')) return fetchImpl();
-            return defaultFetchMock(url);
-        });
-        renderConfig();
-        await act(() => user.click(getKeywordsButton()));
-        const kd = getDialogByTitle('Configuration Keywords');
-        await waitFor(() => expect(within(kd).getByRole('alert')).toHaveTextContent(expected));
-    });
-
-    test('keywords dialog: close button closes it', async () => {
-        renderConfig();
-        await act(() => user.click(getKeywordsButton()));
-        await waitFor(() => expect(screen.getByRole('heading', {name: 'Configuration Keywords'})).toBeInTheDocument());
-        await waitFor(() => expect(queryLoading()).not.toBeInTheDocument());
-        const kd = getDialogByTitle('Configuration Keywords');
-        await act(() => user.click(within(kd).getAllByRole('button', {name: /^Close$/}).at(-1)));
-        await waitFor(() => expect(screen.queryByRole('heading', {name: 'Configuration Keywords'})).not.toBeInTheDocument());
+        const file = await screen.findByRole('group', {name: 'Configuration file'});
+        fireEvent.mouseEnter(file.parentElement);
+        const help = await screen.findByRole('button', {name: 'What fs#1.size does'});
+        expect(screen.getByRole('button', {name: 'What nodes does'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'What orchestrate does'})).toBeInTheDocument();
+        // A section header has no help.
+        expect(screen.getAllByRole('button', {name: /^What /})).toHaveLength(3);
+        fireEvent.click(help);
+        const doc = screen.getByRole('dialog', {name: 'fs#1.size'});
+        expect(doc).toHaveTextContent('Size of filesystem');
+        expect(doc).toHaveTextContent('Default1GB');
+        // A click beside it closes it.
+        fireEvent.pointerDown(document.body);
+        expect(screen.queryByRole('dialog', {name: 'fs#1.size'})).not.toBeInTheDocument();
+        fireEvent.mouseEnter(file.parentElement);
+        expect(global.fetch.mock.calls.filter(([url]) => url.includes('/config/keywords'))).toHaveLength(1);
     });
 
     test('getUniqueSections: null keywordsData renders empty add combobox', async () => {

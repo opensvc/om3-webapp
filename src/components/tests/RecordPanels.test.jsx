@@ -122,7 +122,7 @@ describe('record panels', () => {
     test.each(['ns1/sec/key', 'ns1/cfg/settings'])('%s, which om shows no status of, shows its keys, its configuration on a tab', (path) => {
         renderPeek(`/nodes?peek=object:${path}`);
         const panel = screen.getByRole('dialog', {name: path});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Keys', 'Configuration']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Keys', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Keys'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).queryByTestId('object-status')).not.toBeInTheDocument();
         expect(within(panel).getByTestId('object-details')).toHaveAttribute('data-embedded', 'true');

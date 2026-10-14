@@ -5,11 +5,12 @@ import {Field, Input, Checkbox, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, LifeRingIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {CodeIcon, EyeIcon, EyeOffIcon, FileIcon, PencilIcon, PlusIcon, TrashIcon, UploadIcon} from "../ui/icons";
 import {formatSeconds, useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {parseObjectPath} from "../utils/objectUtils";
 import {useTranslation} from "react-i18next";
+import {ConfigText} from "./ConfigText";
 
 /**
  * The object configuration file, its secrets redacted unless `showSecrets`: the
@@ -297,51 +298,6 @@ const UpdateConfigDialog = ({
             disabled={actionLoading}
             emptyText={t("config.filePicker.noFile")}
         />
-    </Dialog>
-    );
-};
-
-const KeywordsDialog = ({open, onClose, keywordsData, keywordsLoading, keywordsError}) => {
-    const {t} = useTranslation();
-    return (
-    <Dialog
-        open={open}
-        onClose={onClose}
-        title={t("config.keywords.title")}
-        size="lg"
-        footer={<Button onClick={onClose} disabled={keywordsLoading}>{t("common.close")}</Button>}
-    >
-        {keywordsLoading && <Spinner/>}
-        {keywordsError && <Alert>{keywordsError}</Alert>}
-        {!keywordsLoading && !keywordsError && !keywordsData && (
-            <p className="text-ink-muted">{t("config.keywords.empty")}</p>
-        )}
-        {!keywordsLoading && !keywordsError && keywordsData && (
-            <Table aria-label={t("config.keywords.tableLabel")}>
-                <thead>
-                <HeaderRow>
-                    <HeaderCell>{t("config.keywords.keyword")}</HeaderCell>
-                    <HeaderCell>{t("config.keywords.description")}</HeaderCell>
-                    <HeaderCell>{t("config.keywords.default")}</HeaderCell>
-                    <HeaderCell>{t("common.type")}</HeaderCell>
-                    <HeaderCell>{t("config.keywords.section")}</HeaderCell>
-                    <HeaderCell>{t("config.keywords.scopable")}</HeaderCell>
-                </HeaderRow>
-                </thead>
-                <tbody>
-                {keywordsData.map((keyword, index) => (
-                    <Row key={`${keyword.section || "default"}.${keyword.option}-${index}`}>
-                        <Cell className="font-mono whitespace-nowrap">{keyword.option}</Cell>
-                        <Cell>{keyword.text || t("common.notAvailable")}</Cell>
-                        <Cell className="font-mono">{keyword.default || t("common.none")}</Cell>
-                        <Cell className="whitespace-nowrap">{keyword.converter || t("common.notAvailable")}</Cell>
-                        <Cell className="whitespace-nowrap">{keyword.section || t("common.notAvailable")}</Cell>
-                        <Cell>{keyword.scopable ? t("common.yes") : t("common.no")}</Cell>
-                    </Row>
-                ))}
-                </tbody>
-            </Table>
-        )}
     </Dialog>
     );
 };
@@ -729,7 +685,6 @@ const ConfigSection = ({
     const [updateConfigDialogOpen, setUpdateConfigDialogOpen] = useState(false);
     const [newConfigFile, setNewConfigFile] = useState(null);
     const [manageParamsDialogOpen, setManageParamsDialogOpen] = useState(false);
-    const [keywordsDialogOpen, setKeywordsDialogOpen] = useState(false);
     const [paramsToSet, setParamsToSet] = useState([]);
     const [paramsToUnset, setParamsToUnset] = useState([]);
     const [paramsToDelete, setParamsToDelete] = useState([]);
@@ -806,11 +761,6 @@ const ConfigSection = ({
         } finally {
             setActionLoading(false);
         }
-    };
-
-    const handleOpenKeywordsDialog = () => {
-        setKeywordsDialogOpen(true);
-        void fetchKeywords();
     };
 
     const handleOpenManageParamsDialog = () => {
@@ -1028,6 +978,10 @@ const ConfigSection = ({
     };
 
     const closeConfigDialog = () => setConfigDialogOpen(false);
+    const keywordsPath = (() => {
+        const {namespace, kind, name} = parseObjectPath(decodedObjectName);
+        return [namespace, kind, name].map(encodeURIComponent).join("/");
+    })();
 
     // The file, its tools and the edit in progress: in a dialog opened by a button,
     // or `inline`, in place, as in the configuration tab of an object.
@@ -1087,7 +1041,7 @@ const ConfigSection = ({
                                 onClick={() => setUpdateConfigDialogOpen(true)}
                                 disabled={actionLoading}
                             >
-                                <FileIcon/>
+                                <UploadIcon/>
                             </IconButton>
                             <IconButton
                                 label={t("config.view.manageParams")}
@@ -1095,13 +1049,6 @@ const ConfigSection = ({
                                 disabled={actionLoading}
                             >
                                 <PencilIcon/>
-                            </IconButton>
-                            <IconButton
-                                label={t("config.view.viewKeywords")}
-                                onClick={handleOpenKeywordsDialog}
-                                disabled={actionLoading}
-                            >
-                                <LifeRingIcon/>
                             </IconButton>
                         </div>
                         {!configNode && !configLoading && !configError && (
@@ -1115,12 +1062,13 @@ const ConfigSection = ({
                             <p className="text-ink-muted">{t("config.view.empty")}</p>
                         )}
                         {!configLoading && !configError && configData !== null && (
-                            <div
-                                className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2">
-                            <pre key={configData} className="m-0 font-mono text-data whitespace-pre-wrap text-ink">
-                                {configData}
-                            </pre>
-                            </div>
+                            <ConfigText
+                                text={configData}
+                                label={t("config.view.fileLabel")}
+                                keywordsUrl={`${URL_OBJECT}/${keywordsPath}/config/keywords`}
+                                // The keywords are those of the kind: read once for all its objects.
+                                cacheKey={`object:${parseObjectPath(decodedObjectName).kind}`}
+                            />
                         )}
                     </>
                 );
@@ -1168,13 +1116,6 @@ const ConfigSection = ({
                 actionLoading={actionLoading}
                 handleManageParamsSubmit={handleManageParamsSubmit}
                 openSnackbar={openSnackbar}
-            />
-            <KeywordsDialog
-                open={keywordsDialogOpen}
-                onClose={() => setKeywordsDialogOpen(false)}
-                keywordsData={keywordsData}
-                keywordsLoading={keywordsLoading}
-                keywordsError={keywordsError}
             />
         </>
     );

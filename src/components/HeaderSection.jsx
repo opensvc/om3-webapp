@@ -6,7 +6,8 @@ import {statusBadge} from '../ui/components/status';
 import {FrozenMark} from '../ui/components/FrozenMark';
 import {ObjectIcon, om3ObjectKind} from '../ui/components/ObjectIcon';
 import {AlertTriangleIcon, GearIcon} from '../ui/icons';
-import {OBJECT_ACTIONS, actionLabel} from '../constants/actions';
+import {KEY_KINDS, OBJECT_ACTIONS, actionLabel, objectActionsFor} from '../constants/actions';
+import {OrchestrationBadge} from './OrchestrationBadge';
 import {isActionAllowedForSelection} from '../utils/objectUtils';
 
 /** Icon of an action in a menu: the action icons are sized to the menu line. */
@@ -15,9 +16,11 @@ const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&
 
 /**
  * Record header of the object page: the kind icon and the object name, then its
- * global state, frozen and provisioning marks, the global expectation in progress,
- * and the object actions menu at the right edge. `embedded` in a record panel, whose
- * title already names the object: the state and the actions only.
+ * global state, frozen and provisioning marks, the orchestration in progress (its
+ * logs and its abort), and the object actions menu at the right edge. `embedded`
+ * in a record panel, whose title already names the object: the state and the
+ * actions only. A configuration, a secret or a user is on all the nodes and has no
+ * status: its actions only.
  */
 const HeaderSection = ({
                            decodedObjectName,
@@ -27,17 +30,17 @@ const HeaderSection = ({
                            handleObjectActionClick,
                            getObjectStatus,
                            embedded = false,
+                           onOrchestrationLogs,
                        }) => {
     const {t} = useTranslation();
     if (!globalStatus) return null;
 
     const isNotProvisioned = globalStatus?.provisioned === "false" || globalStatus?.provisioned === false;
-    const {avail, frozen, globalExpect} = getObjectStatus();
+    const {avail, frozen, globalExpect, orchestrationId} = getObjectStatus();
     const badge = statusBadge(avail);
+    const hasStatus = !KEY_KINDS.includes(kind);
     // Some actions only apply to some kinds (enable and disable to services).
-    const allowedActions = OBJECT_ACTIONS.filter(
-        (action) => !action.kinds || action.kinds.includes(kind)
-    );
+    const allowedActions = objectActionsFor(kind, OBJECT_ACTIONS);
 
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -49,16 +52,20 @@ const HeaderSection = ({
             )}
 
             <div className="flex items-center gap-3">
-                {globalExpect && (
-                    <span title={globalExpect} className="text-data whitespace-nowrap text-ink-muted">
-                        {globalExpect}
+                <OrchestrationBadge
+                    globalExpect={globalExpect}
+                    orchestrationId={orchestrationId}
+                    onLogs={onOrchestrationLogs}
+                    onAbort={() => handleObjectActionClick("abort")}
+                    disabled={actionInProgress}
+                />
+                {hasStatus && (
+                    <span data-state={badge.state} title={t("objects.header.statusTitle", {status: avail || t("objects.header.unknown")})} className="inline-flex">
+                        <StatusBadge state={badge.state} label={badge.label ?? (avail || undefined)} className="w-auto"/>
                     </span>
                 )}
-                <span data-state={badge.state} title={t("objects.header.statusTitle", {status: avail || t("objects.header.unknown")})} className="inline-flex">
-                    <StatusBadge state={badge.state} label={badge.label ?? (avail || undefined)} className="w-auto"/>
-                </span>
                 <FrozenMark frozen={frozen === 'frozen'}/>
-                {isNotProvisioned && (
+                {hasStatus && isNotProvisioned && (
                     <span
                         role="img"
                         title={t("objects.header.notProvisionedTitle")}

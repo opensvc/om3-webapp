@@ -4,6 +4,7 @@ import {render, screen, waitFor, act, within, fireEvent, cleanup} from '@testing
 import userEvent from '@testing-library/user-event';
 import {vi} from 'vitest';
 import KeysSection from '../KeysSection';
+import {EyeIcon} from '../../ui/icons';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 vi.mock('../../hooks/useEventStore.js', () => ({default: vi.fn()}));
@@ -118,6 +119,18 @@ describe('KeysSection', () => {
     ])('does not render for %s', async (_, objectName) => {
         render(<KeysSection decodedObjectName={objectName} openSnackbar={openSnackbar}/>);
         await waitFor(() => expect(screen.queryByText(/Object Keys/i)).not.toBeInTheDocument());
+    });
+
+    test('the keys are on all the nodes: no node column; an eye decodes one', async () => {
+        mockFetch({keys: [{name: 'k', node: 'n', size: 100}]});
+        await renderAndWait('root/sec/sec1', 1);
+        expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Size', 'Actions']);
+        expect(screen.queryByText('n')).not.toBeInTheDocument();
+        // The names at the left, as the other columns.
+        expect(screen.getByRole('rowheader', {name: 'k'})).toHaveClass('text-left');
+        const view = screen.getByRole('button', {name: 'View key k'});
+        const {container} = render(<EyeIcon/>);
+        expect(view.querySelector('svg').innerHTML).toBe(container.querySelector('svg').innerHTML);
     });
 
     test('renders for cfg and sec', async () => {

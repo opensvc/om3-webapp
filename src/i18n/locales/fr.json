@@ -269,16 +269,6 @@
       "submit": "Mettre à jour",
       "updating": "Mise à jour"
     },
-    "keywords": {
-      "title": "Mots-clés de configuration",
-      "empty": "Aucun mot-clé disponible.",
-      "tableLabel": "table des mots-clés de configuration",
-      "keyword": "Mot-clé",
-      "description": "Description",
-      "default": "Défaut",
-      "section": "Section",
-      "scopable": "Scopable"
-    },
     "params": {
       "title": "Gérer les paramètres de configuration",
       "apply": "Appliquer",
@@ -319,7 +309,6 @@
       "editFile": "Éditer le fichier de configuration",
       "uploadFile": "Envoyer un nouveau fichier de configuration",
       "manageParams": "Gérer les paramètres de configuration",
-      "viewKeywords": "Voir les mots-clés de configuration",
       "noInstance": "Aucune instance sélectionnée pour afficher la configuration.",
       "loadingForEdit": "Chargement de la configuration pour l'édition",
       "loading": "Chargement de la configuration",
@@ -351,6 +340,17 @@
       "deleted_one": "{{count}} section supprimée",
       "deleted_other": "{{count}} sections supprimées",
       "noSelection": "Aucune sélection"
+    },
+    "keywordHelp": {
+      "open": "Ce que fait {{keyword}}",
+      "loadError": "L'aide des mots-clés n'a pas pu être lue : {{message}}",
+      "default": "Défaut",
+      "candidates": "Valeurs",
+      "example": "Exemple",
+      "converter": "Type",
+      "scopable": "Portée par nœud",
+      "deprecated": "Obsolète",
+      "replacedBy": "remplacé par {{keyword}}"
     }
   },
   "console": {
@@ -968,7 +968,7 @@
     "selectObject": "Sélectionner l'objet {{name}}",
     "empty": "Aucun objet ne correspond aux filtres actuels.",
     "loadingMore": "Chargement d'autres objets",
-    "actionsMenu": "Actions sur les objets sélectionnés",
+    "actionsMenu": "Actions",
     "lists": {
       "label": "Listes d'objets",
       "services": "Services",
@@ -1012,7 +1012,8 @@
       "notProvisionedTitle": "Non provisionné",
       "notProvisionedLabel": "L'objet n'est pas provisionné",
       "actionsMenu": "Actions sur l'objet"
-    }
+    },
+    "selectHint": "Sélectionnez des objets pour agir dessus"
   },
   "pools": {
     "columns": {
@@ -1257,5 +1258,12 @@
       "node": "Nœuds",
       "network": "Réseaux"
     }
+  },
+  "orchestration": {
+    "label": "Orchestration en cours : {{expect}}",
+    "logs": "Journaux",
+    "abort": "Interrompre",
+    "logsOf": "Journaux de l'orchestration",
+    "allLogs": "Afficher tous les journaux"
   }
 }

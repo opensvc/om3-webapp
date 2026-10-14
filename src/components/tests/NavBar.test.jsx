@@ -343,4 +343,10 @@ describe('NavBar', () => {
         renderNavBar();
         expect(screen.getByRole('link', {name: /view user information/i})).toHaveAttribute('href', '/whoami');
     });
+
+    test('no button for the shortcuts, which read as a help: the "?" key opens them', () => {
+        render(<MemoryRouter><NavBar showSidebarToggle/></MemoryRouter>);
+        expect(screen.queryByRole('button', {name: /shortcuts/i})).not.toBeInTheDocument();
+        expect(document.querySelector('[aria-keyshortcuts="?"]')).toBeNull();
+    });
 });

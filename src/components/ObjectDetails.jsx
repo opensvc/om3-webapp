@@ -19,6 +19,7 @@ import InstanceCard from "./InstanceCard.jsx";
 import LogsViewer from "./LogsViewer";
 import {INSTANCE_ACTIONS, OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
+import {orchestrationOf} from "./OrchestrationBadge";
 import EventLogger from "../components/EventLogger";
 import logger from "../utils/logger";
 
@@ -64,7 +65,7 @@ export const parseProvisionedState = (state) => {
  * configuration in tabs of their own (`onOpenLogs`). An instance opens on a click only where `onViewInstance`
  * says what to do with it: in the panel, the status board shows the instances.
  */
-const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {}) => {
+const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance, onOrchestrationLogs} = {}) => {
     const {t} = useTranslation();
     const {objectName} = useParams();
     const decodedObjectName = path ?? decodeURIComponent(objectName);
@@ -125,6 +126,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
         const avail = objectStatus?.avail || "n/a";
         const frozen = objectStatus?.frozen === "frozen" ? "frozen" : "unfrozen";
         let globalExpect = null;
+        let orchestrationId = null;
         let hasAnyNodeStopped = false;
         let hasAnyNodeLagging = false;
 
@@ -133,14 +135,14 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
                 const monitorKey = `${node}:${decodedObjectName}`;
                 const monitor = instanceMonitor[monitorKey] || {};
                 if (!globalExpect && monitor.global_expect && monitor.global_expect !== "none") {
-                    globalExpect = monitor.global_expect;
+                    ({globalExpect, orchestrationId} = orchestrationOf([monitor]));
                 }
                 const ns = objectInstanceStatus[node] || {};
                 if (hasTimestamp(ns.stopped_at)) hasAnyNodeStopped = true;
                 if (hasTimestamp(ns.rpo_breached_at)) hasAnyNodeLagging = true;
             }
         }
-        return {avail, frozen, globalExpect, hasAnyNodeStopped, hasAnyNodeLagging};
+        return {avail, frozen, globalExpect, orchestrationId, hasAnyNodeStopped, hasAnyNodeLagging};
     }, [objectStatus, objectInstanceStatus, instanceMonitor, decodedObjectName]);
 
     const nodesList = useMemo(() => {
@@ -570,6 +572,7 @@ const ObjectDetail = ({path, embedded = false, onOpenLogs, onViewInstance} = {})
                         actionInProgress={actionInProgress}
                         handleObjectActionClick={handleObjectActionClick}
                         getObjectStatus={() => objectData}
+                        onOrchestrationLogs={onOrchestrationLogs}
                     />
                 </div>
                 {configSection !== null && <div className="shrink-0">{configSection}</div>}

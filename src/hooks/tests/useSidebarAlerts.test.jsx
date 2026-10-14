@@ -9,7 +9,6 @@ import useSidebarAlerts, {
     applySidebarEvent,
     countPills,
     objectCounts,
-    groupCounts,
     heartbeatCounts,
     nodesDetails,
     usageDetails,
@@ -132,28 +131,6 @@ describe('count pills', () => {
         ]);
     });
 
-    test('number the namespaces and the kinds by their worst object', () => {
-        const objects = {
-            'ns1/svc/a': {avail: 'up'},
-            'ns1/svc/b': {avail: 'down'},
-            'ns2/svc/c': {avail: 'warn'},
-            'ns2/vol/d': {avail: 'up'},
-            'ns3/cfg/e': {},
-            f: {avail: 'up'},
-        };
-        expect(groupCounts(objects, ({namespace}) => namespace)).toEqual([
-            {state: 'up', count: 1},
-            {state: 'warn', count: 1},
-            {state: 'down', count: 1},
-            {state: 'unknown', count: 1},
-        ]);
-        expect(groupCounts(objects, ({kind}) => kind)).toEqual([
-            {state: 'up', count: 1},
-            {state: 'down', count: 1},
-            {state: 'unknown', count: 1},
-        ]);
-    });
-
     test('number the heartbeat streams, down when stopped or with a stale peer', () => {
         expect(heartbeatCounts({
             n1: {streams: [
@@ -231,8 +208,6 @@ describe('useSidebarAlerts', () => {
         });
         await flush();
         expect(result.current['/objects'].counts).toEqual([{state: 'up', count: 1}]);
-        expect(result.current['/namespaces'].counts).toEqual([{state: 'up', count: 1}]);
-        expect(result.current['/kinds'].counts).toEqual([{state: 'up', count: 1}]);
         expect(result.current['/nodes'].details).toEqual(['1 node', 'frozen: 1']);
         expect(result.current['/nodes'].counts).toEqual([{state: 'frozen', count: 1}]);
         expect(result.current['/heartbeats'].counts).toEqual([{state: 'down', count: 1}]);

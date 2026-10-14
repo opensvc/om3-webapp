@@ -274,7 +274,7 @@ describe('Namespaces', () => {
     test('filters by namespace via the select', () => {
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'prod'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/namespaces?namespace=prod');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces&namespace=prod');
         expect(getBodyRows()).toHaveLength(1);
         expect(screen.getByRole('row', {name: /prod/i})).toBeInTheDocument();
     });
@@ -283,7 +283,7 @@ describe('Namespaces', () => {
         setup({search: '?namespace=prod'});
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'all'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/namespaces');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces');
     });
 
     test('reads initial namespace from URL', () => {

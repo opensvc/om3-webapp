@@ -5,7 +5,6 @@ import {useTranslation} from "react-i18next";
 import i18n from "../i18n";
 import {URL_NETWORK, URL_NODE_EVENT, URL_POOL} from "../config/apiPath.js";
 import logger from "../utils/logger.js";
-import {parseObjectPath} from "../utils/objectUtils.jsx";
 
 /** Pools and networks have no events: their usage is polled at this period. */
 export const SIDEBAR_USAGE_REFRESH_MS = 15000;
@@ -235,25 +234,6 @@ export function objectCounts(objects) {
     return countPills(tally);
 }
 
-/**
- * Groups of objects, namespaces or kinds, by their worst object: a group with a
- * down object counts as down, else with a warn one as warn, else with an up one
- * as up, else as unknown.
- */
-export function groupCounts(objects, groupOf) {
-    const groups = {};
-    for (const [path, status] of Object.entries(objects || {})) {
-        const key = groupOf(parseObjectPath(path));
-        (groups[key] ??= {})[path] = status;
-    }
-    const tally = {};
-    for (const members of Object.values(groups)) {
-        const state = objectsPill(members);
-        tally[state] = (tally[state] || 0) + 1;
-    }
-    return countPills(tally);
-}
-
 /** Heartbeat streams: up when running with every peer beating, down when stopped or with a stale peer. */
 export function heartbeatCounts(heartbeatStatus) {
     const tally = {};
@@ -310,8 +290,6 @@ export default function useSidebarAlerts() {
 
     return useMemo(() => ({
         "/objects": {counts: objectCounts(objects)},
-        "/namespaces": {counts: groupCounts(objects, ({namespace}) => namespace)},
-        "/kinds": {counts: groupCounts(objects, ({kind}) => kind)},
         "/heartbeats": {counts: heartbeatCounts(heartbeatStatus)},
         "/pools": {counts: alertPills("down", fullCount(pools)), details: usageDetails(pools, "pool")},
         "/network": {counts: alertPills("down", fullCount(networks)), details: usageDetails(networks, "network")},

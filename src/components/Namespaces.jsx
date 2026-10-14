@@ -99,7 +99,8 @@ const NamespaceTableRow = React.memo(({
         prev.counts["n/a"] === next.counts["n/a"];
 });
 
-const Namespaces = () => {
+/** The objects by namespace. `embedded` in a tab of the Objects page, which pads it. */
+const Namespaces = ({embedded = false}) => {
     const {t} = useTranslation();
     const navigate = useNavigate();
     const location = useLocation();
@@ -197,9 +198,9 @@ const Namespaces = () => {
         setVisibleCount(50);
 
         if (newNamespace === "all") {
-            navigate("/namespaces");
+            navigate("/objects?list=namespaces");
         } else {
-            navigate(`/namespaces?namespace=${newNamespace}`);
+            navigate(`/objects?list=namespaces&namespace=${encodeURIComponent(newNamespace)}`);
         }
     }, [navigate]);
 
@@ -264,7 +265,7 @@ const Namespaces = () => {
     }, [namespaces, selectedNamespace]);
 
     return (
-        <div className="flex h-full flex-col gap-3 p-4">
+        <div className={embedded ? "flex h-full flex-col gap-3" : "flex h-full flex-col gap-3 p-4"}>
             <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-1 text-ink-muted">
                     {t("namespaces.filterBy")}

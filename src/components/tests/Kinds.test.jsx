@@ -72,6 +72,7 @@ const buildStatusByKind = (definitions) => {
             up: counts.up || 0,
             down: counts.down || 0,
             warn: counts.warn || 0,
+            'n/a': counts['n/a'] || 0,
             unprovisioned: counts.unprovisioned || 0,
         };
     });
@@ -128,7 +129,7 @@ describe('Kinds', () => {
     test('renders table with headers', () => {
         renderComponent();
         expect(screen.getByRole('table')).toBeInTheDocument();
-        ['Kind', 'Up', 'Down', 'Warn', 'Unprovisioned', 'Total'].forEach(text =>
+        ['Kind', 'Up', 'Down', 'Warn', 'N/A', 'Unprovisioned', 'Total'].forEach(text =>
             expect(screen.getByRole('columnheader', {name: text})).toBeInTheDocument()
         );
     });
@@ -148,35 +149,64 @@ describe('Kinds', () => {
         renderComponent();
         const serviceRow = screen.getByRole('row', {name: /service/i});
         const cells = getCells(serviceRow);
-        // cells: kind, up, down, warn, unprovisioned, total
+        // cells: kind, up, down, warn, n/a, unprovisioned, total
         expect(cells[0]).toHaveTextContent('service');
         expect(cells[1]).toHaveTextContent('2');
         expect(cells[2]).toHaveTextContent('1');
         expect(cells[3]).toHaveTextContent('1');
         expect(cells[4]).toHaveTextContent('0');
-        expect(cells[5]).toHaveTextContent('4'); // 2+1+1+0
+        expect(cells[5]).toHaveTextContent('0');
+        expect(cells[6]).toHaveTextContent('4'); // 2+1+1+0
+    });
+
+    test('counts the objects without status, a sec, a cfg, as n/a, in the total', () => {
+        setup({data: {statusByKind: buildStatusByKind({sec: {'n/a': 5}}), kinds: ['sec']}});
+        renderComponent();
+        const cells = getCells(screen.getByRole('row', {name: /sec/}));
+        expect(cells[4]).toHaveTextContent('5');
+        expect(cells[6]).toHaveTextContent('5');
+    });
+
+    test('counts an object unprovisioned once in the total: it is in its state too', () => {
+        setup({data: {statusByKind: buildStatusByKind({vol: {up: 2, down: 4, unprovisioned: 3}}), kinds: ['vol']}});
+        renderComponent();
+        const cells = getCells(screen.getByRole('row', {name: /vol/}));
+        expect(cells[5]).toHaveTextContent('3');
+        expect(cells[6]).toHaveTextContent('6');
     });
 
     test('shows status marks by state', () => {
         renderComponent();
         const serviceRow = screen.getByRole('row', {name: /service/i});
         const marks = serviceRow.querySelectorAll('[data-state]');
-        // up, down, warn, unprovisioned (unprovisioned in the down state)
-        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'down']);
+        // up, down, warn, n/a, unprovisioned (unprovisioned in the down state)
+        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'na', 'down']);
         expect(marks[0]).toHaveTextContent('up');
         expect(marks[1]).toHaveTextContent('down');
         expect(marks[2]).toHaveTextContent('warn');
-        expect(marks[3]).toHaveTextContent('unprovisioned');
+        expect(marks[4]).toHaveTextContent('unprovisioned');
         expect(marks[0]).toHaveClass('text-state-up');
         expect(marks[1]).toHaveClass('text-state-down');
         expect(marks[2]).toHaveClass('text-state-warn');
-        expect(marks[3]).toHaveClass('text-state-down');
+        expect(marks[4]).toHaveClass('text-state-down');
     });
 
     test('navigates to objects on row click', () => {
         renderComponent();
         fireEvent.click(screen.getByRole('row', {name: /service/i}));
         expect(mockNavigate).toHaveBeenCalledWith('/objects?kind=service');
+    });
+
+    test.each([
+        ['sec', '/objects?kind=sec&list=secrets'],
+        ['vol', '/objects?kind=vol&list=volumes'],
+        ['ccfg', '/objects?kind=ccfg&list=configs'],
+        ['svc', '/objects?kind=svc'],
+    ])('a %s row opens the Objects page on its tab', (kind, url) => {
+        mockUseKindData.mockReturnValue({statusByKind: {[kind]: {up: 1, down: 0, warn: 0, unprovisioned: 0}}, kinds: [kind]});
+        renderComponent();
+        fireEvent.click(screen.getByRole('row', {name: new RegExp(kind)}));
+        expect(mockNavigate).toHaveBeenCalledWith(url);
     });
 
     test('navigates to objects on row Enter key', () => {
@@ -258,7 +288,7 @@ describe('Kinds', () => {
     test('filters by kind via the select', () => {
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'deployment'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/kinds?kind=deployment');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=kinds&kind=deployment');
         expect(getBodyRows()).toHaveLength(1);
         expect(screen.getByRole('row', {name: /deployment/i})).toBeInTheDocument();
     });
@@ -267,7 +297,7 @@ describe('Kinds', () => {
         setup({search: '?kind=deployment'});
         renderComponent();
         fireEvent.change(getFilter(), {target: {value: 'all'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/kinds');
+        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=kinds');
     });
 
     test('reads initial kind from URL', () => {
@@ -355,9 +385,9 @@ describe('Kinds', () => {
             fireEvent.click(getHeaderCellFor('Total'));
             await waitFor(() => {
                 const names = getKindNames();
-                // alpha, beta, delta all total 6; gamma total 7
-                expect(names.slice(0, 3).sort()).toEqual(['alpha', 'beta', 'delta']);
-                expect(names[3]).toBe('gamma');
+                // The objects in their state, unprovisioned or not: gamma 2, beta 5, alpha and delta 6.
+                expect(names.slice(0, 2)).toEqual(['gamma', 'beta']);
+                expect(names.slice(2).sort()).toEqual(['alpha', 'delta']);
             });
         });
 
@@ -462,17 +492,17 @@ describe('Kinds', () => {
 
     test('shows unprovisioned objects in the down state', () => {
         const data = {
-            statusByKind: buildStatusByKind({testkind: {up: 0, down: 0, warn: 0, unprovisioned: 1}}),
+            statusByKind: buildStatusByKind({testkind: {'n/a': 1, unprovisioned: 1}}),
             kinds: ['testkind'],
         };
         setup({data});
         renderComponent();
         const row = screen.getByRole('row', {name: /testkind/i});
         const marks = row.querySelectorAll('[data-state]');
-        expect(marks[3]).toHaveAttribute('data-state', 'down');
-        expect(marks[3]).toHaveAttribute('title', 'unprovisioned');
-        expect(getCells(row)[4]).toHaveTextContent('1');
+        expect(marks[4]).toHaveAttribute('data-state', 'down');
+        expect(marks[4]).toHaveAttribute('title', 'unprovisioned');
         expect(getCells(row)[5]).toHaveTextContent('1');
+        expect(getCells(row)[6]).toHaveTextContent('1');
     });
 
     test('counts a missing status as 0', () => {

@@ -27,7 +27,6 @@ vi.mock('../../app/record-history', async (importOriginal) => ({
 vi.mock('../NavBar', () => ({default: () => <div data-testid="navbar">NavBar</div>}));
 vi.mock('../../hooks/useSidebarAlerts', () => ({default: () => ({})}));
 vi.mock('../NodesTable', () => ({default: () => <div data-testid="nodes">NodesTable</div>}));
-vi.mock('../Namespaces', () => ({default: () => <div data-testid="namespaces">Namespaces</div>}));
 vi.mock('../Heartbeats', () => ({default: () => <div data-testid="heartbeats">Heartbeats</div>}));
 vi.mock('../Pools', () => ({default: () => <div data-testid="pools">Pools</div>}));
 // The lists show the query of their address: the panel state they were given.
@@ -223,7 +222,6 @@ describe('App Component', () => {
     });
 
     test.each([
-        ['/namespaces', 'namespaces'],
         ['/nodes', 'nodes'],
         ['/pools', 'pools'],
         ['/network', 'network'],
@@ -241,6 +239,9 @@ describe('App Component', () => {
         ['/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
         ['/network/test-network', 'network', '?sel=test-network'],
         ['/nodes/node1/objects/ns1%2Fsvc%2Fweb', 'objects', '?sel=ns1%2Fsvc%2Fweb'],
+        // The kinds and namespaces pages are tabs of the Objects page, their filter kept.
+        ['/kinds?kind=sec', 'objects', '?kind=sec&list=kinds'],
+        ['/namespaces', 'objects', '?list=namespaces'],
     ])('old record address %s opens the panel over %s', async (path, testId, search) => {
         setupBasicAuth();
         const {unmount} = renderApp([path]);

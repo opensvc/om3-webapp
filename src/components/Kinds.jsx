@@ -8,17 +8,28 @@ import {Table, HeaderRow, SortHeaderCell, Row, Cell, EmptyRow} from "../ui/compo
 import {StatusCount} from "../ui/components/StatusCount";
 import {Select} from "../ui/components/Field";
 import {Spinner} from "../ui/components/Spinner";
+import {objectsUrl} from "../utils/objectLists";
 
-const STATUSES = ["up", "down", "warn", "unprovisioned"];
+/**
+ * The states an object of a kind is in, each object in one of them: a cfg, a
+ * sec or a usr has no status, n/a. Unprovisioned is said apart: an object
+ * unprovisioned is counted in its state too.
+ */
+const STATES = ["up", "down", "warn", "n/a"];
+const STATUSES = [...STATES, "unprovisioned"];
 
 const STATUS_COLUMNS = [
     {column: "up", labelKey: "kinds.columns.up"},
     {column: "down", labelKey: "kinds.columns.down"},
     {column: "warn", labelKey: "kinds.columns.warn"},
+    {column: "n/a", labelKey: "kinds.columns.na"},
     {column: "unprovisioned", labelKey: "kinds.columns.unprovisioned"},
 ];
 
-const MARK_STATE = {up: "up", down: "down", warn: "warn", unprovisioned: "down"};
+const MARK_STATE = {up: "up", down: "down", warn: "warn", "n/a": "na", unprovisioned: "down"};
+
+/** How many objects of the kind: each once, in its state. */
+const totalOf = (counts) => STATES.reduce((sum, state) => sum + (counts[state] || 0), 0);
 
 const areStatusDotPropsEqual = (prev, next) =>
     prev.status === next.status && prev.count === next.count && prev.kind === next.kind;
@@ -43,10 +54,7 @@ const KindTableRow = React.memo(({
                                      onKindClick,
                                      onStatusClick
                                  }) => {
-    const total = useMemo(() =>
-            counts.up + counts.down + counts.warn + counts.unprovisioned,
-        [counts]
-    );
+    const total = useMemo(() => totalOf(counts), [counts]);
 
     const handleRowClick = useCallback(() => {
         onKindClick(kind);
@@ -77,10 +85,12 @@ const KindTableRow = React.memo(({
         prev.counts.up === next.counts.up &&
         prev.counts.down === next.counts.down &&
         prev.counts.warn === next.counts.warn &&
+        prev.counts["n/a"] === next.counts["n/a"] &&
         prev.counts.unprovisioned === next.counts.unprovisioned;
 });
 
-const Kinds = () => {
+/** The objects by kind. `embedded` in a tab of the Objects page, which pads it. */
+const Kinds = ({embedded = false}) => {
     const {t} = useTranslation();
     const navigate = useNavigate();
     const location = useLocation();
@@ -141,12 +151,12 @@ const Kinds = () => {
                 diff = countsA.down - countsB.down;
             } else if (deferredSortColumn === "warn") {
                 diff = countsA.warn - countsB.warn;
+            } else if (deferredSortColumn === "n/a") {
+                diff = countsA["n/a"] - countsB["n/a"];
             } else if (deferredSortColumn === "unprovisioned") {
                 diff = countsA.unprovisioned - countsB.unprovisioned;
             } else if (deferredSortColumn === "total") {
-                const totalA = countsA.up + countsA.down + countsA.warn + countsA.unprovisioned;
-                const totalB = countsB.up + countsB.down + countsB.warn + countsB.unprovisioned;
-                diff = totalA - totalB;
+                diff = totalOf(countsA) - totalOf(countsB);
             }
 
             return deferredSortDirection === "asc" ? diff : -diff;
@@ -176,19 +186,19 @@ const Kinds = () => {
         setVisibleCount(50);
 
         if (newKind === "all") {
-            navigate("/kinds");
+            navigate("/objects?list=kinds");
         } else {
-            navigate(`/kinds?kind=${newKind}`);
+            navigate(`/objects?list=kinds&kind=${encodeURIComponent(newKind)}`);
         }
     }, [navigate]);
 
     const handleKindClick = useCallback((kind) => {
-        navigate(`/objects?kind=${kind}`);
+        // On the tab the objects of the kind are listed in.
+        navigate(objectsUrl({kind}));
     }, [navigate]);
 
     const handleStatusClick = useCallback((kind, status) => {
-        const url = `/objects?kind=${kind}&globalState=${status}`;
-        navigate(url);
+        navigate(objectsUrl({kind, globalState: status}));
     }, [navigate]);
 
     const handleScroll = useCallback(() => {
@@ -235,7 +245,7 @@ const Kinds = () => {
     }, [kinds, selectedKind]);
 
     return (
-        <div className="flex h-full flex-col gap-3 p-4">
+        <div className={embedded ? "flex h-full flex-col gap-3" : "flex h-full flex-col gap-3 p-4"}>
             <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-1 text-ink-muted">
                     {t("kinds.filterBy")}
@@ -290,7 +300,7 @@ const Kinds = () => {
                             />
                         ))
                     ) : (
-                        <EmptyRow colSpan={6}>
+                        <EmptyRow colSpan={STATUS_COLUMNS.length + 2}>
                             <span data-testid="no-kinds-message">
                                 {selectedKind !== "all"
                                     ? t("kinds.emptyFiltered")

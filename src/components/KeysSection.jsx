@@ -471,10 +471,18 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
         const result = await fetchKeyContent(keyName);
         if (result.type !== 'error') {
             setKeyViewContent(result);
+            // Asked for, the value shows at once; the timer masks it again.
+            setRevealSecret(true);
         } else {
             setViewDialogOpen(false);
         }
         setKeyViewLoading(false);
+    };
+
+    // Closed, a revealed value is masked: it is not shown again on reopening before it is read.
+    const closeViewDialog = () => {
+        setViewDialogOpen(false);
+        setRevealSecret(false);
     };
 
     const openUpdateDialog = async (keyName) => {
@@ -600,10 +608,10 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
 
             <Dialog
                 open={viewDialogOpen}
-                onClose={() => setViewDialogOpen(false)}
+                onClose={closeViewDialog}
                 title={t("keys.view.title", {key: keyToView ?? ""})}
                 size="lg"
-                footer={<Button onClick={() => setViewDialogOpen(false)}>{t("common.close")}</Button>}
+                footer={<Button onClick={closeViewDialog}>{t("common.close")}</Button>}
             >
                 {keyViewLoading && (
                     <div className="flex justify-center p-6">

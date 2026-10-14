@@ -34,8 +34,6 @@ import {decodeToken as decodeTokenFromLogin} from "./Login.jsx";
 // Lazy load components for code splitting
 const NodesTable = lazy(() => import("./NodesTable"));
 const Objects = lazy(() => import("./Objects"));
-const Namespaces = lazy(() => import("./Namespaces"));
-const Kinds = lazy(() => import("./Kinds"));
 const Heartbeats = lazy(() => import("./Heartbeats"));
 const Pools = lazy(() => import("./Pools"));
 const Network = lazy(() => import("./Network"));
@@ -53,6 +51,14 @@ const ObjectRedirect = () => {
 const NetworkRedirect = () => {
     const {networkName} = useParams();
     return <Navigate to={`/network?${new URLSearchParams({sel: networkName})}`} replace/>;
+};
+
+/** An old page become a tab of the Objects page: there, its filter kept. */
+const ObjectsTab = ({list}) => {
+    const {search} = useLocation();
+    const params = new URLSearchParams(search);
+    params.set("list", list);
+    return <Navigate to={`/objects?${params}`} replace/>;
 };
 
 // An instance is a column of the status board of its object.
@@ -388,9 +394,9 @@ const App = () => {
                                     <Suspense fallback={<Loading/>}>
                                         <Routes>
                                             <Route path="/" element={<Navigate to="/objects" replace/>}/>
-                                            <Route path="/namespaces"
-                                                   element={<ProtectedRoute><Namespaces/></ProtectedRoute>}/>
-                                            <Route path="/kinds" element={<ProtectedRoute><Kinds/></ProtectedRoute>}/>
+                                            {/* Tabs of the Objects page now: an old link lands there. */}
+                                            <Route path="/namespaces" element={<ObjectsTab list="namespaces"/>}/>
+                                            <Route path="/kinds" element={<ObjectsTab list="kinds"/>}/>
                                             <Route path="/heartbeats" element={<Heartbeats/>}/>
                                             <Route path="/nodes" element={<ProtectedRoute><NodesTable/></ProtectedRoute>}/>
                                             <Route path="/pools" element={<ProtectedRoute><Pools/></ProtectedRoute>}/>

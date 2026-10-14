@@ -26,6 +26,9 @@ import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {useMediaQuery} from "../ui/lib/media";
 import {TabList} from "../ui/components/Tabs";
+import {GROUP_TABS, OBJECT_LISTS, OBJECTS_TABS, listOfKind} from "../utils/objectLists";
+import Kinds from "./Kinds";
+import Namespaces from "./Namespaces";
 import {tabPanelProps} from "../ui/components/tabs-ids";
 import {AlertTriangleIcon, ChevronDownIcon, CloseIcon, FilterIcon, GearIcon, PlusIcon, SearchIcon} from "../ui/icons";
 
@@ -72,24 +75,15 @@ const parseObjectName = (objectName) => {
     };
 };
 
-/**
- * The list is split in tabs: the objects running on the nodes, the ones holding
- * configuration, the cfg, the sec and the cluster object, and the users. The tab
- * is in the URL, `list=configs` or `list=users`; the first one is shown without it.
- */
-const CONFIG_KINDS = ["cfg", "sec", "ccfg"];
-const OBJECT_LISTS = ["services", "configs", "users"];
-const listOf = (objectName) => {
-    const {kind} = parseObjectName(objectName);
-    return kind === "usr" ? "users" : CONFIG_KINDS.includes(kind) ? "configs" : "services";
-};
+/** The tab an object is listed in (objectLists). */
+const listOf = (objectName) => listOfKind(parseObjectName(objectName).kind);
 /** The kind a new object takes by default, from the tab it is created from. */
-const LIST_KIND = {services: "svc", configs: "cfg", users: "usr"};
+const LIST_KIND = {services: "svc", volumes: "vol", configs: "cfg", secrets: "sec", users: "usr"};
 /**
  * The lists of objects held on all the nodes, with no status nor placement: their
  * names only, the status, orchestrate, topology and node columns telling nothing.
  */
-const NAMES_ONLY_LISTS = ["configs", "users"];
+const NAMES_ONLY_LISTS = ["configs", "secrets", "users"];
 
 const selectObjectStatus = (state) => state.objectStatus;
 const selectObjectInstanceStatus = (state) => state.objectInstanceStatus;
@@ -312,6 +306,13 @@ const FilterPopover = ({label, options, selected, onToggle}) => {
 /** The values on offer, plus those chosen (from the URL) that the data does not hold. */
 const withSelected = (values, selected) => [...values, ...selected.filter((value) => !values.includes(value))];
 
+/**
+ * A filter is worth showing with a choice to make: two values or more. With one,
+ * every object of the tab has it; shown anyway while it holds a value no object of
+ * the tab has, for that filter not to act unseen.
+ */
+const hasChoice = (values, selected) => values.length > 1 || selected.some((value) => !values.includes(value));
+
 const GLOBAL_STATE_MARKS = {
     up: <StatusMark state="up"/>,
     down: <StatusMark state="down"/>,
@@ -342,7 +343,7 @@ const Objects = () => {
     const rawNamespaces = parseMultipleValues("namespace");
     const rawKinds = parseMultipleValues("kind");
     const rawSearchQuery = queryParams.get("name") || "";
-    const list = OBJECT_LISTS.includes(queryParams.get("list")) ? queryParams.get("list") : "services";
+    const list = OBJECTS_TABS.includes(queryParams.get("list")) ? queryParams.get("list") : OBJECT_LISTS[0];
 
     const {daemon} = useFetchDaemonStatus();
     const objectStatus = useEventStore(selectObjectStatus);
@@ -413,6 +414,9 @@ const Objects = () => {
             counts[of] += 1;
             if (of === list) names.push(name);
         }
+        // The group tabs count their groups: the namespaces, the kinds.
+        counts.namespaces = new Set(allObjectNames.map(extractNamespace)).size;
+        counts.kinds = new Set(allObjectNames.map((name) => parseObjectName(name).kind)).size;
         return {listObjectNames: names, listCounts: counts};
     }, [allObjectNames, list]);
 
@@ -828,11 +832,13 @@ const Objects = () => {
         setSelectedKinds([]);
         const params = new URLSearchParams(location.search);
         params.delete("kind");
+        // The open row of a group tab is a namespace, of a list an object: not the other's.
+        if (GROUP_TABS.includes(next) !== GROUP_TABS.includes(list)) ["sel", "tab"].forEach((key) => params.delete(key));
         if (next === OBJECT_LISTS[0]) params.delete("list");
         else params.set("list", next);
         const queryString = params.toString();
         navigate(`${location.pathname}${queryString ? `?${queryString}` : ""}`, {replace: true});
-    }, [location.pathname, location.search, navigate]);
+    }, [list, location.pathname, location.search, navigate]);
 
     // Created, the object opens in its panel, over the tab it is listed in.
     const handleCreated = useCallback((path, provisioning) => {
@@ -918,19 +924,36 @@ const Objects = () => {
     const namesOnly = NAMES_ONLY_LISTS.includes(list);
     const columnCount = namesOnly ? 2 : 3 + PROPERTY_COLUMNS.length + (isWideScreen ? allNodes.length : 0);
 
+    const tabList = (
+        <TabList
+            tabs={OBJECTS_TABS.map((key) => ({
+                key,
+                label: t(`objects.lists.${key}`),
+                badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
+            }))}
+            active={list}
+            onChange={handleListChange}
+            label={t("objects.lists.label")}
+            idPrefix={listTabsId}
+        />
+    );
+
+    // The objects by namespace or by kind, the views the menu had for them.
+    if (GROUP_TABS.includes(list)) {
+        return (
+            <div className="flex h-full flex-col gap-3 p-4">
+                {tabList}
+                {/* Its own panels: the open row (`sel`) is a namespace there, not an object. */}
+                <div className="min-h-0 flex-1" {...tabPanelProps(listTabsId, list)}>
+                    {list === "kinds" ? <Kinds embedded/> : <Namespaces embedded/>}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex h-full flex-col gap-3 p-4">
-            <TabList
-                tabs={OBJECT_LISTS.map((key) => ({
-                    key,
-                    label: t(`objects.lists.${key}`),
-                    badge: <span className="text-ink-muted tabular-nums">{listCounts[key]}</span>,
-                }))}
-                active={list}
-                onChange={handleListChange}
-                label={t("objects.lists.label")}
-                idPrefix={listTabsId}
-            />
+            {tabList}
             <div className="flex shrink-0 flex-wrap items-center gap-3">
                 {isMobile && (
                     <Button
@@ -954,18 +977,22 @@ const Objects = () => {
                             selected={selectedGlobalStates}
                             onToggle={handleGlobalStateChange}
                         />
-                        <FilterPopover
-                            label={t("objects.filters.namespace")}
-                            options={namespaceOptions}
-                            selected={selectedNamespaces}
-                            onToggle={handleNamespaceChange}
-                        />
-                        <FilterPopover
-                            label={t("objects.filters.kind")}
-                            options={kindOptions}
-                            selected={selectedKinds}
-                            onToggle={handleKindChange}
-                        />
+                        {hasChoice(namespaces, selectedNamespaces) && (
+                            <FilterPopover
+                                label={t("objects.filters.namespace")}
+                                options={namespaceOptions}
+                                selected={selectedNamespaces}
+                                onToggle={handleNamespaceChange}
+                            />
+                        )}
+                        {hasChoice(kinds, selectedKinds) && (
+                            <FilterPopover
+                                label={t("objects.filters.kind")}
+                                options={kindOptions}
+                                selected={selectedKinds}
+                                onToggle={handleKindChange}
+                            />
+                        )}
                         <label className="flex items-center gap-1 text-ink-muted">
                             {t("common.name")}
                             <span className="relative flex items-center">

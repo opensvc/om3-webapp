@@ -553,7 +553,7 @@
       "maskedAgain_other": "Masqué à nouveau dans {{count}} secondes.",
       "hide": "Masquer le secret",
       "reveal": "Afficher le secret",
-      "hidden": "Le contenu de ce secret est masqué par défaut.",
+      "hidden": "Le contenu de ce secret est masqué.",
       "revealHint": "Utilisez le bouton Afficher le secret pour le voir.",
       "contentAria": "Contenu de la clé"
     },
@@ -606,6 +606,7 @@
       "up": "Up",
       "down": "Down",
       "warn": "Warn",
+      "na": "N/A",
       "unprovisioned": "Non provisionné",
       "total": "Total"
     },
@@ -972,8 +973,12 @@
     "lists": {
       "label": "Listes d'objets",
       "services": "Services",
+      "volumes": "Volumes",
       "configs": "Configurations",
-      "users": "Utilisateurs"
+      "secrets": "Secrets",
+      "users": "Utilisateurs",
+      "namespaces": "Namespaces",
+      "kinds": "Tous"
     },
     "columns": {
       "object": "Objet",

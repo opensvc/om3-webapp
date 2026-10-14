@@ -1,4 +1,4 @@
-import {URL_NODE, URL_OBJECT} from "../config/apiPath.js";
+import {URL_CLUSTER, URL_NODE, URL_OBJECT} from "../config/apiPath.js";
 import {INSTANCE_ACTIONS, NODE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS} from "../constants/actions";
 import {getResponseErrorMessage} from "../services/api.jsx";
 import {parseObjectPath} from "../utils/objectUtils.jsx";
@@ -22,6 +22,15 @@ export const CLEAR_ACTION = {name: "clear", icon: NODE_ACTIONS.find((a) => a.nam
 
 /** The address of an action, given what it acts on. */
 export function actionUrl({path, action, node, rid}) {
+    // The cluster object is acted on as the cluster, on all the nodes: `om cluster
+    // freeze`, not the freeze of an object.
+    // Its instance on a node stands for the node: `om node freeze`. The cluster
+    // object's own instance freeze is no node freeze, nothing a user would see.
+    if (parseObjectPath(path).kind === "ccfg" && rid === undefined) {
+        return node === undefined
+            ? `${URL_CLUSTER}/action/${encodeURIComponent(action)}`
+            : `${URL_NODE}/${encodeURIComponent(node)}/action/${encodeURIComponent(action)}`;
+    }
     if (node === undefined) {
         const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
         return `${URL_OBJECT}/${pathParts(path)}/${endpoint}`;

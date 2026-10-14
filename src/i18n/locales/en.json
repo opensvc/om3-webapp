@@ -691,6 +691,7 @@
     "events": "Namespace Events"
   },
   "nav": {
+    "openCluster": "Open the cluster",
     "routes": {
       "heartbeats": "Heartbeats",
       "networks": "Networks",
@@ -1190,7 +1191,8 @@
       "instance": "{{path}} on {{where}}",
       "resource": "{{rid}} of {{path}} on {{where}}",
       "cells": "{{list}} of {{path}}",
-      "cell": "{{rid}} on {{where}}"
+      "cell": "{{rid}} on {{where}}",
+      "cluster": "the cluster, on all its nodes"
     },
     "feedback": {
       "running": "Running {{action}} on {{subject}}…",

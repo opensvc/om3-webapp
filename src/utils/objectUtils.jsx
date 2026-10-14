@@ -14,6 +14,9 @@ const COMMON_SVC_ACTIONS = [
 ];
 
 const ALLOWED_ACTIONS_BY_KIND = {
+    // The cluster object stands for the cluster: its actions are the cluster's, on
+    // all the nodes (`om cluster freeze`), not an object's (see actionUrl).
+    ccfg: ["abort", "freeze", "unfreeze"],
     cfg: ["abort", "delete"],
     vol: ["abort", "delete", "freeze", "provision", "purge", "unfreeze", "unprovision"],
     sec: ["abort", "delete"],

@@ -691,6 +691,7 @@
     "events": "Événements des namespaces"
   },
   "nav": {
+    "openCluster": "Ouvrir le cluster",
     "routes": {
       "heartbeats": "Heartbeats",
       "networks": "Réseaux",
@@ -1190,7 +1191,8 @@
       "instance": "{{path}} sur {{where}}",
       "resource": "{{rid}} de {{path}} sur {{where}}",
       "cells": "{{list}} de {{path}}",
-      "cell": "{{rid}} sur {{where}}"
+      "cell": "{{rid}} sur {{where}}",
+      "cluster": "le cluster, sur tous ses nœuds"
     },
     "feedback": {
       "running": "{{action}} en cours sur {{subject}}…",

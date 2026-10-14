@@ -6,7 +6,7 @@ import logger from '../utils/logger.js';
 import {retainEventReception, forceFlush} from "../eventSourceManager";
 import {usePanelSearch} from "../app/panel-search";
 import {ObjectDetailPanel} from "./RecordPanels";
-import {URL_OBJECT} from "../config/apiPath.js";
+import {actionUrl} from "./objectActions";
 import {extractNamespace, isActionAllowedForSelection} from "../utils/objectUtils";
 import {OBJECT_ACTIONS, actionLabel} from "../constants/actions";
 import {useTranslation} from "react-i18next";
@@ -590,13 +590,11 @@ const Objects = () => {
                     errorCount++;
                     return;
                 }
-                const {namespace, kind, name} = parseObjectName(objectName);
                 if ((action === "freeze" && rawObj.frozen === "frozen") || (action === "unfreeze" && rawObj.frozen === "unfrozen")) {
                     errorCount++;
                     return;
                 }
-                const endpoint = OBJECT_ACTIONS.find((a) => a.name === action)?.endpoint ?? `action/${action}`;
-                const url = `${URL_OBJECT}/${namespace}/${kind}/${name}/${endpoint}`;
+                const url = actionUrl({path: objectName, action});
                 try {
                     const response = await fetch(url, {
                         method: "POST",

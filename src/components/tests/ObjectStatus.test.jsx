@@ -398,6 +398,65 @@ describe('ObjectStatus', () => {
             expect(screen.queryByRole('menuitem', {name: 'Console'})).not.toBeInTheDocument();
         });
 
+        describe('the cluster object', () => {
+            const readyCluster = async (clusterStatus) => {
+                answer(dns, clusterStatus);
+                render(<ObjectStatus path="cluster"/>);
+                await screen.findByRole('table');
+                fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+            };
+
+            test('is frozen as the cluster, on all its nodes, confirmed first', async () => {
+                await readyCluster(cluster(false));
+                expect(screen.getByRole('menuitem', {name: 'Start'})).toBeDisabled();
+                expect(screen.getByRole('menuitem', {name: 'Delete'})).toBeDisabled();
+                expect(screen.getByRole('menuitem', {name: 'Unfreeze'})).toBeDisabled();
+                pick('Freeze');
+                const dialog = screen.getByRole('dialog', {name: /freeze/i});
+                fireEvent.click(within(dialog).getByRole('checkbox'));
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+                await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/freeze']));
+                expect(await screen.findByText('freeze on the cluster, on all its nodes: accepted')).toBeInTheDocument();
+            });
+
+            test('a node picked is frozen as a node, not as an instance of the cluster object', async () => {
+                answer(dns, cluster(true));
+                render(<ObjectStatus path="cluster"/>);
+                await screen.findByRole('table');
+                fireEvent.click(header('dev3n2'));
+                fireEvent.click(selectionButton());
+                // dev3n2 is not frozen: nothing to unfreeze, and no service action.
+                expect(screen.queryByRole('menuitem', {name: 'Unfreeze'})).not.toBeInTheDocument();
+                expect(screen.queryByRole('menuitem', {name: 'Start'})).not.toBeInTheDocument();
+                pick('Freeze');
+                const dialog = screen.getByRole('dialog', {name: /freeze/i});
+                fireEvent.click(within(dialog).getByRole('checkbox'));
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+                await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n2/action/freeze']));
+                expect(await screen.findByText('freeze on dev3n2: accepted')).toBeInTheDocument();
+            });
+
+            test('the board follows the freeze of the nodes', async () => {
+                answer(dns, cluster(false));
+                render(<ObjectStatus path="cluster"/>);
+                await screen.findByRole('table');
+                expect(mockRetain).toHaveBeenCalledWith('tok', ['NodeStatusUpdated']);
+                const reads = mockApiFetch.mock.calls.length;
+                act(() => useEventStore.setState({nodeStatus: {dev3n1: {frozen_at: '2026-10-14T08:00:00Z'}}}));
+                await waitFor(() => expect(mockApiFetch.mock.calls.length).toBeGreaterThan(reads));
+                act(() => useEventStore.setState({nodeStatus: {}}));
+            });
+
+            test('a node frozen, the cluster unfreezes, and freezes the others', async () => {
+                await readyCluster(cluster(true));
+                expect(screen.getByRole('menuitem', {name: 'Freeze'})).toBeEnabled();
+                expect(screen.getByRole('menuitem', {name: 'Unfreeze'})).toBeEnabled();
+                pick('Abort');
+                confirm('abort');
+                await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/abort']));
+            });
+        });
+
         test('says which node refused the action, and why', async () => {
             await ready();
             global.fetch = vi.fn((url) => Promise.resolve(url.includes('dev3n2')

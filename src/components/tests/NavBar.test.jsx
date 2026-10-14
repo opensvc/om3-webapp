@@ -141,6 +141,16 @@ describe('NavBar', () => {
         expect(screen.getByRole('link', {name: /view user information/i})).toBeInTheDocument();
     });
 
+    test('the Cluster tag opens the cluster object over the view, its filters kept, its row panel closed', () => {
+        mockUseLocation.mockReturnValue({pathname: '/objects', search: '?globalState=down&sel=svc%2Fweb&tab=logs'});
+        renderNavBar();
+        const tag = screen.getByRole('link', {name: 'Open the cluster'});
+        expect(tag).toHaveAttribute('href', '/objects?globalState=down&peek=object%3Acluster');
+        expect(tag).toHaveTextContent('Cluster');
+        // The product name still leads home.
+        expect(screen.getByRole('link', {name: 'OpenSVC'})).toHaveAttribute('href', '/');
+    });
+
     test('does not show breadcrumbs on /login', () => {
         setupMocks({pathname: '/login', authToken: null, fetchNodes: undefined});
         renderNavBar();
@@ -283,9 +293,10 @@ describe('NavBar', () => {
 
     test('links the OpenSVC name to the home view, tagged Cluster, without the logo', () => {
         renderNavBar();
-        const link = screen.getByRole('link', {name: 'OpenSVC Cluster'});
+        const link = screen.getByRole('link', {name: 'OpenSVC'});
         expect(link).toHaveAttribute('href', '/');
         expect(link.querySelector('img')).toBeNull();
+        expect(link.nextElementSibling).toHaveTextContent('Cluster');
     });
 
     // ---------- sidebar toggle ----------

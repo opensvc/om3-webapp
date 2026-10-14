@@ -1604,11 +1604,23 @@ describe('Objects Component', () => {
             .not.toBeInTheDocument();
     });
 
-    test.each([
-        ['cluster', {
+    test('the cluster object is frozen as the cluster, on all the nodes', async () => {
+        // The cluster object is listed with the configurations.
+        setup({
             objectStatus: {cluster: {avail: 'up', frozen: 'unfrozen'}},
             objectInstanceStatus: {cluster: {node1: {avail: 'up'}}},
-        }, '/root/ccfg/cluster/action/restart'],
+        }, '?list=configs', {isWideScreen: true, isMobile: false});
+        await waitForLoad();
+        selectRow('cluster');
+        openActionsMenu();
+        await clickMenuItem('Freeze');
+        await confirmDialog();
+        await waitFor(() =>
+            expect(global.fetch).toHaveBeenCalledWith('/api/cluster/action/freeze', expect.any(Object))
+        );
+    });
+
+    test.each([
         ['svc/myobj', {
             objectStatus: {'svc/myobj': {avail: 'up', frozen: 'unfrozen'}},
             objectInstanceStatus: {'svc/myobj': {node1: {avail: 'up'}}},
@@ -1618,8 +1630,7 @@ describe('Objects Component', () => {
             objectInstanceStatus: {standalone: {node1: {avail: 'up'}}},
         }, '/root/svc/standalone/action/restart'],
     ])('object name "%s" resolves to the expected action URL', async (rowName, customState, expectedUrl) => {
-        // The cluster object is listed with the configurations.
-        setup(customState, rowName === 'cluster' ? '?list=configs' : '', {isWideScreen: true, isMobile: false});
+        setup(customState, '', {isWideScreen: true, isMobile: false});
         await waitForLoad();
         selectRow(rowName);
         openActionsMenu();

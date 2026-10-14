@@ -44,6 +44,9 @@ const OBJECT_EVENTS = [
     "InstanceConfigDeleted",
 ];
 
+/** The events of the nodes: their freeze. */
+const NODE_EVENTS = ["NodeStatusUpdated"];
+
 /** A burst of events reads the object once. */
 const REFRESH_DELAY_MS = 300;
 
@@ -104,8 +107,14 @@ const ObjectStatus = ({path}) => {
         void load();
         const token = localStorage.getItem("authToken");
         const release = token ? retainEventReception(token, OBJECT_EVENTS, path) : null;
+        // The cluster object's board shows the frozen nodes: their freeze, which brings
+        // no event about the object, reads it again too.
+        const releaseNodes = token && parseObjectPath(path).kind === "ccfg"
+            ? retainEventReception(token, NODE_EVENTS)
+            : null;
         return () => {
             release?.();
+            releaseNodes?.();
             if (timer.current) clearTimeout(timer.current);
         };
     }, [path, load]);
@@ -118,6 +127,11 @@ const ObjectStatus = ({path}) => {
         .filter(([key]) => key.endsWith(`:${path}`))
         .map(([key, m]) => `${key}=${m?.state}/${m?.global_expect}/${m?.local_expect}/${m?.updated_at}`)
         .join(","));
+    // The frozen nodes, for the cluster object alone (see NODE_EVENTS).
+    const isCluster = parseObjectPath(path).kind === "ccfg";
+    const frozenNodes = useEventStore((s) => (isCluster
+        ? Object.entries(s.nodeStatus ?? {}).map(([node, st]) => `${node}=${st?.frozen_at}`).sort().join(",")
+        : ""));
     const first = useRef(true);
     useEffect(() => {
         if (first.current) {
@@ -125,7 +139,7 @@ const ObjectStatus = ({path}) => {
             return;
         }
         refresh();
-    }, [objectStatus, instances, configs, monitors, refresh]);
+    }, [objectStatus, instances, configs, monitors, frozenNodes, refresh]);
 
     const board = useMemo(() => (digest === null ? null : buildBoard(digest)), [digest]);
 
@@ -154,14 +168,16 @@ const ObjectStatus = ({path}) => {
      * any, as a selector (`rid=a,b`); `subject` says it in words. A console opens a
      * terminal on its resource at once: no action to confirm.
      */
-    const ask = useCallback((action, {targets = [], subject = path, fromSelection = false} = {}) => {
+    const ask = useCallback((action, {targets = [], subject, fromSelection = false} = {}) => {
         if (action === "console") {
             const {namespace, kind, name} = parseObjectPath(path);
             setConsoleTarget({node: targets[0].node, namespace, kind, name, rid: targets[0].rid});
             return;
         }
-        setPending({action, targets, subject, fromSelection});
-    }, [path]);
+        // The actions on the cluster object are the cluster's, on all its nodes (actionUrl).
+        const object = parseObjectPath(path).kind === "ccfg" ? t("statusBoard.subjects.cluster") : path;
+        setPending({action, targets, subject: subject ?? object, fromSelection});
+    }, [path, t]);
 
     const run = useCallback(async () => {
         if (pending === null) return;
@@ -206,7 +222,8 @@ const ObjectStatus = ({path}) => {
         : nodes.length === allNodes.length ? t("statusBoard.actions.allNodes") : nodes.join(", "));
     const onInstances = (nodes) => ({
         targets: nodes.map((node) => ({node})),
-        subject: t("statusBoard.subjects.instance", {path, where: where(nodes)}),
+        // On the cluster object, the instances are the nodes themselves (actionUrl).
+        subject: kind === "ccfg" ? where(nodes) : t("statusBoard.subjects.instance", {path, where: where(nodes)}),
     });
     /** The resources on the nodes, each node given the ones it has of them. */
     const onResources = (rows, nodes) => ({
@@ -228,6 +245,13 @@ const ObjectStatus = ({path}) => {
     };
     /** The instance actions for these instances: freeze where one is not, clear where one failed. */
     const instanceActions = (nodes) => {
+        // The cluster object's instances stand for their nodes: the node is frozen or not.
+        if (kind === "ccfg") {
+            const frozen = nodes.map((node) => board.nodes.find((n) => n.name === node)?.frozen ?? false);
+            return INSTANCE_ACTIONS.filter((a) => (a.name === "freeze"
+                ? frozen.some((f) => !f)
+                : a.name === "unfreeze" && frozen.some((f) => f)));
+        }
         const l = nodes.map(instanceOf);
         return [
             ...(l.some((i) => i.failed) ? [CLEAR_ACTION] : []),
@@ -280,6 +304,11 @@ const ObjectStatus = ({path}) => {
         },
     };
 
+    // The cluster is frozen node by node: nothing to freeze once all of them are, nor
+    // to unfreeze while none is.
+    const clusterIdle = (action) => kind === "ccfg" && (
+        (action === "freeze" && board.nodes.every((n) => n.frozen))
+        || (action === "unfreeze" && !board.nodes.some((n) => n.frozen)));
     const objectMenu = (
         <MenuButton
             // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
@@ -294,7 +323,7 @@ const ObjectStatus = ({path}) => {
                     key: a.name,
                     label: actionLabel(a.name),
                     icon: actionIcon(a),
-                    disabled: !isActionAllowedForSelection(a.name, [path]),
+                    disabled: !isActionAllowedForSelection(a.name, [path]) || clusterIdle(a.name),
                     onSelect: () => ask(a.name),
                 }))}
         />

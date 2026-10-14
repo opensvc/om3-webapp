@@ -4,6 +4,7 @@ import {SidebarIcon, UserIcon} from "../ui/icons";
 import {GlobalSearch} from "../app/GlobalSearch";
 import {setShortcutsHelp} from "../ui/lib/shortcuts";
 import {loadSearchIndex} from "./searchIndex";
+import {applyPanelUpdate} from "../app/panel-search";
 import {StateGlyph} from "../ui/components/StateGlyph";
 import {ProductTag} from "../ui/components/ProductTag";
 import {useAuth} from "../context/AuthProvider.jsx";
@@ -162,12 +163,24 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
                 </button>
             )}
 
-            {/* The top bar link: the product name, back to the home view, tagged
-                not to be taken for the collector. */}
-            <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight text-ink">
-                OpenSVC
-                <ProductTag/>
-            </Link>
+            {/* The product name, back to the home view, tagged not to be taken for
+                the collector. */}
+            <div className="flex shrink-0 items-center gap-2">
+                <Link to="/" className="font-semibold tracking-tight text-ink">OpenSVC</Link>
+                {/* The tag opens the cluster over the view on display, as a node or an
+                    object opens: the panel of the cluster object, its configuration
+                    and the cluster actions. */}
+                <Link
+                    to={{
+                        pathname: location.pathname,
+                        search: `?${applyPanelUpdate(new URLSearchParams(location.search ?? ""), {peek: "object:cluster"})}`,
+                    }}
+                    aria-label={t("nav.openCluster")}
+                    className="flex rounded-(--radius-control) hover:brightness-95"
+                >
+                    <ProductTag/>
+                </Link>
+            </div>
 
             {breadcrumb.length > 0 && location.pathname !== '/login' && (
                 <nav aria-label={t("nav.breadcrumb.label")} className="flex min-w-0 items-center gap-1 overflow-hidden font-medium whitespace-nowrap">

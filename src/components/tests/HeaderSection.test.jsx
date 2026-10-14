@@ -11,7 +11,7 @@ const {mockHandleObjectActionClick} = vi.hoisted(() => ({
 
 // ── Mocks ───────────────────────────────────────────────────────────────
 vi.mock('../../constants/actions', async (importOriginal) => ({
-    actionLabel: (await importOriginal()).actionLabel,
+    ...(await importOriginal()),
     OBJECT_ACTIONS: [
         {name: 'delete', icon: 'delete-icon', color: 'red'},
         {name: 'edit', icon: 'edit-icon'},
@@ -154,8 +154,16 @@ describe('HeaderSection Component', () => {
         });
 
         test('other kinds show only actions without a kinds restriction', async () => {
-            render(<HeaderSection {...defaultProps} kind="cfg"/>);
+            render(<HeaderSection {...defaultProps} kind="ccfg"/>);
             expect(await openMenuLabels()).toEqual(['Delete', 'Edit']);
+        });
+
+        test.each(['cfg', 'sec', 'usr'])('%s, on all the nodes, shows no status and only deletes', async (kind) => {
+            render(<HeaderSection {...defaultProps} kind={kind}
+                                  globalStatus={{avail: 'n/a', frozen: 'unfrozen', provisioned: 'false'}}/>);
+            expect(status()).toBeNull();
+            expect(screen.queryByRole('img', {name: 'Object is not provisioned'})).not.toBeInTheDocument();
+            expect(await openMenuLabels()).toEqual(['Delete']);
         });
 
         test('svc-only actions are routed through the click handler', async () => {
@@ -204,5 +212,31 @@ describe('HeaderSection Component', () => {
 
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
         expect(mockHandleObjectActionClick).not.toHaveBeenCalled();
+    });
+
+    describe('the orchestration in progress', () => {
+        test('no abort in the menu: the badge of the global expect offers it, with the logs', async () => {
+            const onLogs = vi.fn();
+            defaultProps.getObjectStatus.mockReturnValue({
+                avail: 'up', frozen: 'unfrozen', globalExpect: 'stopped', orchestrationId: 'o-1',
+            });
+            render(<HeaderSection {...defaultProps} onOrchestrationLogs={onLogs}/>);
+            const badge = screen.getByRole('button', {name: 'Orchestration in progress: stopped'});
+            expect(badge).toHaveTextContent('stopped');
+            await userEvent.click(badge);
+            const menu = screen.getByRole('menu');
+            expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Logs', 'Abort']);
+            await userEvent.click(within(menu).getByRole('menuitem', {name: 'Logs'}));
+            expect(onLogs).toHaveBeenCalledWith('o-1');
+            await userEvent.click(badge);
+            await userEvent.click(screen.getByRole('menuitem', {name: 'Abort'}));
+            expect(mockHandleObjectActionClick).toHaveBeenCalledWith('abort');
+        });
+
+        test('no badge while nothing is expected', () => {
+            defaultProps.getObjectStatus.mockReturnValue({avail: 'up', frozen: 'unfrozen', globalExpect: null});
+            render(<HeaderSection {...defaultProps}/>);
+            expect(screen.queryByRole('button', {name: /Orchestration in progress/})).not.toBeInTheDocument();
+        });
     });
 });

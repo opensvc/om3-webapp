@@ -269,16 +269,6 @@
       "submit": "Update",
       "updating": "Updating"
     },
-    "keywords": {
-      "title": "Configuration Keywords",
-      "empty": "No keywords available.",
-      "tableLabel": "configuration keywords table",
-      "keyword": "Keyword",
-      "description": "Description",
-      "default": "Default",
-      "section": "Section",
-      "scopable": "Scopable"
-    },
     "params": {
       "title": "Manage Configuration Parameters",
       "apply": "Apply",
@@ -319,7 +309,6 @@
       "editFile": "Edit configuration file",
       "uploadFile": "Upload new configuration file",
       "manageParams": "Manage configuration parameters",
-      "viewKeywords": "View configuration keywords",
       "noInstance": "No instance selected to view configuration.",
       "loadingForEdit": "Loading configuration for editing",
       "loading": "Loading configuration",
@@ -351,6 +340,17 @@
       "deleted_one": "Successfully deleted {{count}} section(s)",
       "deleted_other": "Successfully deleted {{count}} section(s)",
       "noSelection": "No selection made"
+    },
+    "keywordHelp": {
+      "open": "What {{keyword}} does",
+      "loadError": "The keywords help could not be read: {{message}}",
+      "default": "Default",
+      "candidates": "Values",
+      "example": "Example",
+      "converter": "Type",
+      "scopable": "Scopable",
+      "deprecated": "Deprecated",
+      "replacedBy": "replaced by {{keyword}}"
     }
   },
   "console": {
@@ -968,7 +968,7 @@
     "selectObject": "Select object {{name}}",
     "empty": "No objects found matching the current filters.",
     "loadingMore": "Loading more objects",
-    "actionsMenu": "Actions on selected objects",
+    "actionsMenu": "Actions",
     "lists": {
       "label": "Object lists",
       "services": "Services",
@@ -1012,7 +1012,8 @@
       "notProvisionedTitle": "Not Provisioned",
       "notProvisionedLabel": "Object is not provisioned",
       "actionsMenu": "Object actions"
-    }
+    },
+    "selectHint": "Select objects to act on them"
   },
   "pools": {
     "columns": {
@@ -1257,5 +1258,12 @@
       "node": "Nodes",
       "network": "Networks"
     }
+  },
+  "orchestration": {
+    "label": "Orchestration in progress: {{expect}}",
+    "logs": "Logs",
+    "abort": "Abort",
+    "logsOf": "Logs of orchestration",
+    "allLogs": "Show all the logs"
   }
 }

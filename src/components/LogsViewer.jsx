@@ -19,6 +19,7 @@ const LogsViewer = ({
                         maxLogs = 1000,
                         height = "500px",
                         bottomSpacing = 30,
+                        filters = [],
                     }) => {
     const {t, i18n} = useTranslation();
     const [logs, setLogs] = useState([]);
@@ -62,8 +63,10 @@ const LogsViewer = ({
         } else {
             baseUrl = `${URL_NODE}/${nodename}/log`;
         }
-        return `${baseUrl}?follow=true`;
-    }, [type, nodename, namespace, kind, instanceName]);
+        // The journal fields to match, `ORCHESTRATION_ID=…` for the logs of one orchestration.
+        const filterQuery = filters.map((f) => `&filter=${encodeURIComponent(f)}`).join("");
+        return `${baseUrl}?follow=true${filterQuery}`;
+    }, [type, nodename, namespace, kind, instanceName, filters.join("\n")]);
 
     const buildSubtitle = useCallback(() => {
         if (type === "instance" && instanceName && instanceName.trim() !== "") {

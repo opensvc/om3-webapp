@@ -182,6 +182,17 @@ describe('LogsViewer', () => {
             });
         });
 
+        test('reads only the journal entries the filters match, as the logs of one orchestration', async () => {
+            mockSuccessfulFetch([]);
+            renderComponent({type: 'instance', instanceName: 'inst', namespace: 'ns', kind: 'kind', filters: ['ORCHESTRATION_ID=o-1']});
+            await waitFor(() => {
+                expect(global.fetch).toHaveBeenCalledWith(
+                    'http://mock-api/test-node/instance/path/ns/kind/inst/log?follow=true&filter=ORCHESTRATION_ID%3Do-1',
+                    expect.objectContaining({method: 'GET'}),
+                );
+            });
+        });
+
         test('fetches correct URL for instance type', async () => {
             mockSuccessfulFetch([]);
             renderComponent({type: 'instance', instanceName: 'inst', namespace: 'ns', kind: 'kind'});

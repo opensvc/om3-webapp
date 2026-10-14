@@ -175,6 +175,33 @@ describe('ObjectStatus', () => {
             expect(await screen.findByText('start on system/svc/dns: accepted')).toBeInTheDocument();
         });
 
+        test('no abort in the menu: the orchestration in progress offers it, with its logs, by its global expect', async () => {
+            const onLogs = vi.fn();
+            act(() => useEventStore.setState({instanceMonitor: {
+                'dev3n1:system/svc/dns': {global_expect: 'none'},
+                'dev3n2:system/svc/dns': {global_expect: 'stopped', orchestration_id: 'o-42'},
+            }}));
+            answer(dns);
+            render(<ObjectStatus path="system/svc/dns" onOrchestrationLogs={onLogs}/>);
+            await screen.findByRole('table');
+            fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+            expect(screen.queryByRole('menuitem', {name: 'Abort'})).not.toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
+
+            const badge = screen.getByRole('button', {name: 'Orchestration in progress: stopped'});
+            fireEvent.click(badge);
+            pick('Logs');
+            expect(onLogs).toHaveBeenCalledWith('o-42');
+            fireEvent.click(badge);
+            pick('Abort');
+            confirm('abort');
+            await waitFor(() => expect(posted).toEqual(['POST /api/object/path/system/svc/dns/action/abort']));
+
+            // Done, the badge goes.
+            act(() => useEventStore.setState({instanceMonitor: {}}));
+            expect(screen.queryByRole('button', {name: /Orchestration in progress/})).not.toBeInTheDocument();
+        });
+
         test('nothing selected, no action button: the help says how to select', async () => {
             await ready();
             const help = /Click on resources or on instances to select them/;
@@ -451,9 +478,9 @@ describe('ObjectStatus', () => {
                 await readyCluster(cluster(true));
                 expect(screen.getByRole('menuitem', {name: 'Freeze'})).toBeEnabled();
                 expect(screen.getByRole('menuitem', {name: 'Unfreeze'})).toBeEnabled();
-                pick('Abort');
-                confirm('abort');
-                await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/abort']));
+                pick('Unfreeze');
+                confirm('unfreeze');
+                await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/unfreeze']));
             });
         });
 

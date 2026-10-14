@@ -2,7 +2,6 @@ import {Link, useLocation} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import {SidebarIcon, UserIcon} from "../ui/icons";
 import {GlobalSearch} from "../app/GlobalSearch";
-import {setShortcutsHelp} from "../ui/lib/shortcuts";
 import {loadSearchIndex} from "./searchIndex";
 import {applyPanelUpdate} from "../app/panel-search";
 import {StateGlyph} from "../ui/components/StateGlyph";
@@ -221,18 +220,8 @@ const NavBar = ({sidebarOpen = false, onToggleSidebar, showSidebarToggle = false
 
                 {showSidebarToggle && (
                     <>
+                        {/* The shortcuts list opens with the "?" key: no button for it, which read as a help. */}
                         <GlobalSearch loadIndex={loadSearchIndex}/>
-                        {/* The shortcuts for whoever does not know "?" yet. */}
-                        <button
-                            type="button"
-                            aria-keyshortcuts="?"
-                            title={`${t("shortcuts.title")} (?)`}
-                            onClick={() => setShortcutsHelp(true)}
-                            className={`${HEADER_BUTTON} font-semibold`}
-                        >
-                            <span aria-hidden="true">?</span>
-                            <span className="sr-only">{t("shortcuts.title")}</span>
-                        </button>
                     </>
                 )}
 

@@ -206,7 +206,7 @@ const selectRow = (name) => {
 const rowCheckboxes = () => screen.getAllByRole('checkbox', {name: /^Select object /});
 
 const openActionsMenu = () =>
-    fireEvent.click(screen.getByRole('button', {name: /actions on selected objects/i}));
+    fireEvent.click(screen.getByRole('button', {name: 'Actions'}));
 
 const clickMenuItem = async (text) => {
     const menu = await screen.findByRole('menu');
@@ -230,8 +230,9 @@ const getFeedback = () =>
 const sortButton = (label) =>
     within(screen.getByRole('columnheader', {name: new RegExp(`^${label}`)})).getByRole('button');
 const clickHeader = (label) => fireEvent.click(sortButton(label));
+/** The names of the rows: the third cell, the second on a list of names only (configurations, users). */
 const objectNamesInOrder = () =>
-    screen.getAllByRole('row').slice(1).map((row) => rowCells(row)[2].textContent);
+    screen.getAllByRole('row').slice(1).map((row) => (rowCells(row).length === 2 ? rowCells(row)[1] : rowCells(row)[2]).textContent);
 
 const makeMany = (n) => {
     const objectStatus = {};
@@ -473,7 +474,7 @@ describe('Objects Component', () => {
         expect(within(menu).getByRole('menuitem', {name: 'Restart'}).querySelector('.text-state-down')).toBeNull();
     });
 
-    test('global actions menu disables actions not allowed for the selection', async () => {
+    test('a selection of configurations offers what applies to keys only: abort, delete, purge', async () => {
         setup({
             objectStatus: {
                 ...defaultState.objectStatus,
@@ -484,10 +485,7 @@ describe('Objects Component', () => {
         selectRow('test-ns/cfg/conf1');
         openActionsMenu();
         const menu = await screen.findByRole('menu');
-        const items = within(menu).getAllByRole('menuitem');
-        expect(items).toHaveLength(12);
-        expect(within(menu).getByRole('menuitem', {name: 'Start'})).toBeDisabled();
-        expect(within(menu).getByRole('menuitem', {name: 'Freeze'})).toBeDisabled();
+        expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Abort', 'Delete', 'Purge']);
         expect(within(menu).getByRole('menuitem', {name: 'Delete'})).toBeEnabled();
         expect(within(menu).getByRole('menuitem', {name: 'Abort'})).toBeEnabled();
     });
@@ -514,6 +512,24 @@ describe('Objects Component', () => {
             expect(screen.getByRole('tabpanel')).toContainElement(screen.getByRole('table', {name: 'Objects'}));
             expect(objectNamesInOrder()).not.toEqual(expect.arrayContaining([configs[0]]));
             expect(objectNamesInOrder()).not.toContain('test-ns/usr/usr1');
+        });
+
+        test.each(['configs', 'users'])('list=%s, held on all the nodes, shows their names only: no status, placement nor node column', async (tab) => {
+            setup({...mixed, objectInstanceStatus: {'test-ns/usr/usr1': {node1: {}}, 'test-ns/cfg/conf1': {node1: {}}}},
+                `?list=${tab}`, {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const table = screen.getByRole('table', {name: 'Objects'});
+            expect(within(table).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim())).toEqual(['', 'Object']);
+            for (const row of within(table).getAllByRole('row').slice(1)) {
+                expect(within(row).getAllByRole('cell')).toHaveLength(2);
+            }
+        });
+
+        test('the services keep their status, placement and node columns', async () => {
+            setup(mixed, '', {isWideScreen: true, isMobile: false});
+            await waitForLoad();
+            const headers = within(screen.getByRole('table', {name: 'Objects'})).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+            expect(headers.slice(1, 5)).toEqual(['Status', 'Object', 'Orchestrate', 'Topology']);
         });
 
         test('list=users shows the users alone', async () => {
@@ -1273,10 +1289,11 @@ describe('Objects Component', () => {
 
 
 
-    test('global actions disabled when none selected', async () => {
+    test('no actions while none is selected: a hint says how to get them', async () => {
         setup();
         await waitForLoad();
-        expect(screen.getByRole('button', {name: /actions on selected objects/i})).toBeDisabled();
+        expect(screen.queryByRole('button', {name: 'Actions'})).not.toBeInTheDocument();
+        expect(screen.getByText('Select objects to act on them')).toBeInTheDocument();
     });
 
     test('filters are always visible', async () => {

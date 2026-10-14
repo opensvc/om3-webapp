@@ -14,7 +14,8 @@ import {Button, IconButton} from "../ui/components/Button";
 import {MenuButton} from "../ui/components/MenuButton";
 import {Spinner} from "../ui/components/Spinner";
 import {CloseIcon, GearIcon} from "../ui/icons";
-import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, actionLabel} from "../constants/actions";
+import {INSTANCE_ACTIONS, OBJECT_ACTIONS, RESOURCE_ACTIONS, actionLabel, objectActionsFor} from "../constants/actions";
+import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
 import ActionDialogManager from "./ActionDialogManager";
 import ConsoleTerminal from "./ConsoleTerminal.jsx";
 import {CLEAR_ACTION, postAction, resourceActions} from "./objectActions";
@@ -56,7 +57,7 @@ const REFRESH_DELAY_MS = 300;
  * status for the frozen nodes and the agent versions. Read again on each event
  * about the object.
  */
-const ObjectStatus = ({path}) => {
+const ObjectStatus = ({path, onOrchestrationLogs}) => {
     const {t} = useTranslation();
     const [digest, setDigest] = useState(null);
     const [error, setError] = useState(null);
@@ -127,6 +128,15 @@ const ObjectStatus = ({path}) => {
         .filter(([key]) => key.endsWith(`:${path}`))
         .map(([key, m]) => `${key}=${m?.state}/${m?.global_expect}/${m?.local_expect}/${m?.updated_at}`)
         .join(","));
+    // The orchestration in progress, by the monitors of the instances: said as a
+    // string, for the selector to give the same value while it does not change.
+    const orchestration = useEventStore((s) => {
+        const {globalExpect, orchestrationId} = orchestrationOf(Object.entries(s.instanceMonitor ?? {})
+            .filter(([key]) => key.endsWith(`:${path}`))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, m]) => m));
+        return globalExpect === null ? "" : `${globalExpect} ${orchestrationId ?? ""}`;
+    });
     // The frozen nodes, for the cluster object alone (see NODE_EVENTS).
     const isCluster = parseObjectPath(path).kind === "ccfg";
     const frozenNodes = useEventStore((s) => (isCluster
@@ -317,8 +327,7 @@ const ObjectStatus = ({path}) => {
             label={t("statusBoard.actions.object")}
             align="end"
             disabled={running}
-            items={OBJECT_ACTIONS
-                .filter((a) => !a.kinds || a.kinds.includes(kind))
+            items={objectActionsFor(kind)
                 .map((a) => ({
                     key: a.name,
                     label: actionLabel(a.name),
@@ -326,6 +335,17 @@ const ObjectStatus = ({path}) => {
                     disabled: !isActionAllowedForSelection(a.name, [path]) || clusterIdle(a.name),
                     onSelect: () => ask(a.name),
                 }))}
+        />
+    );
+
+    const [globalExpect, orchestrationId] = orchestration === "" ? [null, null] : orchestration.split(" ");
+    const orchestrationBadge = (
+        <OrchestrationBadge
+            globalExpect={globalExpect}
+            orchestrationId={orchestrationId || null}
+            onLogs={onOrchestrationLogs}
+            onAbort={() => ask("abort")}
+            disabled={running}
         />
     );
 
@@ -418,10 +438,10 @@ const ObjectStatus = ({path}) => {
             {header.title !== null && header.actions !== null ? (
                 <>
                     {policies !== null && createPortal(policies, header.title)}
-                    {createPortal(objectMenu, header.actions)}
+                    {createPortal(<>{orchestrationBadge}{objectMenu}</>, header.actions)}
                 </>
             ) : (
-                <div className="flex items-center justify-between gap-2">{policies}{objectMenu}</div>
+                <div className="flex items-center justify-between gap-2">{policies}<span className="flex items-center gap-2">{orchestrationBadge}{objectMenu}</span></div>
             )}
             <StatusBoard
                 board={board}

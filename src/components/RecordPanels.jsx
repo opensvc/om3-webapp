@@ -11,6 +11,8 @@ import {ObjectResources, ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
 import NamespaceMetrics from "./NamespaceMetrics";
 import LogsViewer from "./LogsViewer";
+import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
+import {KEY_KINDS} from "../constants/actions";
 
 /*
  * The record panels, one per kind of record (`peek.ts`), as oc3 gives each object its
@@ -19,17 +21,18 @@ import LogsViewer from "./LogsViewer";
  * record (undefined: closed), the tab open and what changes it, and what closes it.
  */
 
-/** Kinds without instances to act on nor logs to read: their keys are the record. */
-const KEY_KINDS = ["cfg", "sec", "usr"];
-
-/** The logs of an instance on one of the nodes the object has instances on. */
-function InstanceLogs({path, nodes, node, onNodeChange}) {
+/**
+ * The logs of an instance on one of the nodes the object has instances on, or of
+ * one orchestration of it only.
+ */
+function InstanceLogs({path, nodes, node, onNodeChange, orchestration, onClearOrchestration}) {
     const {t} = useTranslation();
     const {namespace, kind, name} = parseObjectPath(path);
     if (nodes.length === 0) return <p className="py-4 text-center text-ink-muted">{t("panel.logs.noNode")}</p>;
     const shown = nodes.includes(node) ? node : nodes[0];
     return (
         <div className="flex h-[calc(100dvh-10rem)] flex-col gap-2">
+            <OrchestrationLogsFilter id={orchestration} onClear={onClearOrchestration}/>
             {nodes.length > 1 && (
                 <label className="flex items-center gap-2 text-ink-muted">
                     {t("common.node")}
@@ -40,13 +43,14 @@ function InstanceLogs({path, nodes, node, onNodeChange}) {
             )}
             <div className="min-h-0 flex-1">
                 <LogsViewer
-                    key={shown}
+                    key={`${shown}/${orchestration}`}
                     nodename={shown}
                     type="instance"
                     namespace={namespace}
                     kind={kind}
                     instanceName={name}
                     height="100%"
+                    filters={orchestration ? [`ORCHESTRATION_ID=${orchestration}`] : []}
                 />
             </div>
         </div>
@@ -59,7 +63,8 @@ function InstanceLogs({path, nodes, node, onNodeChange}) {
  * for it on each node (ObjectTabs), then the logs of its instances, then its
  * configuration (ObjectConfig).
  * A configuration, a secret or a user, which om shows no status of, shows its keys
- * (ObjectDetail), then its configuration, as a service does.
+ * (ObjectDetail), then its logs and its configuration, as a service does. The
+ * badge of an orchestration in progress opens the logs of that orchestration.
  */
 export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
@@ -69,7 +74,15 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const instances = useEventStore((s) => (path === undefined ? undefined : s.objectInstanceStatus[path]));
     const nodes = useMemo(() => Object.keys(instances ?? {}).sort(), [instances]);
     const [logsNode, setLogsNode] = useState(null);
-    useEffect(() => setLogsNode(null), [path]);
+    const [logsOrchestration, setLogsOrchestration] = useState(null);
+    useEffect(() => {
+        setLogsNode(null);
+        setLogsOrchestration(null);
+    }, [path]);
+    const showOrchestrationLogs = (id) => {
+        setLogsOrchestration(id);
+        onTabChange("logs");
+    };
 
     // An object deleted or purged, from the panel or anywhere else, leaves the
     // store: its panel closes. Only once it was seen there, for an object the store
@@ -90,6 +103,7 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
     const tabs = keysOnly
         ? [
             {key: "keys", label: t("panel.tabs.keys")},
+            {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
         ]
         : [
@@ -117,13 +131,14 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                     {/* Kept mounted under the other tabs: its stream and its state hold. */}
                     <div hidden={active !== tabs[0].key}>
                         {keysOnly
-                            ? <ObjectDetail key={path} path={path} embedded/>
-                            : <ObjectStatus key={path} path={path}/>}
+                            ? <ObjectDetail key={path} path={path} embedded onOrchestrationLogs={showOrchestrationLogs}/>
+                            : <ObjectStatus key={path} path={path} onOrchestrationLogs={showOrchestrationLogs}/>}
                     </div>
                     {active === "resources" && <ObjectResources key={path} path={path}/>}
                     {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
                     {active === "logs" && (
-                        <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}/>
+                        <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}
+                                      orchestration={logsOrchestration} onClearOrchestration={() => setLogsOrchestration(null)}/>
                     )}
                     {active === "config" && <ObjectConfig path={path}/>}
                 </>

@@ -10,8 +10,11 @@ import {getResponseErrorMessage} from "../services/api.jsx";
 import {NODE_ACTIONS, actionLabel} from "../constants/actions";
 import ActionDialogManager from "./ActionDialogManager";
 import LogsViewer from "./LogsViewer";
+import {ConfigText} from "./ConfigText";
 import {monitorMark} from "./NodeRow";
 import {MenuButton} from "../ui/components/MenuButton";
+import {OrchestrationBadge, orchestrationOf} from "./OrchestrationBadge";
+import {OrchestrationLogsFilter} from "./OrchestrationLogsFilter";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
 import {Button, IconButton} from "../ui/components/Button";
@@ -165,12 +168,15 @@ export const matches = (filter, ...values) => {
 /**
  * The actions on the node, in the title bar of its panel as oc3 places them: the
  * node actions of the Nodes view, each confirmed first. Freeze or unfreeze, by its
- * state.
+ * state. Abort is no action of the menu: the badge of the orchestration in progress
+ * offers it, with its logs.
  */
-function NodeActions({node, frozen, onFeedback}) {
+function NodeActions({node, frozen, monitor, onFeedback, onOrchestrationLogs}) {
     const {t} = useTranslation();
     const [pending, setPending] = useState(null);
+    const {globalExpect, orchestrationId} = orchestrationOf([monitor]);
     const items = NODE_ACTIONS
+        .filter(({name}) => name !== "abort")
         .filter(({name}) => !(name === "freeze" && frozen) && !(name === "unfreeze" && !frozen))
         .map(({name, icon, color}) => ({
             key: name,
@@ -202,6 +208,12 @@ function NodeActions({node, frozen, onFeedback}) {
 
     return (
         <>
+            <OrchestrationBadge
+                globalExpect={globalExpect}
+                orchestrationId={orchestrationId}
+                onLogs={onOrchestrationLogs}
+                onAbort={() => setPending({action: "abort", node})}
+            />
             <MenuButton
                 // The actions, as in oc3: a pill tinted with the accent, the gear of the actions.
                 prominent
@@ -225,7 +237,7 @@ function NodeActions({node, frozen, onFeedback}) {
  * The state of the node, as the Nodes view tells it and kept current by its events,
  * then its properties as the agent probed them (`om node system property`).
  */
-function NodeStatusTab({node}) {
+function NodeStatusTab({node, onOrchestrationLogs}) {
     const {t, i18n} = useTranslation();
     const status = useEventStore((s) => s.nodeStatus?.[node]);
     const monitor = useEventStore((s) => s.nodeMonitor?.[node]);
@@ -280,7 +292,8 @@ function NodeStatusTab({node}) {
     return (
         <div className="space-y-4">
             {header.actions !== null && createPortal(
-                <NodeActions node={node} frozen={frozen} onFeedback={setFeedback}/>,
+                <NodeActions node={node} frozen={frozen} monitor={monitor} onFeedback={setFeedback}
+                             onOrchestrationLogs={onOrchestrationLogs}/>,
                 header.actions,
             )}
             {feedback !== null && (
@@ -547,9 +560,8 @@ function NodeConfig({node}) {
             {saved && <Alert tone="success">{t("config.feedback.updated")}</Alert>}
             {error && <Alert tone="error">{error}</Alert>}
             <Loaded resource={file}>
-                <div className="overflow-x-auto rounded-(--radius-control) border border-line bg-surface-sunken p-2">
-                    <pre aria-label={t("nodePanel.config.file")} className="m-0 font-mono text-data whitespace-pre-wrap text-ink">{file.data}</pre>
-                </div>
+                <ConfigText text={file.data ?? ""} label={t("nodePanel.config.file")}
+                            keywordsUrl={nodeUrl(node, "config/keywords")} cacheKey="node"/>
             </Loaded>
         </div>
     );
@@ -617,6 +629,13 @@ function NodeDrivers({node}) {
 export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
     const {t} = useTranslation();
     const open = node !== undefined;
+    // The orchestration whose logs the badge asked for: the logs tab shows its only.
+    const [logsOrchestration, setLogsOrchestration] = useState(null);
+    useEffect(() => setLogsOrchestration(null), [node]);
+    const showOrchestrationLogs = (id) => {
+        setLogsOrchestration(id);
+        onTabChange("logs");
+    };
     const tabs = ["status", "inventory", "config", "schedules", "drivers", "logs"]
         .map((key) => ({key, label: t(`nodePanel.tabs.${key}`)}));
     return (
@@ -634,15 +653,24 @@ export function NodeDetailPanel({node, tab, onTabChange, onClose}) {
             {(active) => (
                 <>
                     <div hidden={active !== "status"}>
-                        <NodeStatusTab key={node} node={node}/>
+                        <NodeStatusTab key={node} node={node} onOrchestrationLogs={showOrchestrationLogs}/>
                     </div>
                     {active === "inventory" && <NodeInventory key={node} node={node}/>}
                     {active === "config" && <NodeConfig key={node} node={node}/>}
                     {active === "schedules" && <NodeSchedules key={node} node={node}/>}
                     {active === "drivers" && <NodeDrivers key={node} node={node}/>}
                     {active === "logs" && (
-                        <div className="h-[calc(100dvh-10rem)]">
-                            <LogsViewer key={node} nodename={node} type="node" height="100%"/>
+                        <div className="flex h-[calc(100dvh-10rem)] flex-col gap-2">
+                            <OrchestrationLogsFilter id={logsOrchestration} onClear={() => setLogsOrchestration(null)}/>
+                            <div className="min-h-0 flex-1">
+                                <LogsViewer
+                                    key={`${node}/${logsOrchestration}`}
+                                    nodename={node}
+                                    type="node"
+                                    height="100%"
+                                    filters={logsOrchestration ? [`ORCHESTRATION_ID=${logsOrchestration}`] : []}
+                                />
+                            </div>
                         </div>
                     )}
                 </>

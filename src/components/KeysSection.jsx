@@ -5,7 +5,7 @@ import {Field, Input, Textarea} from "../ui/components/Field";
 import {Table, HeaderRow, HeaderCell, Row, Cell} from "../ui/components/Table";
 import {Alert} from "../ui/components/Alert";
 import {Spinner} from "../ui/components/Spinner";
-import {EyeIcon, EyeOffIcon, FileIcon, KeyIcon, LockIcon, PencilIcon, PlusIcon, TrashIcon} from "../ui/icons";
+import {EyeIcon, EyeOffIcon, KeyIcon, LockIcon, PencilIcon, PlusIcon, TrashIcon} from "../ui/icons";
 import {useAutoHide} from "../ui/lib/reveal";
 import {URL_OBJECT} from "../config/apiPath.js";
 import {getResponseErrorMessage} from "../services/api.jsx";
@@ -551,7 +551,6 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     <thead>
                     <HeaderRow>
                         <HeaderCell>{t("common.name")}</HeaderCell>
-                        <HeaderCell>{t("common.node")}</HeaderCell>
                         <HeaderCell>{t("keys.size")}</HeaderCell>
                         <HeaderCell>{t("common.actions")}</HeaderCell>
                     </HeaderRow>
@@ -559,10 +558,9 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                     <tbody>
                     {safeKeys.map((key) => (
                         <Row key={key.name}>
-                            <th scope="row" className="px-2 py-1 text-center font-normal">
+                            <th scope="row" className="px-2 py-1 text-left font-normal">
                                 {key.name}
                             </th>
-                            <Cell>{key.node}</Cell>
                             <Cell numeric className="whitespace-nowrap">{t("keys.bytes", {size: key.size})}</Cell>
                             <Cell className="whitespace-nowrap">
                                 <IconButton
@@ -571,7 +569,7 @@ const KeysSection = ({decodedObjectName, openSnackbar}) => {
                                     onClick={() => handleViewKey(key.name)}
                                     disabled={actionLoading}
                                 >
-                                    <FileIcon/>
+                                    <EyeIcon/>
                                 </IconButton>
                                 <IconButton
                                     size="sm"

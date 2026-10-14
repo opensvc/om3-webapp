@@ -12,6 +12,10 @@ vi.mock('../ObjectDetails', () => ({
 }));
 vi.mock('../ObjectStatus', () => ({default: ({path}) => <div data-testid="object-status">{path}</div>}));
 vi.mock('../ObjectConfig', () => ({default: ({path}) => <div data-testid="object-config">{path}</div>}));
+vi.mock('../ObjectTabs', () => ({
+    ObjectResources: ({path}) => <div data-testid="object-resources">{path}</div>,
+    ObjectSchedules: ({path}) => <div data-testid="object-schedules">{path}</div>,
+}));
 vi.mock('../NetworkDetails', () => ({default: ({name}) => <div data-testid="network-details">{name}</div>}));
 vi.mock('../NamespaceMetrics', () => ({default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>}));
 vi.mock('../LogsViewer', () => ({
@@ -79,10 +83,11 @@ describe('record panels', () => {
         expect(openDialogs()).toHaveLength(1);
     });
 
-    test('a service opens on its status board, its logs and its configuration on tabs of their own', () => {
+    test('a service opens on its status board, its resources, schedules, logs and configuration on tabs of their own', () => {
         renderPeek('/nodes?peek=object:ns1/svc/web');
         const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
-        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Status', 'Logs', 'Configuration']);
+        expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Status', 'Resources', 'Schedules', 'Logs', 'Configuration']);
         expect(within(panel).getByRole('tab', {name: 'Status'})).toHaveAttribute('aria-selected', 'true');
         expect(within(panel).getByTestId('object-status')).toBeVisible();
         expect(within(panel).queryByTestId('object-details')).not.toBeInTheDocument();
@@ -92,6 +97,17 @@ describe('record panels', () => {
         expect(screen.getByTestId('search')).toHaveTextContent('peektab=config');
         expect(within(panel).getByTestId('object-config')).toHaveTextContent('ns1/svc/web');
         expect(within(panel).getByTestId('object-status')).not.toBeVisible();
+    });
+
+    test('the resources and the schedules of the object, a tab each', () => {
+        renderPeek('/nodes?peek=object:ns1/svc/web');
+        const panel = screen.getByRole('dialog', {name: 'ns1/svc/web'});
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Resources'}));
+        expect(screen.getByTestId('search')).toHaveTextContent('peektab=resources');
+        expect(within(panel).getByTestId('object-resources')).toHaveTextContent('ns1/svc/web');
+        fireEvent.click(within(panel).getByRole('tab', {name: 'Schedules'}));
+        expect(within(panel).getByTestId('object-schedules')).toHaveTextContent('ns1/svc/web');
+        expect(within(panel).queryByTestId('object-resources')).not.toBeInTheDocument();
     });
 
     test('the logs tab reads the logs of an instance, on the node chosen', () => {

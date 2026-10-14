@@ -414,7 +414,7 @@ describe('ObjectStatus', () => {
                 pick('Freeze');
                 const dialog = screen.getByRole('dialog', {name: /freeze/i});
                 fireEvent.click(within(dialog).getByRole('checkbox'));
-                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/cluster/action/freeze']));
                 expect(await screen.findByText('freeze on the cluster, on all its nodes: accepted')).toBeInTheDocument();
             });
@@ -431,7 +431,7 @@ describe('ObjectStatus', () => {
                 pick('Freeze');
                 const dialog = screen.getByRole('dialog', {name: /freeze/i});
                 fireEvent.click(within(dialog).getByRole('checkbox'));
-                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm'}));
+                fireEvent.click(within(dialog).getByRole('button', {name: 'Confirm freeze action'}));
                 await waitFor(() => expect(posted).toEqual(['POST /api/node/name/dev3n2/action/freeze']));
                 expect(await screen.findByText('freeze on dev3n2: accepted')).toBeInTheDocument();
             });

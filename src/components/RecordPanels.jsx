@@ -7,6 +7,7 @@ import {parseObjectPath} from "../utils/objectUtils.jsx";
 import ObjectDetail from "./ObjectDetails";
 import ObjectStatus from "./ObjectStatus";
 import ObjectConfig from "./ObjectConfig";
+import {ObjectResources, ObjectSchedules} from "./ObjectTabs";
 import NetworkDetails from "./NetworkDetails";
 import NamespaceMetrics from "./NamespaceMetrics";
 import LogsViewer from "./LogsViewer";
@@ -54,8 +55,9 @@ function InstanceLogs({path, nodes, node, onNodeChange}) {
 
 /**
  * An object. A service or a volume shows its status as `om <path> status` does, with
- * its actions (ObjectStatus), then the logs of its instances, then its configuration
- * (ObjectConfig).
+ * its actions (ObjectStatus), then what its resources report and the tasks scheduled
+ * for it on each node (ObjectTabs), then the logs of its instances, then its
+ * configuration (ObjectConfig).
  * A configuration, a secret or a user, which om shows no status of, shows its keys
  * (ObjectDetail), then its configuration, as a service does.
  */
@@ -92,6 +94,8 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
         ]
         : [
             {key: "status", label: t("panel.tabs.status")},
+            {key: "resources", label: t("panel.tabs.resources")},
+            {key: "schedules", label: t("panel.tabs.schedules")},
             {key: "logs", label: t("panel.tabs.logs")},
             {key: "config", label: t("panel.tabs.config")},
         ];
@@ -116,6 +120,8 @@ export function ObjectDetailPanel({path, tab, onTabChange, onClose}) {
                             ? <ObjectDetail key={path} path={path} embedded/>
                             : <ObjectStatus key={path} path={path}/>}
                     </div>
+                    {active === "resources" && <ObjectResources key={path} path={path}/>}
+                    {active === "schedules" && <ObjectSchedules key={path} path={path}/>}
                     {active === "logs" && (
                         <InstanceLogs path={path} nodes={nodes} node={logsNode} onNodeChange={setLogsNode}/>
                     )}

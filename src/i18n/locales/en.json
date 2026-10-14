@@ -791,6 +791,18 @@
       "daysAgo": "{{count}}d ago"
     }
   },
+  "objectTabs": {
+    "schedules": {
+      "filter": "Filter the schedules",
+      "none": "No task scheduled"
+    },
+    "resources": {
+      "filter": "Filter the resources",
+      "none": "No resource reports information",
+      "noMatch": "No resource matches the filter",
+      "key": "Key"
+    }
+  },
   "nodePanel": {
     "loading": "Reading",
     "loadError": "Could not read it: {{message}}",
@@ -1060,6 +1072,8 @@
     "tabs": {
       "status": "Status",
       "logs": "Logs",
+      "resources": "Resources",
+      "schedules": "Schedules",
       "keys": "Keys",
       "config": "Configuration"
     },

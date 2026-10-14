@@ -30,7 +30,7 @@ import {formatBytes, formatSizeMiB} from "../ui/lib/format";
  */
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
-const isSet = (time) => !!time && time !== ZERO_TIME;
+export const isSet = (time) => !!time && time !== ZERO_TIME;
 
 /** The events that keep the state of the nodes current, the Nodes view's. */
 const NODE_EVENTS = ["NodeStatusUpdated", "NodeMonitorUpdated", "NodeStatsUpdated"];
@@ -41,22 +41,27 @@ const PACKAGES_SHOWN = 200;
 const nodeUrl = (node, path) => `${URL_NODE}/${encodeURIComponent(node)}/${path}`;
 const authHeaders = () => ({Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`});
 
+/*
+ * The helpers of the tabs below are shared with the tabs of the object panel
+ * (ObjectTabs): a read endpoint, its table, its filter.
+ */
+
 /** Feedback tones, from the severities of the snackbar the views use. */
 const TONES = {info: "info", success: "success", warning: "warning", error: "error"};
 const ICON = "flex h-4 w-4 items-center justify-center text-ink-muted [&>svg]:h-4! [&>svg]:w-4!";
 const DANGER_ICON = "flex h-4 w-4 items-center justify-center text-state-down [&>svg]:h-4! [&>svg]:w-4!";
 
 /**
- * Reads an endpoint of the node: the JSON it answers, or its text with `text`.
+ * Reads an endpoint of the daemon: the JSON it answers, or its text with `text`.
  * `reload` reads it again.
  */
-function useNodeResource(node, path, {text = false} = {}) {
+export function useApiResource(url, {text = false} = {}) {
     const [state, setState] = useState({data: null, error: null, loading: true});
     const [version, setVersion] = useState(0);
     useEffect(() => {
         let cancelled = false;
         setState((previous) => ({...previous, loading: true, error: null}));
-        fetch(nodeUrl(node, path), {headers: authHeaders(), cache: "no-cache"})
+        fetch(url, {headers: authHeaders(), cache: "no-cache"})
             .then(async (response) => {
                 if (!response.ok) throw new Error((await getResponseErrorMessage(response)) || `HTTP ${response.status}`);
                 return text ? response.text() : response.json();
@@ -70,15 +75,18 @@ function useNodeResource(node, path, {text = false} = {}) {
         return () => {
             cancelled = true;
         };
-    }, [node, path, text, version]);
+    }, [url, text, version]);
     return {...state, reload: () => setVersion((v) => v + 1)};
 }
 
+/** Reads an endpoint of the node (`/api/node/name/{node}/…`). */
+const useNodeResource = (node, path, options) => useApiResource(nodeUrl(node, path), options);
+
 /** The records of a list the daemon answers: `items`, each one's `data` when it has one. */
-const itemsOf = (resource) => (resource.data?.items ?? []).map((item) => item?.data ?? item);
+export const itemsOf = (resource) => (resource.data?.items ?? []).map((item) => item?.data ?? item);
 
 /** A section of a tab: its title and how many it holds. */
-function Section({id, title, count, children, tools}) {
+export function Section({id, title, count, children, tools}) {
     return (
         <section aria-labelledby={id} className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -94,7 +102,7 @@ function Section({id, title, count, children, tools}) {
 }
 
 /** What a resource holds once read: a spinner while it is read, its error if it failed. */
-function Loaded({resource, children}) {
+export function Loaded({resource, children}) {
     const {t} = useTranslation();
     if (resource.loading && resource.data === null) return <Spinner label={t("nodePanel.loading")}/>;
     if (resource.error) return <Alert tone="error">{t("nodePanel.loadError", {message: resource.error})}</Alert>;
@@ -102,7 +110,7 @@ function Loaded({resource, children}) {
 }
 
 /** A plain table of records: a column per key, the empty text when there is none. */
-function DataTable({label, columns, rows, rowKey, empty}) {
+export function DataTable({label, columns, rows, rowKey, empty}) {
     const {t} = useTranslation();
     return (
         <Table aria-label={label}>
@@ -132,7 +140,7 @@ function DataTable({label, columns, rows, rowKey, empty}) {
  * the search icon and the clear button of the browser: a label longer in one
  * language than in another is never cut.
  */
-function FilterField({label, value, onChange}) {
+export function FilterField({label, value, onChange}) {
     return (
         <span className="relative ml-auto flex max-w-full items-center">
             <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-ink-muted"/>
@@ -149,7 +157,7 @@ function FilterField({label, value, onChange}) {
     );
 }
 
-const matches = (filter, ...values) => {
+export const matches = (filter, ...values) => {
     const q = filter.trim().toLowerCase();
     return q === "" || values.some((v) => String(v ?? "").toLowerCase().includes(q));
 };

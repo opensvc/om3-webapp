@@ -791,6 +791,18 @@
       "daysAgo": "il y a {{count}} j"
     }
   },
+  "objectTabs": {
+    "schedules": {
+      "filter": "Filtrer les planifications",
+      "none": "Aucune tâche planifiée"
+    },
+    "resources": {
+      "filter": "Filtrer les ressources",
+      "none": "Aucune ressource ne remonte d’information",
+      "noMatch": "Aucune ressource ne correspond au filtre",
+      "key": "Clé"
+    }
+  },
   "nodePanel": {
     "loading": "Lecture",
     "loadError": "Lecture impossible : {{message}}",
@@ -1060,6 +1072,8 @@
     "tabs": {
       "status": "État",
       "logs": "Journaux",
+      "resources": "Ressources",
+      "schedules": "Planifications",
       "keys": "Clés",
       "config": "Configuration"
     },

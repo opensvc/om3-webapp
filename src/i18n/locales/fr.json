@@ -647,27 +647,55 @@
     "footer": "Utilisation sur le nœud qui sert cette page, rafraîchie toutes les {{seconds}} secondes. Le CPU est en pourcentage d'un CPU."
   },
   "namespaces": {
-    "filterBy": "Filtrer par namespace",
-    "allOption": "tous",
     "columns": {
-      "namespace": "Namespace",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "na": "N/A",
-      "total": "Total",
-      "metrics": "Métriques"
+      "namespace": "Nom",
+      "services": "Services",
+      "volumes": "Volumes",
+      "sec": "Secrets",
+      "cfg": "Configs",
+      "pools": "Pools",
+      "nets": "Réseaux",
+      "cpu": "CPU",
+      "memory": "Mémoire"
     },
-    "showObjects_one": "Afficher {{count}} objet {{status}} de {{namespace}}",
-    "showObjects_other": "Afficher les {{count}} objets {{status}} de {{namespace}}",
     "viewMetrics": "Voir les métriques du namespace {{namespace}}",
-    "emptyFiltered": "Aucun namespace ne correspond au filtre sélectionné",
     "empty": "Aucun namespace disponible",
     "metricsTitle": "Métriques",
     "metricsOf": "Métriques de {{namespace}}",
     "resizeDrawer": "Redimensionner le panneau",
     "eventsLogger": "Journal des événements des namespaces",
-    "events": "Événements des namespaces"
+    "events": "Événements des namespaces",
+    "tableLabel": "Namespaces",
+    "show": {
+      "svc_one": "Afficher le service {{status}} de {{namespace}}",
+      "svc_other": "Afficher les {{count}} services {{status}} de {{namespace}}",
+      "vol_one": "Afficher le volume {{status}} de {{namespace}}",
+      "vol_other": "Afficher les {{count}} volumes {{status}} de {{namespace}}",
+      "sec_one": "Afficher le secret de {{namespace}}",
+      "sec_other": "Afficher les {{count}} secrets de {{namespace}}",
+      "cfg_one": "Afficher la configuration de {{namespace}}",
+      "cfg_other": "Afficher les {{count}} configurations de {{namespace}}"
+    },
+    "usage": {
+      "claimed": "{{name}} : {{used}} sur {{total}} réclamé ({{percent}})",
+      "unclaimed": "{{name}} : {{used}} sur {{total}}, sans réclamation ({{percent}})",
+      "error": "L'usage des pools et des réseaux n'a pas pu être lu : {{message}}",
+      "percentOf": "{{percent}} de {{total}}",
+      "free": "Libre",
+      "used": "Utilisé",
+      "total": "Total",
+      "cap": "Plafond",
+      "noClaim": "aucune réclamation"
+    },
+    "cpu": {
+      "trend": "CPU de {{namespace}}, 5 dernières minutes",
+      "count_one": "{{value}} cpu",
+      "count_other": "{{value}} cpus"
+    },
+    "memory": {
+      "used": "{{used}} utilisé",
+      "trend": "Mémoire de {{namespace}}, 5 dernières minutes"
+    }
   },
   "nav": {
     "openCluster": "Ouvrir le cluster",

@@ -2,435 +2,306 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor, act, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {vi} from 'vitest';
-import Namespaces, {areStatusDotPropsEqual} from '../Namespaces';
+import Namespaces from '../Namespaces';
+import useEventStore from '../../hooks/useEventStore';
 import i18n from '../../i18n';
 
-// ── Hoisted mock variables ──────────────────────────────────────────────
-const {
-    mockNavigate,
-    mockUseNavigate,
-    mockUseLocation,
-    mockRetainEventReception,
-    mockReleaseEventReception,
-    mockUseEventStore,
-    mockUseNamespaceData,
-} = vi.hoisted(() => ({
+const {mockNavigate, mockRetain, mockRelease} = vi.hoisted(() => ({
     mockNavigate: vi.fn(),
-    mockUseNavigate: vi.fn(() => mockNavigate),
-    mockUseLocation: vi.fn(() => ({pathname: '/namespaces', search: ''})),
-    mockRetainEventReception: vi.fn(),
-    mockReleaseEventReception: vi.fn(),
-    mockUseEventStore: vi.fn(),
-    mockUseNamespaceData: vi.fn(),
+    mockRetain: vi.fn(),
+    mockRelease: vi.fn(),
 }));
 
-// ── Mocks ───────────────────────────────────────────────────────────────
-vi.mock('react-router-dom', async (importOriginal) => {
-    const actual = await importOriginal();
-    return {
-        ...actual,
-        useNavigate: mockUseNavigate,
-        useLocation: mockUseLocation,
-    };
-});
-
-vi.mock('../../hooks/useEventStore.js', () => ({
-    __esModule: true,
-    default: mockUseEventStore,
+vi.mock('react-router-dom', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useNavigate: () => mockNavigate,
 }));
 
 vi.mock('../../eventSourceManager.jsx', () => ({
     retainEventReception: (...args) => {
-        mockRetainEventReception(...args);
-        return mockReleaseEventReception;
+        mockRetain(...args);
+        return mockRelease;
     },
-}));
-
-vi.mock('../../hooks/useNamespaceData', () => ({
-    useNamespaceData: mockUseNamespaceData,
+    startLoggerReception: vi.fn(),
+    closeLoggerEventSource: vi.fn(),
 }));
 
 vi.mock('../NamespaceMetrics', () => ({
     default: ({namespace}) => <div data-testid="namespace-metrics">{namespace}</div>,
 }));
 
-// ── Helpers ─────────────────────────────────────────────────────────────
-// The sort button of a column header (its arrow is hidden from the accessible name).
-const getHeaderCellFor = (columnName) => screen.getByRole('button', {name: columnName});
+const GiB = 1024 ** 3;
 
-const getColumnHeader = (columnName) =>
-    screen.getAllByRole('columnheader').find(th => within(th).queryByRole('button', {name: columnName}));
-
-const getBody = () => screen.getAllByRole('rowgroup')[1];
-
-const getBodyRows = () => within(getBody()).getAllByRole('row');
-
-const getCells = (row) => within(row).getAllByRole('cell');
-
-const getFilter = () => screen.getByRole('combobox', {name: /Filter by/i});
-
-const buildStatusByNamespace = (objectStatus) => {
-    const statusByNamespace = {};
-    Object.entries(objectStatus).forEach(([path, data]) => {
-        if (!path || !path.includes('/')) return;
-        const namespace = path.split('/')[0];
-        if (!namespace) return;
-        statusByNamespace[namespace] = statusByNamespace[namespace] || {up: 0, down: 0, warn: 0, 'n/a': 0};
-        const status = data?.avail;
-        const key = ['up', 'down', 'warn'].includes(status) ? status : 'n/a';
-        statusByNamespace[namespace][key]++;
-    });
-    return statusByNamespace;
+const OBJECTS = {
+    'prod/svc/web': {avail: 'up'},
+    'prod/svc/db': {avail: 'up'},
+    'prod/svc/api': {avail: 'down'},
+    'prod/vol/data': {avail: 'up'},
+    'prod/vol/cache': {avail: 'warn'},
+    'prod/sec/tls': {avail: 'n/a'},
+    'prod/cfg/app': {avail: 'n/a'},
+    'prod/cfg/env': {avail: 'n/a'},
+    'foo': {avail: 'warn'},
+    'cluster': {avail: 'n/a'},
+    'dev/svc/x': {avail: 'n/a'},
 };
 
-const defaultMockData = {
-    statusByNamespace: buildStatusByNamespace({
-        'root/svc/service1': {avail: 'up'},
-        'root/svc/service2': {avail: 'down'},
-        'prod/svc/service3': {avail: 'warn'},
-        'prod/svc/service4': {avail: 'up'},
-        'dev/svc/service5': {avail: 'up'},
-    }),
-    namespaces: ['root', 'prod', 'dev'],
+/** The claims of prod: 20 GiB of the default pool, 10 addresses, 8 cpus and 4 GiB of memory. */
+const PROD_NSCFG = `[DEFAULT]
+id = 1
+
+[claim#1]
+type = pool
+name = default
+limit = 20g
+
+[claim#2]
+type = network
+name = default
+limit = 10
+
+[claim#3]
+type = cpu
+limit = 800%
+
+[claim#4]
+type = memory
+limit = 4g
+limit@dev3n1 = 1g
+`;
+
+/** The cgroup metrics, the cpu counter growing between two readings. */
+const pg = (usec) => [
+    '# HELP opensvc_pg_cgroup_cpu_usage_usec cpu',
+    `opensvc_pg_cgroup_cpu_usage_usec{namespace="prod",path="prod/svc/web"} ${usec}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/web"} ${GiB / 2}`,
+    `opensvc_pg_cgroup_memory_current_bytes{namespace="prod",path="prod/svc/db"} ${GiB / 2}`,
+].join('\n');
+
+let pgReadings;
+
+const API = {
+    '/api/pool': {items: [{name: 'default', size: 100 * GiB}, {name: 'shm', size: 4 * GiB}]},
+    '/api/pool/volume': {items: [
+        {path: 'prod/vol/data', pool: 'default', size: 10 * GiB},
+        {path: 'prod/vol/cache', pool: 'shm', size: GiB},
+    ]},
+    '/api/network': {items: [{name: 'default', size: 65536}]},
+    '/api/network/ip': {items: [
+        // The same address on two nodes: one address taken.
+        {ip: '10.0.0.1', path: 'prod/svc/web', network: {name: 'default'}, node: 'n1'},
+        {ip: '10.0.0.1', path: 'prod/svc/web', network: {name: 'default'}, node: 'n2'},
+        {ip: '10.0.0.2', path: 'prod/svc/api', network: {name: 'default'}, node: 'n1'},
+    ]},
 };
 
-const sortingMockData = {
-    statusByNamespace: buildStatusByNamespace({
-        'alpha/svc/a': {avail: 'up'},
-        'alpha/svc/b': {avail: 'down'},
-        'alpha/svc/c': {avail: 'warn'},
-        'alpha/svc/d': {avail: 'n/a'},
-        'beta/svc/a': {avail: 'up'},
-        'beta/svc/b': {avail: 'up'},
-        'beta/svc/c': {avail: 'warn'},
-        'gamma/svc/a': {avail: 'down'},
-        'gamma/svc/b': {avail: 'down'},
-        'gamma/svc/c': {avail: 'warn'},
-        'gamma/svc/d': {avail: 'n/a'},
-        'delta/svc/a': {avail: 'up'},
-        'delta/svc/b': {avail: 'up'},
-        'delta/svc/c': {avail: 'up'},
-    }),
-    namespaces: ['alpha', 'beta', 'gamma', 'delta'],
-};
-
-function setup(overrides = {}) {
-    const {
-        pathname = '/namespaces',
-        search = '',
-        data = defaultMockData,
-        token = 'valid-token',
-    } = overrides;
-
+beforeEach(() => {
     vi.clearAllMocks();
-    Storage.prototype.getItem = vi.fn(() => token);
-    mockUseNavigate.mockReturnValue(mockNavigate);
-    mockUseLocation.mockReturnValue({pathname, search});
-    mockUseEventStore.mockImplementation((selector) => selector({objectStatus: {}}));
-    mockUseNamespaceData.mockReturnValue(data);
-}
+    localStorage.setItem('authToken', 'tok');
+    pgReadings = 0;
+    useEventStore.setState({objectStatus: structuredClone(OBJECTS)});
+    global.fetch = vi.fn(async (url) => {
+        if (url === '/metrics/pg') {
+            pgReadings += 1;
+            // Five seconds of cpu between two readings ten seconds apart: about half a cpu.
+            return new Response(pg(pgReadings * 5000000), {status: 200});
+        }
+        if (url === '/api/object/path/prod/nscfg/namespace/config/file') return new Response(PROD_NSCFG, {status: 200});
+        if (url.endsWith('/nscfg/namespace/config/file')) return new Response('{"detail":"not found"}', {status: 404});
+        const body = API[url];
+        return body
+            ? new Response(JSON.stringify(body), {status: 200, headers: {'Content-Type': 'application/json'}})
+            : new Response('{}', {status: 404});
+    });
+});
 
-function renderComponent() {
-    return render(
-        <MemoryRouter>
-            <Namespaces/>
-        </MemoryRouter>
-    );
-}
+afterEach(() => {
+    localStorage.clear();
+    vi.useRealTimers();
+});
 
-// ── Tests ───────────────────────────────────────────────────────────────
+const renderNamespaces = () => render(<MemoryRouter><Namespaces/></MemoryRouter>);
+const table = () => screen.getByRole('table', {name: 'Namespaces'});
+const bodyRows = () => within(table()).getAllByRole('row').slice(1);
+const names = () => bodyRows().map((r) => within(r).getAllByRole('cell')[0].textContent);
+const row = (name) => bodyRows().find((r) => within(r).getAllByRole('cell')[0].textContent === name);
+const cell = (name, column) => {
+    const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim());
+    return within(row(name)).getAllByRole('cell')[headers.indexOf(column)];
+};
+const loaded = () => waitFor(() => expect(cell('prod', 'Pools')).toHaveTextContent(' of '));
+/**
+ * The hover card of a cell, opened from the keyboard: its figures, label then value,
+ * and its notes; closed again once read, unless `keepOpen`.
+ */
+const cardOf = (element, {keepOpen = false} = {}) => {
+    fireEvent.focus(element);
+    const card = screen.getByRole('tooltip');
+    const read = {
+        card,
+        figures: Object.fromEntries([...card.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])),
+        notes: [...card.querySelectorAll('li')].map((li) => li.textContent),
+    };
+    if (!keepOpen) fireEvent.blur(element);
+    return read;
+};
+
 describe('Namespaces', () => {
-    beforeEach(() => setup());
+    test('the columns: name, services, volumes, secrets, configs, pools, networks, cpu, memory', async () => {
+        renderNamespaces();
+        expect(within(table()).getAllByRole('columnheader').map((h) => h.textContent.replace(/[▲▼]/g, '').trim()))
+            .toEqual(['Name', 'Services', 'Volumes', 'Secrets', 'Configs', 'Pools', 'Networks', 'CPU', 'Memory']);
+        expect(names()).toEqual(['dev', 'prod', 'root']);
+        await loaded();
+    });
 
-    test('renders table with headers', () => {
-        renderComponent();
-        expect(screen.getByRole('table')).toBeInTheDocument();
-        ['Namespace', 'Up', 'Down', 'Warn', 'N/A', 'Total'].forEach(text =>
-            expect(screen.getByRole('columnheader', {name: text})).toBeInTheDocument()
-        );
+    test('the services and volumes by availability, a pill in its tint each; secrets and configs in grey', async () => {
+        renderNamespaces();
+        const services = within(cell('prod', 'Services')).getAllByRole('button');
+        expect(services.map((b) => [b.textContent, b.dataset.tone])).toEqual([['2', 'up'], ['1', 'down']]);
+        expect(services[0]).toHaveClass('border-state-up', 'text-state-up');
+        expect(services[0]).toHaveAccessibleName('Show the 2 up services of prod');
+        expect(within(cell('prod', 'Volumes')).getAllByRole('button').map((b) => [b.textContent, b.dataset.tone]))
+            .toEqual([['1', 'up'], ['1', 'warn']]);
+        const secrets = within(cell('prod', 'Secrets')).getByRole('button');
+        expect([secrets.textContent, secrets.dataset.tone]).toEqual(['1', 'neutral']);
+        expect(secrets).toHaveClass('border-line', 'text-ink-muted');
+        expect(within(cell('prod', 'Configs')).getByRole('button')).toHaveTextContent('2');
+        // The cluster object is no service, no volume, no secret, no configuration.
+        expect(within(cell('root', 'Services')).getByRole('button')).toHaveAccessibleName('Show the 1 warn service of root');
+        expect(cell('root', 'Configs')).toHaveTextContent('–');
+        await loaded();
+    });
+
+    test('a pill opens the objects it counts, on their tab; the row, every object of the namespace', async () => {
+        renderNamespaces();
+        fireEvent.click(within(cell('prod', 'Services')).getByRole('button', {name: /down/}));
+        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&globalState=down');
+        fireEvent.click(within(cell('prod', 'Volumes')).getByRole('button', {name: /warn/}));
+        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&list=volumes&globalState=warn');
+        fireEvent.click(within(cell('prod', 'Secrets')).getByRole('button'));
+        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&list=secrets');
+        fireEvent.click(within(cell('prod', 'Configs')).getByRole('button'));
+        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod&list=configs');
+        fireEvent.click(cell('prod', 'Name'));
+        expect(mockNavigate).toHaveBeenLastCalledWith('/objects?namespace=prod');
+        await loaded();
+    });
+
+    test('the pools: free, used and total out of the claim, else the pool size, a segment per pool', async () => {
+        renderNamespaces();
+        await loaded();
+        // default: 10 GiB of a 20 GiB claim; shm, claimed of by nothing: 1 GiB of its 4 GiB.
+        expect(cell('prod', 'Pools')).toHaveTextContent('46% of 24 GiB');
+        const bar = within(cell('prod', 'Pools')).getByRole('img');
+        expect(bar).toHaveAccessibleName('Pools: default: 10 GiB of 20 GiB claimed (50%), shm: 1 GiB of 4 GiB, no claim (25%)');
+        // The figures behind it in its hover card, reached from the keyboard too.
+        const target = cell('prod', 'Pools').querySelector('[tabindex="0"]');
+        const {card, figures, notes} = cardOf(target, {keepOpen: true});
+        expect(figures).toEqual({Free: '13 GiB', Used: '11 GiB', Total: '24 GiB'});
+        expect(notes).toEqual(['default: 10 GiB of 20 GiB claimed (50%)', 'shm: 1 GiB of 4 GiB, no claim (25%)']);
+        expect(target).toHaveAttribute('aria-describedby', card.id);
+        fireEvent.blur(target);
+        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+        expect([...bar.querySelectorAll('[data-segment]')].map((s) => [s.dataset.segment, s.style.width]))
+            .toEqual([['default', `${(10 / 24) * 100}%`], ['shm', `${(1 / 24) * 100}%`]]);
+        expect(cell('dev', 'Pools')).toHaveTextContent('–');
+    });
+
+    test('the networks: the addresses held, each once, out of the claim', async () => {
+        renderNamespaces();
+        await loaded();
+        expect(cell('prod', 'Networks')).toHaveTextContent('20% of 10');
+        expect(within(cell('prod', 'Networks')).getByRole('img')).toHaveAccessibleName('Networks: default: 2 of 10 claimed (20%)');
+        expect(cardOf(cell('prod', 'Networks').querySelector('[tabindex="0"]')).figures).toEqual({Free: '8', Used: '2', Total: '10'});
+        expect(cell('dev', 'Networks')).toHaveTextContent('–');
+    });
+
+    test('the cpu used of the claimed cap and the memory free, used and capped, a sparkline each', async () => {
+        vi.useFakeTimers({shouldAdvanceTime: true});
+        renderNamespaces();
+        await loaded();
+        // The memory on the first reading; a cpu rate needs a second one.
+        await waitFor(() => expect(cell('prod', 'Memory')).toHaveTextContent('25% of 4 GiB'));
+        expect(cardOf(within(cell('prod', 'Memory')).getByRole('button')).figures).toEqual({Used: '1 GiB', Cap: '4 GiB', Free: '3 GiB'});
+        expect(cell('prod', 'CPU')).toHaveTextContent('– of 8 cpus');
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10000);
+        });
+        // About half a cpu of 8.
+        await waitFor(() => expect(cell('prod', 'CPU')).toHaveTextContent(/^\d+% of 8 cpus/));
+        const sparkline = within(cell('prod', 'Memory')).getByRole('img', {name: 'Memory of prod, last 5 minutes'});
+        expect(sparkline.querySelector('polyline')).not.toBeNull();
+        // No claim: the memory used alone, no cap.
+        expect(cell('dev', 'Memory')).toHaveTextContent('– used');
+        expect(cell('dev', 'CPU')).toHaveTextContent(/^–/);
+        expect(cardOf(within(cell('dev', 'CPU')).getByRole('button')).figures).toEqual({Used: '–', Cap: 'no claim'});
+    });
+
+    test('the cpu or memory opens the usage of the namespace by object, not its objects', async () => {
+        renderNamespaces();
+        await loaded();
+        fireEvent.click(within(cell('prod', 'CPU')).getByRole('button', {name: 'View metrics for namespace prod'}));
+        expect(screen.getByTestId('namespace-metrics')).toHaveTextContent('prod');
+        expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    test('sorted by a column, ties in the order of the names', async () => {
+        renderNamespaces();
+        await loaded();
+        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
+        expect(names()).toEqual(['dev', 'root', 'prod']);
+        fireEvent.click(screen.getByRole('button', {name: 'Services'}));
+        expect(names()).toEqual(['prod', 'dev', 'root']);
+    });
+
+    test('reads the claims of each namespace, a namespace without nscfg claiming nothing', async () => {
+        renderNamespaces();
+        await loaded();
+        const read = global.fetch.mock.calls.map(([url]) => url).filter((url) => url.includes('/nscfg/'));
+        expect([...new Set(read)].sort()).toEqual([
+            '/api/object/path/dev/nscfg/namespace/config/file',
+            '/api/object/path/prod/nscfg/namespace/config/file',
+            '/api/object/path/root/nscfg/namespace/config/file',
+        ]);
+    });
+
+    test('pages the namespaces, 50 a page, as oc3 does', async () => {
+        const many = {};
+        for (let i = 0; i < 60; i++) many[`ns${String(i).padStart(2, '0')}/svc/s`] = {avail: 'up'};
+        useEventStore.setState({objectStatus: many});
+        renderNamespaces();
+        expect(bodyRows()).toHaveLength(50);
+        fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+        expect(bodyRows()).toHaveLength(10);
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/pool', expect.anything()));
+    });
+
+    test('no namespace: says so', async () => {
+        useEventStore.setState({objectStatus: {}});
+        renderNamespaces();
+        expect(screen.getByTestId('no-namespaces-message')).toHaveTextContent('No namespaces available');
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/pool', expect.anything()));
     });
 
     test('speaks French to a French browser', async () => {
         await i18n.changeLanguage('fr');
         try {
-            renderComponent();
-            expect(screen.getByRole('columnheader', {name: 'Namespace'})).toBeInTheDocument();
-            expect(screen.getByRole('columnheader', {name: 'Métriques'})).toBeInTheDocument();
-            expect(screen.getByLabelText('Filtrer par namespace')).toBeInTheDocument();
+            renderNamespaces();
+            expect(screen.getByRole('button', {name: 'Réseaux'})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: 'Mémoire'})).toBeInTheDocument();
+            expect(screen.getByLabelText('Par page')).toBeInTheDocument();
+            await waitFor(() => expect(cell('prod', 'Réseaux')).toHaveTextContent(/^20\s%\sde 10/));
         } finally {
             await i18n.changeLanguage('en');
         }
     });
 
-    test('displays namespace counts correctly', () => {
-        renderComponent();
-        const rootRow = screen.getByRole('row', {name: /root/i});
-        const cells = getCells(rootRow);
-        expect(cells[0]).toHaveTextContent('root');
-        expect(cells[1]).toHaveTextContent('1');
-        expect(cells[2]).toHaveTextContent('1');
-        expect(cells[3]).toHaveTextContent('0');
-        expect(cells[4]).toHaveTextContent('0');
-        expect(cells[5]).toHaveTextContent('2');
-    });
-
-    test('shows status marks by state', () => {
-        renderComponent();
-        const rootRow = screen.getByRole('row', {name: /root/i});
-        const marks = rootRow.querySelectorAll('[data-state]');
-        expect([...marks].map(mark => mark.getAttribute('data-state'))).toEqual(['up', 'down', 'warn', 'na']);
-        expect(marks[0]).toHaveTextContent('up');
-        expect(marks[1]).toHaveTextContent('down');
-        expect(marks[2]).toHaveTextContent('warn');
-        expect(marks[3]).toHaveTextContent('n/a');
-        expect(marks[0]).toHaveClass('text-state-up');
-        expect(marks[1]).toHaveClass('text-state-down');
-        expect(marks[2]).toHaveClass('text-state-warn');
-        expect(marks[3]).toHaveClass('text-state-unknown');
-    });
-
-    test('navigates to objects on row click', () => {
-        renderComponent();
-        fireEvent.click(screen.getByRole('row', {name: /root/i}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
-    });
-
-    test('navigates to objects on row Enter key', () => {
-        renderComponent();
-        fireEvent.keyDown(screen.getByRole('row', {name: /root/i}), {key: 'Enter'});
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root');
-    });
-
-    test('navigates with up status on count click', () => {
-        renderComponent();
-        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 up object of root'}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=up');
-        // the click does not reach the row
-        expect(mockNavigate).toHaveBeenCalledTimes(1);
-    });
-
-    test('navigates with down status', () => {
-        renderComponent();
-        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 down object of root'}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=down');
-        expect(mockNavigate).toHaveBeenCalledTimes(1);
-    });
-
-    test('navigates with warn status', () => {
-        renderComponent();
-        fireEvent.click(screen.getByRole('button', {name: 'Show the 1 warn object of prod'}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=prod&globalState=warn');
-        expect(mockNavigate).toHaveBeenCalledTimes(1);
-    });
-
-    test('navigates with n/a status', () => {
-        renderComponent();
-        fireEvent.click(screen.getByRole('button', {name: 'Show the 0 n/a objects of root'}));
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?namespace=root&globalState=n/a');
-        expect(mockNavigate).toHaveBeenCalledTimes(1);
-    });
-
-    test('starts event reception on mount with token', async () => {
-        renderComponent();
-        await waitFor(() => {
-            expect(mockRetainEventReception).toHaveBeenCalledWith(
-                'valid-token',
-                ['ObjectStatusUpdated', 'InstanceStatusUpdated', 'ObjectDeleted', 'InstanceConfigUpdated']
-            );
-        });
-    });
-
-    test('closes event source on unmount', async () => {
-        const {unmount} = renderComponent();
-        await act(() => unmount());
-        expect(mockReleaseEventReception).toHaveBeenCalled();
-    });
-
-    test('does not start event reception without token', () => {
-        setup({token: null});
-        renderComponent();
-        expect(mockRetainEventReception).not.toHaveBeenCalled();
-    });
-
-    test('shows no namespaces message when empty', () => {
-        setup({data: {statusByNamespace: {}, namespaces: []}});
-        renderComponent();
-        expect(screen.getByTestId('no-namespaces-message')).toHaveTextContent('No namespaces available');
-    });
-
-    test('shows filter mismatch message', () => {
-        setup({data: {statusByNamespace: {}, namespaces: []}, search: '?namespace=nonexistent'});
-        renderComponent();
-        expect(screen.getByTestId('no-namespaces-message')).toHaveTextContent('No namespaces match the selected filter');
-        expect(getFilter()).toHaveValue('nonexistent');
-    });
-
-    test('lists all and every namespace in the filter', () => {
-        renderComponent();
-        const options = within(getFilter()).getAllByRole('option').map(option => option.value);
-        expect(options).toEqual(['all', 'root', 'prod', 'dev']);
-    });
-
-    test('filters by namespace via the select', () => {
-        renderComponent();
-        fireEvent.change(getFilter(), {target: {value: 'prod'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces&namespace=prod');
-        expect(getBodyRows()).toHaveLength(1);
-        expect(screen.getByRole('row', {name: /prod/i})).toBeInTheDocument();
-    });
-
-    test('resets to all when selecting all', () => {
-        setup({search: '?namespace=prod'});
-        renderComponent();
-        fireEvent.change(getFilter(), {target: {value: 'all'}});
-        expect(mockNavigate).toHaveBeenCalledWith('/objects?list=namespaces');
-    });
-
-    test('reads initial namespace from URL', () => {
-        setup({search: '?namespace=prod'});
-        renderComponent();
-        expect(getFilter()).toHaveValue('prod');
-        expect(getBodyRows()).toHaveLength(1);
-    });
-
-    test('handles empty namespace parameter in URL', () => {
-        setup({search: '?namespace='});
-        renderComponent();
-        expect(getFilter()).toHaveValue('all');
-    });
-
-    test('clicking different column resets direction', () => {
-        renderComponent();
-        fireEvent.click(getHeaderCellFor('Up'));
-        fireEvent.click(getHeaderCellFor('Up'));
-        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'descending');
-        fireEvent.click(getHeaderCellFor('Down'));
-        expect(getColumnHeader('Down')).toHaveAttribute('aria-sort', 'ascending');
-        expect(getColumnHeader('Up')).toHaveAttribute('aria-sort', 'none');
-    });
-
-    test('marks the namespace column sorted ascending by default', () => {
-        renderComponent();
-        expect(getColumnHeader('Namespace')).toHaveAttribute('aria-sort', 'ascending');
-    });
-
-    describe('sorting order verification', () => {
-        beforeEach(() => {
-            setup({data: sortingMockData});
-            renderComponent();
-        });
-
-        const getNamespaceNames = () => {
-            const rows = getBodyRows();
-            return rows.map(row => within(row).getAllByRole('cell')[0].textContent);
-        };
-
-        test('default sort by namespace ascending', async () => {
-            await waitFor(() => expect(getNamespaceNames()).toEqual(['alpha', 'beta', 'delta', 'gamma']));
-        });
-
-        test('sort by Up ascending', async () => {
-            fireEvent.click(getHeaderCellFor('Up'));
-            await waitFor(() => expect(getNamespaceNames()).toEqual(['gamma', 'alpha', 'beta', 'delta']));
-        });
-
-        test('sort by Down ascending', async () => {
-            fireEvent.click(getHeaderCellFor('Down'));
-            await waitFor(() => expect(getNamespaceNames()).toEqual(['beta', 'delta', 'alpha', 'gamma']));
-        });
-
-        test('sort by Warn ascending', async () => {
-            fireEvent.click(getHeaderCellFor('Warn'));
-            await waitFor(() => {
-                const names = getNamespaceNames();
-                expect(names[0]).toBe('delta');
-            });
-        });
-
-        test('sort by N/A ascending', async () => {
-            fireEvent.click(getHeaderCellFor('N/A'));
-            await waitFor(() => {
-                const names = getNamespaceNames();
-                expect(names[0]).toBe('beta');
-                expect(names[1]).toBe('delta');
-            });
-        });
-
-        test('sort by Total ascending', async () => {
-            fireEvent.click(getHeaderCellFor('Total'));
-            await waitFor(() => expect(getNamespaceNames()).toEqual(['beta', 'delta', 'alpha', 'gamma']));
-        });
-
-        test('sort by Namespace descending', async () => {
-            fireEvent.click(getHeaderCellFor('Namespace'));
-            await waitFor(() => expect(getNamespaceNames()).toEqual(['gamma', 'delta', 'beta', 'alpha']));
-        });
-    });
-
-    describe('pages', () => {
-        function generateLargeData(count) {
-            const obj = {};
-            for (let i = 0; i < count; i++) obj[`ns${i}/svc/svc`] = {avail: 'up'};
-            const status = buildStatusByNamespace(obj);
-            return {statusByNamespace: status, namespaces: Object.keys(status)};
-        }
-
-        test('pages the namespaces, 50 a page, as oc3 does: the next page, another size', () => {
-            setup({data: generateLargeData(60)});
-            renderComponent();
-            expect(getBodyRows()).toHaveLength(50);
-            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
-
-            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-            expect(getBodyRows()).toHaveLength(10);
-
-            fireEvent.change(screen.getByLabelText('Per page'), {target: {value: '25'}});
-            expect(getBodyRows()).toHaveLength(25);
-            expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
-        });
-
-        test('sorted again, the list starts over from its first page', () => {
-            setup({data: generateLargeData(60)});
-            renderComponent();
-            fireEvent.click(screen.getByRole('button', {name: 'Next'}));
-            expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
-            fireEvent.click(screen.getByRole('button', {name: /Total/}));
-            expect(screen.getByText('1–50 of 60')).toBeInTheDocument();
-        });
-    });
-
-    test('handles unknown status by showing N/A count', () => {
-        const data = buildStatusByNamespace({'ns/svc': {avail: 'unknown'}});
-        setup({data: {statusByNamespace: data, namespaces: Object.keys(data)}});
-        renderComponent();
-        const cells = getCells(getBodyRows()[0]);
-        expect(cells[4]).toHaveTextContent('1');
-    });
-
-    test('opens the metrics of a namespace without opening its objects', () => {
-        renderComponent();
-        expect(screen.getByRole('columnheader', {name: 'Metrics'})).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: 'View metrics for namespace prod'}));
-        expect(screen.getByTestId('namespace-metrics')).toHaveTextContent('prod');
-        expect(screen.getByRole('dialog', {name: 'Metrics of prod'})).toBeInTheDocument();
-        expect(mockNavigate).not.toHaveBeenCalled();
-    });
-
-    test('labels the namespace filter', () => {
-        renderComponent();
-        expect(screen.getByText('Filter by namespace')).toBeInTheDocument();
-        expect(getFilter()).toBeInTheDocument();
-    });
-});
-
-describe('areStatusDotPropsEqual', () => {
-    test('returns true when status and count are equal', () => {
-        expect(areStatusDotPropsEqual({status: 'up', count: 3}, {status: 'up', count: 3})).toBe(true);
-    });
-    test('returns false when status differs', () => {
-        expect(areStatusDotPropsEqual({status: 'up', count: 3}, {status: 'down', count: 3})).toBe(false);
-    });
-    test('returns false when count differs', () => {
-        expect(areStatusDotPropsEqual({status: 'up', count: 3}, {status: 'up', count: 5})).toBe(false);
+    test('keeps the events of the objects coming while shown', async () => {
+        const {unmount} = renderNamespaces();
+        expect(mockRetain).toHaveBeenCalledWith('tok', expect.arrayContaining(['ObjectStatusUpdated', 'ObjectDeleted']));
+        await loaded();
+        unmount();
+        expect(mockRelease).toHaveBeenCalled();
     });
 });

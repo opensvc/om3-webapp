@@ -647,27 +647,55 @@
     "footer": "Usage on the node serving this page, refreshed every {{seconds}} seconds. CPU is in percent of one CPU."
   },
   "namespaces": {
-    "filterBy": "Filter by namespace",
-    "allOption": "all",
     "columns": {
-      "namespace": "Namespace",
-      "up": "Up",
-      "down": "Down",
-      "warn": "Warn",
-      "na": "N/A",
-      "total": "Total",
-      "metrics": "Metrics"
+      "namespace": "Name",
+      "services": "Services",
+      "volumes": "Volumes",
+      "sec": "Secrets",
+      "cfg": "Configs",
+      "pools": "Pools",
+      "nets": "Networks",
+      "cpu": "CPU",
+      "memory": "Memory"
     },
-    "showObjects_one": "Show the {{count}} {{status}} object of {{namespace}}",
-    "showObjects_other": "Show the {{count}} {{status}} objects of {{namespace}}",
     "viewMetrics": "View metrics for namespace {{namespace}}",
-    "emptyFiltered": "No namespaces match the selected filter",
     "empty": "No namespaces available",
     "metricsTitle": "Metrics",
     "metricsOf": "Metrics of {{namespace}}",
     "resizeDrawer": "Resize drawer",
     "eventsLogger": "Namespaces Events Logger",
-    "events": "Namespace Events"
+    "events": "Namespace Events",
+    "tableLabel": "Namespaces",
+    "show": {
+      "svc_one": "Show the {{count}} {{status}} service of {{namespace}}",
+      "svc_other": "Show the {{count}} {{status}} services of {{namespace}}",
+      "vol_one": "Show the {{count}} {{status}} volume of {{namespace}}",
+      "vol_other": "Show the {{count}} {{status}} volumes of {{namespace}}",
+      "sec_one": "Show the {{count}} secret of {{namespace}}",
+      "sec_other": "Show the {{count}} secrets of {{namespace}}",
+      "cfg_one": "Show the {{count}} configuration of {{namespace}}",
+      "cfg_other": "Show the {{count}} configurations of {{namespace}}"
+    },
+    "usage": {
+      "claimed": "{{name}}: {{used}} of {{total}} claimed ({{percent}})",
+      "unclaimed": "{{name}}: {{used}} of {{total}}, no claim ({{percent}})",
+      "error": "Pool and network usage could not be read: {{message}}",
+      "percentOf": "{{percent}} of {{total}}",
+      "free": "Free",
+      "used": "Used",
+      "total": "Total",
+      "cap": "Cap",
+      "noClaim": "no claim"
+    },
+    "cpu": {
+      "trend": "CPU of {{namespace}}, last 5 minutes",
+      "count_one": "{{value}} cpu",
+      "count_other": "{{value}} cpus"
+    },
+    "memory": {
+      "used": "{{used}} used",
+      "trend": "Memory of {{namespace}}, last 5 minutes"
+    }
   },
   "nav": {
     "openCluster": "Open the cluster",

@@ -3,7 +3,6 @@ import {Routes, Route, Navigate, useNavigate, useLocation, useParams} from "reac
 import {useTranslation} from "react-i18next";
 import OidcCallback from "./OidcCallback";
 import SilentRenew from "./SilentRenew.jsx";
-import {attachOidcSession, isSessionGone, renewOidcSession} from "../context/oidcSession.js";
 import AuthChoice from "./AuthChoice.jsx";
 import Login from "./Login.jsx";
 import '../styles/main.css';
@@ -105,9 +104,16 @@ const OidcInitializer = ({children, authInfo}) => {
     const navigate = useNavigate();
     const resumeCheckTimer = useRef(null); // debounce timer
 
-    // The provider ended the session: sign in again. A token expired or a renewal
-    // failing for a network blip is not that (oidcSession).
-    const handleSignedOut = useCallback(() => {
+    const handleTokenExpired = useCallback(() => {
+        logger.warn('Access token expired, redirecting to /ui/auth-choice');
+        authDispatch?.({type: SetAccessToken, data: null});
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenExpiration');
+        navigate('/auth-choice', {replace: true});
+    }, [authDispatch, navigate]);
+
+    const handleSilentRenewError = useCallback((error) => {
+        logger.error('Silent renew failed:', error);
         authDispatch?.({type: SetAccessToken, data: null});
         localStorage.removeItem('authToken');
         localStorage.removeItem('tokenExpiration');
@@ -140,32 +146,42 @@ const OidcInitializer = ({children, authInfo}) => {
         init().catch((err) => logger.error("OIDC init error:", err));
     }, [authInfo, isInitialized, auth.authChoice, authDispatch, recreateUserManager]);
 
-    // The session kept alive in one place (oidcSession): renewed, its renewal
-    // tried again after a transient failure, ended only by the provider.
     useEffect(() => {
-        if (!userManager || auth.authChoice !== 'openid') return undefined;
-        logger.info("Attaching the OpenID session");
-        const detach = attachOidcSession(userManager, {onUser: onUserRefreshed, onSignedOut: handleSignedOut});
-        const signedIn = (user) => {
-            onUserRefreshed(user);
-            authDispatch?.({type: LoginAction, data: user.profile.preferred_username});
-        };
-        userManager.getUser().then(user => {
-            if (user && !user.expired) {
-                logger.info("Found existing valid user:", user.profile?.preferred_username);
-                signedIn(user);
-            } else if (user) {
-                logger.debug("Found expired user, renewing the session");
-                renewOidcSession(userManager).then(signedIn).catch((error) => {
-                    if (isSessionGone(error)) handleSignedOut();
-                    else logger.warn("Session renewal failed, kept for a retry:", error?.message ?? error);
-                });
-            }
-        }).catch(err => {
-            logger.error("Error getting user:", err);
-        });
-        return detach;
-    }, [userManager, auth.authChoice, authDispatch, handleSignedOut, onUserRefreshed]);
+        if (userManager && auth.authChoice === 'openid') {
+            logger.info("Setting up OIDC event listeners");
+            userManager.events.removeUserLoaded(onUserRefreshed);
+            userManager.events.removeAccessTokenExpired(handleTokenExpired);
+            userManager.events.removeSilentRenewError(handleSilentRenewError);
+            userManager.events.addUserLoaded(onUserRefreshed);
+            userManager.events.addAccessTokenExpiring(() => {
+                logger.debug('Access token is about to expire, attempting silent renew...');
+            });
+            userManager.events.addAccessTokenExpired(handleTokenExpired);
+            userManager.events.addSilentRenewError(handleSilentRenewError);
+            userManager.getUser().then(user => {
+                if (user && !user.expired) {
+                    logger.info("Found existing valid user:", user.profile?.preferred_username);
+                    onUserRefreshed(user);
+                    authDispatch?.({type: LoginAction, data: user.profile.preferred_username});
+                } else if (user && user.expired) {
+                    logger.debug("Found expired user, will attempt silent renew");
+                    userManager.signinSilent().then(refreshedUser => {
+                        if (refreshedUser && !refreshedUser.expired) {
+                            logger.info("Silent renew succeeded for:", refreshedUser.profile?.preferred_username);
+                            onUserRefreshed(refreshedUser);
+                            authDispatch?.({type: LoginAction, data: refreshedUser.profile.preferred_username});
+                        } else {
+                            logger.warn("Silent renew failed or user still expired, will trigger logout via error handler");
+                        }
+                    }).catch(error => {
+                        logger.error("Silent renew failed:", error);
+                    });
+                }
+            }).catch(err => {
+                logger.error("Error getting user:", err);
+            });
+        }
+    }, [userManager, auth.authChoice, authDispatch, handleTokenExpired, handleSilentRenewError, onUserRefreshed]);
 
     useEffect(() => {
         if (auth.authChoice) {
@@ -195,16 +211,24 @@ const OidcInitializer = ({children, authInfo}) => {
                     if (!token) {
                         logger.warn('No OIDC token found on resume, redirecting to /auth-choice');
                         navigate('/auth-choice', {replace: true});
-                    } else if (!isTokenValid(token) && userManager) {
-                        // Still initializing without a user manager: its start renews the session.
-                        logger.warn('OIDC token expired on resume, renewing the session');
-                        renewOidcSession(userManager).then((user) => {
-                            logger.info('Session renewed on resume');
-                            onUserRefreshed(user);
-                        }).catch((error) => {
-                            if (isSessionGone(error)) handleSignedOut();
-                            else logger.warn('Session renewal failed on resume, kept for a retry:', error?.message ?? error);
-                        });
+                    } else if (!isTokenValid(token)) {
+                        logger.warn('OIDC token expired on resume, attempting silent renew');
+                        if (userManager) {
+                            userManager.signinSilent().then((user) => {
+                                if (user && !user.expired) {
+                                    logger.info('Silent renew succeeded on resume');
+                                    onUserRefreshed(user);
+                                } else {
+                                    logger.warn('Silent renew failed on resume, redirecting to /auth-choice');
+                                    navigate('/auth-choice', {replace: true});
+                                }
+                            }).catch((error) => {
+                                logger.error('Silent renew error on resume:', error);
+                                navigate('/auth-choice', {replace: true});
+                            });
+                        } else {
+                            navigate('/auth-choice', {replace: true});
+                        }
                     }
                     return;
                 }
@@ -246,7 +270,7 @@ const OidcInitializer = ({children, authInfo}) => {
                 clearTimeout(resumeCheckTimer.current);
             }
         };
-    }, [navigate, userManager, onUserRefreshed, handleSignedOut, location.pathname]);
+    }, [navigate, userManager, onUserRefreshed, location.pathname]);
 
     return children;
 };
